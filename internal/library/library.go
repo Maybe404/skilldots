@@ -1,0 +1,161 @@
+// Package library locates a skilldots library on disk and wraps the handful
+// of git operations skilldots needs. git is invoked as a subprocess so the
+// behaviour matches what the user sees in their own shell.
+package library
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/Maybe404/skilldots/internal/lock"
+	"github.com/Maybe404/skilldots/internal/manifest"
+)
+
+const (
+	EnvLibrary = "SKILLDOTS_LIBRARY"
+	EnvCache   = "SKILLDOTS_CACHE"
+	DirSkills  = "skills"
+	DirPrivate = "private"
+	DirVendor  = "vendor"
+)
+
+// Library is an opened skilldots library.
+type Library struct {
+	Root     string
+	Manifest *manifest.Manifest
+	Lock     *lock.Lock
+}
+
+// DefaultRoot is where `skd init` creates a library unless told otherwise.
+func DefaultRoot() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".skilldots")
+}
+
+// Locate finds the library: explicit flag, $SKILLDOTS_LIBRARY, a skills.toml
+// in the current directory or any parent, then the default root.
+func Locate(flag string) (string, error) {
+	candidates := []string{flag, os.Getenv(EnvLibrary)}
+	if cwd, err := os.Getwd(); err == nil {
+		for d := cwd; ; d = filepath.Dir(d) {
+			if _, err := os.Stat(filepath.Join(d, manifest.FileName)); err == nil {
+				candidates = append(candidates, d)
+				break
+			}
+			if filepath.Dir(d) == d {
+				break
+			}
+		}
+	}
+	candidates = append(candidates, DefaultRoot())
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(c, manifest.FileName)); err == nil {
+			return c, nil
+		}
+		if c == flag {
+			return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
+		}
+	}
+	return "", errors.New("no skilldots library found; run `skd init` or set " + EnvLibrary)
+}
+
+// Open loads manifest and lock from root.
+func Open(root string) (*Library, error) {
+	m, err := manifest.Load(filepath.Join(root, manifest.FileName))
+	if err != nil {
+		return nil, err
+	}
+	l, err := lock.Load(filepath.Join(root, lock.FileName))
+	if err != nil {
+		return nil, err
+	}
+	return &Library{Root: root, Manifest: m, Lock: l}, nil
+}
+
+// Save writes manifest and lock back.
+func (l *Library) Save() error {
+	if err := l.Manifest.Save(filepath.Join(l.Root, manifest.FileName)); err != nil {
+		return err
+	}
+	return l.Lock.Save(filepath.Join(l.Root, lock.FileName))
+}
+
+// Git runs git inside the library root.
+func (l *Library) Git(args ...string) (string, error) { return Git(l.Root, args...) }
+
+func (l *Library) SkillsDir() string  { return filepath.Join(l.Root, DirSkills) }
+func (l *Library) PrivateDir() string { return filepath.Join(l.Root, DirPrivate) }
+func (l *Library) VendorDir() string  { return filepath.Join(l.Root, DirVendor) }
+
+// PackDir is where a pack's vendored skills live.
+func (l *Library) PackDir(repo string) string {
+	return filepath.Join(l.VendorDir(), filepath.FromSlash(repo))
+}
+
+// Rel returns p relative to the library root with forward slashes, or p
+// unchanged when it is outside the library.
+func (l *Library) Rel(p string) string {
+	r, err := filepath.Rel(l.Root, p)
+	if err != nil || strings.HasPrefix(r, "..") {
+		return p
+	}
+	return filepath.ToSlash(r)
+}
+
+// Abs resolves a path stored by Rel.
+func (l *Library) Abs(p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(l.Root, filepath.FromSlash(p))
+}
+
+// CacheDir is where upstream repositories are cloned.
+func CacheDir() string {
+	if v := os.Getenv(EnvCache); v != "" {
+		return v
+	}
+	if d, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(d, "skilldots", "repos")
+	}
+	return filepath.Join(DefaultRoot(), ".cache", "repos")
+}
+
+// Git runs git in dir and returns trimmed stdout.
+func Git(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
+// IsGitRepo reports whether dir is inside a git work tree.
+func IsGitRepo(dir string) bool {
+	out, err := Git(dir, "rev-parse", "--is-inside-work-tree")
+	return err == nil && out == "true"
+}
+
+// EnsureGit initialises dir as a git repository when it is not one.
+func EnsureGit(dir string) error {
+	if IsGitRepo(dir) {
+		return nil
+	}
+	_, err := Git(dir, "init", "-q")
+	return err
+}

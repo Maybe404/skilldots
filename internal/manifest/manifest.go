@@ -1,0 +1,185 @@
+// Package manifest reads and writes skills.toml, the declarative source of
+// truth for a skilldots library.
+package manifest
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+
+	"github.com/pelletier/go-toml/v2"
+)
+
+const FileName = "skills.toml"
+
+// Manifest is the whole skills.toml.
+type Manifest struct {
+	Targets Targets  `toml:"targets"`
+	Packs   []*Pack  `toml:"pack,omitempty"`
+	Apps    []*App   `toml:"app,omitempty"`
+	Locals  []*Local `toml:"local,omitempty"`
+}
+
+// Targets configures where skills get linked.
+type Targets struct {
+	// Default is the target set used when nothing more specific is given.
+	Default []string `toml:"default"`
+	// Custom adds user-defined targets on top of the built-in registry.
+	Custom map[string]CustomTarget `toml:"custom,omitempty"`
+}
+
+type CustomTarget struct {
+	Path string `toml:"path"`
+	// Mode is "link" (default) or "copy".
+	Mode string `toml:"mode,omitempty"`
+}
+
+// Pack is one upstream repository and the skills selected from it.
+type Pack struct {
+	Repo  string `toml:"repo"`
+	Ref   string `toml:"ref,omitempty"`
+	Alias string `toml:"alias,omitempty"`
+	// Use lists selected skills by name, or ["*"] for everything.
+	Use []string `toml:"use"`
+	// Skip excludes skills (name or category/* glob) when Use is "*".
+	Skip    []string  `toml:"skip,omitempty"`
+	Targets *[]string `toml:"targets,omitempty"`
+	// Skill holds per-skill overrides keyed by upstream skill name.
+	Skill map[string]*SkillOverride `toml:"skill,omitempty"`
+}
+
+// SkillOverride tunes one skill inside a pack.
+type SkillOverride struct {
+	// As renames the link in target directories (used for conflicts).
+	As      string    `toml:"as,omitempty"`
+	Targets *[]string `toml:"targets,omitempty"`
+}
+
+// App is a skill shipped inside an installed application; linked, never copied.
+type App struct {
+	Name    string    `toml:"name"`
+	Path    string    `toml:"path"`
+	Targets *[]string `toml:"targets,omitempty"`
+}
+
+// Local overrides a skill under skills/ or private/. Directories there are
+// managed automatically; an entry is only needed to change targets.
+type Local struct {
+	Name    string    `toml:"name"`
+	Targets *[]string `toml:"targets,omitempty"`
+}
+
+// Load reads path. A missing file is an error; use New for a fresh library.
+func Load(path string) (*Manifest, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	m := &Manifest{}
+	if err := toml.Unmarshal(b, m); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if m.Targets.Custom == nil {
+		m.Targets.Custom = map[string]CustomTarget{}
+	}
+	return m, nil
+}
+
+// New returns a manifest with sensible defaults.
+func New(defaultTargets []string) *Manifest {
+	return &Manifest{Targets: Targets{Default: defaultTargets, Custom: map[string]CustomTarget{}}}
+}
+
+// Save writes the manifest with stable ordering.
+func (m *Manifest) Save(path string) error {
+	sort.SliceStable(m.Packs, func(i, j int) bool { return m.Packs[i].Repo < m.Packs[j].Repo })
+	sort.SliceStable(m.Apps, func(i, j int) bool { return m.Apps[i].Name < m.Apps[j].Name })
+	sort.SliceStable(m.Locals, func(i, j int) bool { return m.Locals[i].Name < m.Locals[j].Name })
+	b, err := toml.Marshal(m)
+	if err != nil {
+		return err
+	}
+	header := "# skilldots manifest — edit by hand or with `skd`.\n# Docs: https://github.com/Maybe404/skilldots\n\n"
+	return os.WriteFile(path, []byte(header+string(b)), 0o644)
+}
+
+// FindPack returns the pack matching repo or alias.
+func (m *Manifest) FindPack(key string) *Pack {
+	for _, p := range m.Packs {
+		if p.Repo == key || (p.Alias != "" && p.Alias == key) || strings.EqualFold(p.DisplayName(), key) {
+			return p
+		}
+	}
+	return nil
+}
+
+// DisplayName is the alias when set, else the repo.
+func (p *Pack) DisplayName() string {
+	if p.Alias != "" {
+		return p.Alias
+	}
+	return p.Repo
+}
+
+// Prefix is the string used to namespace conflicting skill names.
+func (p *Pack) Prefix() string {
+	if p.Alias != "" {
+		return p.Alias
+	}
+	_, repo, _ := strings.Cut(p.Repo, "/")
+	if repo == "" {
+		repo = p.Repo
+	}
+	return repo
+}
+
+// UsesAll reports whether the pack follows every upstream skill.
+func (p *Pack) UsesAll() bool {
+	return len(p.Use) == 1 && p.Use[0] == "*"
+}
+
+// Override returns the per-skill override, creating it when create is true.
+func (p *Pack) Override(name string, create bool) *SkillOverride {
+	if p.Skill == nil {
+		p.Skill = map[string]*SkillOverride{}
+	}
+	o := p.Skill[name]
+	if o == nil && create {
+		o = &SkillOverride{}
+		p.Skill[name] = o
+	}
+	return o
+}
+
+// Selected reports whether a skill (by name and category path) is chosen.
+func (p *Pack) Selected(name, category string) bool {
+	if p.UsesAll() {
+		for _, s := range p.Skip {
+			if matchSkip(s, name, category) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, u := range p.Use {
+		if u == name || u == category+"/"+name {
+			return true
+		}
+	}
+	return false
+}
+
+func matchSkip(pat, name, category string) bool {
+	if pat == name {
+		return true
+	}
+	if strings.HasSuffix(pat, "/*") {
+		return category == strings.TrimSuffix(pat, "/*") || strings.HasPrefix(category, strings.TrimSuffix(pat, "/*")+"/")
+	}
+	return pat == category+"/"+name
+}
+
+// ErrNotFound is returned by lookups that miss.
+var ErrNotFound = errors.New("not found")

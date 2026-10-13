@@ -1,0 +1,70 @@
+// Package skillmd reads the frontmatter of a SKILL.md file.
+package skillmd
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// Meta is the subset of SKILL.md frontmatter skilldots cares about.
+type Meta struct {
+	Name        string
+	Description string
+	License     string
+}
+
+// Read parses the frontmatter of dir/SKILL.md. Name falls back to the
+// directory name when the frontmatter has none.
+func Read(dir string) (Meta, error) {
+	f, err := os.Open(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		return Meta{}, err
+	}
+	defer f.Close()
+
+	m := Meta{}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	inFront := false
+	for i := 0; sc.Scan(); i++ {
+		line := sc.Text()
+		if i == 0 {
+			if strings.TrimSpace(line) != "---" {
+				break
+			}
+			inFront = true
+			continue
+		}
+		if !inFront {
+			break
+		}
+		if strings.TrimSpace(line) == "---" {
+			break
+		}
+		key, val, ok := strings.Cut(line, ":")
+		if !ok || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		val = strings.Trim(strings.TrimSpace(val), `"'`)
+		switch strings.TrimSpace(key) {
+		case "name":
+			m.Name = val
+		case "description":
+			m.Description = val
+		case "license":
+			m.License = val
+		}
+	}
+	if m.Name == "" {
+		m.Name = filepath.Base(dir)
+	}
+	return m, nil
+}
+
+// IsSkillDir reports whether dir contains a SKILL.md.
+func IsSkillDir(dir string) bool {
+	st, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil && !st.IsDir()
+}
