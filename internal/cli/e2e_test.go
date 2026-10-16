@@ -348,3 +348,41 @@ func TestReservedQualifiers(t *testing.T) {
 		t.Fatalf("skills:foo = %s, want the local skill", p)
 	}
 }
+
+// With two library skills named foo (vendored for agents, own for claude),
+// adopt must compare against and enable the right one, or neither.
+func TestAdoptWithSameNamedEntries(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.skill("up/skills/foo", "foo")
+	e.write("up/skills/foo/vendor-only.md", "v\n")
+	up := e.repo("up")
+	e.ok("", "add", up, "--all", "--agent", "agents")
+	e.ok("", "new", "foo")
+	f, _ := os.OpenFile(filepath.Join(lib, "skills.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString("\n[[local]]\nname = \"foo\"\ntargets = [\"claude\"]\n")
+	f.Close()
+	e.ok("", "apply")
+	ownSkill, _ := os.ReadFile(filepath.Join(lib, "skills", "foo", "SKILL.md"))
+
+	// codex has an unmanaged copy named foo: ambiguous, so it is left alone.
+	e.write(".codex/skills/foo/SKILL.md", string(ownSkill))
+	e.write(".codex/skills/foo/mine.txt", "x\n")
+	// gemini has dirx whose frontmatter says foo and whose content is the
+	// user's own skills/foo: it is adopted as skills:foo, not the vendor one.
+	e.write(".gemini/skills/dirx/SKILL.md", string(ownSkill))
+	e.ok("", "adopt", "--yes")
+
+	if b, err := os.ReadFile(e.p(".codex/skills/foo/mine.txt")); err != nil || string(b) != "x\n" {
+		t.Fatal("ambiguous codex/foo was replaced")
+	}
+	isLink(t, e.p(".gemini/skills/foo"), filepath.Join(lib, "skills", "foo"))
+	if _, err := os.Lstat(e.p(".gemini/skills/dirx")); !os.IsNotExist(err) {
+		t.Fatal("gemini/dirx still there after adoption")
+	}
+	isLink(t, e.p(".agents/skills/foo"), filepath.Join(lib, "vendor"))
+	if b, _ := os.ReadFile(filepath.Join(lib, "skills.toml")); strings.Count(string(b), "gemini") != 1 {
+		t.Fatalf("gemini should be added to exactly one entry:\n%s", b)
+	}
+}

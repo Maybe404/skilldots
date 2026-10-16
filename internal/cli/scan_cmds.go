@@ -113,6 +113,11 @@ type proposal struct {
 	Repo   string
 	Skill  string
 	Reason string
+	// Via is the kind of the proposal an "enable" extends (same skill
+	// found in another agent); Entry is the qualified library entry an
+	// "enable" of something already in the library refers to.
+	Via   string `json:",omitempty"`
+	Entry string `json:",omitempty"`
 }
 
 func adoptCmd() *cobra.Command {
@@ -175,7 +180,13 @@ func proposals(c *ctx, rep scan.Report) []proposal {
 		if seen[it.Name] {
 			continue
 		}
-		if e := engine.Find(entries, it.Name); e != nil {
+		e, err := engine.Lookup(entries, it.Name)
+		if err != nil {
+			seen[it.Name] = true
+			out = append(out, proposal{Item: it, Kind: "skip", Label: warn(err.Error() + "; enable one with skd enable <name> --agent " + it.Target)})
+			continue
+		}
+		if e != nil {
 			// Already in the library: this agent just is not a target yet.
 			enabled := false
 			for _, t := range e.Targets {
@@ -184,7 +195,7 @@ func proposals(c *ctx, rep scan.Report) []proposal {
 			if enabled {
 				continue
 			}
-			out = append(out, proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target + " (already in library)"})
+			out = append(out, proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target + " (already in library)", Entry: engine.Qualified(*e)})
 			continue
 		}
 		p := proposal{Item: it}
@@ -214,7 +225,7 @@ func proposals(c *ctx, rep scan.Report) []proposal {
 	for _, it := range rep.Unmanaged() {
 		for _, p := range out {
 			if p.Item.Name == it.Name && p.Item.Target != it.Target && (p.Kind == "own" || p.Kind == "pack" || p.Kind == "app") {
-				out = append(out, proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target})
+				out = append(out, proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target, Via: p.Kind, Repo: p.Repo, Skill: p.Skill})
 				break
 			}
 		}
@@ -376,12 +387,33 @@ func applyProposals(c *ctx, props []proposal) error {
 	// A real directory is only replaced by a link when the library holds
 	// exactly its content; otherwise it may be the user's only copy of
 	// something, so it stays where it is.
+	// entryFor is the one library entry a proposal adopts into.
+	entryFor := func(p proposal) *engine.Entry {
+		kind := p.Kind
+		if kind == "enable" && p.Via != "" {
+			kind = p.Via
+		}
+		if kind == "enable" {
+			e, _ := engine.Lookup(entries, p.Entry)
+			return e
+		}
+		for i := range entries {
+			e := &entries[i]
+			switch {
+			case kind == "own" && e.Kind == engine.KindSkill && e.Dir == filepath.Join(c.lib.SkillsDir(), adoptedAs(p.Item)),
+				kind == "pack" && e.Kind == engine.KindVendor && e.Origin == p.Repo && e.Name == p.Skill,
+				kind == "app" && e.Kind == engine.KindApp && e.Name == p.Item.Name:
+				return e
+			}
+		}
+		return nil
+	}
 	keep := map[string]bool{}
 	for _, p := range props {
 		if p.Kind == "skip" || p.Kind == "drop" || p.Item.LinkTo != "" {
 			continue
 		}
-		e := engine.Find(entries, adoptedAs(p.Item))
+		e := entryFor(p)
 		if e == nil {
 			continue
 		}
@@ -393,18 +425,23 @@ func applyProposals(c *ctx, props []proposal) error {
 		c.printf("%s %s differs from the library's %s (%s); left in place — compare them and remove one by hand\n",
 			warn("!"), p.Item.Path, adoptedAs(p.Item), e.Dir)
 	}
-	want := map[string][]string{}
+	want := map[*engine.Entry][]string{}
+	var order []*engine.Entry
 	for _, p := range props {
 		if p.Kind == "skip" || p.Kind == "drop" || keep[p.Item.Target+"/"+p.Item.Name] {
 			continue
 		}
-		want[adoptedAs(p.Item)] = append(want[adoptedAs(p.Item)], p.Item.Target)
-	}
-	for name, extra := range want {
-		e := engine.Find(entries, name)
+		e := entryFor(p)
 		if e == nil {
 			continue
 		}
+		if _, ok := want[e]; !ok {
+			order = append(order, e)
+		}
+		want[e] = append(want[e], p.Item.Target)
+	}
+	for _, e := range order {
+		extra := want[e]
 		next := dedupe(append(append([]string{}, e.TargetNames...), extra...))
 		if len(next) != len(e.TargetNames) {
 			editTargets(c, e, next)
