@@ -97,7 +97,7 @@ func truncateText(s string, n int) string {
 // extra argument is an error before anything is fetched.
 func AddArgs(args []string) (string, error) {
 	if len(args) > 1 && !isCommandWord(args[0]) {
-		return "", fmt.Errorf("add takes one source, got %d arguments (%s); quote a pasted install command", len(args), truncateText(strings.Join(args, " "), 60))
+		return "", fmt.Errorf("add takes one source, got %d arguments (%s); a path or URL with spaces needs quotes (skd add \"./my skills\"), and so does a pasted install command", len(args), truncateText(strings.Join(args, " "), 60))
 	}
 	return strings.Join(args, " "), nil
 }

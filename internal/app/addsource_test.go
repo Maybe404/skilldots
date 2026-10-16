@@ -140,4 +140,10 @@ func TestAddArgs(t *testing.T) {
 			t.Errorf("%q: %q %v", c.args, got, err)
 		}
 	}
+	// A path split at a space: the advice fits a path, not only a pasted
+	// install command.
+	_, err := app.AddArgs([]string{"./up", "sp"})
+	if err == nil || !strings.Contains(err.Error(), "path or URL with spaces needs quotes") || !strings.Contains(err.Error(), "pasted install command") {
+		t.Errorf("./up sp: %v", err)
+	}
 }
