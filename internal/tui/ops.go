@@ -76,8 +76,10 @@ type Ops interface {
 	// of skills.toml that are not (skd targets).
 	Targets() ([]TargetRow, error)
 	// TrustTarget approves the custom target the person was shown as t
-	// (its path in skills.toml, directory and mode) (skd targets trust).
-	TrustTarget(t TargetRow) (string, error)
+	// (its path in skills.toml, directory and mode); typed is the name
+	// they typed to confirm one whose directory is not named skills
+	// (skd targets trust).
+	TrustTarget(t TargetRow, typed string) (string, error)
 }
 
 // TargetRow is one agent target. A custom target not in use has Active
@@ -613,12 +615,12 @@ func (o *libOps) Targets() ([]TargetRow, error) {
 	return out, nil
 }
 
-func (o *libOps) TrustTarget(t TargetRow) (string, error) {
+func (o *libOps) TrustTarget(t TargetRow, typed string) (string, error) {
 	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	if err := s.Reg.Approve(targets.Withheld{Name: t.Name, Path: t.Raw, Real: t.Path, Mode: t.Mode}); err != nil {
+	if err := s.Reg.Approve(targets.Withheld{Name: t.Name, Path: t.Raw, Real: t.Path, Mode: t.Mode}, typed); err != nil {
 		return "", err
 	}
 	return "approved custom target " + t.Name + " → " + t.Path + " · A applies", nil

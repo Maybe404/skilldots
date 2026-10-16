@@ -22,7 +22,7 @@ func targetsCmd() *cobra.Command {
 			"A custom target is used only after a person approves it on this machine\n" +
 			"(skd targets trust <name>, at a terminal), and never when its directory is\n" +
 			"outside your home directory, is your home directory, is or holds a\n" +
-			"sensitive place (~/.ssh, ~/.gnupg, ~/.aws, ~/Library/LaunchAgents, …) or the\n" +
+			"sensitive place (~/.ssh, ~/.aws, ~/Library/LaunchAgents, ~/.vscode, …) or the\n" +
 			"library, is inside a built-in target's directory, or is, is inside or holds\n" +
 			"another custom target's directory.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -111,7 +111,8 @@ func trustCmd() *cobra.Command {
 		Long: "Show where a custom target of skills.toml leads and, when you agree, let skd\n" +
 			"write skills there on this machine. The approval names the target and its\n" +
 			"directory (symbolic links resolved); when skills.toml later points the\n" +
-			"target elsewhere it needs approving again. Approvals are kept beside the\n" +
+			"target elsewhere it needs approving again. A directory not named skills\n" +
+			"is approved only by typing the target's name. Approvals are kept beside the\n" +
 			"settings file, never in a library. Only a person at a terminal can approve:\n" +
 			"without one, and with --yes or --json, skd refuses.",
 		Args: cobra.ExactArgs(1),
@@ -173,24 +174,41 @@ func untrustCmd() *cobra.Command {
 }
 
 // approveTarget shows a person where the custom target w leads and asks
-// whether skd may write there; on yes the approval is recorded.
+// whether skd may write there; on yes the approval is recorded. For a
+// directory not named skills (targets.Unusual) the person is warned and
+// must type the target's name: a y is not enough.
 func approveTarget(reg *targets.Registry, w targets.Withheld) (bool, error) {
-	say("%s\n", card(
-		bold("Custom target "+txt(w.Name)),
-		"skills.toml path  "+txt(w.Path),
-		"directory         "+txt(w.Real),
-		"mode              "+txt(w.Mode),
+	lines := []string{
+		bold("Custom target " + txt(w.Name)),
+		"skills.toml path  " + txt(w.Path),
+		"directory         " + txt(w.Real),
+		"mode              " + txt(w.Mode),
 		"",
-		dim("skd will "+map[bool]string{true: "copy", false: "link"}[w.Mode == "copy"]+" skills into this directory, put back trash entries"),
+		dim("skd will " + map[bool]string{true: "copy", false: "link"}[w.Mode == "copy"] + " skills into this directory, put back trash entries"),
 		dim("that came from it, and with --force move what is in their way into the"),
 		dim("library trash. Approve only a directory you meant for skills."),
-	))
+	}
+	unusual := targets.Unusual(w.Real)
+	if unusual {
+		lines = append(lines, "",
+			warn("! This directory is not named skills. Whatever reads or runs files from"),
+			warn("  it (an editor, a shell, a service) would load what skd puts there."))
+	}
+	say("%s\n", card(lines...))
+	if unusual {
+		var typed string
+		err := ask(huh.NewInput().Title(fmt.Sprintf("Type %s to let skd write skills into %s (anything else refuses)", txt(w.Name), txt(w.Real))).Value(&typed))
+		if err != nil || typed != w.Name {
+			return false, nil
+		}
+		return true, reg.Approve(w, typed)
+	}
 	var yes bool
 	err := ask(huh.NewConfirm().Title(fmt.Sprintf("Let skd write skills into %s?", txt(w.Real))).Affirmative("Approve").Negative("No").Value(&yes))
 	if err != nil || !yes {
 		return false, nil
 	}
-	return true, reg.Approve(w)
+	return true, reg.Approve(w, "")
 }
 
 // reviewCustomTargets is what clone says about the cloned library's

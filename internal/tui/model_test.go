@@ -220,8 +220,8 @@ func (f *fakeOps) Targets() ([]TargetRow, error) {
 	f.rec("targets-list")
 	return append([]TargetRow{}, f.targets...), nil
 }
-func (f *fakeOps) TrustTarget(r TargetRow) (string, error) {
-	f.rec("trust " + r.Name + " " + r.Path + " " + r.Mode)
+func (f *fakeOps) TrustTarget(r TargetRow, typed string) (string, error) {
+	f.rec("trust " + r.Name + " " + r.Path + " " + r.Mode + " typed=" + typed)
 	return "ok", nil
 }
 func (f *fakeOps) SetSetting(k, v string) (string, error) {

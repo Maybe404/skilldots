@@ -20,7 +20,7 @@ func customRegistry(t *testing.T, custom map[string]struct{ Path, Mode string })
 		t.Fatal(err)
 	}
 	for _, w := range reg.Withheld() {
-		if err := reg.Approve(w); err != nil {
+		if err := reg.Approve(w, w.Name); err != nil {
 			t.Fatal(err)
 		}
 	}

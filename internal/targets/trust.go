@@ -27,15 +27,27 @@ import (
 
 // Sensitive are places under the home directory, given relative to it,
 // that a custom target may not be, be inside, or contain: keys and
-// credentials, and directories whose contents run or load by themselves.
-// skd's own settings directory and the library are too (SensitiveDirs,
-// checkPath).
+// credentials, and directories whose contents run or load by themselves
+// (at login, from PATH, or in a shell, an editor or git). skd's own
+// settings directory and the library are too (SensitiveDirs, checkPath).
 var Sensitive = []string{
+	// Keys and credentials.
 	".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".password-store",
-	".config/gcloud", ".config/gh", ".config/git", ".config/autostart", ".config/systemd", ".config/environment.d",
-	".local/bin", "bin",
-	"Library/LaunchAgents", "Library/Keychains",
+	".config/gcloud", ".config/gh", ".config/git",
+	// Started at login or by a service manager.
+	".config/autostart", ".config/systemd", ".config/environment.d", ".local/share/systemd",
+	"Library/LaunchAgents", "Library/LaunchDaemons", "Library/Keychains",
 	"AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+	// Programs: on PATH, found by name, or opened as applications.
+	".local/bin", "bin", "go/bin", ".cargo", "node_modules", "Applications", ".local/share/applications",
+	// Loaded by a shell, an editor, git or an automation tool.
+	".oh-my-zsh", ".zsh", ".config/zsh", ".config/fish", ".bashrc.d",
+	".vim", ".config/nvim", ".local/share/nvim", ".emacs.d", ".config/emacs",
+	".vscode", ".vscode-insiders", ".vscode-server", ".cursor/extensions", ".config/Code",
+	"Library/Application Support/Code", ".git-templates", ".hammerspoon",
+	"Library/Services", "Library/Scripts", "Library/Workflows", "Library/PreferencePanes",
+	"Library/QuickLook", "Library/Input Methods",
+	"Documents/PowerShell", "Documents/WindowsPowerShell",
 }
 
 // SensitiveDirs are the absolute places a custom target may not be, be
@@ -47,6 +59,15 @@ func SensitiveDirs(home string) []string {
 		out = append(out, filepath.Join(home, filepath.FromSlash(s)))
 	}
 	return append(out, filepath.Dir(config.Path()))
+}
+
+// Unusual reports whether a custom target's directory (real) is not
+// named skills or skill (ignoring case): not a directory meant for
+// skills, so likely read by something else too. Approving one asks the
+// person to type the target's name, not just to say yes.
+func Unusual(real string) bool {
+	b := filepath.Base(real)
+	return !strings.EqualFold(b, "skills") && !strings.EqualFold(b, "skill")
 }
 
 // CheckPath reports where a custom target's path is (real: ~ expanded,
@@ -220,9 +241,10 @@ func isApproved(list []Approval, name, real string) bool {
 // (Real), as the person was shown them (a Withheld of this or an
 // earlier registry). When skills.toml or a link on the way changed
 // meanwhile, so that the target is no longer what was shown, nothing is
-// recorded. Only a person at a terminal may call this; the callers
-// check.
-func (r *Registry) Approve(shown Withheld) error {
+// recorded. An Unusual directory (not named skills) needs typed to be
+// the target's name: the person typed it to confirm. Only a person at a
+// terminal may call this; the callers check.
+func (r *Registry) Approve(shown Withheld, typed string) error {
 	name := shown.Name
 	c, ok := r.custom[name]
 	if !ok {
@@ -237,6 +259,9 @@ func (r *Registry) Approve(shown Withheld) error {
 	}
 	if real != shown.Real {
 		return fmt.Errorf("custom target %q now leads to %s, not %s as shown; nothing was approved", name, real, shown.Real)
+	}
+	if Unusual(real) && typed != name {
+		return fmt.Errorf("custom target %q leads to %s, which is not named skills; it is approved only when its name is typed to confirm; nothing was approved", name, real)
 	}
 	list, err := Approvals()
 	if err != nil {

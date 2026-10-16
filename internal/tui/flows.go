@@ -14,6 +14,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/scan"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // The multi-step dialogs: add, new, fork, scan/adopt and the trash. Each
@@ -399,7 +400,7 @@ func (m Model) targetsView(rows []TargetRow) (tea.Model, tea.Cmd) {
 			verb = "copy"
 		}
 		row := r
-		return step{next: confirmOverlay("Approve custom target "+clean(r.Name), []string{
+		lines := []string{
 			"skills.toml path  " + r.Raw,
 			"directory         " + r.Path,
 			"mode              " + r.Mode,
@@ -407,10 +408,32 @@ func (m Model) targetsView(rows []TargetRow) (tea.Model, tea.Cmd) {
 			"skd will " + verb + " skills into this directory, put back trash entries",
 			"that came from it, and with --force move what is in their way into",
 			"the library trash. Approve only a directory you meant for skills.",
-		}, jobChoice("y", "approve", job{label: "approving " + clean(row.Name), run: func(o Ops) result {
-			msg, err := o.TrustTarget(row)
-			return result{msg: msg, err: err}
-		}}))}
+		}
+		trust := func(typed string) *job {
+			return &job{label: "approving " + clean(row.Name), run: func(o Ops) result {
+				msg, err := o.TrustTarget(row, typed)
+				return result{msg: msg, err: err}
+			}}
+		}
+		if !targets.Unusual(r.Path) {
+			return step{next: confirmOverlay("Approve custom target "+clean(r.Name), lines, choice{key: "y", label: "approve", then: func() step {
+				return step{job: trust("")}
+			}})}
+		}
+		lines = append(lines, "", "! This directory is not named skills. Whatever reads or runs files",
+			"  from it (an editor, a shell, a service) would load what skd puts there.")
+		typeName := func() step {
+			return step{next: inputOverlay("Type "+clean(row.Name)+" to approve", "the directory "+tildify(row.Path)+" is not named skills · esc cancels",
+				"", "", m.theme, m.surf, func(v string) (step, error) {
+					if v != row.Name {
+						return step{}, fmt.Errorf("type %s exactly to approve it, or esc to cancel", clean(row.Name))
+					}
+					return step{job: trust(v)}, nil
+				})}
+		}
+		ov := confirmOverlay("Approve custom target "+clean(r.Name), lines, choice{key: "y", label: "type its name to approve", then: typeName})
+		ov.noEnter = true
+		return step{next: ov}
 	}}
 	m.ov = listOverlay("Agent targets", "where skd links skills · a custom target of skills.toml is used once you approve it here (skd targets trust)",
 		"no targets", items, approve)

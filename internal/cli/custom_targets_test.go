@@ -400,6 +400,27 @@ func TestCustomTargetInsideABuiltinOneCannotReachThroughALink(t *testing.T) {
 	isLink(t, e.p(".claude/skills/foo"), lib)
 }
 
+// targetRow is the `skd targets --json` row of name.
+func (e *env) targetRow(lib, name string) (active, approvable bool, problem string) {
+	e.t.Helper()
+	var rows []struct {
+		Name               string
+		Active, Approvable bool
+		Problem            string
+	}
+	js := e.ok(lib, "targets", "--json")
+	if err := json.Unmarshal([]byte(js), &rows); err != nil {
+		e.t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.Name == name {
+			return r.Active, r.Approvable, r.Problem
+		}
+	}
+	e.t.Fatalf("no row %s in %s", name, js)
+	return
+}
+
 // customLib is a library at ~/lib whose skills.toml has the custom
 // targets given (TOML), with one skill.
 func customLib(e *env, targetsTOML string) string {
@@ -408,6 +429,26 @@ func customLib(e *env, targetsTOML string) string {
 	e.write("lib/skills.toml", "[targets]\ndefault = [\"agents\"]\n\n"+targetsTOML)
 	e.write("lib/skills/tdd/SKILL.md", "---\nname: tdd\ndescription: d\n---\n")
 	return lib
+}
+
+// A directory not named skills is approved only when the person types
+// the target's name: y is not enough. The warning says why.
+func TestTrustUnusualDirectoryNeedsTheName(t *testing.T) {
+	e := newEnv(t)
+	lib := customLib(e, "[targets.custom.ext]\npath = \"~/.my-editor/plugins\"\n")
+	for _, keys := range []string{"y\r", "yes\r", "\r", "Ext\r"} {
+		tr := e.interactive(lib, []typed{{2 * time.Second, keys}}, "targets", "trust", "ext")
+		if _, err := os.Stat(e.approvals()); err == nil {
+			t.Fatalf("approved with %q:\n%s", keys, tr)
+		}
+		if !strings.Contains(tr, "not named skills") {
+			t.Errorf("no warning:\n%s", tr)
+		}
+	}
+	tr := e.interactive(lib, []typed{{2 * time.Second, "ext\r"}}, "targets", "trust", "ext")
+	if a, _, p := e.targetRow(lib, "ext"); !a {
+		t.Fatalf("typing the name did not approve: %s\n%s", p, tr)
+	}
 }
 
 // A forged lock record filed under a target that is not in use never

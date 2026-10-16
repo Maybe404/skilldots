@@ -7,15 +7,19 @@ import (
 	"testing"
 )
 
-// The library is refused, at, inside and above it, and so is a directory
-// inside a built-in target's (a skill linked there may hold a link that
-// leads anywhere).
-func TestCheckPathRefusesTheLibraryAndBuiltinInsides(t *testing.T) {
+// Places that load or run what is put in them are refused, at, inside
+// and above them; so is the library, and a directory inside a built-in
+// target's (a skill linked there may hold a link that leads anywhere).
+func TestCheckPathRefusesAutoloadPlacesTheLibraryAndBuiltinInsides(t *testing.T) {
 	home := sandbox(t)
 	lib := filepath.Join(home, "code", "lib")
 	os.MkdirAll(filepath.Join(lib, ".git", "hooks"), 0o755)
 	for _, p := range []string{
-		"~/.cursor",
+		"~/.vscode/extensions", "~/.cursor/extensions", "~/node_modules", "~/.git-templates/hooks",
+		"~/Applications", "~/.local/share/nvim/site/pack/x/start", "~/.local/share/systemd/user",
+		"~/.config/fish/conf.d", "~/.oh-my-zsh/custom", "~/Library/Services", "~/.cargo/bin",
+		"~/.hammerspoon", "~/.vim/pack/x/start", "~/.config/nvim/lua", "~/Library/LaunchDaemons",
+		"~/.vscode", "~/.local/share", "~/.cursor",
 		lib, filepath.Join(lib, ".git", "hooks"), filepath.Join(lib, "vendor"), filepath.Join(lib, ".trash"),
 		filepath.Join(lib, "skills", "foo", "newdir"), "~/code",
 		"~/.claude/skills/foo", "~/.claude/skills/foo/newdir", "~/.agents/skills/x/y", "~/.gemini/skills/a",
@@ -66,8 +70,44 @@ func TestNestedCustomTargetsAreWithheld(t *testing.T) {
 	}
 	// Approving one of them is refused too.
 	w, _ := reg.WithheldTarget("inner")
-	if err := reg.Approve(w); err == nil {
+	if err := reg.Approve(w, "inner"); err == nil {
 		t.Error("approved a target nested in another")
+	}
+}
+
+// A directory not named skills is approved only when the person typed
+// the target's name; the path in skills.toml must still be the one shown.
+func TestUnusualDirectoryNeedsTheNameTyped(t *testing.T) {
+	home := sandbox(t)
+	custom := map[string]struct{ Path, Mode string }{"ext": {Path: "~/my-tool/plugins"}, "sk": {Path: "~/x/Skill"}}
+	reg, _ := NewRegistry("", custom)
+	ext, _ := reg.WithheldTarget("ext")
+	sk, _ := reg.WithheldTarget("sk")
+	if !Unusual(ext.Real) || Unusual(sk.Real) || Unusual(filepath.Join(home, "SKILLS")) {
+		t.Fatal("Unusual")
+	}
+	for _, typed := range []string{"", "y", "yes", "Ext", "ext "} {
+		if err := reg.Approve(ext, typed); err == nil {
+			t.Errorf("approved %s with %q typed", ext.Real, typed)
+		}
+	}
+	if _, err := os.Stat(ApprovalsFile()); err == nil {
+		t.Fatal("approvals written")
+	}
+	if err := reg.Approve(ext, "ext"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Approve(sk, ""); err != nil {
+		t.Fatal(err)
+	}
+	moved := sk
+	moved.Path = "~/x/other/Skill"
+	if err := reg.Approve(moved, ""); err == nil {
+		t.Error("approved a path skills.toml does not have")
+	}
+	reg, _ = NewRegistry("", custom)
+	if !used(reg, "ext") || !used(reg, "sk") {
+		t.Fatal("approved targets not used")
 	}
 }
 

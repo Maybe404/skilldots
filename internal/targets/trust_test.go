@@ -24,13 +24,13 @@ func sandbox(t *testing.T) string {
 
 // approve is what a person at a terminal does for the custom target
 // name at path of a library with no other custom target, having been
-// shown that it leads to want.
+// shown that it leads to want (and typing its name when asked).
 func approve(name, path, want string) error {
 	reg, err := NewRegistry("", map[string]struct{ Path, Mode string }{name: {Path: path}})
 	if err != nil {
 		return err
 	}
-	return reg.Approve(Withheld{Name: name, Path: path, Mode: "link", Real: want})
+	return reg.Approve(Withheld{Name: name, Path: path, Mode: "link", Real: want}, name)
 }
 
 func TestCheckPathRefusesWhatIsNotForSkills(t *testing.T) {

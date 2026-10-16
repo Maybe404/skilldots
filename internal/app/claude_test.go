@@ -86,7 +86,7 @@ func TestClaudeDisabledThroughCustomTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Approve(targets.Withheld{Name: "mine", Path: filepath.Join(dir, "skills") + "/", Mode: "link", Real: filepath.Join(dir, "skills")}); err != nil {
+	if err := reg.Approve(targets.Withheld{Name: "mine", Path: filepath.Join(dir, "skills") + "/", Mode: "link", Real: filepath.Join(dir, "skills")}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.Save(filepath.Join(root, manifest.FileName)); err != nil {
