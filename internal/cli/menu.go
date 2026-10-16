@@ -279,6 +279,10 @@ func cloneCmd() *cobra.Command {
 			if len(args) == 2 {
 				dir = args[1]
 			}
+			dir, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
 			if fsutil.Lexists(dir) {
 				return fmt.Errorf("%s already exists", dir)
 			}

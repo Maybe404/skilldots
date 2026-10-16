@@ -184,8 +184,12 @@ func IsGitRepo(dir string) bool {
 	return err == nil && out == "true"
 }
 
-// EnsureGit initialises dir as a git repository when it is not one.
+// EnsureGit initialises dir as a git repository when it is not one,
+// creating dir first if needed.
 func EnsureGit(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
 	if IsGitRepo(dir) {
 		return nil
 	}
