@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -24,6 +27,17 @@ const HistoryFile = "skills.history.jsonl"
 
 // MaxCommits is how many upstream commit subjects one record keeps.
 const MaxCommits = 20
+
+// MaxSubject is how many characters of an upstream commit subject a
+// record keeps; MaxName is the same for the repository and skill names.
+const (
+	MaxSubject = 200
+	MaxName    = 200
+)
+
+// maxLine is the longest history line read; a longer one (nothing skd
+// writes comes close) is skipped like an unreadable one.
+const maxLine = 1 << 20
 
 // historyDepth is how many commits an update fetches beyond the shallow
 // cache clone to find the subjects since the previous commit.
@@ -55,6 +69,10 @@ type UpdateRecord struct {
 	// CommitsUnknown is set when upstream's history could not be read
 	// (From is not in the fetched history, or git failed).
 	CommitsUnknown bool `json:"commitsUnknown,omitempty"`
+	// ApplyError is set when the update was saved (vendor/ and the lock
+	// moved to To) but linking it into the agents failed: skd apply
+	// finishes it.
+	ApplyError string `json:"applyError,omitempty"`
 }
 
 // UpstreamCommit is one upstream commit.
@@ -76,6 +94,53 @@ func newRecord(rep *engine.SyncReport, now time.Time) *UpdateRecord {
 		return nil
 	}
 	return r
+}
+
+// sanitize makes everything in r that comes from upstream or the manifest
+// safe to print and bounded: control characters (ESC, BEL, …) are taken
+// out and long text is cut. It runs when a record is written and again
+// when it is read (a line written by an older skd, or merged in by git).
+func (r *UpdateRecord) sanitize() {
+	r.Repo = CleanText(r.Repo, MaxName)
+	r.From, r.To = CleanText(r.From, MaxName), CleanText(r.To, MaxName)
+	for _, l := range []*[]string{&r.Changed, &r.Added, &r.Moved, &r.Gone, &r.Dropped, &r.New} {
+		out := []string{}
+		for _, n := range *l {
+			out = append(out, CleanText(n, MaxName))
+		}
+		*l = out
+	}
+	if r.Commits == nil {
+		r.Commits = []UpstreamCommit{}
+	}
+	for i := range r.Commits {
+		r.Commits[i].Hash = CleanText(r.Commits[i].Hash, MaxName)
+		r.Commits[i].Subject = CleanText(r.Commits[i].Subject, MaxSubject)
+	}
+	r.ApplyError = CleanText(r.ApplyError, MaxSubject)
+}
+
+// CleanText is s fit to print on one terminal line: tabs and line breaks
+// become spaces, other control characters (C0, DEL, C1) and the bidi
+// controls that reorder text are dropped, invalid UTF-8 becomes U+FFFD,
+// and the result is cut to max characters with "…".
+func CleanText(s string, max int) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range strings.ToValidUTF8(s, "\uFFFD") {
+		switch {
+		case r == '\t' || r == '\n' || r == '\r':
+			r = ' '
+		case unicode.IsControl(r), r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069, r == 0x200E, r == 0x200F, r == 0x061C:
+			continue
+		}
+		if n == max {
+			return strings.TrimRight(b.String(), " ") + "…"
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return b.String()
 }
 
 // movedNames takes the skill names out of SyncReport.Moved
@@ -163,7 +228,7 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 			r.MoreCommits = true
 			break
 		}
-		r.Commits = append(r.Commits, UpstreamCommit{Hash: h, Subject: subj})
+		r.Commits = append(r.Commits, UpstreamCommit{Hash: CleanText(h, MaxName), Subject: CleanText(subj, MaxSubject)})
 	}
 }
 
@@ -172,7 +237,9 @@ func globEscape(s string) string {
 	return r.Replace(s)
 }
 
-// appendHistory adds records to the history file, one JSON line each.
+// appendHistory adds records to the history file, one JSON line each. A
+// file that does not end in a line break (edited by hand, or a write cut
+// short) gets one first, so the new record starts on its own line.
 func (s *Session) appendHistory(recs []*UpdateRecord) error {
 	if len(recs) == 0 {
 		return nil
@@ -185,9 +252,15 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 		}
 		b = append(append(b, line...), '\n')
 	}
-	f, err := os.OpenFile(s.HistoryPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(s.HistoryPath(), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return err
+	}
+	if fi, err := f.Stat(); err == nil && fi.Size() > 0 {
+		last := make([]byte, 1)
+		if _, err := f.ReadAt(last, fi.Size()-1); err == nil && last[0] != '\n' {
+			b = append([]byte{'\n'}, b...)
+		}
 	}
 	if _, err := f.Write(b); err != nil {
 		f.Close()
@@ -199,13 +272,15 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 // History returns the recorded updates, newest first: of one pack (repo
 // or alias, or a repository no longer subscribed) when pack is set, at
 // most n when n > 0. It reads only the library, never the network. Lines
-// that cannot be read (a merge gone wrong) are skipped and counted in
-// skipped.
+// that cannot be read (a merge gone wrong, or longer than any record skd
+// writes) are skipped and counted in skipped. Records are sanitized
+// (CleanText) as they are read.
 func (s *Session) History(packName string, n int) (recs []UpdateRecord, skipped int, err error) {
 	repo := packName
 	if p := s.Lib.Manifest.FindPack(packName); p != nil {
 		repo = p.Repo
 	}
+	repo = CleanText(repo, MaxName)
 	f, err := os.Open(s.HistoryPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return []UpdateRecord{}, 0, nil
@@ -214,27 +289,28 @@ func (s *Session) History(packName string, n int) (recs []UpdateRecord, skipped 
 		return nil, 0, err
 	}
 	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
+	br := bufio.NewReaderSize(f, 64*1024)
+	for {
+		raw, tooLong, rerr := readLine(br, maxLine)
+		if line := strings.TrimSpace(string(raw)); tooLong || line != "" {
+			var r UpdateRecord
+			if tooLong || json.Unmarshal([]byte(line), &r) != nil || r.Repo == "" {
+				skipped++
+			} else if r.sanitize(); repo == "" || r.Repo == repo {
+				recs = append(recs, r)
+			}
 		}
-		var r UpdateRecord
-		if err := json.Unmarshal([]byte(line), &r); err != nil || r.Repo == "" {
-			skipped++
-			continue
+		if errors.Is(rerr, io.EOF) {
+			break
 		}
-		if repo == "" || r.Repo == repo {
-			recs = append(recs, r)
+		if rerr != nil {
+			return nil, skipped, rerr
 		}
-	}
-	if err := sc.Err(); err != nil {
-		return nil, skipped, err
 	}
 	// Newest first; lines from two machines merged by git may be out of
-	// order.
+	// order. Records of the same second keep the file's order reversed:
+	// the later line is the later update.
+	slices.Reverse(recs)
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].Time.After(recs[j].Time) })
 	if n > 0 && len(recs) > n {
 		recs = recs[:n]
@@ -243,6 +319,25 @@ func (s *Session) History(packName string, n int) (recs []UpdateRecord, skipped 
 		recs = []UpdateRecord{}
 	}
 	return recs, skipped, nil
+}
+
+// readLine reads one line of any length. A line longer than max is not
+// kept: tooLong is set and the rest of it is read past.
+func readLine(br *bufio.Reader, max int) (line []byte, tooLong bool, err error) {
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if !tooLong {
+			if len(line)+len(chunk) > max {
+				tooLong, line = true, nil
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return line, tooLong, err
+	}
 }
 
 // RecordRows are the labelled skill lists of a record that are not empty,

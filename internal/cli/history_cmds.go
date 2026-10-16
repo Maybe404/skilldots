@@ -67,6 +67,9 @@ func printRecord(c *ctx, r app.UpdateRecord) {
 		from = "new"
 	}
 	c.printf("%s  %s  %s → %s\n", dim(r.Time.Local().Format("2006-01-02 15:04")), bold(r.Repo), dim(from), accent(short(r.To)))
+	if r.ApplyError != "" {
+		c.printf("  %s %s\n", warn(fmt.Sprintf("%-13s", "link failed")), r.ApplyError+dim(" · skd apply finishes it"))
+	}
 	for _, row := range app.RecordRows(r) {
 		c.printf("  %s %s\n", dim(fmt.Sprintf("%-13s", row[0])), row[1])
 	}

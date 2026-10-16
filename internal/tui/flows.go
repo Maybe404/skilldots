@@ -376,6 +376,9 @@ func recordLines(r app.UpdateRecord) []string {
 		from = "new"
 	}
 	lines := []string{from + " → " + short(r.To), ""}
+	if r.ApplyError != "" {
+		lines = append(lines, "linking failed: "+r.ApplyError+" · A applies again", "")
+	}
 	for _, row := range app.RecordRows(r) {
 		lines = append(lines, fit(row[0], 14)+row[1])
 	}

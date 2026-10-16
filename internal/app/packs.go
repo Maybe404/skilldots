@@ -286,12 +286,23 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 			unlock := pack.Hold(p.Repo)
 			fillCommits(context.Background(), r, p.Ref, rep.Upstream)
 			unlock()
+			r.sanitize()
 			recs = append(recs, r)
 		}
 	}
-	ap, err := s.saveAndApply()
-	out.Apply = ap
-	if err == nil {
+	// Once the lock is saved the update has happened, and it is recorded
+	// even when linking fails (the record says so; skd apply finishes
+	// it). When the lock cannot be saved nothing is recorded: the next
+	// update starts from the old commit again and records it then.
+	err := s.Lib.Save()
+	saved := err == nil
+	if saved {
+		out.Apply, err = s.Apply(ApplyOptions{})
+		if err != nil {
+			for _, r := range recs {
+				r.ApplyError = CleanText(err.Error(), MaxSubject)
+			}
+		}
 		if herr := s.appendHistory(recs); herr != nil {
 			s.logf(Warn, "could not write the update history (%s): %v", HistoryFile, herr)
 		} else {

@@ -41,3 +41,39 @@ func TestHistoryCommand(t *testing.T) {
 		t.Fatalf("history not committed:\n%s", files)
 	}
 }
+
+// Upstream's commit subjects never put control characters on the
+// terminal, and a 5 MB subject does not break history (CLI or JSON).
+func TestHistoryUpstreamText(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	e.skill("up/skills/eng/tdd", "tdd")
+	up := e.repo("up")
+	e.ok("", "add", up, "--skill", "tdd")
+	for i, msg := range []string{"tdd: \x1b]0;pwned\x07 \x1b[31mred\x1b[0m", strings.Repeat("y", 5<<20)} {
+		e.write("up/skills/eng/tdd/n.md", strings.Repeat("x", i+1))
+		e.write("msg", msg)
+		e.git(up, "add", "-A", "skills")
+		e.git(up, "commit", "-q", "--cleanup=verbatim", "-F", e.p("msg"))
+	}
+	e.ok("", "update")
+	out := e.ok("", "history")
+	if strings.ContainsAny(out, "\x1b\x07") || !strings.Contains(out, "red") || len(out) > 8192 {
+		t.Fatalf("history prints %d bytes:\n%q", len(out), out)
+	}
+	if r := e.js("", "history"); len(r["records"].([]any)) != 1 {
+		t.Fatalf("history --json: %v", r)
+	}
+	// A line written by something else, too long for any record: skipped.
+	f, _ := os.OpenFile(e.p("lib/skills.history.jsonl"), os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString(`{"repo":"` + strings.Repeat("z", 5<<20) + "\"}\n")
+	f.Close()
+	out, errOut, code := e.skd("", "history")
+	if code != 0 || !strings.Contains(out, "red") || !strings.Contains(errOut, "1 line(s) could not be read") {
+		t.Fatalf("exit %d\n%s\n%s", code, out, errOut)
+	}
+	if r := e.js("", "history"); len(r["records"].([]any)) != 1 || r["skipped"].(float64) != 1 {
+		t.Fatalf("history --json: %v", r)
+	}
+}

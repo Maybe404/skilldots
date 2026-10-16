@@ -63,7 +63,7 @@ This also applies to scheduled or "keep my skills current" requests: report and 
 
 With `--json`, `update` prints `{packs, failed, apply, committed, history}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. "upstream new" (`UpstreamNew`) lists only unselected skills that appeared since the previous `skd update`; offer to add them with `skd add owner/repo --skill <name>`. After an update, summarise what changed for the user.
 
-Every update is recorded in the library (`skills.history.jsonl`, committed with it): `skd history [pack] --json` lists, per update, the old and new commit, the skills changed / added / moved / gone / new upstream and the subjects of the upstream commits that touched them. Use it to answer "what changed in my skills?" — it works offline. Upstream changes are also visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
+Every update is recorded in the library (`skills.history.jsonl`, committed with it): `skd history [pack] --json` lists, per update, the old and new commit, the skills changed / added / moved / gone / new upstream and the subjects of the upstream commits that touched them. Use it to answer "what changed in my skills?" — it works offline. A record with `applyError` was saved but not linked: run `skd apply`. Commit subjects are cleaned of control characters and cut to 200 characters. Upstream changes are also visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
 
 ## Enable or disable per agent
 
