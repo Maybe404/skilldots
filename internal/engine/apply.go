@@ -157,34 +157,40 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			continue
 		}
 		t, err := regTarget(lib, tname)
+		trusted := err == nil
 		if err != nil {
 			forget := func(why string) {
 				plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
 					Reason: fmt.Sprintf("target %q is no longer defined and %s; forgetting the record (nothing on disk is touched)", tname, why)})
 			}
-			if prev.Path == "" || filepath.Base(prev.Path) != name {
-				// Nowhere to look: stop tracking it rather than nag forever.
-				forget("its location was not recorded")
+			p := prev.Path
+			if p == "" || !filepath.IsAbs(p) || filepath.Clean(p) != p || filepath.Base(p) != name {
+				// Nowhere trustworthy to look (unrecorded, relative, or with
+				// ".." / redundant parts): stop tracking it.
+				forget("its location was not recorded as a clean absolute path")
 				continue
 			}
-			// The recorded path is only trusted inside a known target
-			// directory. Elsewhere (a removed custom target, or a tampered
-			// lock) only our own link may go; anything else is left alone.
-			if !knownTargetDir(filepath.Dir(prev.Path)) && fsutil.Lexists(prev.Path) &&
-				!(prev.Mode == "link" && current(prev.Path, prev, lib)) {
-				forget(fmt.Sprintf("its recorded location %s is not a link of ours inside a known target directory", prev.Path))
-				continue
+			// One dest for every check and every action below.
+			t = targets.Target{Name: tname, Path: filepath.Dir(p), Mode: prev.Mode}
+			trusted = knownTargetDir(t.Path)
+			if !trusted {
+				// Outside every known target directory (a removed custom
+				// target, or a tampered lock) only our own link may go,
+				// and --force never applies.
+				if !(prev.Mode == "link" && current(p, prev, lib)) {
+					forget(fmt.Sprintf("%s is not a link of ours inside a known target directory", p))
+					continue
+				}
 			}
-			t = targets.Target{Name: tname, Path: filepath.Dir(prev.Path), Mode: prev.Mode}
 		}
 		dest := filepath.Join(t.Path, name)
 		op := Op{Target: t, Name: name, Dest: dest, Source: prev.Source, Mode: prev.Mode}
 		switch {
 		case !fsutil.Lexists(dest):
 			op.Action, op.Reason = "remove", "already gone"
-		case current(dest, prev, lib) || forceKey(key):
+		case current(dest, prev, lib) || (trusted && forceKey(key)):
 			op.Action = "remove"
-		case staleRoot(dest, prev, lib) != "":
+		case trusted && staleRoot(dest, prev, lib) != "":
 			op.Action, op.Reason = "remove", "points at the previous library location "+staleRoot(dest, prev, lib)
 		default:
 			op.Action, op.Reason = "skip", "modified since skilldots wrote it; use --force to remove"

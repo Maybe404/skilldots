@@ -162,3 +162,47 @@ func TestSameNameDisjointTargets(t *testing.T) {
 		t.Fatalf("overlap: warnings %v", warnings)
 	}
 }
+
+// Recorded paths with ".." (through a missing directory or through a
+// symlink) or through a symlinked directory never reach a real directory
+// outside the targets, even with --force.
+func TestOrphanPathTraversalVariants(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	outside := filepath.Join(home, "outside")
+	victim := filepath.Join(outside, "victim")
+	writeSkill(t, victim, "victim")
+	os.WriteFile(filepath.Join(victim, "thesis.txt"), []byte("precious"), 0o644)
+	deep := filepath.Join(home, "deep", "er")
+	os.MkdirAll(deep, 0o755)
+	os.Symlink(deep, filepath.Join(outside, "lnk")) // lnk/.. resolves to home/deep
+	os.Symlink(outside, filepath.Join(home, "via")) // via/victim is victim
+	writeSkill(t, filepath.Join(home, "deep", "victim"), "victim")
+	os.WriteFile(filepath.Join(home, "deep", "victim", "thesis.txt"), []byte("precious"), 0o644)
+	lib.Manifest.Targets.Default = []string{}
+	for _, p := range []string{
+		outside + "/nope/../victim",
+		outside + "/lnk/../victim",
+		home + "/via/victim",
+		"relative/victim",
+		outside + "//victim",
+	} {
+		for _, force := range []bool{false, true} {
+			lib.Lock.Links["gone/victim"] = &lock.Link{Mode: "link", Source: "skills/victim", Path: p}
+			plan := MakePlan(lib, nil, force)
+			if len(plan.Ops) != 1 || plan.Ops[0].Action != "forget" {
+				t.Errorf("%s force=%v: %+v", p, force, plan.Ops)
+			}
+			if _, err := Apply(lib, plan); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, v := range []string{victim, filepath.Join(home, "deep", "victim")} {
+		if b, err := os.ReadFile(filepath.Join(v, "thesis.txt")); err != nil || string(b) != "precious" {
+			t.Errorf("%s was touched", v)
+		}
+	}
+	if m, _ := filepath.Glob(filepath.Join(lib.Root, TrashDir, "*")); len(m) != 0 {
+		t.Errorf("trash: %v", m)
+	}
+}
