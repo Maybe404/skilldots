@@ -528,6 +528,9 @@ func (s *Session) Fork(r Ref, private bool, name string) (*ForkOutcome, error) {
 	if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
 		return nil, fmt.Errorf("%q is already yours (%s)", e.LinkName, e.Dir)
 	}
+	if e.LinkedVia != "" {
+		return nil, fmt.Errorf("%q: its directory goes through %s, a symbolic link inside the library; skd does not copy it", e.LinkName, s.Lib.Rel(e.LinkedVia))
+	}
 	if name == "" {
 		name = e.LinkName
 	} else if err := manifest.CheckName(name); err != nil {
@@ -538,6 +541,9 @@ func (s *Session) Fork(r Ref, private bool, name string) (*ForkOutcome, error) {
 		base = s.Lib.PrivateDir()
 	}
 	dest := filepath.Join(base, name)
+	if err := s.writableInLibrary(dest); err != nil {
+		return nil, err
+	}
 	if fsutil.Lexists(dest) {
 		return nil, fmt.Errorf("%s already exists", dest)
 	}

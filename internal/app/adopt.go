@@ -189,6 +189,9 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				renamed[p.Item.Name] = name
 			}
 			dest := filepath.Join(lib.SkillsDir(), name)
+			if err := s.writableInLibrary(dest); err != nil {
+				return nil, err
+			}
 			if !fsutil.Lexists(dest) {
 				if err := fsutil.CopyTree(src, dest); err != nil {
 					return nil, err
@@ -250,6 +253,9 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 					src = p.Item.LinkTo
 				}
 				dest := filepath.Join(lib.SkillsDir(), n)
+				if err := s.writableInLibrary(dest); err != nil {
+					return nil, err
+				}
 				if fsutil.Lexists(dest) {
 					s.logf(Warn, "%s already exists; leaving it as is", lib.Rel(dest))
 					break
