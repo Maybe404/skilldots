@@ -77,8 +77,11 @@ func (e *env) script(dir string, keys []typed, out string, sargs, args []string)
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	go func() {
-		for _, k := range keys {
+		for i, k := range keys {
 			time.Sleep(k.wait)
+			if i < len(e.before) && e.before[i] != nil {
+				e.before[i]()
+			}
 			io.WriteString(in, k.keys)
 		}
 	}()

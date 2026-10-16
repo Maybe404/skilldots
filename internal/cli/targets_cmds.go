@@ -110,9 +110,10 @@ func trustCmd() *cobra.Command {
 		Short: "Approve a custom target of skills.toml on this machine (a person at a terminal only)",
 		Long: "Show where a custom target of skills.toml leads and, when you agree, let skd\n" +
 			"write skills there on this machine. The approval names the target and its\n" +
-			"directory (symbolic links resolved); when skills.toml later points the\n" +
-			"target elsewhere it needs approving again. A directory not named skills\n" +
-			"is approved only by typing the target's name. Approvals are kept beside the\n" +
+			"directory (symbolic links resolved) and its mode (link or copy); when\n" +
+			"skills.toml later points the target elsewhere or changes its mode it needs\n" +
+			"approving again. A directory not named skills is approved only by typing\n" +
+			"the target's name. Approvals are kept beside the\n" +
 			"settings file, never in a library. Only a person at a terminal can approve:\n" +
 			"without one, and with --yes or --json, skd refuses.",
 		Args: cobra.ExactArgs(1),

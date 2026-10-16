@@ -431,6 +431,70 @@ func customLib(e *env, targetsTOML string) string {
 	return lib
 }
 
+// An approval is of a name, a directory and a mode together: another
+// name for the approved directory, or the approved name set to copy, is
+// not used until approved again.
+func TestApprovalIsOfNameDirectoryAndMode(t *testing.T) {
+	e := newEnv(t)
+	lib := customLib(e, "[targets.custom.mytool]\npath = \"~/my-tool/skills\"\n")
+	e.interactive(lib, []typed{{2 * time.Second, "y"}}, "targets", "trust", "mytool")
+	if a, _, p := e.targetRow(lib, "mytool"); !a {
+		t.Fatalf("not approved: %s", p)
+	}
+	write := func(s string) {
+		os.WriteFile(filepath.Join(lib, "skills.toml"), []byte("[targets]\ndefault = [\"agents\"]\n\n"+s), 0o644)
+	}
+	write("[targets.custom.yours]\npath = \"~/my-tool/skills\"\n")
+	if a, ap, _ := e.targetRow(lib, "yours"); a || !ap {
+		t.Errorf("another name for the approved directory: active %v approvable %v", a, ap)
+	}
+	write("[targets.custom.mytool]\npath = \"~/my-tool/skills\"\nmode = \"copy\"\n")
+	if a, ap, p := e.targetRow(lib, "mytool"); a || !ap || !strings.Contains(p, "mode copy") {
+		t.Errorf("mode copy: active %v approvable %v %s", a, ap, p)
+	}
+	e.ok(lib, "enable", "tdd", "--agent", "mytool")
+	if _, err := os.Lstat(e.p("my-tool/skills/tdd")); err == nil {
+		t.Error("copied into a target approved for link")
+	}
+	tr := e.interactive(lib, []typed{{2 * time.Second, "y"}}, "targets", "trust", "mytool")
+	if !strings.Contains(tr, "copy") {
+		t.Errorf("trust does not show the mode:\n%s", tr)
+	}
+	if a, _, p := e.targetRow(lib, "mytool"); !a {
+		t.Fatalf("copy not approved: %s\n%s", p, tr)
+	}
+	e.ok(lib, "apply")
+	if st, err := os.Lstat(e.p("my-tool/skills/tdd")); err != nil || !st.IsDir() {
+		t.Errorf("not copied: %v", err)
+	}
+}
+
+// What a person approves is what they were shown: when a link on the way
+// changes while trust asks, nothing is recorded.
+func TestTrustRecordsOnlyWhatWasShown(t *testing.T) {
+	e := newEnv(t)
+	os.MkdirAll(e.p("a"), 0o755)
+	os.MkdirAll(e.p("b"), 0o755)
+	os.Symlink(e.p("a"), e.p("via"))
+	lib := customLib(e, "[targets.custom.mytool]\npath = \"~/via/skills\"\n")
+	e.before = []func(){func() {
+		os.Remove(e.p("via"))
+		os.Symlink(e.p("b"), e.p("via"))
+	}}
+	tr := e.interactive(lib, []typed{{2 * time.Second, "y"}}, "targets", "trust", "mytool")
+	e.before = nil
+	if !strings.Contains(tr, e.p("a/skills")) {
+		t.Errorf("trust did not show where it led:\n%s", tr)
+	}
+	if _, err := os.Stat(e.approvals()); err == nil {
+		b, _ := os.ReadFile(e.approvals())
+		t.Fatalf("approved after the link changed:\n%s\n%s", b, tr)
+	}
+	if !strings.Contains(tr, "not "+e.p("a/skills")+" as shown") {
+		t.Errorf("trust does not say why:\n%s", tr)
+	}
+}
+
 // A directory not named skills is approved only when the person types
 // the target's name: y is not enough. The warning says why.
 func TestTrustUnusualDirectoryNeedsTheName(t *testing.T) {

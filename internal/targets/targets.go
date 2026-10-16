@@ -107,9 +107,9 @@ type Withheld struct {
 // (name -> path, name -> mode) of the library at lib. A custom entry is
 // used only when its name is not a built-in one, its path is allowed
 // (checkPath: in the home directory, away from sensitive places, the
-// library, the built-in targets and the other custom targets), and a
-// person approved that name with that directory on this machine
-// (Approve); the others are withheld
+// library, the built-in targets and the other custom targets), its mode
+// is link or copy, and a person approved that name with that directory
+// and that mode on this machine (Approve); the others are withheld
 // (Withheld), never an error: one bad entry does not stop the library.
 func NewRegistry(lib string, custom map[string]struct{ Path, Mode string }) (*Registry, error) {
 	home, err := os.UserHomeDir()
@@ -141,9 +141,9 @@ func NewRegistry(lib string, custom map[string]struct{ Path, Mode string }) (*Re
 			w.Problem = err.Error()
 		case trustErr != nil:
 			w.Problem = fmt.Sprintf("the approvals file cannot be read (%v); fix or remove it, then approve again", trustErr)
-		case !isApproved(approved, name, real):
+		case !isApproved(approved, name, real, c.Mode):
 			w.Approvable = true
-			w.Problem = fmt.Sprintf("it is not approved on this machine; a person approves it at a terminal with `skd targets trust %s`", name)
+			w.Problem = fmt.Sprintf("it is not approved on this machine (with this directory and mode %s); a person approves it at a terminal with `skd targets trust %s`", c.Mode, name)
 		default:
 			r.targets[name] = Target{Name: name, Path: Expand(c.Path, home), Mode: c.Mode, Real: real}
 			continue

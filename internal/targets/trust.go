@@ -20,7 +20,7 @@ import (
 // copies into a target, restores trash entries there and, with --force,
 // moves what is in the way into the library trash. So a custom target is
 // used only when it is in an allowed place (checkPath, inspect) and a
-// person approved that name with that directory on this machine
+// person approved that name with that directory and mode on this machine
 // (Approve). The
 // approvals are kept outside every library, beside the settings file,
 // so a library cannot bring its own.
@@ -159,7 +159,8 @@ func IsBuiltin(name string) bool {
 
 // inspect is where the custom target name of r leads (its path as
 // skills.toml has it now, links resolved now) and why skd may not use
-// it: a built-in target's name, a path checkPath refuses, or a directory that is, is inside or holds another
+// it: a built-in target's name, a mode other than link or copy, a path
+// checkPath refuses, or a directory that is, is inside or holds another
 // custom target's (each target's entries are written through that
 // target only; another target's writes could put a link on the way).
 // Only other custom targets whose own paths checkPath allows count, so
@@ -170,6 +171,8 @@ func (r *Registry) inspect(name string) (string, error) {
 	switch {
 	case IsBuiltin(name):
 		return real, fmt.Errorf("it has the name of a built-in target; the built-in %s is used, give the custom one another name in skills.toml", name)
+	case c.Mode != "link" && c.Mode != "copy":
+		return real, fmt.Errorf("its mode %q is neither link nor copy", c.Mode)
 	case err != nil:
 		return real, err
 	}
@@ -193,11 +196,14 @@ func (r *Registry) inspect(name string) (string, error) {
 	return real, nil
 }
 
-// Approval is one custom target a person approved: the name and the
-// directory (links resolved) it was approved with.
+// Approval is one custom target a person approved: the name, the
+// directory (links resolved) and the mode (link or copy) it was approved
+// with. A record without a mode (written before skd recorded modes) is
+// an approval for link: a target set to copy needs approving again.
 type Approval struct {
 	Name     string    `toml:"name" json:"name"`
 	Path     string    `toml:"path" json:"path"`
+	Mode     string    `toml:"mode" json:"mode"`
 	Approved time.Time `toml:"approved" json:"approved"`
 }
 
@@ -224,12 +230,17 @@ func Approvals() ([]Approval, error) {
 	if err := toml.Unmarshal(b, &f); err != nil {
 		return nil, fmt.Errorf("%s: %w", ApprovalsFile(), err)
 	}
+	for i := range f.Target {
+		if f.Target[i].Mode == "" {
+			f.Target[i].Mode = "link"
+		}
+	}
 	return f.Target, nil
 }
 
-func isApproved(list []Approval, name, real string) bool {
+func isApproved(list []Approval, name, real, mode string) bool {
 	for _, a := range list {
-		if a.Name == name && a.Path == real {
+		if a.Name == name && a.Path == real && a.Mode == mode {
 			return true
 		}
 	}
@@ -237,8 +248,8 @@ func isApproved(list []Approval, name, real string) bool {
 }
 
 // Approve records that a person approved the custom target shown: its
-// name, its path as skills.toml has it and the directory it leads to
-// (Real), as the person was shown them (a Withheld of this or an
+// name, its path as skills.toml has it, the directory it leads to (Real)
+// and its mode, as the person was shown them (a Withheld of this or an
 // earlier registry). When skills.toml or a link on the way changed
 // meanwhile, so that the target is no longer what was shown, nothing is
 // recorded. An Unusual directory (not named skills) needs typed to be
@@ -250,8 +261,8 @@ func (r *Registry) Approve(shown Withheld, typed string) error {
 	if !ok {
 		return fmt.Errorf("skills.toml has no custom target %q", name)
 	}
-	if c.Path != shown.Path {
-		return fmt.Errorf("custom target %q is now %q in skills.toml, not %q as shown; nothing was approved", name, c.Path, shown.Path)
+	if c.Path != shown.Path || c.Mode != shown.Mode {
+		return fmt.Errorf("custom target %q is now %q (%s) in skills.toml, not %q (%s) as shown; nothing was approved", name, c.Path, c.Mode, shown.Path, shown.Mode)
 	}
 	real, err := r.inspect(name)
 	if err != nil {
@@ -267,10 +278,10 @@ func (r *Registry) Approve(shown Withheld, typed string) error {
 	if err != nil {
 		return fmt.Errorf("%w; fix or remove it first", err)
 	}
-	if isApproved(list, name, real) {
+	if isApproved(list, name, real, c.Mode) {
 		return nil
 	}
-	return writeApprovals(append(list, Approval{Name: name, Path: real, Approved: time.Now().UTC().Truncate(time.Second)}))
+	return writeApprovals(append(list, Approval{Name: name, Path: real, Mode: c.Mode, Approved: time.Now().UTC().Truncate(time.Second)}))
 }
 
 // Revoke drops every approval of the custom target name and returns how
@@ -295,7 +306,8 @@ func Revoke(name string) (int, error) {
 
 const approvalsHeader = `# Custom targets of skills.toml a person approved on this machine with
 # ` + "`skd targets trust <name>`" + `. skd writes skills into a custom target only
-# when its name and its directory (symbolic links resolved) are here.
+# when its name, its directory (symbolic links resolved) and its mode are
+# here.
 # Per user and per machine: never part of a library.
 `
 

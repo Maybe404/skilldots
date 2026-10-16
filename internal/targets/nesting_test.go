@@ -75,6 +75,53 @@ func TestNestedCustomTargetsAreWithheld(t *testing.T) {
 	}
 }
 
+// The approval names the mode: a target approved to be linked into is
+// not used once skills.toml says copy, until approved again. A record
+// without a mode (an older skd) approves link only.
+func TestApprovalNamesTheMode(t *testing.T) {
+	home := sandbox(t)
+	real := filepath.Join(home, "my-tool", "skills")
+	link := map[string]struct{ Path, Mode string }{"mine": {Path: "~/my-tool/skills"}}
+	cp := map[string]struct{ Path, Mode string }{"mine": {Path: "~/my-tool/skills", Mode: "copy"}}
+	if err := approve("mine", "~/my-tool/skills", real); err != nil {
+		t.Fatal(err)
+	}
+	if reg, _ := NewRegistry("", link); !used(reg, "mine") {
+		t.Fatal("approved link target not used")
+	}
+	reg, _ := NewRegistry("", cp)
+	if used(reg, "mine") {
+		t.Fatal("a link approval let skd copy")
+	}
+	w, _ := reg.WithheldTarget("mine")
+	if !w.Approvable || w.Mode != "copy" {
+		t.Fatalf("%+v", w)
+	}
+	// Shown as link, but skills.toml now says copy: not approved.
+	if err := reg.Approve(Withheld{Name: "mine", Path: "~/my-tool/skills", Mode: "link", Real: real}, ""); err == nil {
+		t.Fatal("approved a mode other than the one shown")
+	}
+	if err := reg.Approve(w, ""); err != nil {
+		t.Fatal(err)
+	}
+	if reg, _ := NewRegistry("", cp); !used(reg, "mine") {
+		t.Fatal("approved copy target not used")
+	}
+	// An approvals file of an older skd: no mode.
+	os.WriteFile(ApprovalsFile(), []byte("[[target]]\nname = 'mine'\npath = '"+real+"'\napproved = 2026-01-01T00:00:00Z\n"), 0o644)
+	if reg, _ := NewRegistry("", link); !used(reg, "mine") {
+		t.Error("an old approval no longer approves link")
+	}
+	if reg, _ := NewRegistry("", cp); used(reg, "mine") {
+		t.Error("an old approval approves copy")
+	}
+	// Any other mode is never used.
+	reg, _ = NewRegistry("", map[string]struct{ Path, Mode string }{"mine": {Path: "~/my-tool/skills", Mode: "hardlink"}})
+	if w, ok := reg.WithheldTarget("mine"); !ok || w.Approvable {
+		t.Errorf("mode hardlink: %+v", w)
+	}
+}
+
 // A directory not named skills is approved only when the person typed
 // the target's name; the path in skills.toml must still be the one shown.
 func TestUnusualDirectoryNeedsTheNameTyped(t *testing.T) {

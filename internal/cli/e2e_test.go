@@ -41,6 +41,9 @@ type env struct {
 	t    *testing.T
 	home string
 	vars []string
+	// before[i], when set, runs before the i-th keys of an interactive
+	// run are typed.
+	before []func()
 }
 
 func newEnv(t *testing.T) *env {
