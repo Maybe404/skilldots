@@ -278,7 +278,7 @@ func applyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&dry, "dry-run", "n", false, "show the plan without changing anything")
-	cmd.Flags().BoolVar(&force, "force", false, "replace unmanaged or modified entries")
+	cmd.Flags().BoolVar(&force, "force", false, "replace unmanaged or modified entries (they are moved into <target>/"+engine.BackupDir+"/, not deleted)")
 	return cmd
 }
 
@@ -311,10 +311,14 @@ func runApply(c *ctx, dry, force bool) error {
 		c.printf("%s\n", dim(fmt.Sprintf("dry run · +%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])))
 		return nil
 	}
-	if err := engine.Apply(c.lib, plan); err != nil {
-		return err
+	res, err := engine.Apply(c.lib, plan)
+	if saveErr := c.lib.Save(); saveErr != nil && err == nil {
+		err = saveErr
 	}
-	if err := c.lib.Save(); err != nil {
+	for _, b := range res.Backups {
+		c.printf("  %s %s\n", dim("moved aside"), b)
+	}
+	if err != nil {
 		return err
 	}
 	c.printf("%s %s\n", ok("✓"), dim(fmt.Sprintf("applied · +%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])))

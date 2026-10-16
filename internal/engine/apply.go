@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -129,51 +130,85 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 	return plan
 }
 
+// BackupDir is the folder inside a target where displaced files are kept.
+const BackupDir = ".skilldots-backup"
+
+// Result reports what Apply did beyond the plan.
+type Result struct {
+	// Backups lists "<dest> → <backup path>" for every real directory that
+	// was moved aside rather than deleted.
+	Backups []string
+}
+
 // Apply executes the plan and updates the lock. The caller saves the library.
-func Apply(lib *library.Library, plan Plan) error {
+// A symlink in the way is simply replaced; anything else (a real directory,
+// or a copy modified since skilldots wrote it) is moved into the target's
+// BackupDir first, never deleted.
+func Apply(lib *library.Library, plan Plan) (*Result, error) {
+	res := &Result{}
+	stamp := time.Now().Format("20060102-150405")
+	clear := func(op Op, prev *lock.Link) error {
+		if !fsutil.Lexists(op.Dest) {
+			return nil
+		}
+		st, err := os.Lstat(op.Dest)
+		if err != nil {
+			return err
+		}
+		disposable := st.Mode()&os.ModeSymlink != 0 || (prev != nil && current(op.Dest, prev, lib))
+		if disposable {
+			return os.RemoveAll(op.Dest)
+		}
+		bdir := filepath.Join(op.Target.Path, BackupDir, stamp)
+		if err := os.MkdirAll(bdir, 0o755); err != nil {
+			return err
+		}
+		to := filepath.Join(bdir, op.Name)
+		if err := os.Rename(op.Dest, to); err != nil {
+			return fmt.Errorf("backing up %s: %w", op.Dest, err)
+		}
+		res.Backups = append(res.Backups, op.Dest+" → "+to)
+		return nil
+	}
 	for _, op := range plan.Ops {
 		key := op.Target.Name + "/" + op.Name
 		switch op.Action {
 		case "create", "replace":
 			if err := os.MkdirAll(op.Target.Path, 0o755); err != nil {
-				return err
+				return res, err
 			}
-			if fsutil.Lexists(op.Dest) {
-				if err := os.RemoveAll(op.Dest); err != nil {
-					return err
-				}
+			if err := clear(op, lib.Lock.Links[key]); err != nil {
+				return res, err
 			}
 			mode := op.Mode
 			l := &lock.Link{Mode: mode, Source: lib.Rel(op.Source)}
 			if mode == "link" {
 				if err := os.Symlink(op.Source, op.Dest); err != nil {
 					if runtime.GOOS != "windows" {
-						return fmt.Errorf("%s: %w", op.Dest, err)
+						return res, fmt.Errorf("%s: %w", op.Dest, err)
 					}
 					mode = "copy"
 				}
 			}
 			if mode == "copy" {
 				if err := fsutil.CopyTree(op.Source, op.Dest); err != nil {
-					return err
+					return res, err
 				}
 				h, err := fsutil.HashTree(op.Dest)
 				if err != nil {
-					return err
+					return res, err
 				}
 				l.Mode, l.Hash = "copy", h
 			}
 			lib.Lock.Links[key] = l
 		case "remove":
-			if fsutil.Lexists(op.Dest) {
-				if err := os.RemoveAll(op.Dest); err != nil {
-					return err
-				}
+			if err := clear(op, lib.Lock.Links[key]); err != nil {
+				return res, err
 			}
 			delete(lib.Lock.Links, key)
 		}
 	}
-	return nil
+	return res, nil
 }
 
 // current reports whether dest still is what the lock says we wrote.
