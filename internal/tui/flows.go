@@ -437,7 +437,7 @@ func (m Model) planView(repo string, plan *app.UpdatePlan) (tea.Model, tea.Cmd) 
 			lines = append(lines, fit(row[0], 14)+row[1])
 		}
 		if len(plan.Updates) == 0 {
-			lines = append(lines, "", "Nothing changed upstream. Updating anyway re-vendors missing files and re-links.")
+			lines = append(lines, "", "Nothing changed upstream. Updating anyway re-vendors missing skills and re-links.")
 		}
 		lines = append(lines, "", "Recorded in the update history (h).")
 		m.ov = confirmOverlay("Update "+repo, lines, choice{key: "y", label: "update", then: func() step {

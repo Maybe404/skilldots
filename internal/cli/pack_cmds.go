@@ -311,8 +311,31 @@ func confirmUpdate(c *ctx, repos []string) (chosen []string, failed, err error) 
 		failed = fmt.Errorf("%d pack(s) could not be checked: %s", len(plan.Failed), plan.Failed[0].Repo)
 	}
 	if len(plan.Updates) == 0 {
-		c.printf("%s\n", ok("✓ nothing to update upstream"))
-		return nil, failed, nil
+		// Packs named and checked: offer to update them anyway, as u in
+		// the dashboard does. That re-vendors skills missing from vendor/
+		// and re-links; --yes does it without asking.
+		var checked []string
+		for _, st := range plan.Packs {
+			checked = append(checked, st.Repo)
+		}
+		if len(repos) == 0 || len(checked) == 0 {
+			c.printf("%s %s\n", ok("✓ nothing to update upstream"), dim("· skd apply re-links · skd update <pack> re-vendors one anyway"))
+			return nil, failed, nil
+		}
+		c.printf("%s\n", ok("✓ nothing changed upstream for "+strings.Join(checked, ", ")))
+		yes := false
+		err := ask(huh.NewConfirm().
+			Title("Update anyway?").
+			Description("re-vendors skills missing from vendor/ and re-links them").
+			Affirmative("Update anyway").Negative("No").Value(&yes))
+		if errors.Is(err, huh.ErrUserAborted) || (err == nil && !yes) {
+			c.printf("%s\n", dim("nothing updated"))
+			return nil, failed, nil
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		return checked, failed, nil
 	}
 	var opts []huh.Option[string]
 	for _, st := range plan.Updates {

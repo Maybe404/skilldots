@@ -59,7 +59,7 @@ Tell the user what it found, pack by pack: `changed` are selected skills whose u
 skd update owner/repo [owner/repo…] --json
 ```
 
-This also applies to scheduled or "keep my skills current" requests: report and ask, unless the user explicitly said to update without asking. Without a terminal (or with `--yes`/`--json`) `skd update` does not prompt and updates every pack it is given — all of them when none are named — so always name the packs. A pack `outdated` could not fetch is in `failed` and the exit code is non-zero; the others are still reported. `skd list` shows the last check's count without fetching.
+This also applies to scheduled or "keep my skills current" requests: report and ask, unless the user explicitly said to update without asking. Without a terminal — stdin or stdout not one, so piping the output counts — (or with `--yes`/`--json`) `skd update` does not prompt and updates every pack it is given — all of them when none are named — so always name the packs. A pack `outdated` could not fetch is in `failed` and the exit code is non-zero; the others are still reported. `skd list` shows the last check's count without fetching.
 
 With `--json`, `update` prints `{packs, failed, apply, committed, history}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. "upstream new" (`UpstreamNew`) lists only unselected skills that appeared since the previous `skd update`; offer to add them with `skd add owner/repo --skill <name>`. After an update, summarise what changed for the user.
 

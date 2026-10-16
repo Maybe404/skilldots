@@ -113,7 +113,11 @@ func confirm(prompt string) bool {
 	return yes
 }
 
-func isTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+// isTerminal reports whether skd can ask a person: stdin and stdout are
+// both terminals. With stdout piped (skd update | cat) a prompt would be
+// drawn where nobody sees it and wait forever, so such runs behave as
+// without a terminal: they do what --yes does, or refuse.
+func isTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) && stdoutIsTerminal() }
 
 // Root builds the command tree.
 func Root() *cobra.Command {
