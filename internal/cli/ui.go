@@ -132,9 +132,11 @@ var themeDone = "-"
 // themeWarned is set once a bad theme setting was reported.
 var themeWarned bool
 
-// detectBackground and stdoutIsTerminal are replaceable in tests.
+// detectBackground, stdinIsTerminal and stdoutIsTerminal are replaceable
+// in tests.
 var (
 	detectBackground = termbg.Detect
+	stdinIsTerminal  = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 	stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 )
 
