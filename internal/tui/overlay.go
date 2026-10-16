@@ -120,12 +120,13 @@ var helpKeys = [][2]string{
 	{"↑↓ j k", "move"},
 	{"pgup pgdn ^u ^d", "page up / down"},
 	{"g G home end", "top / end"},
-	{"tab ← → h l", "switch column"},
+	{"tab ← → l", "switch column"},
 	{"enter", "open the pack under the cursor"},
 	{"/", "filter this column (esc clears)"},
 	{"space", "enable / disable the skill (installs an upstream one)"},
 	{"a", "add a repository: pick skills or categories, alias, agents"},
 	{"u / U", "update this pack / every pack with upstream changes"},
+	{"h", "update history: what each update changed, with upstream's commit messages"},
 	{"c", "check upstream for changes again (runs at start; skd outdated)"},
 	{"e", "choose agents for the skill or pack"},
 	{"f", "fork a vendored or app skill into your library (rename it there)"},
@@ -140,6 +141,11 @@ var helpKeys = [][2]string{
 	{"?", "this help"},
 	{"q esc", "quit (esc clears a filter first)"},
 	{"ctrl+c", "quit · while busy: quit when done, twice: stop now"},
+}
+
+// textOverlay shows lines to read; any key but ↑↓ closes it.
+func textOverlay(title string, lines []string) *overlay {
+	return &overlay{kind: ovHelp, title: title, lines: lines}
 }
 
 func helpOverlay() *overlay {

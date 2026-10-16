@@ -455,3 +455,45 @@ func TestAddFlowPreselects(t *testing.T) {
 		t.Fatalf("add call = %q", got)
 	}
 }
+
+func TestHistoryView(t *testing.T) {
+	m, f := newModel(t, sampleSnapshot(), 120, 40)
+	m, cmd := press(t, m, "h")
+	m = drain(t, m, cmd)
+	if m.ov != nil || !strings.Contains(m.status, "no updates recorded yet") {
+		t.Fatalf("empty history: %+v %q", m.ov, m.status)
+	}
+	f.history = []app.UpdateRecord{
+		{Repo: "acme/x", From: "1111111aaa", To: "2222222bbb", Time: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
+			Changed: []string{"tdd"}, Gone: []string{"old"}, Commits: []app.UpstreamCommit{{Hash: "abcdef123", Subject: "tdd: clearer\x1b[31m steps"}}, MoreCommits: true},
+		{Repo: "acme/y", To: "3333333", Added: []string{"a"}, Time: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)},
+	}
+	m, cmd = press(t, m, "h")
+	m = drain(t, m, cmd)
+	if m.ov == nil || !strings.HasPrefix(m.ov.title, "Update history · 2 updates") {
+		t.Fatalf("history view: %+v", m.ov)
+	}
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"acme/x", "1111111→2222222", "1 changed · 1 gone", "acme/y", "1 added"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("history lacks %q:\n%s", want, v)
+		}
+	}
+	m, _ = press(t, m, "enter")
+	text := strings.Join(m.ov.lines, "\n")
+	for _, want := range []string{"1111111 → 2222222", "changed       tdd", "upstream gone old", "abcdef1 tdd: clearer", "… more"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("details lack %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "\x1b") {
+		t.Error("a control character from upstream reached the screen")
+	}
+	// h no longer moves to the left column; ← does.
+	m, _ = press(t, m, "esc")
+	m, _ = press(t, m, "right")
+	m, _ = press(t, m, "left")
+	if m.focus != focusLeft {
+		t.Fatal("← does not switch to the left column")
+	}
+}

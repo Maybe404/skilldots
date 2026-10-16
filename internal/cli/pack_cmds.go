@@ -263,7 +263,10 @@ func updateCmd() *cobra.Command {
 					return err
 				}
 			}
-			c.jsonOut(map[string]any{"packs": out.Reports, "failed": out.Failed, "apply": out.Apply, "committed": committed})
+			if len(out.History) > 0 {
+				c.printf("%s\n", dim(fmt.Sprintf("recorded in %s · skd history shows what changed and why", app.HistoryFile)))
+			}
+			c.jsonOut(map[string]any{"packs": out.Reports, "failed": out.Failed, "apply": out.Apply, "committed": committed, "history": out.History})
 			if len(out.Failed) > 0 {
 				return fmt.Errorf("%d pack(s) failed: %s", len(out.Failed), out.Failed[0].Repo)
 			}

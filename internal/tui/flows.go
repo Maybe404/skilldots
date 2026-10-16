@@ -345,3 +345,54 @@ func (m Model) settingsView(settings []Setting) (tea.Model, tea.Cmd) {
 	m.ov = listOverlay("Settings", "per user and per machine (skd config) · the theme applies the next time skd starts", "no settings", items, change)
 	return m, nil
 }
+
+// historyView is `skd history`: the recorded updates, newest first;
+// enter shows one with upstream's commit messages.
+func (m Model) historyView(recs []app.UpdateRecord) (tea.Model, tea.Cmd) {
+	if len(recs) == 0 {
+		if m.status == "" || m.statusLvl != lvWarn {
+			m.status, m.statusLvl = "no updates recorded yet · u and U record each one", lvInfo
+		}
+		return m, nil
+	}
+	var items []pickItem
+	for i, r := range recs {
+		items = append(items, pickItem{label: r.Time.Local().Format("2006-01-02 15:04") + "  " + r.Repo,
+			detail: short(r.From) + "→" + short(r.To) + " · " + app.RecordSummary(r), value: strconv.Itoa(i)})
+	}
+	show := listAction{key: "v", label: "details", run: func(it pickItem) step {
+		i, _ := strconv.Atoi(it.value)
+		return step{next: textOverlay(recs[i].Repo+" · "+recs[i].Time.Local().Format("2006-01-02 15:04"), recordLines(recs[i]))}
+	}}
+	m.ov = listOverlay("Update history · "+plural(len(recs), "update"), "newest first · recorded in "+app.HistoryFile+" in the library (skd history)",
+		"no updates recorded yet", items, show)
+	return m, nil
+}
+
+// recordLines is one update record in full.
+func recordLines(r app.UpdateRecord) []string {
+	from := short(r.From)
+	if from == "" {
+		from = "new"
+	}
+	lines := []string{from + " → " + short(r.To), ""}
+	for _, row := range app.RecordRows(r) {
+		lines = append(lines, fit(row[0], 14)+row[1])
+	}
+	lines = append(lines, "")
+	switch {
+	case r.CommitsUnknown:
+		lines = append(lines, "upstream commits unknown (history rewritten or not fetched)")
+	case len(r.Commits) == 0:
+		lines = append(lines, "no upstream commits touched these skills")
+	default:
+		lines = append(lines, "upstream commits:")
+		for _, c := range r.Commits {
+			lines = append(lines, "  "+short(c.Hash)+" "+clean(c.Subject))
+		}
+		if r.MoreCommits {
+			lines = append(lines, "  … more: git log "+short(r.From)+".."+short(r.To)+" in the cache clone")
+		}
+	}
+	return lines
+}

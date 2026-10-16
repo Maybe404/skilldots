@@ -70,6 +70,7 @@ type fakeOps struct {
 	// check is what Check returns; checkErr fails it.
 	check    *app.Outdated
 	checkErr error
+	history  []app.UpdateRecord
 }
 
 func (f *fakeOps) rec(s string) {
@@ -171,6 +172,10 @@ func (f *fakeOps) Adopt(props []app.Proposal) (string, error) {
 func (f *fakeOps) TrashList() ([]engine.TrashEntry, error) { f.rec("trash-list"); return f.trash, nil }
 func (f *fakeOps) Restore(id string) (string, error)       { f.rec("restore " + id); return "ok", nil }
 func (f *fakeOps) EmptyTrash() (string, error)             { f.rec("empty"); return "ok", nil }
+func (f *fakeOps) History(p string) ([]app.UpdateRecord, error) {
+	f.rec("history " + p)
+	return f.history, nil
+}
 func (f *fakeOps) Settings() ([]Setting, error) {
 	f.rec("settings")
 	var out []Setting

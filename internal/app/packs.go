@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
@@ -237,6 +239,9 @@ type UpdateOutcome struct {
 	Apply   *ApplyOutcome
 	// Changed is set when any pack's vendored content or names changed.
 	Changed bool
+	// History are the records written to the history file (HistoryFile),
+	// one per pack that moved to a new commit or changed.
+	History []UpdateRecord
 }
 
 // Update fetches the named packs (every pack when none) and re-vendors
@@ -255,8 +260,10 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 		}
 		packs = append(packs, p)
 	}
-	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}}
+	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}, History: []UpdateRecord{}}
 	updated := map[string]string{}
+	var recs []*UpdateRecord
+	now := time.Now()
 	for _, p := range packs {
 		unlock := pack.Hold(p.Repo)
 		known := s.knownUpstream(p.Repo)
@@ -275,10 +282,23 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 		out.Reports = append(out.Reports, rep)
 		out.Changed = out.Changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped) > 0 || len(rep.Renamed) > 0
 		updated[p.Repo] = rep.NewCommit
+		if r := newRecord(rep, now); r != nil {
+			unlock := pack.Hold(p.Repo)
+			fillCommits(context.Background(), r, p.Ref, rep.Upstream)
+			unlock()
+			recs = append(recs, r)
+		}
 	}
 	ap, err := s.saveAndApply()
 	out.Apply = ap
 	if err == nil {
+		if herr := s.appendHistory(recs); herr != nil {
+			s.logf(Warn, "could not write the update history (%s): %v", HistoryFile, herr)
+		} else {
+			for _, r := range recs {
+				out.History = append(out.History, *r)
+			}
+		}
 		// The updated packs now match upstream: `list` and the menu stop
 		// counting them.
 		if rerr := s.refreshRecorded(updated); rerr != nil {

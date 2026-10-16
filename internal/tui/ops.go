@@ -55,6 +55,9 @@ type Ops interface {
 	Restore(id string) (string, error)
 	// EmptyTrash permanently deletes the trash.
 	EmptyTrash() (string, error)
+	// History lists the recorded updates, newest first, of one pack or
+	// of all ("") (skd history). It never touches the network.
+	History(pack string) ([]app.UpdateRecord, error)
 	// Settings lists the user settings (skd config list).
 	Settings() ([]Setting, error)
 	// SetSetting changes one (skd config set; "" unsets it).
@@ -310,6 +313,9 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 		}
 	}
 	msg := withSummary(fmt.Sprintf("updated %d pack(s): %s · %d added · %d new upstream", len(reports), what, added, fresh), out.Apply)
+	if len(out.History) > 0 {
+		msg += " · h shows what changed"
+	}
 	if len(out.Failed) > 0 {
 		var failed []string
 		for _, f := range out.Failed {
@@ -499,6 +505,18 @@ func (o *libOps) EmptyTrash() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("deleted %d item(s) from the trash for good", n), nil
+}
+
+func (o *libOps) History(p string) ([]app.UpdateRecord, error) {
+	s, err := o.open()
+	if err != nil {
+		return nil, err
+	}
+	recs, skipped, err := s.History(p, 0)
+	if err == nil && skipped > 0 {
+		return recs, warning(fmt.Sprintf("%s: %d line(s) could not be read and were skipped", app.HistoryFile, skipped))
+	}
+	return recs, err
 }
 
 func (o *libOps) Settings() ([]Setting, error) {

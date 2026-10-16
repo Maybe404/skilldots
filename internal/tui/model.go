@@ -108,6 +108,10 @@ type result struct {
 	scan     *ScanResult
 	trash    []engine.TrashEntry
 	settings []Setting
+	// history is the update history (h); historyRead is set even when it
+	// is empty.
+	history     []app.UpdateRecord
+	historyRead bool
 	// focus is the Skill.Key of a row to put the cursor on afterwards.
 	focus string
 }
@@ -584,8 +588,13 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.switchFocus(focusLeft), nil
 	case "right", "l", "enter":
 		return m.switchFocus(focusRight), nil
-	case "left", "h":
+	case "left":
 		return m.switchFocus(focusLeft), nil
+	case "h":
+		return m.start(job{label: "reading the update history", run: func(o Ops) result {
+			recs, err := o.History("")
+			return result{history: recs, err: err, historyRead: true}
+		}})
 	case "/":
 		m.filtering = true
 		m.finput.SetValue(m.filter[m.focus])
@@ -991,7 +1000,7 @@ func (m Model) start(j job) (tea.Model, tea.Cmd) {
 		}
 		defer jobs.end()
 		res := j.run(ops)
-		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil {
+		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil && !res.historyRead {
 			snap, err := ops.Load()
 			if err != nil && res.err == nil {
 				res.err = err
@@ -1012,7 +1021,13 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	}
+	var w warning
 	switch {
+	case r.historyRead && (r.err == nil || errors.As(r.err, &w)):
+		if r.err != nil {
+			m.status, m.statusLvl = string(w), lvWarn
+		}
+		return m.historyView(r.history)
 	case r.err != nil:
 	case r.browse != nil:
 		m.ov = m.browseOverlay(r.src, r.browse)
