@@ -13,11 +13,11 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/pack"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // HistoryFile is the update history, at the library root. It is part of
@@ -123,25 +123,9 @@ func (r *UpdateRecord) sanitize() {
 // CleanText is s fit to print on one terminal line: tabs and line breaks
 // become spaces, other control characters (C0, DEL, C1) and the bidi
 // controls that reorder text are dropped, invalid UTF-8 becomes U+FFFD,
-// and the result is cut to max characters with "…".
-func CleanText(s string, max int) string {
-	var b strings.Builder
-	n := 0
-	for _, r := range strings.ToValidUTF8(s, "\uFFFD") {
-		switch {
-		case r == '\t' || r == '\n' || r == '\r':
-			r = ' '
-		case unicode.IsControl(r), r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069, r == 0x200E, r == 0x200F, r == 0x061C:
-			continue
-		}
-		if n == max {
-			return strings.TrimRight(b.String(), " ") + "…"
-		}
-		b.WriteRune(r)
-		n++
-	}
-	return b.String()
-}
+// and with max > 0 the result is cut to max characters with "…". It is
+// safetext.Clean, for front ends that already use app.
+func CleanText(s string, max int) string { return safetext.Clean(s, max) }
 
 // movedNames takes the skill names out of SyncReport.Moved
 // ("name: …").

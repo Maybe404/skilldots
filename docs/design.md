@@ -129,6 +129,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 - **链接 vs 拷贝**：默认软链接；Windows 无权限或 target 要求拷贝时降级，锁里记录哈希。拷贝只有"原样"（哈希一致且没有哈希看不到的 `.git`、`node_modules`、符号链接）时才直接替换，否则整份移入 trash；用户改过的文件不覆盖并警告
 - **库目录移动**：链接指向"另一个根 + 锁里记录的相对路径"时识别为旧位置的链接，`apply` 直接重建
 - **不删除**：除 `skd trash empty` 外不永久删除用户数据。trash 用 rename，仅跨设备（EXDEV）时回退为完整拷贝（含 `.git`、符号链接、权限）后再删源，其他错误原样返回
+- **终端输出不带外来控制字符**：上游仓库与库文件里的文字（SKILL.md 的 description、分类目录名、被拒目录名、git 输出、skills.toml/skills.lock 的内容）写到终端前都去掉控制字符（C0、DEL、C1）和 bidi 控制符，统一由 `internal/safetext`（`Clean` 单行、`Lines` 保留换行）完成，`app.CleanText` 与仪表盘的 `clean` 都是它。源头：`skillmd.Read` 清洗 description/license（`--json` 里也是清洗后的）；`manifest.CheckCategory` 拒绝含这类字符的分类（扫描时该 skill 被拒并告警，锁里的分类同样被拒）；`manifest.Load` 拒绝 repo/ref/alias/app 名与路径/local 名/target 名与路径里有这类字符的清单（报错带文件路径，需手改）；`pack.ParseSource` 拒绝这类来源；`pack.Rejected.String()` 清洗。打印层：CLI 的告警、错误（`Main`）、进度行（`logLine`）、update 报告的 skill 列表、scan 的条目名与路径都过 `safetext`。`--json` 其余字段保持原样（数据；JSON 本身转义 U+0020 以下的控制字符），展示给人的程序自行清洗
 - **`--json`**：stdout 只有一份 JSON，进度和告警走 stderr；失败时 stdout 为空、退出码非 0（`update` 例外：输出 `{packs, failed, apply, committed, history}` 后以非 0 退出；`outdated` 同理输出 `{checked, packs, failed, updates}`，`packs[]` 为 `{repo, commit, latest, changed, moved, new, gone, pending, checked}`）
 - **更新安全**：锁定 commit，`update` 永远显式；上游删除不自动删本地
 - **许可证**：vendor 时拷 LICENSE；找不到（根目录、skill 目录、frontmatter `license:`）的仓库提示，自写来源不检查

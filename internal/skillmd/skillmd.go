@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // Meta is the subset of SKILL.md frontmatter skilldots cares about.
@@ -56,9 +58,11 @@ func Read(dir string) (Meta, error) {
 			m.Name = val
 			m.EmptyName = val == ""
 		case "description":
-			m.Description = val
+			// Shown in every listing: upstream text, so no control
+			// characters (safetext.Clean), in --json too.
+			m.Description = safetext.Clean(val, 0)
 		case "license":
-			m.License = val
+			m.License = safetext.Clean(val, 0)
 		}
 	}
 	if m.Name == "" {

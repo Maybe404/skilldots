@@ -107,7 +107,7 @@ func initCmd() *cobra.Command {
 			}
 			rep, out, err := c.Subscribe(&manifest.Pack{Repo: SelfRepo, Use: []string{SelfSkill}})
 			if rep == nil && err != nil {
-				say("  %s could not fetch the %s skill (%v); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, err, SelfRepo, SelfSkill)
+				say("  %s could not fetch the %s skill (%s); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, errText(err), SelfRepo, SelfSkill)
 				result["skillError"] = err.Error()
 				jsonOut(result)
 				return nil

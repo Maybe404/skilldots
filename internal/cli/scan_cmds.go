@@ -63,7 +63,7 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 			t = newTable("", "SKILL", "STATE", "DETAIL")
 		}
 		mark, state, detail := scanRow(c, it)
-		t.Row(mark, it.Name, state, detail)
+		t.Row(mark, txt(it.Name), state, detail)
 	}
 	flush()
 	if counts[scan.Copy]+counts[scan.ExtLink]+counts[scan.AppLink]+counts[scan.Broken] > 0 {
@@ -73,7 +73,7 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 
 func scanRow(c *ctx, it scan.Item) (mark, state, detail string) {
 	home, _ := os.UserHomeDir()
-	short := func(p string) string { return strings.Replace(p, home, "~", 1) }
+	short := func(p string) string { return txt(strings.Replace(p, home, "~", 1)) }
 	switch it.State {
 	case scan.Managed:
 		return ok("●"), dim("managed"), dim(short(it.LinkTo))
@@ -86,7 +86,7 @@ func scanRow(c *ctx, it scan.Item) (mark, state, detail string) {
 	case scan.Copy:
 		d := "copied files"
 		if it.Source != "" {
-			d = "from " + it.Source
+			d = "from " + txt(it.Source)
 		}
 		if it.Duplicate {
 			d += "  " + warn("differs from a same-named copy elsewhere")

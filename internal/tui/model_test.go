@@ -688,7 +688,9 @@ func TestViewStripsControlCharacters(t *testing.T) {
 			Skills: []pack.Skill{{Name: "evil", Category: "c" + evil, Description: evil + "描述"}}}}})
 		check("browse", nm.(Model))
 	}
-	if got := clean("a\x1b[2Jb\tc\u009bd\xffe 中文 👍🏽"); got != "a[2Jb cde 中文 👍🏽" {
+	// The same cleaning as the CLI and the history (safetext.Clean): bidi
+	// controls go too, an invalid byte shows as U+FFFD.
+	if got := clean("a\x1b[2Jb\tc\u009bd\xffe \u202E中文 👍🏽"); got != "a[2Jb cd\uFFFDe 中文 👍🏽" {
 		t.Errorf("clean: %q", got)
 	}
 }

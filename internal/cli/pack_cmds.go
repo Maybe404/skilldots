@@ -225,7 +225,7 @@ func sortedKeys[V any](m map[string]V) []string {
 
 func warnLicense(c *ctx, rep *engine.SyncReport) {
 	for _, w := range rep.Warnings {
-		fmt.Fprintf(os.Stderr, "%s %s: %s\n", warn("!"), rep.Repo, w)
+		fmt.Fprintf(os.Stderr, "%s %s: %s\n", warn("!"), rep.Repo, txt(w))
 	}
 	if rep.NoLicense {
 		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
@@ -260,7 +260,7 @@ func updateCmd() *cobra.Command {
 			// Whatever succeeded is saved and linked even if another pack failed.
 			out, err := c.Update(args, func(repo string, rep *engine.SyncReport, err error) {
 				if err != nil {
-					c.printf("%s %s: %v\n", bad("✗"), repo, err)
+					c.printf("%s %s: %s\n", bad("✗"), repo, errText(err))
 					return
 				}
 				printReport(c, rep)
@@ -304,7 +304,7 @@ func confirmUpdate(c *ctx, repos []string) (chosen []string, failed, err error) 
 	c.printf("%s\n", dim("checking upstream…"))
 	plan, err := c.PlanUpdate(context.Background(), repos, func(repo string, st *app.PackStatus, err error) {
 		if err != nil {
-			c.printf("%s %s: %v\n", bad("✗"), repo, err)
+			c.printf("%s %s: %s\n", bad("✗"), repo, errText(err))
 		}
 	})
 	if err != nil {
@@ -375,7 +375,7 @@ func printReport(c *ctx, r *engine.SyncReport) {
 	c.printf("%s\n", head)
 	row := func(label string, style func(string) string, names []string) {
 		if len(names) > 0 {
-			c.printf("  %s %s\n", style(fmt.Sprintf("%-13s", label)), strings.Join(names, ", "))
+			c.printf("  %s %s\n", style(fmt.Sprintf("%-13s", label)), strings.Join(txts(names), ", "))
 		}
 	}
 	row("changed", accent, r.Changed)
@@ -388,14 +388,14 @@ func printReport(c *ctx, r *engine.SyncReport) {
 		if n > 5 {
 			shown, more = shown[:5], dim(fmt.Sprintf(" … %d more (skd add %s to browse)", n-5, r.Repo))
 		}
-		c.printf("  %s %s%s\n", dim(fmt.Sprintf("%-13s", "upstream new")), strings.Join(shown, ", "), more)
+		c.printf("  %s %s%s\n", dim(fmt.Sprintf("%-13s", "upstream new")), strings.Join(txts(shown), ", "), more)
 	}
 	row("upstream gone", warn, r.UpstreamGone)
 	for _, rj := range r.Rejected {
 		c.printf("  %s %s\n", warn(fmt.Sprintf("%-13s", "rejected")), rj)
 	}
 	for _, b := range r.Backups {
-		c.printf("  %s %s\n", dim(fmt.Sprintf("%-13s", "moved aside")), b)
+		c.printf("  %s %s\n", dim(fmt.Sprintf("%-13s", "moved aside")), txt(b))
 	}
 	if len(r.Changed) > 0 {
 		c.printf("  %s\n", dim(fmt.Sprintf("see changes: git -C %s diff -- vendor/%s", c.lib.Root, r.Repo)))
@@ -679,7 +679,7 @@ func outdatedCmd() *cobra.Command {
 			}
 			out, err := c.Outdated(args, func(repo string, st *app.PackStatus, err error) {
 				if err != nil {
-					c.printf("%s %s: %v\n", bad("✗"), repo, err)
+					c.printf("%s %s: %s\n", bad("✗"), repo, errText(err))
 					return
 				}
 				printStatus(c, st)

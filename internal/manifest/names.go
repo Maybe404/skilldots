@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
@@ -26,10 +28,16 @@ func CheckName(name string) error {
 	return nil
 }
 
-// CheckCategory validates a category path ("a/b"); "" is valid.
+// CheckCategory validates a category path ("a/b"); "" is valid. It is an
+// upstream directory path that becomes one in vendor/ and is shown in
+// listings, so control characters, bidi controls and invalid UTF-8 are
+// refused along with what could escape a directory.
 func CheckCategory(cat string) error {
 	if cat == "" {
 		return nil
+	}
+	if safetext.Has(cat) {
+		return fmt.Errorf("invalid category %q: control characters", cat)
 	}
 	for _, seg := range strings.Split(cat, "/") {
 		if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, "\\\x00") {

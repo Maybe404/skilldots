@@ -13,6 +13,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/targets"
 	"github.com/Maybe404/skilldots/internal/termbg"
 	"github.com/Maybe404/skilldots/internal/tui"
@@ -52,8 +53,24 @@ func say(format string, a ...any) {
 	fmt.Fprintf(os.Stdout, format, a...)
 }
 
+// txt and errText are text from outside skd (upstream names and
+// directories, file names, library files, git's output) as it may be
+// printed: no control characters or bidi controls (safetext). Every
+// warning and error goes through them; so does anything else that
+// carries such text.
+func txt(s string) string      { return safetext.Clean(s, 0) }
+func errText(err error) string { return safetext.Lines(err.Error()) }
+func txts(s []string) []string {
+	out := make([]string, len(s))
+	for i, v := range s {
+		out[i] = txt(v)
+	}
+	return out
+}
+
 // logLine prints the progress messages of the shared app flows.
 func logLine(l app.Level, msg string) {
+	msg = safetext.Lines(msg)
 	switch l {
 	case app.Problem:
 		fmt.Fprintf(os.Stderr, "%s %s\n", warn("warning:"), msg)
@@ -162,7 +179,7 @@ func Root() *cobra.Command {
 // Main runs the CLI and returns an exit code.
 func Main() int {
 	if err := Root().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, "error:", errText(err))
 		return 1
 	}
 	return 0

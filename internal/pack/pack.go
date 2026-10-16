@@ -17,6 +17,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
@@ -36,6 +37,10 @@ var ghShort = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 func ParseSource(s string) (Source, error) {
 	src := Source{}
 	s = strings.TrimSpace(s)
+	// It becomes the pack's name, printed by every command.
+	if safetext.Has(s) {
+		return src, fmt.Errorf("source %q has control characters: not a repository", s)
+	}
 	// git would take a leading "-" as an option (--upload-pack=…).
 	if strings.HasPrefix(s, "-") {
 		return src, fmt.Errorf("source %q starts with \"-\": not a repository", s)
@@ -345,7 +350,9 @@ type Rejected struct {
 	Reason string `json:"reason"`
 }
 
-func (r Rejected) String() string { return r.Dir + ": " + r.Reason }
+// String is r for a person: the directory is upstream's and may hold
+// anything, so it is cleaned (safetext) like the rest.
+func (r Rejected) String() string { return safetext.Clean(r.Dir+": "+r.Reason, 0) }
 
 // testDirs are never scanned: fixtures routinely contain throwaway skills.
 var testDirs = map[string]bool{"test": true, "tests": true, "testdata": true, "fixtures": true, "__fixtures__": true, "__tests__": true}

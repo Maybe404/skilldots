@@ -13,6 +13,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 const FileName = "skills.toml"
@@ -87,7 +88,40 @@ func Load(path string) (*Manifest, error) {
 	if m.Targets.Custom == nil {
 		m.Targets.Custom = map[string]CustomTarget{}
 	}
+	if err := m.checkText(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return m, nil
+}
+
+// checkText refuses a manifest whose repositories, refs, aliases, paths
+// or target names hold control characters, bidi controls or invalid
+// UTF-8: they are printed by every command and passed to git, and nothing
+// skd writes has them, so the file was written to attack a terminal.
+func (m *Manifest) checkText() error {
+	bad := func(what, s string) error {
+		if safetext.Has(s) {
+			return fmt.Errorf("%s %q has control characters; fix it by hand", what, s)
+		}
+		return nil
+	}
+	var errs []error
+	for _, p := range m.Packs {
+		errs = append(errs, bad("pack repo", p.Repo), bad("pack ref", p.Ref), bad("pack alias", p.Alias))
+	}
+	for _, a := range m.Apps {
+		errs = append(errs, bad("app name", a.Name), bad("app path", a.Path))
+	}
+	for _, l := range m.Locals {
+		errs = append(errs, bad("local name", l.Name))
+	}
+	for n, ct := range m.Targets.Custom {
+		errs = append(errs, bad("target", n), bad("target path", ct.Path))
+	}
+	for _, n := range m.Targets.Default {
+		errs = append(errs, bad("default target", n))
+	}
+	return errors.Join(errs...)
 }
 
 // New returns a manifest with sensible defaults.
