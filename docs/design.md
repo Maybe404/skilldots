@@ -73,6 +73,8 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 
 `skd clone` 在 apply 之前列出库里的每个自定义 target 和不用它的原因：能批准的，交互终端下逐个显示并询问（默认否），非交互（含 `--yes`、`--json`）时跳过并说明如何批准；路径不允许或与内置同名的只说明原因。之后每个读库的命令都在 stderr 告警每个不生效的自定义 target（原因、受影响的 skill），apply 的计划里该 target 的条目显示为跳过（“custom target … is not used”），锁里已记录在它下面的链接不动。已知局限：能写用户配置目录、或能伪造终端（如 `script`）的程序仍可绕过；这一层挡的是“clone 一个库、无人值守地执行命令”，不是本机上的恶意程序。
 
+**“人在终端”的边界（设计边界，写明而不假装能挡）**：`targets trust`、仪表盘的批准、键入 target 名确认、`trash empty` 都只认“stdin 与 stdout 都是终端（且需要时键入了答案）”。这挡住 agent 的普通工具调用（stdout 被捕获、无 tty）、脚本、cron、`--yes`/`--json`，但挡不住自己驱动伪终端的程序：有 pty 的 agent 用 `script -q /dev/null skd targets trust x`、`expect` 或它控制的终端模拟器，就能看到提示并替人回答、键入名字。skd 区分不了伪终端和人，不做检测（检测父进程、终端类型之类都可伪造，只会给人错误的安全感）。对策在约定层：随库发布的 `skills/skilldots/SKILL.md` 明确禁止 agent 用 `script`、`expect`、`unbuffer`、tmux/screen 或任何伪终端代人批准自定义 target、键入确认或清空回收站；README 的 “Built for agents” 同样写明。真正需要隔离时，靠的是 agent 自身的权限（不给它 pty、不让它执行 `script`），不是 skd。
+
 ## 命令
 
 | 命令 | 作用 |

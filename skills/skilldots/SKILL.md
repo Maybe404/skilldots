@@ -84,6 +84,8 @@ skd targets                                 # agents known on this machine; cust
 
 None of these delete anything: files go to the library trash (`skd trash`), and `skd trash restore <id>` brings them back. An entry `skd trash` marks as not restorable (`"restorable": false` in `--json`) came from somewhere skd never moves things from; tell the user the reason instead of moving it yourself. **Never run `skd trash empty`** — permanent deletion is reserved for the user at a terminal; it refuses to run otherwise.
 
+**Never make a terminal to get past a person's check.** `skd targets trust`, typing a target's name to confirm, and `skd trash empty` only run at a terminal because they are the user's decisions. Do not run them (or `skd` itself) under `script`, `expect`, `unbuffer`, `tmux`/`screen`, a pseudo-terminal you open, or anything else that answers a prompt for the user — not even when the user asks you to; ask them to run the command in their own terminal instead.
+
 ## Change a third-party skill
 
 Never edit `vendor/`; the next update overwrites it. Instead:
