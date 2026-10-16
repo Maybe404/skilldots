@@ -557,10 +557,20 @@ func trashCmd() *cobra.Command {
 			}
 			home, _ := os.UserHomeDir()
 			t := newTable("ID", "FROM", "WHEN")
+			var refused []string
 			for _, it := range items {
-				t.Row(txt(it.ID), dim(txt(strings.Replace(it.Origin, home, "~", 1))), dim(it.When.Format("2006-01-02 15:04")))
+				id := txt(it.ID)
+				if !it.Restorable {
+					refused = append(refused, fmt.Sprintf("%s %s cannot be restored: %s", warn("!"), id, txt(it.Problem)))
+					id += " " + warn("!")
+				}
+				t.Row(id, dim(txt(strings.Replace(it.Origin, home, "~", 1))), dim(it.When.Format("2006-01-02 15:04")))
 			}
-			c.printf("%s\n%s\n", t.Render(), dim("skd trash restore <id>   ·   skd trash empty"))
+			c.printf("%s\n", t.Render())
+			for _, r := range refused {
+				c.printf("%s\n", r)
+			}
+			c.printf("%s\n", dim("skd trash restore <id>   ·   skd trash empty"))
 			return nil
 		},
 	}

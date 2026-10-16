@@ -173,7 +173,7 @@ The first skill to use a name keeps it. When `skd add` or `skd update` vendors a
 
 - **Moved the library:** `skd use <new dir>` then `skd apply`; links into the old location are recognised and re-pointed.
 
-Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights, or for targets with `mode = "copy"`), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`: a copy is only discarded when it is exactly what skd wrote, and a vendored directory only when it matches the lock. `skd remove` of a pack's last skill drops the pack.
+Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights, or for targets with `mode = "copy"`), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`: a copy is only discarded when it is exactly what skd wrote, and a vendored directory only when it matches the lock. `skd trash restore` only puts a directory back where skd takes them from, an entry of an agent's skill directory or a place inside the library's `vendor/`; a trash entry recorded as coming from anywhere else, or reached through a symbolic link, is listed as not restorable with the reason, and is left for you to move by hand (a library cloned from someone else carries their `.trash/` too). `skd remove` of a pack's last skill drops the pack.
 
 ## Unattended updates
 

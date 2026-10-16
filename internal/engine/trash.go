@@ -13,6 +13,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/safetext"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // TrashDir is the library folder where skilldots parks anything it takes
@@ -27,6 +28,10 @@ type TrashEntry struct {
 	Origin string    `json:"origin"` // where it came from
 	Path   string    `json:"path"`   // where it is now
 	When   time.Time `json:"when"`
+	// Restorable is false when `skd trash restore` refuses the entry;
+	// Problem then says why (it holds no control characters).
+	Restorable bool   `json:"restorable"`
+	Problem    string `json:"problem,omitempty"`
 }
 
 // trashBatch is the per-run folder so one command's moves stay together.
@@ -52,6 +57,11 @@ func Trash(lib *library.Library, src string) (string, error) {
 	dir := filepath.Join(lib.Root, TrashDir, batch())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
+	}
+	// The record is absolute: a library or a target named by a relative
+	// path would otherwise be restored relative to wherever skd runs.
+	if abs, err := filepath.Abs(src); err == nil {
+		src = abs
 	}
 	name := filepath.Base(src)
 	dest := filepath.Join(dir, name)
@@ -86,18 +96,24 @@ func move(src, dst string) error {
 	return os.RemoveAll(src)
 }
 
-// ListTrash returns every parked directory, newest first.
-func ListTrash(lib *library.Library) ([]TrashEntry, error) {
+// ListTrash returns every parked directory, newest first, each marked
+// with whether Restore would put it back (reg is the target registry;
+// nil allows only the library's vendor/).
+func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error) {
 	root := filepath.Join(lib.Root, TrashDir)
-	batches, err := os.ReadDir(root)
-	if os.IsNotExist(err) {
+	if err := realDir(root); os.IsNotExist(err) {
 		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("the trash %q: %w; skd does not follow it", root, err)
 	}
+	batches, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
 	}
 	var out []TrashEntry
 	for _, b := range batches {
+		// DirEntry types come from the directory itself: a symbolic link
+		// to a directory is not a directory here, and is left out.
 		if !b.IsDir() {
 			continue
 		}
@@ -107,32 +123,45 @@ func ListTrash(lib *library.Library) ([]TrashEntry, error) {
 				continue
 			}
 			p := filepath.Join(root, b.Name(), it.Name())
-			origin, _ := os.ReadFile(p + ".origin")
 			when, _ := time.ParseInLocation("20060102-150405", b.Name(), time.Local)
-			out = append(out, TrashEntry{ID: b.Name() + "/" + it.Name(), Name: it.Name(),
-				Origin: strings.TrimSpace(string(origin)), Path: p, When: when})
+			e := TrashEntry{ID: b.Name() + "/" + it.Name(), Name: it.Name(), Path: p, When: when}
+			origin, err := readOrigin(p)
+			if err == nil {
+				e.Origin = origin
+				err = checkOrigin(lib, reg, origin)
+			}
+			e.Restorable = err == nil
+			if err != nil {
+				e.Problem = err.Error()
+			}
+			out = append(out, e)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
 	return out, nil
 }
 
-// Restore moves a parked directory back to its origin.
-func Restore(lib *library.Library, id string) (string, error) {
-	p := filepath.Join(lib.Root, TrashDir, filepath.FromSlash(id))
-	origin, err := os.ReadFile(p + ".origin")
+// Restore moves a parked directory back to its origin. Only an entry skd
+// could have made is restored: id names a directory exactly two levels
+// down in the library's .trash (no "..", no separator, nothing reached
+// through a symbolic link), and its recorded origin is a place skd moves
+// directories from (checkOrigin). The trash of a library cloned from
+// someone else is theirs to write; without these checks restoring an
+// entry would move any directory to any place.
+func Restore(lib *library.Library, reg *targets.Registry, id string) (string, error) {
+	p, err := entryPath(lib, id)
 	if err != nil {
-		return "", fmt.Errorf("no trash entry %q", id)
+		return "", err
 	}
-	dest := strings.TrimSpace(string(origin))
-	// skd records where it took a directory from, and never takes one
-	// from a path with control characters: such a record was written by
-	// someone else, and restoring would create that name.
-	if safetext.Has(dest) {
-		return "", fmt.Errorf("trash entry %q: where it came from (%q) has control characters; restore it by hand from %q", id, dest, p)
+	dest, err := readOrigin(p)
+	if err == nil {
+		err = checkOrigin(lib, reg, dest)
+	}
+	if err != nil {
+		return "", fmt.Errorf("trash entry %q cannot be restored: %w; restore it by hand from %q", id, err, p)
 	}
 	if fsutil.Lexists(dest) {
-		return "", fmt.Errorf("%s already exists; remove it first (skd disable/remove) or restore by hand from %s", dest, p)
+		return "", fmt.Errorf("%q already exists; remove it first (skd disable/remove) or restore by hand from %q", dest, p)
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
@@ -145,9 +174,136 @@ func Restore(lib *library.Library, id string) (string, error) {
 	return dest, nil
 }
 
+// entryPath is where the trash entry id is, after checking that id is
+// "<batch>/<name>" and that the trash, the batch and the entry are
+// directories of their own, none a symbolic link.
+func entryPath(lib *library.Library, id string) (string, error) {
+	parts := strings.Split(id, "/")
+	bad := len(parts) != 2
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, `/\`+"\x00") || filepath.Base(part) != part {
+			bad = true
+		}
+	}
+	if bad {
+		return "", fmt.Errorf("no trash entry %q (an id is <batch>/<name>, as `skd trash` lists it)", id)
+	}
+	root := filepath.Join(lib.Root, TrashDir)
+	p := root
+	for _, d := range []string{"", parts[0], parts[1]} {
+		p = filepath.Join(p, d)
+		if err := realDir(p); os.IsNotExist(err) {
+			return "", fmt.Errorf("no trash entry %q", id)
+		} else if err != nil {
+			return "", fmt.Errorf("trash entry %q: %q %w", id, p, err)
+		}
+	}
+	return p, nil
+}
+
+// realDir reports whether p is a directory itself: an error for a
+// symbolic link (even to a directory) or anything else.
+func realDir(p string) error {
+	st, err := os.Lstat(p)
+	switch {
+	case err != nil:
+		return err
+	case st.Mode()&os.ModeSymlink != 0:
+		return errors.New("is a symbolic link")
+	case !st.IsDir():
+		return errors.New("is not a directory")
+	}
+	return nil
+}
+
+// maxOrigin bounds the record read: skd writes one path and a newline.
+const maxOrigin = 16 << 10
+
+// readOrigin reads the record next to the entry at p: a regular file (a
+// FIFO or a link to /dev/zero would hang or never end) holding one path.
+func readOrigin(p string) (string, error) {
+	f := p + ".origin"
+	st, err := os.Lstat(f)
+	if err != nil {
+		return "", errors.New("where it came from is not recorded")
+	}
+	if !st.Mode().IsRegular() || st.Size() > maxOrigin {
+		return "", fmt.Errorf("its record %q is not a file skd wrote", filepath.Base(f))
+	}
+	b, err := os.ReadFile(f)
+	if err != nil {
+		return "", err
+	}
+	s := strings.TrimSuffix(string(b), "\n")
+	return strings.TrimSuffix(s, "\r"), nil // a checkout may add a CR
+}
+
+// checkOrigin reports why origin is not a place Restore puts a directory
+// back. skd moves directories into the trash from two places only, and
+// those are the only places it restores to:
+//
+//   - an entry of an agent's skill directory (a target in reg: apply
+//     --force, disable, remove and adopt move what is in the way or
+//     adopted there), that is a direct child of the target's directory;
+//   - inside the library's vendor/ (update and remove move vendored
+//     skills, purge a whole pack).
+//
+// The record must be an absolute, clean path (no "..", ".", doubled or
+// trailing separators) without control characters, as skd writes it.
+// Symbolic links on the way are resolved before comparing, so neither a
+// link inside vendor/ nor a link elsewhere can lead out of these places.
+func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) error {
+	switch {
+	case safetext.Has(origin):
+		return fmt.Errorf("where it came from (%q) has control characters", origin)
+	case !filepath.IsAbs(origin):
+		return fmt.Errorf("where it came from (%q) is not an absolute path", origin)
+	case filepath.Clean(origin) != origin:
+		return fmt.Errorf("where it came from (%q) is not a clean path", origin)
+	}
+	parent, base := filepath.Dir(origin), filepath.Base(origin)
+	if base == "." || base == ".." || parent == origin {
+		return fmt.Errorf("where it came from (%q) is not a directory skd manages", origin)
+	}
+	at := resolve(parent)
+	if reg != nil {
+		for _, t := range reg.All() {
+			if tp, err := filepath.Abs(t.Path); err == nil && (parent == tp || at == resolve(tp)) {
+				return nil
+			}
+		}
+	}
+	// vendor/ itself must be the library's own directory: a link there
+	// would make anywhere it points "inside vendor/".
+	if vd, err := filepath.Abs(lib.VendorDir()); err == nil && fsutil.Within(resolve(vd), filepath.Join(at, base)) {
+		if err := realDir(vd); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("the library's vendor/ %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("where it came from (%q) is neither in an agent's skill directory nor in the library's vendor/", origin)
+}
+
+// resolve is p with every symbolic link resolved: of its longest part
+// that exists, with the rest appended as it is.
+func resolve(p string) string {
+	var rest []string
+	for {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return filepath.Join(append([]string{r}, rest...)...)
+		}
+		d := filepath.Dir(p)
+		if d == p {
+			return filepath.Join(append([]string{p}, rest...)...)
+		}
+		rest = append([]string{filepath.Base(p)}, rest...)
+		p = d
+	}
+}
+
 // EmptyTrash deletes everything parked. Irreversible.
 func EmptyTrash(lib *library.Library) (int, error) {
-	entries, err := ListTrash(lib)
+	entries, err := ListTrash(lib, nil)
 	if err != nil {
 		return 0, err
 	}

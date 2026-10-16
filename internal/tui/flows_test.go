@@ -237,8 +237,10 @@ func TestTrashFlow(t *testing.T) {
 	m, f := newModel(t, sampleSnapshot(), 120, 36)
 	when := time.Date(2026, 10, 16, 9, 30, 0, 0, time.Local)
 	f.trash = []engine.TrashEntry{
-		{ID: "20261016-093000/tdd", Name: "tdd", Origin: "/lib/vendor/acme/skills/eng/tdd", When: when},
-		{ID: "20261016-093000/old", Name: "old", Origin: "/h/.claude/skills/old", When: when},
+		{ID: "20261016-093000/tdd", Name: "tdd", Origin: "/lib/vendor/acme/skills/eng/tdd", When: when, Restorable: true},
+		{ID: "20261016-093000/old", Name: "old", Origin: "/h/.claude/skills/old", When: when, Restorable: true},
+		{ID: "20261016-093000/lure", Name: "lure", Origin: "/h/Library/LaunchAgents/x", When: when,
+			Problem: `where it came from ("/h/Library/LaunchAgents/x") is neither in an agent's skill directory nor in the library's vendor/`},
 	}
 	m, cmd := press(t, m, "t")
 	m = drain(t, m, cmd)
@@ -246,7 +248,7 @@ func TestTrashFlow(t *testing.T) {
 		t.Fatal("t opens the trash")
 	}
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"Trash · 2 items", "tdd", "2026-10-16 09:30", "/lib/vendor/acme/skills/eng/tdd", "r/enter restore", "x empty trash"} {
+	for _, want := range []string{"Trash · 3 items", "tdd", "cannot be restored · from /h/Library/LaunchAgents/x", "2026-10-16 09:30", "/lib/vendor/acme/skills/eng/tdd", "r/enter restore", "x empty trash"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("trash view lacks %q", want)
 		}
@@ -256,6 +258,17 @@ func TestTrashFlow(t *testing.T) {
 	if got := lastCall(f); got != "restore 20261016-093000/old" {
 		t.Fatalf("call = %q", got)
 	}
+	// An entry skd would not restore says why and runs nothing.
+	m, cmd = press(t, m, "t")
+	m = drain(t, m, cmd)
+	m, cmd = press(t, m, "down", "down", "enter")
+	if cmd != nil || m.busy != "" || lastCall(f) != "trash-list" {
+		t.Fatalf("restoring an entry skd refuses started %q", lastCall(f))
+	}
+	if v := ansi.Strip(m.View()); m.ov == nil || !strings.Contains(v, "Cannot restore lure") || !strings.Contains(v, "LaunchAgents") {
+		t.Fatalf("no reason shown:\n%s", v)
+	}
+	m, _ = press(t, m, "esc")
 	// Emptying asks twice; enter never confirms the second question.
 	m, cmd = press(t, m, "t")
 	m = drain(t, m, cmd)

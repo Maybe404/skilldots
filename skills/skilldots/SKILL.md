@@ -80,7 +80,7 @@ skd targets                                 # agents known on this machine
 - `skd remove <skill>` — also drop a vendored skill from the library (removing a pack's last skill drops the pack).
 - `skd purge owner/repo --yes` — drop a whole repository subscription. Tell the user what you are purging.
 
-None of these delete anything: files go to the library trash (`skd trash`), and `skd trash restore <id>` brings them back. **Never run `skd trash empty`** — permanent deletion is reserved for the user at a terminal; it refuses to run otherwise.
+None of these delete anything: files go to the library trash (`skd trash`), and `skd trash restore <id>` brings them back. An entry `skd trash` marks as not restorable (`"restorable": false` in `--json`) came from somewhere skd never moves things from; tell the user the reason instead of moving it yourself. **Never run `skd trash empty`** — permanent deletion is reserved for the user at a terminal; it refuses to run otherwise.
 
 ## Change a third-party skill
 

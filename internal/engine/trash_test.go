@@ -48,8 +48,8 @@ func TestTrashRoundTrip(t *testing.T) {
 		{"other error", &os.LinkError{Op: "rename", Err: syscall.EACCES}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			lib, _, home := newTestLib(t)
-			src := filepath.Join(home, "agent", "skill")
+			lib, reg, home := newTestLib(t)
+			src := filepath.Join(home, ".agents", "skills", "skill")
 			richDir(t, src)
 			if tc.renameErr != nil {
 				rename = func(string, string) error { return tc.renameErr }
@@ -73,11 +73,11 @@ func TestTrashRoundTrip(t *testing.T) {
 				t.Fatal("source still there")
 			}
 			checkRich(t, to)
-			items, _ := ListTrash(lib)
-			if len(items) != 1 || items[0].Origin != src {
+			items, _ := ListTrash(lib, reg)
+			if len(items) != 1 || items[0].Origin != src || !items[0].Restorable {
 				t.Fatalf("trash list %+v", items)
 			}
-			back, err := Restore(lib, items[0].ID)
+			back, err := Restore(lib, reg, items[0].ID)
 			if err != nil || back != src {
 				t.Fatalf("restore %q %v", back, err)
 			}
@@ -122,7 +122,7 @@ func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	if len(res.Backups) != 1 {
 		t.Fatalf("backups %v (plan %+v)", res.Backups, plan.ChangeList())
 	}
-	items, _ := ListTrash(lib)
+	items, _ := ListTrash(lib, reg)
 	if len(items) != 1 {
 		t.Fatalf("trash %+v", items)
 	}

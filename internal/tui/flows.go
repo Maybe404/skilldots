@@ -271,17 +271,29 @@ func (m Model) trashView(entries []engine.TrashEntry) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	var items []pickItem
+	problems := map[string]string{}
 	for _, e := range entries {
 		when := e.When.Format("2006-01-02 15:04")
 		if e.When.IsZero() {
 			when = "?"
 		}
-		items = append(items, pickItem{label: e.Name, detail: when + "  from " + tildify(e.Origin), value: e.ID})
+		detail := when + "  from " + tildify(e.Origin)
+		if !e.Restorable {
+			problems[e.ID] = e.Problem
+			detail = when + "  cannot be restored · from " + tildify(e.Origin)
+		}
+		items = append(items, pickItem{label: e.Name, detail: detail, value: e.ID})
 	}
 	n := len(entries)
 	restore := listAction{key: "r", label: "restore", run: func(it pickItem) step {
 		id := it.value
-		return step{job: &job{label: "restoring " + it.label, run: func(o Ops) result {
+		// The same refusal as `skd trash restore`, said before any job.
+		if p, bad := problems[id]; bad {
+			lines := append(wrap(p, 64, 8), "", "skd only puts back what it took from an agent's skill",
+				"directory or the library's vendor/. Move it by hand if you trust it.")
+			return step{next: textOverlay("Cannot restore "+clean(it.label), lines)}
+		}
+		return step{job: &job{label: "restoring " + clean(it.label), run: func(o Ops) result {
 			msg, err := o.Restore(id)
 			return result{msg: msg, err: err}
 		}}}

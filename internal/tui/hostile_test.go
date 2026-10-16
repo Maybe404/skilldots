@@ -36,7 +36,7 @@ func TestHostileLibraryDrawsClean(t *testing.T) {
 	}
 	hostile.Change(up, git)
 	agents := filepath.Join(home, ".agents", "skills")
-	hostile.Extras(root, agents, home)
+	lures := hostile.Extras(root, agents, home)
 	hostile.Settings(config.Path())
 	os.Remove(filepath.Join(agents, "review"))
 	write(t, filepath.Join(agents, "review", "SKILL.md"), skillMD("review", hostile.Evil))
@@ -108,6 +108,32 @@ func TestHostileLibraryDrawsClean(t *testing.T) {
 	}
 	key("restore", "enter")
 	closeAll("close")
+	// Restore every entry the trash lists: the lures stay where they are.
+	for i := 0; ; i++ {
+		items, err := o.TrashList()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i >= len(items) {
+			break
+		}
+		key("trash", "t")
+		for j := 0; j < i; j++ {
+			key("trash", "j")
+		}
+		key("restore "+items[i].ID, "r")
+		closeAll("close")
+	}
+	for _, p := range lures.Never {
+		if _, err := os.Lstat(p); err == nil {
+			t.Errorf("restoring created %q", p)
+		}
+	}
+	for _, p := range lures.Kept {
+		if _, err := os.Lstat(filepath.Join(p, "SKILL.md")); err != nil {
+			t.Errorf("restoring moved %q", p)
+		}
+	}
 	key("settings", ",")
 	drawn("settings")
 	key("editor", "enter")

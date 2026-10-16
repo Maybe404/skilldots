@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -126,6 +127,13 @@ func TestHostileCommandsCoverTheTree(t *testing.T) {
 // upstream that changed since, a hostile history, trash, agent directory
 // and settings file. It returns the library and the pack's repository.
 func hostileLibrary(t *testing.T, e *env) (lib, up string) {
+	lib, up, _ = hostileLibraryLures(t, e)
+	return lib, up
+}
+
+// hostileLibraryLures is hostileLibrary that also returns the trash
+// entries that must never be restored.
+func hostileLibraryLures(t *testing.T, e *env) (lib, up string, lures hostile.Lures) {
 	t.Helper()
 	lib = e.p("lib")
 	e.ok("", "init", "--no-skill", lib)
@@ -136,7 +144,7 @@ func hostileLibrary(t *testing.T, e *env) (lib, up string) {
 		t.Fatalf("add: exit %d\n%s", code, errOut)
 	}
 	hostile.Change(up, git)
-	hostile.Extras(lib, e.p(".agents/skills"), e.home)
+	lures = hostile.Extras(lib, e.p(".agents/skills"), e.home)
 	// Something in the way of a link: apply skips it, --force moves it
 	// aside.
 	os.Remove(e.p(".agents/skills/review"))
@@ -147,7 +155,7 @@ func hostileLibrary(t *testing.T, e *env) (lib, up string) {
 		f.Write(b) // keep the library setting init wrote
 		f.Close()
 	}
-	return lib, up
+	return lib, up, lures
 }
 
 func expand(args []string, lib, up string) []string {
@@ -172,7 +180,54 @@ func expand(args []string, lib, up string) []string {
 // this checks the commands' own cleaning, not the last line of defence.
 func TestHostileLibraryPrintsClean(t *testing.T) {
 	e := newEnv(t)
-	lib, up := hostileLibrary(t, e)
+	lib, up, lures := hostileLibraryLures(t, e)
+	// The trash of someone else's library: no entry it lists, and no id
+	// reaching out of it, moves a directory where skd never takes one
+	// from, or moves one from outside the trash. `skd trash` says which
+	// cannot be restored.
+	out, _, _ := e.skd(lib, "trash", "--json")
+	var listed []struct {
+		ID         string `json:"id"`
+		Restorable bool   `json:"restorable"`
+		Problem    string `json:"problem"`
+	}
+	if err := json.Unmarshal([]byte(out), &listed); err != nil {
+		t.Fatalf("trash --json: %v\n%s", err, out)
+	}
+	for _, it := range listed {
+		if it.Restorable || it.Problem == "" {
+			t.Errorf("trash lists %q as restorable (%q)", it.ID, it.Problem)
+		}
+	}
+	if out, _, _ := e.skd(lib, "trash"); strings.Count(out, "cannot be restored") != len(listed) {
+		t.Errorf("trash does not say which cannot be restored:\n%s", out)
+	}
+	for _, id := range lures.IDs {
+		for _, json := range []bool{false, true} {
+			a := []string{"trash", "restore", id}
+			if json {
+				a = append(a, "--json")
+			}
+			out, errOut, code := e.skd(lib, a...)
+			if json {
+				out = ""
+			}
+			gate(t, strings.Join(a, " "), out+errOut, code)
+			if code == 0 {
+				t.Errorf("skd trash restore %q succeeded:\n%s", id, out)
+			}
+		}
+	}
+	for _, p := range lures.Never {
+		if _, err := os.Lstat(p); err == nil {
+			t.Errorf("restoring created %q", p)
+		}
+	}
+	for _, p := range lures.Kept {
+		if _, err := os.Lstat(filepath.Join(p, "SKILL.md")); err != nil {
+			t.Errorf("restoring moved %q", p)
+		}
+	}
 	for _, json := range []bool{false, true} {
 		for _, args := range hostileCommands {
 			if json && slices.Contains([]string{"purge", "remove", "new", "fork", "sync", "clone", "init", "use", "adopt", "update"}, args[0]) {
@@ -212,7 +267,7 @@ func TestHostileLibraryPrintsClean(t *testing.T) {
 		t.Errorf("sync stored a hostile remote: %q", remotes)
 	}
 	// Normal text, that only looks unusual, comes through.
-	out, _, _ := e.skd(lib, "show", up)
+	out, _, _ = e.skd(lib, "show", up)
 	if !strings.Contains(out, "中文 描述 🚀") {
 		t.Errorf("show lost the description of review:\n%s", out)
 	}

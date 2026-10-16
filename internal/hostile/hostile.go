@@ -95,12 +95,24 @@ func Change(dir string, git Git) {
 	git(dir, "commit", "-qm", "change "+Evil)
 }
 
+// Lures are trash entries a hostile library holds so that restoring
+// one would move a directory to, or from, where skd never puts one.
+type Lures struct {
+	// IDs are the `skd trash restore` arguments that must be refused.
+	IDs []string
+	// Never are paths that must not exist after any of them.
+	Never []string
+	// Kept are the lured directories that must stay where they are.
+	Kept []string
+}
+
 // Extras adds what other files of a library and of the machine can
 // carry: a history whose every field (and one it does not know) holds
 // Evil, trash entries named with it whose recorded origin holds it, and
 // in agentDir an unmanaged skill, a copy and a broken link named or
-// described with it. home is where the paths in the trash point.
-func Extras(root, agentDir, home string) {
+// described with it. home is where the paths in the trash point. It
+// also adds the trash entries of Lures and returns them.
+func Extras(root, agentDir, home string) Lures {
 	rec := map[string]any{
 		"time": time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "repo": "x/y" + Evil, "from": "a" + Evil, "to": "b" + Evil,
 		"changed": []string{"c" + Evil}, "added": []string{"a" + Evil}, "moved": []string{"m" + Evil},
@@ -125,6 +137,55 @@ func Extras(root, agentDir, home string) {
 	write(filepath.Join(agentDir, "odd"+Evil, "SKILL.md"), skillMD("odd"+Evil, Evil))
 	write(filepath.Join(agentDir, "copy", "SKILL.md"), skillMD("copy", Evil))
 	os.Symlink(filepath.Join(home, "gone"+Evil), filepath.Join(agentDir, "lnk"+Evil))
+	return lures(root, agentDir, home)
+}
+
+// lures parks, in batch 20240102-030406, entries recorded as coming from
+// outside every place skd moves directories from (under ~/Library, a
+// relative path, a path with "..", the library's skills/), and reaches
+// directories outside the library: by an id with "..", through a batch
+// that is a link, and through an entry that is a link. Those directories
+// have records naming a place skd would accept.
+func lures(root, agentDir, home string) Lures {
+	var l Lures
+	park := func(dir, name, origin string) string {
+		p := filepath.Join(dir, name)
+		write(filepath.Join(p, "SKILL.md"), skillMD(name, "lure"))
+		write(p+".origin", origin+"\n")
+		return p
+	}
+	batch := filepath.Join(root, ".trash", "20240102-030406")
+	for name, origin := range map[string]string{
+		"library": filepath.Join(home, "Library", "LaunchAgents", "lure"),
+		"rel":     filepath.Join("rel", "lure"),
+		"dotdot":  agentDir + "/../../Library/dotdot", // filepath.Join would clean it
+		"mine":    filepath.Join(root, "skills", "lure-mine"),
+		"evil":    filepath.Join(home, "Library", "x"+Evil),
+	} {
+		park(batch, name, origin)
+		l.IDs = append(l.IDs, "20240102-030406/"+name)
+		l.Kept = append(l.Kept, filepath.Join(batch, name))
+		if !filepath.IsAbs(origin) {
+			origin = filepath.Join(root, origin) // skd runs in the library
+		}
+		l.Never = append(l.Never, filepath.Clean(origin))
+	}
+	// Not ~/Library itself: the settings file is there on macOS.
+	l.Never = append(l.Never, filepath.Join(home, "Library", "LaunchAgents"), filepath.Join(home, "Library", "dotdot"))
+
+	// Outside the library, with records skd would accept.
+	outside := filepath.Join(home, "outside")
+	victim := park(outside, "victim", filepath.Join(agentDir, "victim"))
+	l.Kept = append(l.Kept, victim)
+	l.Never = append(l.Never, filepath.Join(agentDir, "victim"))
+	up, _ := filepath.Rel(filepath.Join(root, ".trash"), victim)
+	os.Symlink(outside, filepath.Join(root, ".trash", "20240102-030407"))
+	os.MkdirAll(filepath.Join(root, ".trash", "20240102-030408"), 0o755)
+	os.Symlink(victim, filepath.Join(root, ".trash", "20240102-030408", "victim"))
+	write(filepath.Join(root, ".trash", "20240102-030408", "victim.origin"), filepath.Join(agentDir, "victim")+"\n")
+	l.IDs = append(l.IDs, filepath.ToSlash(up), "20240102-030406/../../../outside/victim",
+		"20240102-030407/victim", "20240102-030408/victim", filepath.ToSlash(victim))
+	return l
 }
 
 // Settings is a settings file (config.toml) whose editor and a key skd
