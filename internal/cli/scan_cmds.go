@@ -277,7 +277,18 @@ func applyProposals(c *ctx, props []proposal) error {
 			}
 			packs[p.Repo] = pk
 		case "app":
-			m.Apps = append(m.Apps, &manifest.App{Name: p.Item.Name, Path: p.Item.LinkTo})
+			dup := false
+			for _, a := range m.Apps {
+				if a.Name == p.Item.Name {
+					dup = true
+					if a.Path != p.Item.LinkTo {
+						c.printf("%s [[app]] %s already points at %s; not changing it to %s\n", warn("!"), a.Name, a.Path, p.Item.LinkTo)
+					}
+				}
+			}
+			if !dup {
+				m.Apps = append(m.Apps, &manifest.App{Name: p.Item.Name, Path: p.Item.LinkTo})
+			}
 		case "own":
 			dest := filepath.Join(c.lib.SkillsDir(), p.Item.Name)
 			src := p.Item.Path
@@ -311,9 +322,22 @@ func applyProposals(c *ctx, props []proposal) error {
 			if pack.Find(rep.Upstream, n) == nil {
 				c.printf("  %s %s is not in %s any more; keeping your copy under skills/\n", warn("!"), n, repo)
 				for _, p := range props {
-					if p.Kind == "pack" && p.Skill == n {
-						fsutil.CopyTree(p.Item.Path, filepath.Join(c.lib.SkillsDir(), n))
+					if p.Kind != "pack" || p.Skill != n {
+						continue
 					}
+					src := p.Item.Path
+					if p.Item.LinkTo != "" {
+						src = p.Item.LinkTo
+					}
+					dest := filepath.Join(c.lib.SkillsDir(), n)
+					if fsutil.Lexists(dest) {
+						c.printf("  %s %s already exists; leaving it as is\n", warn("!"), c.lib.Rel(dest))
+						break
+					}
+					if err := fsutil.CopyTree(src, dest); err != nil {
+						return err
+					}
+					break
 				}
 				var use []string
 				for _, u := range pk.Use {
@@ -353,9 +377,19 @@ func applyProposals(c *ctx, props []proposal) error {
 	if err := c.lib.Save(); err != nil {
 		return err
 	}
-	if err := runApply(c, false, true); err != nil {
+	// Force only the agent entries this adoption takes over; anything else
+	// that is modified or unmanaged keeps being skipped.
+	force := map[string]bool{}
+	for _, p := range props {
+		if p.Kind != "skip" && p.Kind != "drop" {
+			force[p.Item.Target+"/"+p.Item.Name] = true
+		}
+	}
+	out, err := doApply(c, false, false, force)
+	if err != nil {
 		return err
 	}
+	c.jsonOut(map[string]any{"proposals": props, "applied": true, "apply": out, "failed": failed})
 	if failed > 0 {
 		return fmt.Errorf("%d repositories could not be fetched", failed)
 	}

@@ -202,3 +202,30 @@ func TestInitInsideOuterRepoAndOtherLibrary(t *testing.T) {
 	}
 	_ = before
 }
+
+// adopt --yes forces only the entries it adopts; an unrelated entry that
+// was modified since skilldots wrote it stays untouched.
+func TestAdoptForcesOnlyItsOwnEntries(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.ok("", "new", "mine")
+	// The user replaced skilldots' link with a directory of their own.
+	os.Remove(e.p(".agents/skills/mine"))
+	e.skill(".agents/skills/mine", "mine")
+	e.write(".agents/skills/mine/notes.txt", "keep me\n")
+	// Something installed by another tool: a copy, and a link to a clone.
+	e.skill(".agents/skills/other", "other")
+	e.skill("elsewhere/linked", "linked")
+	os.Symlink(e.p("elsewhere/linked"), e.p(".agents/skills/linked"))
+
+	e.ok("", "adopt", "--yes")
+	if b, err := os.ReadFile(e.p(".agents/skills/mine/notes.txt")); err != nil || string(b) != "keep me\n" {
+		t.Fatal("adopt --yes touched an unrelated modified entry")
+	}
+	isLink(t, e.p(".agents/skills/other"), lib)
+	isLink(t, e.p(".agents/skills/linked"), lib)
+	if _, err := os.Stat(filepath.Join(lib, "skills", "linked", "SKILL.md")); err != nil {
+		t.Fatal("linked skill was not copied from its link target")
+	}
+}
