@@ -533,7 +533,7 @@ func (m Model) viewStatus() string {
 	if m.busy != "" {
 		note := m.busyNote
 		if m.quitAfter {
-			note = "quitting when it finishes"
+			note = "quitting when it finishes · ctrl+c again to stop it now"
 		}
 		segs := []seg{sg(" "+m.busy+"…", t.Accent)}
 		if note != "" {

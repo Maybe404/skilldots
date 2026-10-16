@@ -137,6 +137,9 @@ type Model struct {
 	// quitAfter is set by ctrl+c while a job runs: the dashboard quits
 	// when it finishes instead of leaving git half-way.
 	quitAfter bool
+	// forceQuit is set by a second ctrl+c while a job runs: Run stops
+	// the job's git and `skd sync` processes instead of waiting.
+	forceQuit bool
 	quitting  bool
 }
 
@@ -358,6 +361,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finish(msg.res)
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			if m.busy != "" && m.quitAfter {
+				// Asked twice: Run stops the job's processes and exits.
+				m.forceQuit, m.quitting = true, true
+				return m, tea.Quit
+			}
 			if m.busy != "" {
 				// Quitting now would leave git or `skd sync` running
 				// on their own, possibly half-way through a write.
