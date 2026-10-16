@@ -95,12 +95,18 @@ func Root() *cobra.Command {
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !isTerminal() {
+				return errNoTTY
+			}
+			return runMenu()
+		},
 	}
 	root.PersistentFlags().StringVar(&flags.library, "library", "", "library directory (default: $"+library.EnvLibrary+", nearest skills.toml, or ~/.skilldots)")
 	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
 	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), enableCmd(), disableCmd(),
-		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd())
+		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd())
 	return root
 }
 

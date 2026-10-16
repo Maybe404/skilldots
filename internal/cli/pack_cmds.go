@@ -332,7 +332,7 @@ func short(s string) string {
 
 func gitCommit(c *ctx, msg string) error {
 	root := c.lib.Root
-	if _, err := c.lib.Git("add", "-A", "--", ":!private"); err != nil {
+	if _, err := c.lib.Git("add", "-A"); err != nil {
 		return err
 	}
 	if _, err := c.lib.Git("diff", "--cached", "--quiet"); err == nil {

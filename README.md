@@ -59,6 +59,9 @@ Prebuilt binaries will follow.
 | `skd path <skill>` | print where a skill's files live, for editing |
 | `skd new <name> [--private]` | scaffold a skill of your own and link it |
 | `skd targets` | known agent directories and which exist on this machine |
+| `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
+| `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
+| `skd` | with no arguments: an interactive menu for all of the above |
 
 All commands take `--json` for scripts and agents, and `--yes` to skip prompts.
 
