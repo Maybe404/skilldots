@@ -20,6 +20,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/cli"
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/tui"
 )
 
@@ -212,6 +213,12 @@ func TestNewFeaturesAgree(t *testing.T) {
 	// see the same upstream commits.
 	cliHome, cliRoot := side(t, up)
 	tuiHome, tuiRoot := side(t, up)
+	// Link for Claude too, so its own settings matter (see claude below).
+	for _, root := range []string{cliRoot, tuiRoot} {
+		if err := manifest.New([]string{"agents", "claude"}).Save(filepath.Join(root, manifest.FileName)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	sides := []frontEnd{cliSide(cliHome, cliRoot), tuiSide(tuiHome, tuiRoot)}
 	results := make([]result, 2)
 	each := func(f func(i int, s frontEnd)) {
