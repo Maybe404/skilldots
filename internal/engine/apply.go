@@ -204,8 +204,13 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		if err != nil {
 			return err
 		}
-		disposable := st.Mode()&os.ModeSymlink != 0 || (prev != nil && current(op.Dest, prev, lib))
-		if disposable {
+		// A symlink holds no data. A copy is only discarded when it is
+		// exactly what skilldots wrote: nothing added that the hash does
+		// not see (.git, node_modules, symlinks). Anything else is trashed.
+		if st.Mode()&os.ModeSymlink != 0 {
+			return os.Remove(op.Dest)
+		}
+		if prev != nil && prev.Mode == "copy" && fsutil.Pristine(op.Dest, prev.Hash) {
 			return os.RemoveAll(op.Dest)
 		}
 		to, err := Trash(lib, op.Dest)

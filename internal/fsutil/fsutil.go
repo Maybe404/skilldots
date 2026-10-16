@@ -87,6 +87,40 @@ func CopyTree(src, dst string) error {
 	})
 }
 
+// CopyAll copies src to dst exactly: every file including .git and
+// node_modules, symlinks as symlinks, permissions kept. dst must not exist.
+// Anything it cannot reproduce (sockets, devices) is an error, so a caller
+// about to remove src never loses data silently.
+func CopyAll(src, dst string) error {
+	if Lexists(dst) {
+		return fmt.Errorf("copy %s: %s already exists", src, dst)
+	}
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		target := filepath.Join(dst, rel)
+		info, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			link, err := os.Readlink(p)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		case info.IsDir():
+			return os.MkdirAll(target, info.Mode().Perm()|0o700)
+		case info.Mode().IsRegular():
+			return copyFile(p, target)
+		}
+		return fmt.Errorf("copy %s: cannot copy special file %s", src, p)
+	})
+}
+
 // CopyFile copies one regular file to dst, replacing a regular file there.
 func CopyFile(src, dst string) error {
 	if st, err := os.Lstat(dst); err == nil && !st.Mode().IsRegular() {

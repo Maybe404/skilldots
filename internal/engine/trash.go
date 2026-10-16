@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
@@ -55,19 +57,32 @@ func Trash(lib *library.Library, src string) (string, error) {
 	for i := 2; fsutil.Lexists(dest); i++ {
 		dest = filepath.Join(dir, fmt.Sprintf("%s-%d", name, i))
 	}
-	if err := os.Rename(src, dest); err != nil {
-		// Cross-device: copy then remove.
-		if err := fsutil.CopyTree(src, dest); err != nil {
-			return "", err
-		}
-		if err := os.RemoveAll(src); err != nil {
-			return "", err
-		}
+	if err := move(src, dest); err != nil {
+		return "", err
 	}
 	if err := os.WriteFile(dest+".origin", []byte(src+"\n"), 0o644); err != nil {
 		return "", err
 	}
 	return dest, nil
+}
+
+// rename is os.Rename, replaceable in tests.
+var rename = os.Rename
+
+// move renames src to dst. Only when that fails because they are on
+// different devices does it fall back to an exact copy (everything,
+// including .git, node_modules and symlinks) followed by removing src.
+// Any other failure is returned with src untouched.
+func move(src, dst string) error {
+	err := rename(src, dst)
+	if err == nil || !errors.Is(err, syscall.EXDEV) {
+		return err
+	}
+	if err := fsutil.CopyAll(src, dst); err != nil {
+		os.RemoveAll(dst) // a partial copy; src is still complete
+		return fmt.Errorf("moving %s across devices: %w", src, err)
+	}
+	return os.RemoveAll(src)
 }
 
 // ListTrash returns every parked directory, newest first.
@@ -115,7 +130,7 @@ func Restore(lib *library.Library, id string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.Rename(p, dest); err != nil {
+	if err := move(p, dest); err != nil {
 		return "", err
 	}
 	os.Remove(p + ".origin")
