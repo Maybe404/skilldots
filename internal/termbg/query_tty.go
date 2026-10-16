@@ -88,18 +88,5 @@ func query(timeout time.Duration) (reply string, unread []byte, ok bool) {
 	}
 	timer := time.AfterFunc(timeout, func() { r.Cancel() })
 	defer timer.Stop()
-	var got []byte
-	buf := make([]byte, 256)
-	for {
-		n, err := r.Read(buf)
-		got = append(got, buf[:n]...)
-		replies, keys, da1 := split(got, false)
-		if da1 {
-			return replies, keys, true
-		}
-		if err != nil {
-			replies, keys, _ = split(got, true)
-			return replies, keys, osc11Reply(replies)
-		}
-	}
+	return gather(r.Read, func() { timer.Reset(tailGrace) })
 }

@@ -6,6 +6,7 @@
 package termbg
 
 import (
+	"bytes"
 	"math"
 	"strconv"
 	"strings"
@@ -153,6 +154,61 @@ func split(b []byte, final bool) (replies string, keys []byte, da1 bool) {
 		}
 	}
 	return string(rep), keys, da1
+}
+
+// tailGrace is how long gather waits for the rest of a key's escape
+// sequence that arrived cut off right after the DA1 answer.
+const tailGrace = 100 * time.Millisecond
+
+// gather reads the terminal's replies and the keys typed meanwhile until
+// the DA1 answer has arrived, or read fails (the wait was cancelled).
+// grace is called when the answer is in but a key typed right after it
+// is still incomplete; the next read should then end within tailGrace.
+func gather(read func([]byte) (int, error), grace func()) (reply string, unread []byte, ok bool) {
+	var got []byte
+	buf := make([]byte, 256)
+	graced := false
+	for {
+		n, err := read(buf)
+		got = append(got, buf[:n]...)
+		// Once DA1 is in, nothing after it is a reply: the end is keys.
+		_, _, da1 := split(got, false)
+		replies, keys, _ := split(got, da1 || err != nil)
+		if da1 && !unfinished(keys) {
+			return replies, keys, true
+		}
+		if err != nil {
+			return replies, keys, da1 || osc11Reply(replies)
+		}
+		if da1 && !graced {
+			graced = true
+			grace()
+		}
+	}
+}
+
+// unfinished reports whether keys end in part of an escape sequence: ESC,
+// ESC O, or ESC [ with parameters but no final byte yet.
+func unfinished(keys []byte) bool {
+	i := bytes.LastIndexByte(keys, 0x1b)
+	if i < 0 {
+		return false
+	}
+	rest := keys[i+1:]
+	switch {
+	case len(rest) == 0:
+		return true
+	case rest[0] == 'O':
+		return len(rest) == 1
+	case rest[0] == '[':
+		for _, c := range rest[1:] {
+			if c >= 0x40 && c <= 0x7e {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // osc11Reply reports whether replies hold an answer to OSC 11.

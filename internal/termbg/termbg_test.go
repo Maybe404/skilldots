@@ -1,6 +1,11 @@
 package termbg
 
-import "testing"
+import (
+	"bytes"
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestParse(t *testing.T) {
 	cases := []struct {
@@ -59,6 +64,48 @@ func TestSplit(t *testing.T) {
 		replies, keys, d := split([]byte(c.in), c.final)
 		if replies != c.replies || string(keys) != c.keys || d != c.da1 {
 			t.Errorf("split(%q, %v) = %q, %q, %v; want %q, %q, %v", c.in, c.final, replies, keys, d, c.replies, c.keys, c.da1)
+		}
+	}
+}
+
+// reads feeds gather one chunk per read; nil stands for the wait being
+// cancelled. grace is counted.
+func reads(chunks ...[]byte) (func([]byte) (int, error), *int) {
+	graces := 0
+	return func(b []byte) (int, error) {
+		if len(chunks) == 0 || chunks[0] == nil {
+			return 0, errors.New("canceled")
+		}
+		n := copy(b, chunks[0])
+		chunks = chunks[1:]
+		return n, nil
+	}, &graces
+}
+
+func TestGatherKeyAfterAnswer(t *testing.T) {
+	osc := []byte("\x1b]11;rgb:0/0/0\x07")
+	da1 := []byte("\x1b[?62;22c")
+	cat := func(bs ...[]byte) []byte { return bytes.Join(bs, nil) }
+	for _, c := range []struct {
+		name   string
+		chunks [][]byte
+		keys   string
+		graces int
+	}{
+		{"answer only", [][]byte{cat(osc, da1)}, "", 0},
+		{"arrow in the same read", [][]byte{cat(osc, da1, []byte("\x1b[B"))}, "\x1b[B", 0},
+		// Esc pressed right after the answer: nothing more comes.
+		{"lone esc", [][]byte{cat(osc, da1, []byte("\x1b")), nil}, "\x1b", 1},
+		// An arrow key whose bytes were read in two parts.
+		{"split arrow", [][]byte{cat(osc, da1, []byte("\x1b")), []byte("[B")}, "\x1b[B", 1},
+		{"split csi", [][]byte{cat(osc, da1, []byte("\x1b[")), []byte("5~")}, "\x1b[5~", 1},
+		{"split ss3", [][]byte{cat(osc, da1, []byte("j\x1bO")), []byte("B")}, "j\x1bOB", 1},
+	} {
+		read, _ := reads(c.chunks...)
+		graces := 0
+		reply, keys, ok := gather(read, func() { graces++ })
+		if !ok || !strings.Contains(reply, "]11;") || string(keys) != c.keys || graces != c.graces {
+			t.Errorf("%s: gather = %q, %q, %v (graces %d); want keys %q, graces %d", c.name, reply, keys, ok, graces, c.keys, c.graces)
 		}
 	}
 }
