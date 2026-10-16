@@ -131,21 +131,33 @@ func (l *Library) Save() error {
 	return l.Lock.Save(filepath.Join(l.Root, lock.FileName))
 }
 
+// ownFiles are the library files skd writes at its root, besides
+// .gitignore.
+var ownFiles = []string{manifest.FileName, lock.FileName, "skills.history.jsonl"}
+
 // CheckFile reports why skd must not write p, one of the library's own
 // files at root (skills.toml, skills.lock, the update history,
-// .gitignore): it is a symbolic link that leads outside the library, or
-// nowhere. A library may come from someone else (skd clone), and such a
-// link would have skd overwrite or append to any file it names, say
-// skills.lock -> ../.codex/config.toml. Reading through it is harmless;
-// a link to a file inside the library is fine.
+// .gitignore). A library may come from someone else (skd clone), and a
+// link there would have skd overwrite or append to any file it names:
+// skills.lock -> ../.codex/config.toml outside the library, or
+// skills.toml -> .git/config (the library's git settings) and
+// skills.history.jsonl -> private/.git/hooks/... inside it. So when p is
+// a symbolic link, skd writes through it only to a regular file directly
+// in the library root, not hidden (no ".git", ".gitattributes", ...) and
+// not another of skd's own files; anything else (outside the library,
+// deeper in it, nowhere, or a directory) is refused. Reading through it
+// is harmless.
 func CheckFile(root, p string) error {
 	st, err := os.Lstat(p)
 	if err != nil || st.Mode()&os.ModeSymlink == 0 {
 		return nil
 	}
+	refuse := func(why string) error {
+		return fmt.Errorf("%s is a symbolic link %s; skd does not write through it (replace it with the file itself)", p, why)
+	}
 	real, err := filepath.EvalSymlinks(p)
 	if err != nil {
-		return fmt.Errorf("%s is a symbolic link that leads nowhere; skd does not write through it (replace it with the file itself)", p)
+		return refuse("that leads nowhere")
 	}
 	if a, err := filepath.Abs(real); err == nil {
 		real = a
@@ -158,7 +170,17 @@ func CheckFile(root, p string) error {
 		r = rr
 	}
 	if !fsutil.Within(r, real) {
-		return fmt.Errorf("%s is a symbolic link to %s, outside the library; skd does not write through it (replace it with the file itself)", p, real)
+		return refuse("to " + real + ", outside the library")
+	}
+	base := filepath.Base(real)
+	if !fsutil.SameDir(filepath.Dir(real), r, false) {
+		return refuse("to " + real + ", not a file directly in the library's folder")
+	}
+	if strings.HasPrefix(base, ".") || slices.Contains(ownFiles, base) {
+		return refuse("to " + real + ", one of the library's hidden or own files")
+	}
+	if st, err := os.Stat(real); err != nil || !st.Mode().IsRegular() {
+		return refuse("to " + real + ", which is not a file")
 	}
 	return nil
 }
