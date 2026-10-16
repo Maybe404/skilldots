@@ -1017,6 +1017,12 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	case r.browse != nil:
 		m.ov = m.browseOverlay(r.src, r.browse)
 		m.status, m.statusLvl = fmt.Sprintf("%s · %d skills · pick and press enter", r.browse.Repo, len(r.browse.Skills)), lvInfo
+		if n := len(r.browse.Preselect); n > 0 {
+			m.status = fmt.Sprintf("%s · %d skills · %d ticked from what you pasted · enter to continue", r.browse.Repo, len(r.browse.Skills), n)
+		}
+		if len(r.browse.Missing) > 0 {
+			m.status, m.statusLvl = fmt.Sprintf("%s has nothing named %s · pick and press enter", r.browse.Repo, strings.Join(r.browse.Missing, ", ")), lvWarn
+		}
 		return m, nil
 	case r.scan != nil:
 		return m.scanView(r.scan)

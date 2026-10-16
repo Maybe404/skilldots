@@ -22,15 +22,31 @@ func addCmd() *cobra.Command {
 	var all bool
 	var alias string
 	cmd := &cobra.Command{
-		Use:   "add <owner/repo | git url>[@ref]",
+		Use:   "add <owner/repo | url | pasted install command>[@ref]",
 		Short: "Subscribe to a repository and pick the skills to vendor",
-		Args:  cobra.ExactArgs(1),
+		Long: "The source is owner/repo, a GitHub URL or any git URL (@ref pins a branch or tag), a skills.sh skill page, " +
+			"a GitHub link to a skill directory (/tree/<ref>/<dir>) or its SKILL.md (/blob/<ref>/…/SKILL.md), " +
+			"or an install command pasted whole, quoted: `npx skills add owner/repo --skill name` (also bunx, pnpm dlx, " +
+			"npx add-skill). The skills a link or --skill names are preselected; the text is only read, never run. " +
+			"The ref in a GitHub link is ignored: append @ref to pin one. Without a source at a terminal, skd asks for one.",
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
 			}
-			src, err := c.ParseAdd(args[0], alias)
+			text := strings.Join(args, " ")
+			if text == "" {
+				if !isTerminal() || flags.json {
+					return fmt.Errorf("give a source: skd add owner/repo (or a URL, or a pasted `npx skills add …`)")
+				}
+				if err := ask(huh.NewInput().Title("Source").
+					Description("owner/repo · a GitHub or skills.sh link · a pasted `npx skills add …` line · any git URL · @ref pins").
+					Placeholder("mattpocock/skills").Value(&text)); err != nil || strings.TrimSpace(text) == "" {
+					return nil
+				}
+			}
+			src, hint, err := c.ParseAddText(text, alias)
 			if err != nil {
 				return err
 			}
@@ -43,12 +59,24 @@ func addCmd() *cobra.Command {
 			if len(f.Skills) == 0 {
 				return fmt.Errorf("%s contains no SKILL.md", src.Repo)
 			}
+			pre, missing := f.Preselect(hint)
+			for _, m := range missing {
+				fmt.Fprintf(os.Stderr, "%s %s: nothing named %q upstream\n", warn("!"), src.Repo, m)
+			}
 			sel := app.Selection{Skills: skills, Categories: categories, All: all, Alias: alias, Agents: targetNames}
-			if !all && len(skills) == 0 && len(categories) == 0 {
+			switch {
+			case all || len(skills) > 0 || len(categories) > 0:
+				sel.Skills = dedupe(append(sel.Skills, pre...))
+			case len(pre) > 0 && (!isTerminal() || flags.json || flags.yes):
+				// No one to ask: what the pasted text names is the choice.
+				sel.Skills = pre
+			case len(missing) > 0 && (!isTerminal() || flags.json || flags.yes):
+				return fmt.Errorf("no skill %q in %s (skd show %s lists them)", missing[0], src.Repo, src.Repo)
+			default:
 				if c.jsonOut(f.Skills) {
 					return nil
 				}
-				chosen, err := pickSkills(c, src.Repo, f)
+				chosen, err := pickSkills(c, src.Repo, f, pre)
 				if err != nil {
 					return err
 				}
@@ -88,7 +116,7 @@ func addCmd() *cobra.Command {
 
 // pickSkills shows an interactive multi-select grouped by category.
 // It returns ["*"] when the user chose to follow everything.
-func pickSkills(c *ctx, repo string, f *app.Fetched) ([]string, error) {
+func pickSkills(c *ctx, repo string, f *app.Fetched, pre []string) ([]string, error) {
 	upstream := f.Skills
 	if !isTerminal() {
 		return nil, fmt.Errorf("no terminal: pass --skill, --category or --all")
@@ -108,7 +136,7 @@ func pickSkills(c *ctx, repo string, f *app.Fetched) ([]string, error) {
 				label += "  " + dim(truncate(s.Description, 60))
 			}
 			opts = append(opts, huh.NewOption(label, s.Name))
-			if f.Have[s.Name] {
+			if f.Have[s.Name] || slices.Contains(pre, s.Name) {
 				preselected = append(preselected, s.Name)
 			}
 		}

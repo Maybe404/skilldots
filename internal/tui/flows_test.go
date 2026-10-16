@@ -417,3 +417,41 @@ func TestSettingsFlow(t *testing.T) {
 		t.Fatalf("library row: %+v", m.ov)
 	}
 }
+
+// A pasted install command or link fills the picker with what it names.
+func TestAddFlowPreselects(t *testing.T) {
+	m, f := newModel(t, sampleSnapshot(), 120, 36)
+	f.browse = &Browse{Repo: "acme/x", Commit: "abcdef0", Have: map[string]bool{}, Preselect: map[string]bool{"b": true},
+		Skills: []pack.Skill{{Name: "a"}, {Name: "b"}}}
+	m, _ = press(t, m, "a")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "npx skills add") || !strings.Contains(v, "skills.sh") {
+		t.Fatalf("the input does not say what it accepts:\n%s", v)
+	}
+	// Text that is no source is refused in the dialog, before any fetch.
+	m = typeText(t, m, "npx skills remove x/y")
+	m, cmd := press(t, m, "enter")
+	if m.ov == nil || m.ov.err == "" || cmd != nil {
+		t.Fatalf("bad command accepted: %+v", m.ov)
+	}
+	for range len("npx skills remove x/y") {
+		m, _ = press(t, m, "backspace")
+	}
+	m = typeText(t, m, "npx skills add acme/x --skill b")
+	m, cmd = press(t, m, "enter")
+	m = drain(t, m, cmd)
+	if lastCall(f) != "browse npx skills add acme/x --skill b" {
+		t.Fatalf("calls: %v", f.calls)
+	}
+	if m.ov == nil || m.ov.items[0].on || !m.ov.items[1].on {
+		t.Fatalf("b is not ticked: %+v", m.ov.items)
+	}
+	if !strings.Contains(m.status, "1 ticked from what you pasted") {
+		t.Fatalf("status: %q", m.status)
+	}
+	m, _ = press(t, m, "enter", "enter")
+	m, cmd = press(t, m, "enter")
+	drain(t, m, cmd)
+	if got := lastCall(f); got != "add npx skills add acme/x --skill b b false" {
+		t.Fatalf("add call = %q", got)
+	}
+}

@@ -114,8 +114,8 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		return run("apply")
 	case "add":
 		var src string
-		if err := ask(huh.NewInput().Title("Repository").
-			Description("owner/repo, a GitHub URL, or any git URL; add @ref to pin").
+		if err := ask(huh.NewInput().Title("Source").
+			Description("owner/repo · a GitHub or skills.sh link · a pasted `npx skills add …` line · any git URL · @ref pins").
 			Placeholder("mattpocock/skills").Value(&src)); err != nil || strings.TrimSpace(src) == "" {
 			return nil
 		}

@@ -30,16 +30,22 @@ func (m Model) open(o *overlay) (tea.Model, tea.Cmd) {
 // addFlow is `skd add`: repository → skills (by name or category, or
 // everything) → alias → agents.
 func (m Model) addFlow() (tea.Model, tea.Cmd) {
-	return m.open(inputOverlay("Add a repository", "owner/repo, a GitHub URL or any git URL · @ref pins a branch or tag",
+	ov := inputOverlay("Add a repository", "owner/repo · a GitHub or skills.sh link to a skill · a pasted `npx skills add …` line · any git URL · @ref pins a branch or tag",
 		"mattpocock/skills", "", m.theme, m.surf, func(src string) (step, error) {
 			if src == "" {
 				return step{}, nil
+			}
+			if _, err := app.ParseAddText(src); err != nil {
+				return step{}, err
 			}
 			return step{job: &job{label: "fetching " + src, run: func(o Ops) result {
 				b, err := o.Browse(src)
 				return result{browse: b, err: err, src: src}
 			}}}, nil
-		}))
+		})
+	// Room for a pasted install command.
+	ov.input.CharLimit = 1000
+	return m.open(ov)
 }
 
 // browseOverlay offers the skills of a fetched repository, grouped by
@@ -58,7 +64,7 @@ func (m Model) browseOverlay(src string, b *Browse) *overlay {
 			if !grouped && s.Category != "" {
 				detail = s.Category + " · " + detail
 			}
-			group = append(group, pickItem{label: s.Name, detail: detail, value: s.Name, on: b.Have[s.Name],
+			group = append(group, pickItem{label: s.Name, detail: detail, value: s.Name, on: b.Have[s.Name] || b.Preselect[s.Name],
 				locked: b.Have[s.Name], note: "installed", group: cat})
 		}
 		if grouped {

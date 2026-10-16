@@ -88,6 +88,10 @@ type Browse struct {
 	Subscribed bool
 	Alias      string
 	Targets    []string
+	// Preselect marks the skills the pasted text named (a link, --skill);
+	// Missing are the names or paths it gave that matched nothing.
+	Preselect map[string]bool
+	Missing   []string
 }
 
 // ScanResult is an inventory plus what adopting it would do.
@@ -206,7 +210,7 @@ func (o *libOps) Browse(arg string) (*Browse, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := s.ParseAdd(arg, "")
+	src, hint, err := s.ParseAddText(arg, "")
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +224,12 @@ func (o *libOps) Browse(arg string) (*Browse, error) {
 		}
 		return nil, fmt.Errorf("%s contains no SKILL.md", src.Repo)
 	}
-	b := &Browse{Repo: src.Repo, Commit: f.Commit, Skills: f.Skills, Have: f.Have, Subscribed: f.Subscribed}
+	b := &Browse{Repo: src.Repo, Commit: f.Commit, Skills: f.Skills, Have: f.Have, Subscribed: f.Subscribed, Preselect: map[string]bool{}}
+	pre, missing := f.Preselect(hint)
+	for _, n := range pre {
+		b.Preselect[n] = true
+	}
+	b.Missing = missing
 	if p := s.Lib.Manifest.FindPack(src.Repo); p != nil {
 		b.Alias = p.Alias
 		if p.Targets != nil {
@@ -230,13 +239,14 @@ func (o *libOps) Browse(arg string) (*Browse, error) {
 	return b, nil
 }
 
-// Add mirrors `skd add <src> --skill a,b [--all] [--alias x] [--agent y]`.
+// Add mirrors `skd add <src> --skill a,b [--all] [--alias x] [--agent y]`;
+// src is anything the add dialog accepts (see app.ParseAddText).
 func (o *libOps) Add(arg string, req AddRequest) (string, error) {
 	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	src, err := s.ParseAdd(arg, req.Alias)
+	src, _, err := s.ParseAddText(arg, req.Alias)
 	if err != nil {
 		return "", err
 	}
