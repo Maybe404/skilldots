@@ -77,7 +77,7 @@ func Locate(flag string) (string, error) {
 				return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
 			}
 		}
-		return "", fmt.Errorf("cannot find the library: the settings file that remembers it is not valid TOML (%w); fix it, or name the library with --library or $%s", serr, EnvLibrary)
+		return "", fmt.Errorf("cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s", serr, EnvLibrary)
 	}
 	candidates = append(candidates, settings[config.Library], DefaultRoot())
 	for _, c := range candidates {

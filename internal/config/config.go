@@ -80,8 +80,20 @@ func Path() string {
 	return filepath.Join(home, ".skilldots", "config.toml")
 }
 
+// InvalidError is a settings file that is not valid TOML.
+type InvalidError struct {
+	Path string
+	Err  error
+}
+
+func (e *InvalidError) Error() string {
+	return fmt.Sprintf("the settings file %s is not valid TOML: %v", e.Path, e.Err)
+}
+
+func (e *InvalidError) Unwrap() error { return e.Err }
+
 // Load reads every setting. A missing file is no settings. A file that
-// cannot be parsed is an error; Get treats it as empty.
+// cannot be parsed is an *InvalidError; Get treats it as empty.
 func Load() (map[string]string, error) {
 	b, err := os.ReadFile(Path())
 	if errors.Is(err, os.ErrNotExist) {
@@ -92,7 +104,7 @@ func Load() (map[string]string, error) {
 	}
 	raw := map[string]any{}
 	if err := toml.Unmarshal(b, &raw); err != nil {
-		return nil, fmt.Errorf("%s: %w", Path(), err)
+		return nil, &InvalidError{Path(), err}
 	}
 	out := map[string]string{}
 	for k, v := range raw {
@@ -154,7 +166,7 @@ func write(name, value string) error {
 	raw := map[string]any{}
 	if b, err := os.ReadFile(p); err == nil {
 		if err := toml.Unmarshal(b, &raw); err != nil {
-			return fmt.Errorf("%s cannot be read (%v); fix or remove it first", p, err)
+			return fmt.Errorf("%w; fix or remove it first", &InvalidError{p, err})
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err

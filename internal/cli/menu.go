@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -304,6 +305,9 @@ func cloneCmd() *cobra.Command {
 			}
 			if safetext.Has(args[0]) {
 				return fmt.Errorf("%q has control characters: not a git URL", args[0])
+			}
+			if _, err := config.Load(); err != nil {
+				return fmt.Errorf("%w; clone records the library there, so fix or remove it first (nothing was cloned)", err)
 			}
 			if _, err := library.Git("", "clone", "-q", "--", args[0], dir); err != nil {
 				return err

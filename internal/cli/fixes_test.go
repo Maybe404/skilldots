@@ -50,19 +50,47 @@ func TestBadThemeSetting(t *testing.T) {
 }
 
 // A settings file that is not valid TOML is reported with its path and
-// the parse error, not taken for "no library"; a library named on the
-// command line still works, with a warning.
+// the parse error, once: as the error of a command that needs it (finding
+// the library, init, clone, use, config), not taken for "no library", and
+// nothing is created first; as one warning after a command that ran
+// without it (the library named on the command line).
 func TestBrokenSettingsFile(t *testing.T) {
 	e := newEnv(t)
 	lib := e.p("lib")
 	e.ok("", "init", "--no-skill", lib)
+	e.git(e.home, "init", "-q", "--bare", e.p("backup.git"))
 	os.WriteFile(e.configPath(), []byte("library = \"unterminated\n"), 0o644)
-	_, errOut, code := e.skd("", "list")
-	if code == 0 || !strings.Contains(errOut, e.configPath()) || strings.Contains(errOut, "no skilldots library found") || !strings.Contains(errOut, "toml") {
-		t.Fatalf("list with a broken settings file: exit %d\n%s", code, errOut)
+	once := func(args []string, wantCode int, errOut string, code int) {
+		t.Helper()
+		if (code == 0) != (wantCode == 0) || strings.Count(errOut, e.configPath()) != 1 || !strings.Contains(errOut, "not valid TOML") ||
+			strings.Contains(errOut, "no skilldots library found") || strings.Contains(errOut, "ignored") {
+			t.Errorf("skd %v: exit %d, want the broken settings file reported once:\n%s", args, code, errOut)
+		}
 	}
-	out, errOut, code := e.skd("", "list", "--library", lib)
-	if code != 0 || !strings.Contains(errOut, "settings are ignored") || !strings.Contains(errOut, e.configPath()) {
-		t.Fatalf("--library with a broken settings file: exit %d\n%s\n%s", code, out, errOut)
+	for _, args := range [][]string{
+		{"list"},
+		{"init", "--no-skill", e.p("new")},
+		{"clone", e.p("backup.git"), e.p("cloned")},
+		{"use", lib},
+		{"config", "list"},
+		{"config", "get", "editor"},
+		{"config", "set", "editor", "vim"},
+	} {
+		_, errOut, code := e.skd("", args...)
+		once(args, 1, errOut, code)
+		if strings.Contains(errOut, "warning:") {
+			t.Errorf("skd %v: a warning besides the error:\n%s", args, errOut)
+		}
+	}
+	for _, p := range []string{"new", "cloned"} {
+		if _, err := os.Stat(e.p(p)); err == nil {
+			t.Errorf("%s was created though the settings file is broken", p)
+		}
+	}
+	args := []string{"list", "--library", lib}
+	out, errOut, code := e.skd("", args...)
+	once(args, 0, errOut, code)
+	if strings.Count(errOut, "warning:") != 1 || !strings.Contains(errOut, "were used") || !strings.Contains(out, "skilldots") {
+		t.Errorf("skd %v: want one warning and the list:\n%s\n%s", args, out, errOut)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -52,6 +53,11 @@ func initCmd() *cobra.Command {
 			root, _ = filepath.Abs(root)
 			if fsutil.Exists(filepath.Join(root, manifest.FileName)) {
 				return fmt.Errorf("%s already has a %s", root, manifest.FileName)
+			}
+			// init records the library in the settings file at the end:
+			// fail before creating anything when it cannot.
+			if _, err := config.Load(); err != nil {
+				return fmt.Errorf("%w; init records the library there, so fix or remove it first (nothing was created)", err)
 			}
 			for _, d := range []string{"", library.DirSkills, library.DirVendor, library.DirPrivate} {
 				if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {

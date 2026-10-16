@@ -3,6 +3,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -11,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/safetext"
@@ -180,11 +182,27 @@ func Root() *cobra.Command {
 
 // Main runs the CLI and returns an exit code.
 func Main() int {
-	if err := Root().Execute(); err != nil {
+	err := Root().Execute()
+	if w := settingsWarning(err); w != "" {
+		fmt.Fprintln(stderr, w)
+	}
+	if err != nil {
 		fmt.Fprintln(stderr, "error:", errText(err))
 		return 1
 	}
 	return 0
+}
+
+// settingsWarning is the one line that says the settings file could not
+// be read and its settings were not used, after a command that ran
+// without them; "" when the file is fine or when err already says it
+// (finding the library, init, config).
+func settingsWarning(err error) string {
+	var bad *config.InvalidError
+	if settingsErr == nil || errors.As(err, &bad) {
+		return ""
+	}
+	return "warning: " + errText(settingsErr) + "; none of its settings (editor, theme, …) were used"
 }
 
 // dashboardLibrary reports whether `skd` should open the full-screen
