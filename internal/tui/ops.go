@@ -75,9 +75,9 @@ type Ops interface {
 	// Targets lists the agent targets: those in use, and the custom ones
 	// of skills.toml that are not (skd targets).
 	Targets() ([]TargetRow, error)
-	// TrustTarget approves the custom target name, which the person was
-	// shown leads to real (skd targets trust).
-	TrustTarget(name, real string) (string, error)
+	// TrustTarget approves the custom target the person was shown as t
+	// (its path in skills.toml, directory and mode) (skd targets trust).
+	TrustTarget(t TargetRow) (string, error)
 }
 
 // TargetRow is one agent target. A custom target not in use has Active
@@ -166,6 +166,9 @@ func applySummary(out *app.ApplyOutcome) string {
 	}
 	if len(out.Backups) > 0 {
 		parts = append(parts, fmt.Sprintf("%d moved to trash", len(out.Backups)))
+	}
+	if len(out.Refused) > 0 {
+		parts = append(parts, fmt.Sprintf("%d not changed: %s", len(out.Refused), out.Refused[0]))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -610,19 +613,15 @@ func (o *libOps) Targets() ([]TargetRow, error) {
 	return out, nil
 }
 
-func (o *libOps) TrustTarget(name, real string) (string, error) {
+func (o *libOps) TrustTarget(t TargetRow) (string, error) {
 	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	c, ok := s.Lib.Manifest.Targets.Custom[name]
-	if !ok {
-		return "", fmt.Errorf("skills.toml has no custom target %q", name)
-	}
-	if err := targets.Approve(name, c.Path, real); err != nil {
+	if err := s.Reg.Approve(targets.Withheld{Name: t.Name, Path: t.Raw, Real: t.Path, Mode: t.Mode}); err != nil {
 		return "", err
 	}
-	return "approved custom target " + name + " → " + real + " · A applies", nil
+	return "approved custom target " + t.Name + " → " + t.Path + " · A applies", nil
 }
 
 func (o *libOps) SetSetting(key, value string) (string, error) {

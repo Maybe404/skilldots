@@ -273,6 +273,11 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 	if reg != nil {
 		var custom []string
 		for _, t := range reg.All() {
+			// A target that no longer leads where it did when the registry
+			// was built (a link on the way changed) is no place to restore to.
+			if t.Intact() != nil {
+				continue
+			}
 			if tp, err := filepath.Abs(t.Path); err == nil && (parent == tp || fsutil.SameDir(at, resolve(tp), false)) {
 				if t.Builtin {
 					return nil

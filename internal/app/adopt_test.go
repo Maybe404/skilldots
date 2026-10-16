@@ -105,3 +105,33 @@ func TestAdoptDropKeepsWhatReplacedTheBrokenLink(t *testing.T) {
 		}
 	})
 }
+
+// When the agent directory itself is replaced by a link after the scan,
+// the broken link the scan found is no longer there: what the path now
+// leads to (someone's own dangling link elsewhere) is left alone.
+func TestAdoptDropKeepsAnEntryOfAReplacedTargetDirectory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	up := upstream(t)
+	home, root := side(t, up)
+	agents := filepath.Join(home, ".agents", "skills")
+	if err := os.Symlink(filepath.Join(home, "gone"), filepath.Join(agents, "ghost")); err != nil {
+		t.Fatal(err)
+	}
+	s, props, logs := dropProposal(t, root, "ghost")
+	other := filepath.Join(home, "other")
+	os.MkdirAll(other, 0o755)
+	os.Symlink(filepath.Join(home, "gone"), filepath.Join(other, "ghost"))
+	os.Rename(agents, filepath.Join(home, "agents-was"))
+	if err := os.Symlink(other, agents); err != nil {
+		t.Fatal(err)
+	}
+	s.Adopt(props)
+	if _, err := os.Lstat(filepath.Join(other, "ghost")); err != nil {
+		t.Fatalf("removed through the replaced directory: %v", err)
+	}
+	if !strings.Contains(strings.Join(*logs, "\n"), "no longer an entry") {
+		t.Errorf("no warning; got %q", *logs)
+	}
+}

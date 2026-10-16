@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/Maybe404/skilldots/internal/fsutil"
 )
 
 // Target is one agent skill directory.
@@ -18,6 +20,28 @@ type Target struct {
 	Mode string
 	// Builtin is false for targets declared in skills.toml.
 	Builtin bool
+	// Real is where Path led when the registry was built (links
+	// resolved): for a custom target, the directory a person approved.
+	// Writes into the target check that Path still leads there (Intact).
+	Real string `json:"-"`
+}
+
+// Intact reports why Path no longer leads to Real, the directory the
+// registry found (and, for a custom target, a person approved): a
+// symbolic link on the way was made or changed since, possibly by skd
+// itself earlier in the same run (a link it created in another target,
+// or a link inside a skill it linked). Nothing is written into a target
+// that is not intact.
+func (t Target) Intact() error {
+	if t.Real == "" {
+		return fmt.Errorf("the directory of target %q was not checked", t.Name)
+	}
+	// The same string, not the same file: Real itself may have become a
+	// link to elsewhere, and a file comparison would follow it.
+	if now := fsutil.Resolve(t.Path); now != t.Real {
+		return fmt.Errorf("target %q (%s) now leads to %s, not %s", t.Name, t.Path, now, t.Real)
+	}
+	return nil
 }
 
 // builtin lists known agents by their global skill directory relative to $HOME.
@@ -58,6 +82,8 @@ var builtin = []struct{ name, rel string }{
 // All and Present, as if skills.toml did not have them.
 type Registry struct {
 	home     string
+	lib      string
+	custom   map[string]struct{ Path, Mode string }
 	targets  map[string]Target
 	withheld map[string]Withheld
 }
@@ -78,32 +104,37 @@ type Withheld struct {
 }
 
 // NewRegistry builds the registry from built-ins plus custom entries
-// (name -> path, name -> mode). A custom entry is used only when its name
-// is not a built-in one, its path passes CheckPath and a person approved
-// that name with that directory on this machine (Approve); the others are
-// withheld (Withheld), never an error: one bad entry does not stop the
-// library.
-func NewRegistry(custom map[string]struct{ Path, Mode string }) (*Registry, error) {
+// (name -> path, name -> mode) of the library at lib. A custom entry is
+// used only when its name is not a built-in one, its path is allowed
+// (checkPath: in the home directory, away from sensitive places, the
+// library, the built-in targets and the other custom targets), and a
+// person approved that name with that directory on this machine
+// (Approve); the others are withheld
+// (Withheld), never an error: one bad entry does not stop the library.
+func NewRegistry(lib string, custom map[string]struct{ Path, Mode string }) (*Registry, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	r := &Registry{home: home, targets: map[string]Target{}, withheld: map[string]Withheld{}}
+	r := &Registry{home: home, lib: lib, custom: map[string]struct{ Path, Mode string }{}, targets: map[string]Target{}, withheld: map[string]Withheld{}}
 	for _, b := range builtin {
-		r.targets[b.name] = Target{Name: b.name, Path: filepath.Join(home, filepath.FromSlash(b.rel)), Mode: "link", Builtin: true}
+		p := filepath.Join(home, filepath.FromSlash(b.rel))
+		r.targets[b.name] = Target{Name: b.name, Path: p, Mode: "link", Builtin: true, Real: fsutil.Resolve(p)}
+	}
+	for name, c := range custom {
+		if c.Mode == "" {
+			c.Mode = "link"
+		}
+		r.custom[name] = c
 	}
 	var approved []Approval
 	var trustErr error
 	if len(custom) > 0 {
 		approved, trustErr = Approvals()
 	}
-	for name, c := range custom {
-		mode := c.Mode
-		if mode == "" {
-			mode = "link"
-		}
-		w := Withheld{Name: name, Path: c.Path, Mode: mode}
-		real, err := inspect(name, c.Path, home)
+	for name, c := range r.custom {
+		w := Withheld{Name: name, Path: c.Path, Mode: c.Mode}
+		real, err := r.inspect(name)
 		w.Real = real
 		switch {
 		case err != nil:
@@ -114,7 +145,7 @@ func NewRegistry(custom map[string]struct{ Path, Mode string }) (*Registry, erro
 			w.Approvable = true
 			w.Problem = fmt.Sprintf("it is not approved on this machine; a person approves it at a terminal with `skd targets trust %s`", name)
 		default:
-			r.targets[name] = Target{Name: name, Path: Expand(c.Path, home), Mode: mode}
+			r.targets[name] = Target{Name: name, Path: Expand(c.Path, home), Mode: c.Mode, Real: real}
 			continue
 		}
 		r.withheld[name] = w

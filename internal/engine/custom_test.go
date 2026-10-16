@@ -15,16 +15,16 @@ import (
 // directory, where the approvals are written.
 func customRegistry(t *testing.T, custom map[string]struct{ Path, Mode string }) *targets.Registry {
 	t.Helper()
-	for name, c := range custom {
-		real, err := targets.CheckPath(c.Path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := targets.Approve(name, c.Path, real); err != nil {
+	reg, err := targets.NewRegistry("", custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range reg.Withheld() {
+		if err := reg.Approve(w); err != nil {
 			t.Fatal(err)
 		}
 	}
-	reg, err := targets.NewRegistry(custom)
+	reg, err = targets.NewRegistry("", custom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestRestoreIntoCustomTargets(t *testing.T) {
 	lib, _, home := restoreLib(t)
 	box := filepath.Join(home, "box")
 	customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: box}})
-	reg, err := targets.NewRegistry(map[string]struct{ Path, Mode string }{
+	reg, err := targets.NewRegistry("", map[string]struct{ Path, Mode string }{
 		"box": {Path: box}, "other": {Path: "~/other"}, "evil": {Path: "~"}, "agents": {Path: "~"},
 	})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestForgedLockPathsNeverMoveOutsideTargets(t *testing.T) {
 			if tc.trust {
 				reg = customRegistry(t, tc.custom)
 			} else {
-				reg, _ = targets.NewRegistry(tc.custom)
+				reg, _ = targets.NewRegistry("", tc.custom)
 			}
 			SetRegistry(reg)
 			for n, c := range tc.custom {
@@ -157,7 +157,7 @@ func TestForgedLockRecordOfAnUnusedTargetIsOnlyForgotten(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			lib, _, home := restoreLib(t)
-			reg, _ := targets.NewRegistry(tc.custom)
+			reg, _ := targets.NewRegistry(lib.Root, tc.custom)
 			SetRegistry(reg)
 			for n, c := range tc.custom {
 				lib.Manifest.Targets.Custom[n] = manifest.CustomTarget{Path: c.Path, Mode: c.Mode}

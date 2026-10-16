@@ -21,7 +21,7 @@ func newTestLib(t *testing.T) (*library.Library, *targets.Registry, string) {
 	t.Setenv("HOME", home)
 	lib := &library.Library{Root: root, Manifest: manifest.New([]string{"agents"}),
 		Lock: &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{}}}
-	reg, err := targets.NewRegistry(nil)
+	reg, err := targets.NewRegistry("", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

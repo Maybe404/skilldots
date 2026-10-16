@@ -398,16 +398,17 @@ func (m Model) targetsView(rows []TargetRow) (tea.Model, tea.Cmd) {
 		if r.Mode == "copy" {
 			verb = "copy"
 		}
-		name, real := r.Name, r.Path
-		return step{next: confirmOverlay("Approve custom target "+clean(name), []string{
+		row := r
+		return step{next: confirmOverlay("Approve custom target "+clean(r.Name), []string{
 			"skills.toml path  " + r.Raw,
-			"directory         " + real,
+			"directory         " + r.Path,
+			"mode              " + r.Mode,
 			"",
 			"skd will " + verb + " skills into this directory, put back trash entries",
 			"that came from it, and with --force move what is in their way into",
 			"the library trash. Approve only a directory you meant for skills.",
-		}, jobChoice("y", "approve", job{label: "approving " + clean(name), run: func(o Ops) result {
-			msg, err := o.TrustTarget(name, real)
+		}, jobChoice("y", "approve", job{label: "approving " + clean(row.Name), run: func(o Ops) result {
+			msg, err := o.TrustTarget(row)
 			return result{msg: msg, err: err}
 		}}))}
 	}}

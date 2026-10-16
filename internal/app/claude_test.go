@@ -82,7 +82,11 @@ func TestClaudeDisabledThroughCustomTarget(t *testing.T) {
 	m := manifest.New([]string{"mine"})
 	m.Targets.Custom["mine"] = manifest.CustomTarget{Path: filepath.Join(dir, "skills") + "/"}
 	// A person approved it on this machine.
-	if err := targets.Approve("mine", filepath.Join(dir, "skills")+"/", filepath.Join(dir, "skills")); err != nil {
+	reg, err := targets.NewRegistry(root, map[string]struct{ Path, Mode string }{"mine": {Path: filepath.Join(dir, "skills") + "/"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Approve(targets.Withheld{Name: "mine", Path: filepath.Join(dir, "skills") + "/", Mode: "link", Real: filepath.Join(dir, "skills")}); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.Save(filepath.Join(root, manifest.FileName)); err != nil {

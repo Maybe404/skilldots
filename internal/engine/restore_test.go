@@ -41,7 +41,7 @@ func restoreLib(t *testing.T) (*library.Library, *targets.Registry, string) {
 	lib.Root = realTemp(t)
 	home := realTemp(t)
 	t.Setenv("HOME", home)
-	reg, err := targets.NewRegistry(nil)
+	reg, err := targets.NewRegistry("", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,17 @@ func sandbox(t *testing.T) string {
 	return home
 }
 
+// approve is what a person at a terminal does for the custom target
+// name at path of a library with no other custom target, having been
+// shown that it leads to want.
+func approve(name, path, want string) error {
+	reg, err := NewRegistry("", map[string]struct{ Path, Mode string }{name: {Path: path}})
+	if err != nil {
+		return err
+	}
+	return reg.Approve(Withheld{Name: name, Path: path, Mode: "link", Real: want})
+}
+
 func TestCheckPathRefusesWhatIsNotForSkills(t *testing.T) {
 	home := sandbox(t)
 	outside := t.TempDir()
@@ -43,7 +54,7 @@ func TestCheckPathRefusesWhatIsNotForSkills(t *testing.T) {
 		"~/.claude", "~/.agents", "~/.config/opencode",
 		filepath.Dir(filepath.Dir(ApprovalsFile())), filepath.Dir(ApprovalsFile()),
 	} {
-		if real, err := CheckPath(p); err == nil {
+		if real, err := CheckPath(p, ""); err == nil {
 			t.Errorf("CheckPath(%q) = %q, allowed", p, real)
 		}
 	}
@@ -51,7 +62,7 @@ func TestCheckPathRefusesWhatIsNotForSkills(t *testing.T) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		// ~/.gnupg does not exist: ~/.GnuPG would become it.
 		for _, p := range []string{"~/.SSH", "~/.Ssh/x", "~/library/launchagents", "~/.GnuPG", "~/.GNUPG/x"} {
-			if real, err := CheckPath(p); err == nil {
+			if real, err := CheckPath(p, ""); err == nil {
 				t.Errorf("CheckPath(%q) = %q, allowed", p, real)
 			}
 		}
@@ -63,7 +74,7 @@ func TestCheckPathRefusesWhatIsNotForSkills(t *testing.T) {
 		filepath.Join(home, "x"):     filepath.Join(home, "x"),
 		"~/work/sub/../skills":       filepath.Join(home, "work", "skills"),
 	} {
-		if real, err := CheckPath(p); err != nil || real != want {
+		if real, err := CheckPath(p, ""); err != nil || real != want {
 			t.Errorf("CheckPath(%q) = %q, %v; want %q", p, real, err, want)
 		}
 	}
@@ -76,7 +87,7 @@ func TestCustomTargetsNeedApproval(t *testing.T) {
 		"home":   {Path: "~"},
 		"agents": {Path: "~/.ssh"},
 	}
-	reg, err := NewRegistry(custom)
+	reg, err := NewRegistry("", custom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,18 +114,18 @@ func TestCustomTargetsNeedApproval(t *testing.T) {
 
 	// Only what was shown is approved; refused ones never are.
 	real := filepath.Join(home, "my-tool", "skills")
-	if err := Approve("mine", "~/my-tool/skills", filepath.Join(home, "elsewhere")); err == nil {
+	if err := approve("mine", "~/my-tool/skills", filepath.Join(home, "elsewhere")); err == nil {
 		t.Error("approved a directory other than the one shown")
 	}
 	for _, n := range []string{"home", "agents"} {
-		if err := Approve(n, custom[n].Path, home); err == nil {
+		if err := approve(n, custom[n].Path, home); err == nil {
 			t.Errorf("approved %s", n)
 		}
 	}
-	if err := Approve("mine", "~/my-tool/skills", real); err != nil {
+	if err := approve("mine", "~/my-tool/skills", real); err != nil {
 		t.Fatal(err)
 	}
-	reg, _ = NewRegistry(custom)
+	reg, _ = NewRegistry("", custom)
 	if m, err := reg.Get("mine"); err != nil || m.Path != real || m.Builtin {
 		t.Fatalf("approved target: %+v %v", m, err)
 	}
@@ -124,7 +135,7 @@ func TestCustomTargetsNeedApproval(t *testing.T) {
 	// The approval is the name with the directory: the same name elsewhere,
 	// or another name for the directory, needs approving again.
 	for name, c := range map[string]struct{ Path, Mode string }{"mine": {Path: "~/my-tool/other"}, "yours": {Path: "~/my-tool/skills"}} {
-		reg, _ = NewRegistry(map[string]struct{ Path, Mode string }{name: c})
+		reg, _ = NewRegistry("", map[string]struct{ Path, Mode string }{name: c})
 		if _, err := reg.Get(name); err == nil {
 			t.Errorf("%s at %s is used without approval", name, c.Path)
 		}
@@ -134,12 +145,12 @@ func TestCustomTargetsNeedApproval(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, "b"), 0o755)
 	os.Symlink(filepath.Join(home, "a"), filepath.Join(home, "via"))
 	via := map[string]struct{ Path, Mode string }{"via": {Path: "~/via/skills"}}
-	if err := Approve("via", "~/via/skills", filepath.Join(home, "a", "skills")); err != nil {
+	if err := approve("via", "~/via/skills", filepath.Join(home, "a", "skills")); err != nil {
 		t.Fatal(err)
 	}
 	os.Remove(filepath.Join(home, "via"))
 	os.Symlink(filepath.Join(home, "b"), filepath.Join(home, "via"))
-	reg, _ = NewRegistry(via)
+	reg, _ = NewRegistry("", via)
 	if _, err := reg.Get("via"); err == nil {
 		t.Error("a target whose link was changed is still used")
 	}
@@ -148,20 +159,20 @@ func TestCustomTargetsNeedApproval(t *testing.T) {
 	if n, err := Revoke("mine"); err != nil || n != 1 {
 		t.Fatalf("revoke: %d %v", n, err)
 	}
-	reg, _ = NewRegistry(custom)
+	reg, _ = NewRegistry("", custom)
 	if _, err := reg.Get("mine"); err == nil {
 		t.Error("revoked target still used")
 	}
 	// An approvals file that cannot be read approves nothing.
-	if err := Approve("mine", "~/my-tool/skills", real); err != nil {
+	if err := approve("mine", "~/my-tool/skills", real); err != nil {
 		t.Fatal(err)
 	}
 	os.WriteFile(ApprovalsFile(), []byte("not = [toml"), 0o644)
-	reg, _ = NewRegistry(custom)
+	reg, _ = NewRegistry("", custom)
 	if w, ok := reg.WithheldTarget("mine"); !ok || w.Approvable {
 		t.Errorf("unreadable approvals: %+v", w)
 	}
-	if err := Approve("mine", "~/my-tool/skills", real); err == nil {
+	if err := approve("mine", "~/my-tool/skills", real); err == nil {
 		t.Error("approving over an unreadable approvals file")
 	}
 }
@@ -172,10 +183,10 @@ func TestCustomTargetCannotTakeABuiltinName(t *testing.T) {
 	home := sandbox(t)
 	custom := map[string]struct{ Path, Mode string }{"claude": {Path: "~/elsewhere/skills"}}
 	real := filepath.Join(home, "elsewhere", "skills")
-	if err := Approve("claude", "~/elsewhere/skills", real); err == nil {
+	if err := approve("claude", "~/elsewhere/skills", real); err == nil {
 		t.Fatal("approved a custom target with a built-in name")
 	}
-	reg, _ := NewRegistry(custom)
+	reg, _ := NewRegistry("", custom)
 	c, err := reg.Get("claude")
 	if err != nil || !c.Builtin || c.Path != filepath.Join(home, ".claude", "skills") {
 		t.Fatalf("claude: %+v %v", c, err)

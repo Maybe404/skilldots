@@ -329,7 +329,7 @@ func cloneCmd() *cobra.Command {
 			}
 			// Someone else's library may name custom targets anywhere:
 			// none is used until a person approves it here.
-			approved, err := reviewCustomTargets(c.reg.Withheld())
+			approved, err := reviewCustomTargets(c.reg)
 			if err != nil {
 				return err
 			}

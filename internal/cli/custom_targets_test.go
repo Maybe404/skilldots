@@ -308,6 +308,96 @@ func TestBuiltinTargetsNeedNoApproval(t *testing.T) {
 	if _, err := os.Stat(e.approvals()); err == nil {
 		t.Error("approvals written for built-in targets")
 	}
+	// Later runs, with --force too, change nothing, refuse nothing, warn
+	// about nothing; a built-in directory that is a link the user made
+	// (to their dotfiles) is used as before.
+	lib := e.p("lib")
+	os.MkdirAll(e.p("dotfiles"), 0o755)
+	os.Rename(e.p(".codex/skills"), e.p("dotfiles/codex-skills"))
+	os.Symlink(e.p("dotfiles/codex-skills"), e.p(".codex/skills"))
+	for _, args := range [][]string{{"apply"}, {"apply", "--force"}, {"apply", "--force", "--yes"}} {
+		o, eo, code := e.skd(lib, args...)
+		if code != 0 || !strings.Contains(o, "up to date") || strings.Contains(o+eo, "skipped") || strings.Contains(o+eo, "warning") || strings.Contains(o+eo, "custom target") {
+			t.Errorf("%v: exit %d\n%s\n%s", args, code, o, eo)
+		}
+	}
+	e.ok(lib, "new", "notes")
+	for _, d := range []string{".agents", ".claude", ".codex", ".gemini", ".grok"} {
+		isLink(t, e.p(d+"/skills/notes"), lib)
+	}
+	isLink(t, e.p("dotfiles/codex-skills/notes"), lib)
+	if m, _ := filepath.Glob(filepath.Join(lib, ".trash", "*")); len(m) != 0 {
+		t.Errorf("trash: %v", m)
+	}
+}
+
+// h3: a custom target inside a built-in target's directory, at a path
+// that does not exist yet (~/.claude/skills/foo/newdir). In one apply the
+// claude target links skills/foo, which holds newdir -> ../../../.ssh,
+// and the custom target would then write through that link into ~/.ssh
+// (links named bar, id_rsa, foo; the real ~/.ssh/id_rsa moved aside).
+// It is not approvable, and an approval an older skd recorded for it is
+// not used: ~/.ssh is as it was after apply and apply --force.
+func TestCustomTargetInsideABuiltinOneCannotReachThroughALink(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib)
+	for _, n := range []string{"foo", "bar", "id_rsa"} {
+		e.ok(lib, "new", n)
+	}
+	if err := os.Symlink("../../../.ssh", filepath.Join(lib, "skills", "foo", "newdir")); err != nil {
+		t.Fatal(err)
+	}
+	e.write(".ssh/id_rsa", "SECRET")
+	b, _ := os.ReadFile(filepath.Join(lib, "skills.toml"))
+	m := strings.Replace(string(b), "default = ['agents']", "default = ['agents', 'claude', 'z']\n\n[targets.custom.z]\npath = '~/.claude/skills/foo/newdir'", 1)
+	if m == string(b) {
+		t.Fatalf("skills.toml:\n%s", b)
+	}
+	os.WriteFile(filepath.Join(lib, "skills.toml"), []byte(m), 0o644)
+	sshAsItWas := func(what string) {
+		t.Helper()
+		des, _ := os.ReadDir(e.p(".ssh"))
+		if len(des) != 1 || des[0].Name() != "id_rsa" {
+			t.Errorf("%s: ~/.ssh holds %v", what, des)
+		}
+		if st, err := os.Lstat(e.p(".ssh/id_rsa")); err != nil || !st.Mode().IsRegular() {
+			t.Errorf("%s: ~/.ssh/id_rsa: %v", what, err)
+		}
+		if b, _ := os.ReadFile(e.p(".ssh/id_rsa")); string(b) != "SECRET" {
+			t.Errorf("%s: ~/.ssh/id_rsa changed", what)
+		}
+		if m, _ := filepath.Glob(filepath.Join(lib, ".trash", "*")); len(m) != 0 {
+			t.Errorf("%s: trash %v", what, m)
+		}
+	}
+	var rows []struct {
+		Name               string
+		Active, Approvable bool
+		Problem            string
+	}
+	if err := json.Unmarshal([]byte(e.ok(lib, "targets", "--json")), &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.Name == "z" && (r.Active || r.Approvable || !strings.Contains(r.Problem, "claude agent's skill directory")) {
+			t.Errorf("z: %+v", r)
+		}
+	}
+	tr := e.interactive(lib, []typed{{2 * time.Second, "y"}, {300 * time.Millisecond, "\r"}, {300 * time.Millisecond, "z\r"}}, "targets", "trust", "z")
+	if _, err := os.Stat(e.approvals()); err == nil {
+		t.Fatalf("approved z:\n%s", tr)
+	}
+	// As an older skd recorded it (no mode: link).
+	e.write(strings.TrimPrefix(e.approvals(), e.home+"/"), "[[target]]\nname = 'z'\npath = '"+e.p(".claude/skills/foo/newdir")+"'\napproved = 2026-01-01T00:00:00Z\n")
+	for _, args := range [][]string{{"apply"}, {"apply", "--force"}, {"apply", "--force", "--yes"}} {
+		o, eo, _ := e.skd(lib, args...)
+		sshAsItWas(strings.Join(args, " ") + "\n" + o + eo)
+		if !strings.Contains(eo, `custom target "z" in skills.toml is not used`) {
+			t.Errorf("%v does not warn about z:\n%s", args, eo)
+		}
+	}
+	isLink(t, e.p(".claude/skills/foo"), lib)
 }
 
 // customLib is a library at ~/lib whose skills.toml has the custom

@@ -198,7 +198,12 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		case "drop":
 			// A dangling link holds no data. The path may have changed since
 			// the scan (a dialog can stay open for a while): anything that is
-			// not a dangling link any more is left alone.
+			// not a dangling link any more is left alone, and so is one of
+			// a target that no longer leads where it did.
+			if t, err := s.Reg.Get(p.Item.Target); err != nil || filepath.Dir(p.Item.Path) != t.Path || t.Intact() != nil {
+				s.logf(Warn, "%s: not removed; it is no longer an entry of the %s target's directory", p.Item.Path, p.Item.Target)
+				continue
+			}
 			if fi, err := os.Lstat(p.Item.Path); err != nil {
 				if !os.IsNotExist(err) {
 					s.logf(Warn, "%s: %v; not removing it", p.Item.Path, err)
@@ -355,6 +360,11 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		}
 		t, err := s.Reg.Get(p.Item.Target)
 		if err != nil || lib.Lock.Links[t.Name+"/"+n] == nil || !fsutil.Lexists(filepath.Join(t.Path, n)) || !fsutil.Lexists(p.Item.Path) {
+			continue
+		}
+		// Only an entry of the target itself, while it leads where it did.
+		if filepath.Dir(p.Item.Path) != t.Path || t.Intact() != nil {
+			s.logf(Warn, "%s: not moved aside; it is no longer an entry of the %s target's directory", p.Item.Path, t.Name)
 			continue
 		}
 		to, err := engine.Trash(lib, p.Item.Path)

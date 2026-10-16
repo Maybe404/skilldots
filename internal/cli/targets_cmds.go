@@ -21,8 +21,10 @@ func targetsCmd() *cobra.Command {
 		Long: "List the built-in agent targets and the custom ones of skills.toml.\n\n" +
 			"A custom target is used only after a person approves it on this machine\n" +
 			"(skd targets trust <name>, at a terminal), and never when its directory is\n" +
-			"outside your home directory, is your home directory, or is or holds a\n" +
-			"sensitive place (~/.ssh, ~/.gnupg, ~/.aws, ~/Library/LaunchAgents, …).",
+			"outside your home directory, is your home directory, is or holds a\n" +
+			"sensitive place (~/.ssh, ~/.gnupg, ~/.aws, ~/Library/LaunchAgents, …) or the\n" +
+			"library, is inside a built-in target's directory, or is, is inside or holds\n" +
+			"another custom target's directory.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
@@ -135,7 +137,7 @@ func trustCmd() *cobra.Command {
 			if !personAtTerminal() {
 				return errNeedsPerson(w)
 			}
-			yes, err := approveTarget(w)
+			yes, err := approveTarget(c.reg, w)
 			if err != nil {
 				return err
 			}
@@ -172,7 +174,7 @@ func untrustCmd() *cobra.Command {
 
 // approveTarget shows a person where the custom target w leads and asks
 // whether skd may write there; on yes the approval is recorded.
-func approveTarget(w targets.Withheld) (bool, error) {
+func approveTarget(reg *targets.Registry, w targets.Withheld) (bool, error) {
 	say("%s\n", card(
 		bold("Custom target "+txt(w.Name)),
 		"skills.toml path  "+txt(w.Path),
@@ -188,14 +190,15 @@ func approveTarget(w targets.Withheld) (bool, error) {
 	if err != nil || !yes {
 		return false, nil
 	}
-	return true, targets.Approve(w.Name, w.Path, w.Real)
+	return true, reg.Approve(w)
 }
 
 // reviewCustomTargets is what clone says about the cloned library's
 // custom targets before it applies: each one a person may approve is
 // asked about at a terminal, and skipped (with how to approve it later)
 // without one. It reports whether any was approved.
-func reviewCustomTargets(ws []targets.Withheld) (approved bool, err error) {
+func reviewCustomTargets(reg *targets.Registry) (approved bool, err error) {
+	ws := reg.Withheld()
 	if len(ws) == 0 {
 		return false, nil
 	}
@@ -215,7 +218,7 @@ func reviewCustomTargets(ws []targets.Withheld) (approved bool, err error) {
 			say("  %s %s (%s) is skipped: not approved on this machine\n", warn("!"), txt(w.Name), where)
 			later = append(later, w.Name)
 		default:
-			yes, err := approveTarget(w)
+			yes, err := approveTarget(reg, w)
 			if err != nil {
 				return approved, err
 			}

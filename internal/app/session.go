@@ -62,7 +62,7 @@ func Open(root string) (*Session, error) {
 	for n, c := range lib.Manifest.Targets.Custom {
 		custom[n] = struct{ Path, Mode string }{c.Path, c.Mode}
 	}
-	reg, err := targets.NewRegistry(custom)
+	reg, err := targets.NewRegistry(lib.Root, custom)
 	if err != nil {
 		return nil, err
 	}

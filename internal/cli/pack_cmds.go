@@ -105,7 +105,7 @@ func addCmd() *cobra.Command {
 			c.jsonOut(map[string]any{"repo": out.Repo, "commit": rep.NewCommit, "skills": out.Linked,
 				"added": nonNil(rep.Added), "changed": nonNil(rep.Changed), "unchanged": nonNil(rep.Unchanged),
 				"noLicense": nonNil(rep.NoLicenseList), "renamed": rep.Renamed, "rejected": nonNil(rep.Rejected),
-				"changes": out.Apply.Changes, "kept": out.Apply.Kept, "backups": out.Apply.Backups})
+				"changes": out.Apply.Changes, "kept": out.Apply.Kept, "backups": out.Apply.Backups, "refused": out.Apply.Refused})
 			return nil
 		},
 	}

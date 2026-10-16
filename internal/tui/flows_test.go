@@ -662,7 +662,7 @@ func TestTargetsViewApproves(t *testing.T) {
 	}
 	m, cmd = press(t, m, "y")
 	settle(t, m, cmd)
-	if !slices.Contains(f.calls, "trust mytool /h/my-tool/skills") {
+	if !slices.Contains(f.calls, "trust mytool /h/my-tool/skills link") {
 		t.Fatalf("calls: %v", f.calls)
 	}
 	for _, c := range f.calls {

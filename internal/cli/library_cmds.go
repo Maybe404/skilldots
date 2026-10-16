@@ -434,6 +434,9 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 	for _, b := range out.Backups {
 		c.printf("  %s %s\n", dim("moved aside"), txt(b))
 	}
+	for _, r := range out.Refused {
+		c.printf("  %s %s\n", warn("! skipped"), txt(r))
+	}
 	if out.Applied {
 		c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
 	}

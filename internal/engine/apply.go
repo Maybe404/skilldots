@@ -226,6 +226,10 @@ type Result struct {
 	// Backups lists "<dest> → <trash path>" for every real directory that
 	// was moved into the library trash rather than deleted.
 	Backups []string
+	// Refused lists "<dest>: <why>" for every planned change not made
+	// because its target no longer leads to the directory the registry
+	// found (targets.Target.Intact); its lock record is left as it was.
+	Refused []string
 }
 
 // Apply executes the plan and updates the lock. The caller saves the library.
@@ -258,12 +262,30 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		res.Backups = append(res.Backups, op.Dest+" → "+lib.Rel(to))
 		return nil
 	}
+	// intact reports whether op's target still leads where the registry
+	// found it; when not, the op is refused. An earlier op of this run may
+	// have changed that: a link it made in one target, or a link inside a
+	// skill it linked, can lie on the way to another target. Nothing is
+	// then written, moved aside or removed there.
+	intact := func(op Op) bool {
+		if err := op.Target.Intact(); err != nil {
+			res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: %v", op.Dest, err))
+			return false
+		}
+		return true
+	}
 	for _, op := range plan.Ops {
 		key := op.Target.Name + "/" + op.Name
 		switch op.Action {
 		case "create", "replace":
+			if !intact(op) {
+				continue
+			}
 			if err := os.MkdirAll(op.Target.Path, 0o755); err != nil {
 				return res, err
+			}
+			if !intact(op) {
+				continue
 			}
 			if err := clear(op, lib.Lock.Links[key]); err != nil {
 				return res, err
@@ -290,6 +312,9 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 			}
 			lib.Lock.Links[key] = l
 		case "remove":
+			if fsutil.Lexists(op.Dest) && !intact(op) {
+				continue
+			}
 			if err := clear(op, lib.Lock.Links[key]); err != nil {
 				return res, err
 			}

@@ -29,7 +29,7 @@ func TestForceApplyBacksUpUnmanagedDir(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	reg, err := targets.NewRegistry(nil)
+	reg, err := targets.NewRegistry("", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
