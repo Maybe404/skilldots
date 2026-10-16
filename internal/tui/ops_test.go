@@ -1,0 +1,276 @@
+package tui
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/lock"
+	"github.com/Maybe404/skilldots/internal/manifest"
+)
+
+func run(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func write(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func skillMD(name, desc string) string {
+	return "---\nname: " + name + "\ndescription: " + desc + "\n---\nbody\n"
+}
+
+// sandbox isolates HOME, the cache and git config, and redirects
+// https://github.com/ to local repositories under the returned upstream dir.
+func sandbox(t *testing.T) (home, upstream string) {
+	t.Helper()
+	home, upstream = t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(home, "cache"))
+	t.Setenv("SKILLDOTS_LIBRARY", "")
+	gc := filepath.Join(home, "gitconfig")
+	write(t, gc, "[user]\n\tname = t\n\temail = t@example.com\n[init]\n\tdefaultBranch = main\n[url \"file://"+upstream+"/\"]\n\tinsteadOf = https://github.com/\n")
+	t.Setenv("GIT_CONFIG_GLOBAL", gc)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	return home, upstream
+}
+
+func newLibrary(t *testing.T, home string) string {
+	t.Helper()
+	root := filepath.Join(home, "lib")
+	for _, d := range []string{"skills", "vendor", "private"} {
+		os.MkdirAll(filepath.Join(root, d), 0o755)
+	}
+	if err := manifest.New([]string{"agents"}).Save(filepath.Join(root, manifest.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	l := &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{}}
+	if err := l.Save(filepath.Join(root, lock.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	run(t, root, "init", "-q")
+	os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o755)
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
+	return root
+}
+
+func findPack(s *Snapshot, repo string) *Pack {
+	for i := range s.Packs {
+		if s.Packs[i].Repo == repo {
+			return &s.Packs[i]
+		}
+	}
+	return nil
+}
+
+func findSkill(p *Pack, name string) *Skill {
+	for i := range p.Skills {
+		if p.Skills[i].Name == name {
+			return &p.Skills[i]
+		}
+	}
+	return nil
+}
+
+func isLink(p string) bool {
+	st, err := os.Lstat(p)
+	return err == nil && st.Mode()&os.ModeSymlink != 0
+}
+
+func TestOpsEndToEnd(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	home, up := sandbox(t)
+	repo := filepath.Join(up, "acme", "skills.git")
+	write(t, filepath.Join(repo, "LICENSE"), "MIT License\n\nPermission is hereby granted, free of charge…\n")
+	write(t, filepath.Join(repo, "skills", "eng", "tdd", "SKILL.md"), skillMD("tdd", "Test first."))
+	write(t, filepath.Join(repo, "skills", "eng", "review", "SKILL.md"), skillMD("review", "Review code."))
+	write(t, filepath.Join(repo, "skills", "prod", "grill", "SKILL.md"), skillMD("grill", "Grill me."))
+	run(t, repo, "init", "-q")
+	run(t, repo, "add", "-A")
+	run(t, repo, "commit", "-q", "-m", "init")
+
+	root := newLibrary(t, home)
+	write(t, filepath.Join(root, "skills", "mine", "SKILL.md"), skillMD("mine", "My own."))
+	o := &libOps{root: root}
+	agents := filepath.Join(home, ".agents", "skills")
+	claude := filepath.Join(home, ".claude", "skills")
+
+	b, err := o.Browse("acme/skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Skills) != 3 || len(b.Have) != 0 {
+		t.Fatalf("browse: %+v", b)
+	}
+	if _, err := o.Add("acme/skills", []string{"tdd"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if !isLink(filepath.Join(agents, "tdd")) {
+		t.Fatal("add did not link tdd")
+	}
+
+	s, err := o.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := findPack(s, "acme/skills")
+	if p == nil || p.Selected != 1 || p.Total != 3 || p.License != "MIT" || !p.Upstream || p.Commit == "" || p.When == "" {
+		t.Fatalf("snapshot pack: %+v", p)
+	}
+	if r := findSkill(p, "review"); r == nil || r.Installed || r.Category != "eng" {
+		t.Fatalf("upstream-only skill: %+v", r)
+	}
+	if len(s.Mine) != 1 || s.Mine[0].Name != "mine" || !s.Mine[0].Enabled() {
+		t.Fatalf("mine: %+v", s.Mine)
+	}
+	if s.Branch != "main" || !s.Dirty || s.Remote || s.Pending != 0 {
+		t.Fatalf("git state: branch %q dirty %v remote %v pending %d", s.Branch, s.Dirty, s.Remote, s.Pending)
+	}
+	var present []string
+	for _, a := range s.Agents {
+		present = append(present, a.Name)
+	}
+	if strings.Join(present, ",") != "agents,claude" {
+		t.Fatalf("present agents: %v", present)
+	}
+
+	tdd := *findSkill(p, "tdd")
+	if _, err := o.SetTargets(&tdd, "", []string{"agents", "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if !isLink(filepath.Join(claude, "tdd")) {
+		t.Fatal("claude link missing")
+	}
+	if _, err := o.SetTargets(&tdd, "", []string{}); err != nil {
+		t.Fatal(err)
+	}
+	if isLink(filepath.Join(claude, "tdd")) || isLink(filepath.Join(agents, "tdd")) {
+		t.Fatal("disable left links")
+	}
+	if !dirExists(filepath.Join(root, "vendor", "acme", "skills", "eng", "tdd")) {
+		t.Fatal("disable must keep the vendored files")
+	}
+	if _, err := o.SetTargets(&tdd, "", []string{"agents"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Add("acme/skills", []string{"review"}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Upstream moves on: tdd changes and a new skill appears.
+	write(t, filepath.Join(repo, "skills", "eng", "tdd", "SKILL.md"), skillMD("tdd", "Test first, always."))
+	write(t, filepath.Join(repo, "skills", "eng", "fresh", "SKILL.md"), skillMD("fresh", "New."))
+	run(t, repo, "add", "-A")
+	run(t, repo, "commit", "-q", "-m", "more")
+	reps, msg, err := o.Update([]string{"acme/skills"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reps) != 1 || !slices.Contains(reps[0].Changed, "tdd") || !slices.Contains(reps[0].UpstreamNew, "fresh") {
+		t.Fatalf("update report: %+v", reps)
+	}
+	if !strings.Contains(msg, "1 changed") {
+		t.Fatalf("update message: %s", msg)
+	}
+
+	// d on a vendored skill: deselected, files in the trash.
+	s, _ = o.Load()
+	review := *findSkill(findPack(s, "acme/skills"), "review")
+	if _, err := o.Trash(review); err != nil {
+		t.Fatal(err)
+	}
+	if isLink(filepath.Join(agents, "review")) || dirExists(filepath.Join(root, "vendor", "acme", "skills", "eng", "review")) {
+		t.Fatal("review still present after trash")
+	}
+	if !trashed(t, root, "review") {
+		t.Fatal("review not in the trash")
+	}
+	// d on your own skill: unlinked, files kept.
+	s, _ = o.Load()
+	if _, err := o.Trash(s.Mine[0]); err != nil {
+		t.Fatal(err)
+	}
+	if isLink(filepath.Join(agents, "mine")) || !dirExists(filepath.Join(root, "skills", "mine")) {
+		t.Fatal("own skill: want unlinked and kept")
+	}
+
+	// fork tdd into private/.
+	s, _ = o.Load()
+	tdd = *findSkill(findPack(s, "acme/skills"), "tdd")
+	if _, err := o.Fork(tdd, true); err != nil {
+		t.Fatal(err)
+	}
+	if !dirExists(filepath.Join(root, "private", "tdd")) {
+		t.Fatal("fork missing")
+	}
+	s, _ = o.Load()
+	if len(s.Private) != 1 || !s.Private[0].Enabled() {
+		t.Fatalf("fork not linked: %+v", s.Private)
+	}
+
+	// purge the pack.
+	if _, err := o.Purge("acme/skills"); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = o.Load()
+	if len(s.Packs) != 0 || dirExists(filepath.Join(root, "vendor", "acme")) {
+		t.Fatalf("purge left %+v", s.Packs)
+	}
+
+	// Follow everything.
+	if _, err := o.Add("acme/skills", nil, true); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = o.Load()
+	if p := findPack(s, "acme/skills"); p == nil || !p.UsesAll || p.Selected != 4 {
+		t.Fatalf("follow all: %+v", p)
+	}
+	if msg, err := o.Apply(); err != nil || msg != "already up to date" {
+		t.Fatalf("apply: %q %v", msg, err)
+	}
+	_ = engine.KindVendor
+	_ = library.DirVendor
+}
+
+func dirExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
+}
+
+func trashed(t *testing.T, root, name string) bool {
+	t.Helper()
+	lib, _, err := openLibrary(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := engine.ListTrash(lib)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Name == name {
+			return true
+		}
+	}
+	return false
+}
