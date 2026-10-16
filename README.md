@@ -61,6 +61,7 @@ Prebuilt binaries will follow.
 | `skd list [pack] [--all] [--flat] [--agent x]` | overview; expand a pack; flat list; what one agent receives |
 | `skd apply [-n] [--force]` | link/unlink to match the manifest; `-n` previews |
 | `skd update [pack…] [--commit]` | fetch upstream, re-vendor selected skills, report changed / new / gone |
+| `skd outdated [pack…]` | check upstream without changing anything: per pack, the selected skills that changed, skills new upstream since the last update, skills gone upstream; exits non-zero if a pack could not be fetched. `skd list` and the menu show the last result (`↑ 2 updates available · checked 2h ago`, stale after a day) without fetching |
 | `skd enable <skill\|pack> [--agent a,b]` | link into agents (default set when omitted) |
 | `skd disable <skill\|pack> [--agent a,b]` | unlink from agents (all when omitted); the library keeps it |
 | `skd remove <skill>` | deselect a vendored skill: unlinked everywhere, dropped from `vendor/` |
@@ -77,7 +78,7 @@ Prebuilt binaries will follow.
 | `skd use <dir>` | point skd at an existing library from any directory |
 | `skd [--simple]` | with no arguments: the full-screen dashboard (below); `--simple`, a narrow terminal or `TERM=dumb` give a question-and-answer menu instead |
 
-All commands take `--json` for scripts and agents, `--yes` to skip prompts, and `--theme light|dark|auto` for colours (default `auto`, also `$SKILLDOTS_THEME`; `NO_COLOR` turns colour off). Under `--json` stdout carries exactly one JSON document (progress and warnings go to stderr); a failing command prints nothing on stdout and exits non-zero, except `skd update`, which reports `{packs, failed, apply, committed}` and exits non-zero when any pack failed. Problems confined to one skill — an unknown target, a name clash, a pack not fetched yet — are warnings, not errors: the rest of the library keeps working.
+All commands take `--json` for scripts and agents, `--yes` to skip prompts, and `--theme light|dark|auto` for colours (default `auto`, also `$SKILLDOTS_THEME`; `NO_COLOR` turns colour off). Under `--json` stdout carries exactly one JSON document (progress and warnings go to stderr); a failing command prints nothing on stdout and exits non-zero, except `skd update`, which reports `{packs, failed, apply, committed}` and exits non-zero when any pack failed, and `skd outdated`, which does the same with `{checked, packs, failed, updates}`. Problems confined to one skill — an unknown target, a name clash, a pack not fetched yet — are warnings, not errors: the rest of the library keeps working.
 
 ## Dashboard
 
@@ -90,7 +91,8 @@ All commands take `--json` for scripts and agents, `--yes` to skip prompts, and 
 | `/` | filter the column (`esc` clears) | |
 | `space` | enable / disable the skill; installs an upstream one | `enable`, `disable`, `add --skill` |
 | `a` | add a repository: tick skills or whole categories (or `*` for everything), then an optional alias and agents | `add [--category] [--alias] [--agent]` |
-| `u` / `U` | update this pack / every pack | `update` |
+| `u` / `U` | update this pack / every pack the upstream check found changes in (every pack until a check has succeeded) | `update` |
+| `c` | check upstream again; the dashboard checks once in the background when it opens: `↑ N packs have updates` in the header, `↑` on the packs, `↑ changed`, `new upstream`, `gone upstream` on the skills | `outdated` |
 | `e` | agents for the skill or pack | `enable/disable --agent` |
 | `f` | fork, under a new name if you type one, into `skills/` or `private/` | `fork [--as] [--private]` |
 | `d` | remove a vendored skill, unlink one of yours, purge a pack | `remove`, `disable`, `purge` |
@@ -162,6 +164,12 @@ Agent directories only ever contain symlinks into the library (copies on Windows
 
 ```cron
 0 4 * * * cd ~/.skilldots && skd update --yes --commit
+```
+
+Or just check, and update by hand when `skd list` says so:
+
+```cron
+0 4 * * * skd outdated >/dev/null 2>&1
 ```
 
 `--commit` commits and pushes the library when something changed, so other machines pick it up with `git pull && skd apply`.

@@ -60,11 +60,14 @@ func (s *Session) Fetch(src pack.Source) (*Fetched, error) {
 	if p != nil {
 		ref = p.Ref
 	}
+	unlock := pack.Hold(src.Repo)
 	clone, commit, err := pack.Fetch(pack.Source{Repo: src.Repo, URL: src.URL, Ref: ref})
 	if err != nil {
+		unlock()
 		return nil, err
 	}
 	up, rejected, err := pack.Scan(clone)
+	unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -251,8 +254,11 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 		packs = append(packs, p)
 	}
 	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}}
+	updated := map[string]string{}
 	for _, p := range packs {
+		unlock := pack.Hold(p.Repo)
 		known := s.knownUpstream(p.Repo)
+		unlock()
 		rep, err := engine.Sync(s.Lib, p)
 		if err == nil {
 			s.markUpstreamNew(p, rep, known)
@@ -266,16 +272,25 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 		}
 		out.Reports = append(out.Reports, rep)
 		out.Changed = out.Changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped) > 0 || len(rep.Renamed) > 0
+		updated[p.Repo] = rep.NewCommit
 	}
 	ap, err := s.saveAndApply()
 	out.Apply = ap
+	if err == nil {
+		// The updated packs now match upstream: `list` and the menu stop
+		// counting them.
+		if rerr := s.refreshRecorded(updated); rerr != nil {
+			s.logf(Warn, "could not record the update for skd outdated: %v", rerr)
+		}
+	}
 	return out, err
 }
 
 // knownUpstream is the set of skill names a pack's upstream had before
 // this update: what the lock recorded at the last update or, for a lock
 // written before that was recorded, what the cache clone holds now. It is
-// nil when neither is known (a pack never fetched here).
+// nil when neither is known (a pack never fetched here). Callers Hold the
+// repository.
 func (s *Session) knownUpstream(repo string) map[string]bool {
 	lp := s.Lib.Lock.Packs[repo]
 	if lp == nil || lp.Commit == "" {

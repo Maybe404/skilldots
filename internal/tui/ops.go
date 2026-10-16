@@ -29,6 +29,9 @@ type Ops interface {
 	// Add subscribes to src (if needed) and vendors what req selects.
 	Add(src string, req AddRequest) (string, error)
 	Update(repos []string) ([]*engine.SyncReport, string, error)
+	// Check fetches every pack's upstream into the cache and compares it
+	// with what is vendored, changing nothing (skd outdated).
+	Check() (*app.Outdated, error)
 	// Fork copies a skill into skills/ or private/ as name ("" keeps its name).
 	Fork(s Skill, private bool, name string) (string, error)
 	// Trash takes a skill out of use: a vendored skill is deselected and
@@ -268,13 +271,22 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 	if err != nil {
 		return reports, "", err
 	}
-	changed, added, fresh := 0, 0, 0
+	var changed []string
+	added, fresh := 0, 0
 	for _, r := range reports {
-		changed += len(r.Changed)
+		changed = append(changed, r.Changed...)
 		added += len(r.Added)
 		fresh += len(r.UpstreamNew)
 	}
-	msg := withSummary(fmt.Sprintf("updated %d pack(s): %d changed · %d added · %d new upstream", len(reports), changed, added, fresh), out.Apply)
+	what := "0 changed"
+	if len(changed) > 0 {
+		sort.Strings(changed)
+		what = "changed " + strings.Join(changed, ", ")
+		if len(changed) > 6 {
+			what = fmt.Sprintf("changed %s … %d more", strings.Join(changed[:6], ", "), len(changed)-6)
+		}
+	}
+	msg := withSummary(fmt.Sprintf("updated %d pack(s): %s · %d added · %d new upstream", len(reports), what, added, fresh), out.Apply)
 	if len(out.Failed) > 0 {
 		var failed []string
 		for _, f := range out.Failed {
@@ -283,6 +295,15 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 		return reports, msg, fmt.Errorf("%s", strings.Join(failed, "; "))
 	}
 	return reports, msg, nil
+}
+
+// Check mirrors `skd outdated`.
+func (o *libOps) Check() (*app.Outdated, error) {
+	s, err := o.open()
+	if err != nil {
+		return nil, err
+	}
+	return s.Outdated(nil, nil)
 }
 
 // Fork mirrors `skd fork <skill> [--private] [--as name]`.

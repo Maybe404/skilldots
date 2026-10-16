@@ -272,7 +272,7 @@ func TestOrphanAppLinkOfRemovedTarget(t *testing.T) {
 	lib.Lock.Links["mine/alias"] = &lock.Link{Mode: "link", Source: app, Path: filepath.Join(gone, "alias")}
 	lib.Manifest.Targets.Default = []string{}
 
-	entries, _, err := Resolve(lib, registry)
+	entries, _, err := Resolve(lib, registryPtr.Load())
 	if err != nil {
 		t.Fatal(err)
 	}

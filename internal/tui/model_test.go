@@ -65,6 +65,9 @@ type fakeOps struct {
 	scan   *ScanResult
 	trash  []engine.TrashEntry
 	browse *Browse
+	// check is what Check returns; checkErr fails it.
+	check    *app.Outdated
+	checkErr error
 }
 
 func (f *fakeOps) rec(s string) {
@@ -112,6 +115,18 @@ func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
 	f.rec("update " + strings.Join(r, ","))
 	return []*engine.SyncReport{{Repo: "mattpocock/skills", OldCommit: "1111111", NewCommit: "2222222",
 		Changed: []string{"tdd"}, UpstreamNew: []string{"fresh"}}}, "updated", nil
+}
+func (f *fakeOps) Check() (*app.Outdated, error) {
+	f.rec("check")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.checkErr != nil {
+		return nil, f.checkErr
+	}
+	if f.check == nil {
+		return &app.Outdated{}, nil
+	}
+	return f.check, nil
 }
 func (f *fakeOps) Fork(s Skill, p bool, as string) (string, error) {
 	if as != "" {

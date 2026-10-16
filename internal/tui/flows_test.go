@@ -308,7 +308,7 @@ func TestHelpListsEveryKey(t *testing.T) {
 	m, _ := newModel(t, sampleSnapshot(), 120, 60)
 	m, _ = press(t, m, "?")
 	text := strings.Join(m.ov.lines, "\n")
-	for _, k := range []string{"j k", "pgup", "g G", "tab", "enter", "/", "space", "a ", "u / U", "e ", "f ", "d ", "n ", "S ", "t ", "s ", "A ", "r ", "?", "q esc", "ctrl+c"} {
+	for _, k := range []string{"j k", "pgup", "g G", "tab", "enter", "/", "space", "a ", "u / U", "e ", "f ", "d ", "n ", "S ", "t ", "s ", "A ", "r ", "c ", "?", "q esc", "ctrl+c"} {
 		if !strings.Contains(text, k) {
 			t.Errorf("help lacks %q", k)
 		}

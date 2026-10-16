@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -131,19 +132,56 @@ func (m Model) spliceOverlay(body []string) []string {
 
 func (m Model) viewHeader() string {
 	t, s := m.theme, m.snap
-	left := []seg{sg(" ", "")}
-	left = append(left, gradient("◆ skilldots", t.Accent, t.Cyan, true)...)
-	if m.version != "" {
-		left = append(left, sg("  v"+strings.TrimPrefix(m.version, "v"), t.Muted))
+	// Narrow screens give up the version, then the branch, then words of
+	// the upstream state, before the state on the right.
+	for drop := 0; ; drop++ {
+		up := m.upstreamState(drop >= 3)
+		left := []seg{sg(" ", "")}
+		left = append(left, gradient("◆ skilldots", t.Accent, t.Cyan, true)...)
+		if m.version != "" && drop < 1 {
+			left = append(left, sg("  v"+strings.TrimPrefix(m.version, "v"), t.Muted))
+		}
+		if len(up) > 0 {
+			left = append(left, sg("  ", ""))
+			left = append(left, up...)
+		}
+		right := []seg{sgb(s.Name, t.Text)}
+		if s.Branch != "" && drop < 2 {
+			right = append(right, sg(" · ", t.Muted), sg(s.Branch, t.Cyan))
+		}
+		right = append(right, sg(" · ", t.Muted))
+		right = append(right, m.syncState()...)
+		right = append(right, sg(" ", ""))
+		if drop >= 3 || segWidth(left)+segWidth(right)+1 <= m.w {
+			return spread(m.w, m.surf.bar, left, right)
+		}
 	}
-	right := []seg{sgb(s.Name, t.Text)}
-	if s.Branch != "" {
-		right = append(right, sg(" · ", t.Muted), sg(s.Branch, t.Cyan))
+}
+
+// upstreamState is what the last upstream check found, for the header;
+// compact for narrow screens.
+func (m Model) upstreamState(compact bool) []seg {
+	t := m.theme
+	var out []seg
+	switch m.check {
+	case checkFailed:
+		return []seg{sg("check failed", t.Warn)}
+	case checkDone:
+		switch n := len(m.packsWithUpdates()); {
+		case n == 0:
+			out = []seg{sg("✓ no updates", t.Muted)}
+		case compact:
+			out = []seg{sg(fmt.Sprintf("↑ %d to update", n), t.Accent)}
+		case n == 1:
+			out = []seg{sg("↑ 1 pack has updates", t.Accent)}
+		default:
+			out = []seg{sg(fmt.Sprintf("↑ %d packs have updates", n), t.Accent)}
+		}
+		if n := len(m.checkFail); n > 0 && !compact {
+			out = append(out, sg(" · ", t.Muted), sg(fmt.Sprintf("%d check failed", n), t.Warn))
+		}
 	}
-	right = append(right, sg(" · ", t.Muted))
-	right = append(right, m.syncState()...)
-	right = append(right, sg(" ", ""))
-	return spread(m.w, m.surf.bar, left, right)
+	return out
 }
 
 // syncState summarises whether the machine and the remote match the
@@ -231,7 +269,11 @@ func (m Model) viewLeft(w, h int) []string {
 			if p.UsesAll {
 				count = fmt.Sprintf("all %d", p.Selected)
 			}
-			nameW := w - 3 - ansi.StringWidth(count) - 2
+			right := []seg{sg(count, t.Cyan), sg(" ", "")}
+			if m.hasUpdates(p.Repo) {
+				right = append([]seg{sg("↑ ", t.Accent)}, right...)
+			}
+			nameW := w - 3 - segWidth(right) - 1
 			name := sg(p.Repo, t.Text)
 			if ansi.StringWidth(p.Repo) > nameW {
 				name.s = ansi.Truncate(p.Repo, nameW, "…")
@@ -239,7 +281,7 @@ func (m Model) viewLeft(w, h int) []string {
 			if sel {
 				name.bold = true
 			}
-			out = append(out, spread(w, bg, lift(t, []seg{mark, name}), []seg{sg(count, t.Cyan), sg(" ", "")}))
+			out = append(out, spread(w, bg, lift(t, []seg{mark, name}), lift(t, right)))
 		case rowSkill:
 			dot := sg("○ ", t.Faint)
 			if r.skill.Enabled() {
@@ -308,6 +350,19 @@ func (m Model) packHeader(p Pack, w int) []string {
 		sel += " · upstream list unknown until u"
 	}
 	lines := append(m.problem(w), row(), row(title...), row(meta...), row(sg("agents ", t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint)))
+	if st, ok := m.outdated[p.Repo]; ok && st.HasUpdates() {
+		var what []string
+		for _, c := range []struct {
+			n    int
+			word string
+		}{{len(st.Changed), "changed"}, {len(st.New), "new"}, {len(st.Gone), "gone"}, {len(st.Pending), "to add"}} {
+			if c.n > 0 {
+				what = append(what, fmt.Sprintf("%d %s", c.n, c.word))
+			}
+		}
+		lines = append(lines, row(sg("↑ upstream ", t.Accent), sg(short(st.Latest), t.Accent),
+			sg(" · "+strings.Join(what, " · ")+" · u updates", t.Faint)))
+	}
 	if rep := m.reports[p.Repo]; rep != nil {
 		lines = append(lines, row())
 		head := []seg{sgb("update ", t.Text)}
@@ -415,6 +470,8 @@ func (m Model) packView(p Pack, w, h int) []string {
 		}
 		out = append(out, row(sg("   "+msg, t.Faint)))
 	}
+	st, checked := m.outdated[p.Repo]
+	in := func(names []string, n string) bool { return checked && slices.Contains(names, n) }
 	for i := l.off; i < len(rows) && i < l.off+lh; i++ {
 		sk := rows[i]
 		rbg := bg
@@ -441,13 +498,25 @@ func (m Model) packView(p Pack, w, h int) []string {
 		default:
 			icon, nameFg, agents = sg("◉ ", t.Muted), t.Text, sg("off · in library", t.Muted)
 		}
+		// What the upstream check found for this skill.
+		var note seg
+		switch {
+		case sk.Installed && in(st.Changed, sk.Name):
+			note = sg("  ↑ changed", t.Accent)
+		case sk.Installed && in(st.Gone, sk.Name):
+			note = sg("  gone upstream", t.Warn)
+		case !sk.Installed && in(st.New, sk.Name):
+			agents = sg("new upstream", t.Cyan)
+		case !sk.Installed && in(st.Pending, sk.Name):
+			agents = sg("selected · u vendors it", t.Muted)
+		}
 		cat := sk.Category
 		if cat == "" {
 			cat = "·"
 		}
 		name := sg(fit(sk.LinkName, nameW)+"  ", nameFg)
 		name.bold = i == m.right.cur && m.focus == focusRight
-		segs := []seg{sg(" ", ""), mark, icon, name, sg(fit(cat, catW)+"  ", t.Muted), agents}
+		segs := []seg{sg(" ", ""), mark, icon, name, sg(fit(cat, catW)+"  ", t.Muted), agents, note}
 		if rbg != bg {
 			segs = lift(t, segs)
 		}
@@ -541,6 +610,13 @@ func wrap(s string, w, n int) []string {
 
 func (m Model) viewStatus() string {
 	t := m.theme
+	if m.busy == "" && m.check == checkRunning {
+		segs := []seg{sg(" checking upstream…", t.Accent)}
+		if m.status != "" {
+			segs = append(segs, sg(" · "+m.status, t.Muted))
+		}
+		return paint(1, "") + m.spin.View() + paint(m.w-1-ansi.StringWidth(m.spin.View()), "", segs...)
+	}
 	if m.busy != "" {
 		note := m.busyNote
 		if m.quitAfter {

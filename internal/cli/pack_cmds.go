@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -481,11 +482,14 @@ func showCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			unlock := pack.Hold(src.Repo)
 			clone, commit, err := pack.Fetch(src)
 			if err != nil {
+				unlock()
 				return err
 			}
 			upstream, rejected, err := pack.Scan(clone)
+			unlock()
 			if err != nil {
 				return err
 			}
@@ -543,4 +547,83 @@ func showCmd() *cobra.Command {
 // lookup resolves a user-supplied skill key; see app.Session.Lookup.
 func lookup(c *ctx, entries []engine.Entry, key string) (*engine.Entry, error) {
 	return c.Lookup(entries, key)
+}
+
+func outdatedCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "outdated [pack...]",
+		Short: "Check upstream for changes to the selected skills, without changing anything",
+		Long: "Fetches each pack into the cache and compares it with what is vendored: skills that changed, " +
+			"appeared or disappeared upstream. vendor/, skills.lock and skills.toml are left alone; " +
+			"`skd update` applies the changes. The result is remembered for `skd list` and the menu.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			out, err := c.Outdated(args, func(repo string, st *app.PackStatus, err error) {
+				if err != nil {
+					c.printf("%s %s: %v\n", bad("✗"), repo, err)
+					return
+				}
+				printStatus(c, st)
+			})
+			if err != nil {
+				return err
+			}
+			if !c.jsonOut(map[string]any{"checked": out.Checked, "packs": out.Packs, "failed": out.Failed, "updates": out.Updates()}) {
+				switch n := out.Updates(); {
+				case n == 1:
+					c.printf("\n%s · %s\n", accent("1 pack has updates"), dim("skd update"))
+				case n > 1:
+					c.printf("\n%s · %s\n", accent(fmt.Sprintf("%d packs have updates", n)), dim("skd update"))
+				case len(out.Failed) == 0:
+					c.printf("\n%s\n", ok("✓ everything is up to date"))
+				}
+			}
+			if len(out.Failed) > 0 {
+				return fmt.Errorf("%d pack(s) could not be checked: %s", len(out.Failed), out.Failed[0].Repo)
+			}
+			return nil
+		},
+	}
+}
+
+// printStatus is one pack of `skd outdated`: a block when it has updates,
+// one line when not.
+func printStatus(c *ctx, st *app.PackStatus) {
+	head := bold(st.Repo)
+	switch {
+	case st.Commit == "":
+		c.printf("%s  %s\n", head, warn("not vendored yet · skd update "+st.Repo))
+		return
+	case !st.HasUpdates() && st.Commit == st.Latest:
+		c.printf("%s  %s\n", head, dim(short(st.Commit)+"  ✓ up to date"))
+		return
+	case !st.HasUpdates():
+		c.printf("%s  %s\n", head, dim(short(st.Commit)+" → "+short(st.Latest)+"  no skill changes"))
+		return
+	}
+	c.printf("%s  %s → %s\n", head, dim(short(st.Commit)), accent(short(st.Latest)))
+	row := func(label string, style func(string) string, names []string, hint string) {
+		if len(names) > 0 {
+			line := fmt.Sprintf("  %s %s", style(fmt.Sprintf("%-13s", label)), strings.Join(names, ", "))
+			if hint != "" {
+				line += "  " + dim(hint)
+			}
+			c.printf("%s\n", line)
+		}
+	}
+	row("changed", accent, st.Changed, "")
+	row("will add", ok, st.Pending, "")
+	// New skills the pack selects anyway (it follows "*") are under
+	// "will add"; the rest are offered.
+	var offered []string
+	for _, n := range st.New {
+		if !slices.Contains(st.Pending, n) {
+			offered = append(offered, n)
+		}
+	}
+	row("upstream new", cyan, offered, "skd add "+st.Repo+" --skill <name>")
+	row("upstream gone", warn, st.Gone, "kept by update")
 }

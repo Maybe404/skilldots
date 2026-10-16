@@ -80,6 +80,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		return nil, err
 	}
 	src.Ref = p.Ref
+	defer pack.Hold(p.Repo)()
 	clone, commit, err := pack.Fetch(src)
 	if err != nil {
 		return nil, err

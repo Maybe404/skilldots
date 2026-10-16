@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -185,7 +186,12 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 	}
 	home, _ := os.UserHomeDir()
 	c.printf("%s  %s\n", brand(), dim(strings.Replace(c.lib.Root, home, "~", 1)))
-	c.printf("%s\n\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(fmt.Sprintf("%d linked", linked))+dim(" · agents: "+strings.Join(m.Targets.Default, ", ")))
+	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(fmt.Sprintf("%d linked", linked))+dim(" · agents: "+strings.Join(m.Targets.Default, ", ")))
+	rec := c.RecordedOutdated()
+	if line := updatesLine(rec, time.Now()); line != "" {
+		c.printf("%s\n", line)
+	}
+	c.printf("\n")
 
 	if len(m.Packs) > 0 {
 		t := newTable("PACK", "SKILLS", "COMMIT", "TARGETS")
@@ -202,6 +208,11 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 			label := p.Repo
 			if p.Alias != "" {
 				label += dim(" (" + p.Alias + ")")
+			}
+			if rec != nil {
+				if st := rec.Find(p.Repo); st != nil && st.HasUpdates() {
+					label += " " + accent("↑")
+				}
 			}
 			sel := fmt.Sprintf("%d of %d", len(mine), total)
 			if p.UsesAll() {
@@ -220,6 +231,32 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 	printGroup(c, entries, engine.KindSkill, "skills/", "yours, published with the library")
 	printGroup(c, entries, engine.KindPrivate, "private/", "this machine only")
 	printGroup(c, entries, engine.KindApp, "apps", "shipped with installed applications")
+}
+
+// updatesLine summarises the last recorded upstream check (skd outdated,
+// or the dashboard's) for the overview and the menu: "" when there is
+// none. It never touches the network.
+func updatesLine(rec *app.Outdated, now time.Time) string {
+	if rec == nil {
+		return ""
+	}
+	when := "checked " + app.Ago(rec.Checked, now)
+	if rec.Stale(now) {
+		when += " · stale, skd outdated checks again"
+	}
+	var line string
+	switch n := rec.Updates(); n {
+	case 0:
+		line = ok("✓") + " " + dim("no updates · "+when)
+	case 1:
+		line = accent("↑ 1 update available") + dim(" · "+when+" · skd update")
+	default:
+		line = accent(fmt.Sprintf("↑ %d updates available", n)) + dim(" · "+when+" · skd update")
+	}
+	if n := len(rec.Failed); n > 0 {
+		line += dim(" · ") + warn(fmt.Sprintf("%d could not be checked", n))
+	}
+	return line
 }
 
 func packEntries(entries []engine.Entry, repo string) []engine.Entry {

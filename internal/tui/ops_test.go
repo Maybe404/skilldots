@@ -191,7 +191,7 @@ func TestOpsEndToEnd(t *testing.T) {
 	if len(reps) != 1 || !slices.Contains(reps[0].Changed, "tdd") || !slices.Equal(reps[0].UpstreamNew, []string{"fresh"}) {
 		t.Fatalf("update report (grill existed before, only fresh is new): %+v", reps[0])
 	}
-	if !strings.Contains(msg, "1 changed") {
+	if !strings.Contains(msg, "changed tdd ·") {
 		t.Fatalf("update message: %s", msg)
 	}
 
@@ -285,4 +285,42 @@ func trashed(t *testing.T, root, name string) bool {
 		}
 	}
 	return false
+}
+
+// The dashboard checks upstream in the background while the user may
+// update, add or reload: the same cache clones, opened from two
+// goroutines. Run with -race.
+func TestCheckBesideOperations(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	home, up := sandbox(t)
+	repo := filepath.Join(up, "acme", "skills.git")
+	write(t, filepath.Join(repo, "skills", "eng", "tdd", "SKILL.md"), skillMD("tdd", "Test first."))
+	write(t, filepath.Join(repo, "skills", "eng", "review", "SKILL.md"), skillMD("review", "Review code."))
+	run(t, repo, "init", "-q")
+	run(t, repo, "add", "-A")
+	run(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init")
+	root := newLibrary(t, home)
+	o := NewOps(root)
+	if _, err := o.Add("acme/skills", AddRequest{Names: []string{"tdd"}}); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(repo, "skills", "eng", "tdd", "more.md"), "more\n")
+	run(t, repo, "add", "-A")
+	run(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c2")
+
+	errs := make(chan error, 3)
+	go func() { _, err := o.Check(); errs <- err }()
+	go func() { _, _, err := o.Update(nil); errs <- err }()
+	go func() { _, err := o.Load(); errs <- err }()
+	for i := 0; i < 3; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := o.Check()
+	if err != nil || len(out.Failed) > 0 || out.Updates() != 0 {
+		t.Fatalf("after the update: %+v, %v", out, err)
+	}
 }

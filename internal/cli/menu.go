@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -48,21 +49,32 @@ func runMenu() error {
 		if out, err := c.lib.Git("log", "-1", "--format=%cr"); err == nil && out != "" {
 			last = dim("  ·  last change " + out)
 		}
+		lines := []string{brand(), dim(strings.Replace(root, home, "~", 1)), "",
+			cyan(plural(len(c.lib.Manifest.Packs), "pack")) + dim(" · ") + cyan(plural(len(entries), "skill")) + dim(" · ") + cyan(fmt.Sprintf("%d linked", linked)) + dim(" · agents: "+strings.Join(c.lib.Manifest.Targets.Default, ", ")),
+			status + last}
+		rec := c.RecordedOutdated()
+		if line := updatesLine(rec, time.Now()); line != "" {
+			lines = append(lines, line)
+		}
+		updateDesc := "fetch upstream changes"
+		if rec != nil {
+			switch n := rec.Updates(); {
+			case n == 1:
+				updateDesc = "1 pack has updates"
+			case n > 1:
+				updateDesc = fmt.Sprintf("%d packs have updates", n)
+			}
+		}
 		fmt.Println()
-		fmt.Println(card(
-			brand(),
-			dim(strings.Replace(root, home, "~", 1)),
-			"",
-			cyan(plural(len(c.lib.Manifest.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(fmt.Sprintf("%d linked", linked))+dim(" · agents: "+strings.Join(c.lib.Manifest.Targets.Default, ", ")),
-			status+last,
-		))
+		fmt.Println(card(lines...))
 		fmt.Println()
 		var choice string
 		err = ask(huh.NewSelect[string]().
 			Options(
 				opt("Overview", "packs and skills at a glance", "list"),
 				opt("Add", "subscribe to a repository and pick skills", "add"),
-				opt("Update", "fetch upstream changes", "update"),
+				opt("Update", updateDesc, "update"),
+				opt("Outdated", "check upstream without changing anything", "outdated"),
 				opt("Agents", "choose which agents get a skill", "targets"),
 				opt("Fork", "make a vendored skill your own", "fork"),
 				opt("Remove", "unlink, drop, or purge", "remove"),
@@ -96,6 +108,8 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		return run("list", "--all")
 	case "update":
 		return run("update")
+	case "outdated":
+		return run("outdated")
 	case "apply":
 		return run("apply")
 	case "add":

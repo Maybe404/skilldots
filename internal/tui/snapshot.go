@@ -131,6 +131,9 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 		}
 		pk.Selected = len(pk.Skills)
 		var rest []Skill
+		// Not under pack.Hold: a background check fetching this clone over
+		// a slow network must not hold up every operation's reload. A scan
+		// caught mid-fetch is corrected by the reload the check ends with.
 		cache := pack.CachePath(p.Repo)
 		if fsutil.Exists(filepath.Join(cache, ".git")) {
 			if up, _, err := pack.Scan(cache); err == nil {

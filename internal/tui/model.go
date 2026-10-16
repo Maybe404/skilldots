@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 )
 
@@ -110,6 +111,27 @@ type result struct {
 
 type doneMsg struct{ res result }
 
+// checkState is where the background upstream check (skd outdated) is.
+type checkState int
+
+const (
+	checkNone checkState = iota
+	checkRunning
+	checkDone
+	checkFailed
+)
+
+// startCheckMsg starts the upstream check; Init sends it once.
+type startCheckMsg struct{}
+
+// checkMsg is a finished upstream check, with a snapshot read after it
+// (the cache clones it fetched list upstream skills).
+type checkMsg struct {
+	out  *app.Outdated
+	err  error
+	snap *Snapshot
+}
+
 // Model is the dashboard.
 type Model struct {
 	// replay are key messages to handle before any other input.
@@ -138,6 +160,13 @@ type Model struct {
 	status    string
 	statusLvl level
 	reports   map[string]*engine.SyncReport
+
+	// The upstream check runs beside operations, never as one: it does
+	// not make the dashboard busy and no key waits for it.
+	check     checkState
+	checkErr  string                    // why it failed, for checkFailed
+	outdated  map[string]app.PackStatus // by repo, from the last check
+	checkFail []app.Failure             // packs the last check could not fetch
 	// jobs counts operations still running, shared by every copy of the
 	// model so Run can wait for them after the program stops.
 	jobs *tracker
@@ -225,16 +254,17 @@ func firstLine(s string) string {
 }
 
 // Init replays the keys typed before the dashboard could read them (see
-// Options.Input), in order.
+// Options.Input), in order, and starts checking upstream for updates.
 func (m Model) Init() tea.Cmd {
+	check := func() tea.Msg { return startCheckMsg{} }
 	if len(m.replay) == 0 {
-		return nil
+		return check
 	}
 	var cmds []tea.Cmd
 	for _, msg := range m.replay {
 		cmds = append(cmds, func() tea.Msg { return msg })
 	}
-	return tea.Sequence(cmds...)
+	return tea.Batch(tea.Sequence(cmds...), check)
 }
 
 // ---- derived lists ------------------------------------------------------
@@ -370,7 +400,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clampAll()
 		return m, nil
 	case spinner.TickMsg:
-		if m.busy == "" {
+		if m.busy == "" && m.check != checkRunning {
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -378,6 +408,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case doneMsg:
 		return m.finish(msg.res)
+	case startCheckMsg:
+		return m.startCheck()
+	case checkMsg:
+		return m.finishCheck(msg), nil
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			if m.busy != "" && m.quitAfter {
@@ -518,6 +552,11 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r":
 		return m.start(job{label: "reloading", run: func(o Ops) result { return result{msg: "reloaded"} }})
+	case "c":
+		if m.check == checkRunning {
+			return m.hint("already checking upstream")
+		}
+		return m.startCheck()
 	}
 	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntS", k.String()) {
 		m.busyNote = "wait until it finishes"
@@ -550,7 +589,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.updateAll()
 	case "U":
-		return m.updateAll()
+		return m.updateOutdated()
 	case "e":
 		return m.agents()
 	case "f":
@@ -600,6 +639,100 @@ func (m Model) updateAll() (tea.Model, tea.Cmd) {
 		reps, msg, err := o.Update(nil)
 		return result{msg: msg, err: err, reports: reps}
 	}})
+}
+
+// updateOutdated is U: update every pack the upstream check found
+// changes in. Until a check has succeeded it updates every pack.
+func (m Model) updateOutdated() (tea.Model, tea.Cmd) {
+	if m.check != checkDone {
+		return m.updateAll()
+	}
+	repos := m.packsWithUpdates()
+	if len(repos) == 0 {
+		return m.hint("no upstream updates · u updates the pack under the cursor · c checks again")
+	}
+	return m.start(job{label: "updating " + plural(len(repos), "pack"), run: func(o Ops) result {
+		reps, msg, err := o.Update(repos)
+		return result{msg: msg, err: err, reports: reps}
+	}})
+}
+
+// packsWithUpdates are the packs the last check found changes in, in the
+// dashboard's order.
+func (m Model) packsWithUpdates() []string {
+	var out []string
+	for _, p := range m.snap.Packs {
+		if m.hasUpdates(p.Repo) {
+			out = append(out, p.Repo)
+		}
+	}
+	return out
+}
+
+func (m Model) hasUpdates(repo string) bool {
+	st, ok := m.outdated[repo]
+	return ok && st.HasUpdates()
+}
+
+// startCheck runs `skd outdated` in the background.
+func (m Model) startCheck() (tea.Model, tea.Cmd) {
+	if m.check == checkRunning {
+		return m, nil
+	}
+	if len(m.snap.Packs) == 0 {
+		m.check, m.outdated, m.checkFail = checkDone, map[string]app.PackStatus{}, nil
+		return m, nil
+	}
+	m.check = checkRunning
+	ops := m.ops
+	run := func() tea.Msg {
+		out, err := ops.Check()
+		var snap *Snapshot
+		if err == nil {
+			snap, _ = ops.Load()
+		}
+		return checkMsg{out: out, err: err, snap: snap}
+	}
+	return m, tea.Batch(m.spin.Tick, run)
+}
+
+// finishCheck takes in a finished upstream check. Problems go on the
+// status line; the dashboard works as before either way.
+func (m Model) finishCheck(c checkMsg) Model {
+	m.check, m.checkErr, m.checkFail = checkDone, "", nil
+	if c.snap != nil && m.busy == "" {
+		m = m.replaceSnapshot(c.snap)
+	}
+	switch {
+	case c.err != nil:
+		m.check, m.checkErr = checkFailed, firstLine(c.err.Error())
+	case c.out == nil:
+	case len(c.out.Packs) == 0 && len(c.out.Failed) > 0:
+		f := c.out.Failed[0]
+		m.check, m.checkErr, m.checkFail = checkFailed, firstLine(f.Repo+": "+f.Error), c.out.Failed
+	default:
+		m.checkFail = c.out.Failed
+		m.outdated = map[string]app.PackStatus{}
+		commits := map[string]string{}
+		for _, p := range m.snap.Packs {
+			commits[p.Repo] = p.Commit
+		}
+		for _, st := range c.out.Packs {
+			// An update that ended while the check ran already moved the
+			// pack on: what the check saw is out of date.
+			if commit, ok := commits[st.Repo]; ok && commit == st.Commit {
+				m.outdated[st.Repo] = st
+			}
+		}
+	}
+	switch {
+	case m.check == checkFailed:
+		m.status, m.statusLvl = "upstream check failed: "+m.checkErr+" · c checks again", lvWarn
+	case len(m.checkFail) > 0:
+		f := m.checkFail[0]
+		m.status, m.statusLvl = fmt.Sprintf("could not check %s: %s · c checks again", f.Repo, firstLine(f.Error)), lvWarn
+	}
+	return m
 }
 
 func (m Model) hint(s string) (tea.Model, tea.Cmd) {
@@ -842,6 +975,10 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 func (m Model) setResult(label string, r result) Model {
 	for _, rep := range r.reports {
 		m.reports[rep.Repo] = rep
+		if m.outdated != nil {
+			// Updated: the pack matches upstream now.
+			m.outdated[rep.Repo] = app.PackStatus{Repo: rep.Repo, Commit: rep.NewCommit, Latest: rep.NewCommit}
+		}
 	}
 	if r.snap != nil {
 		m = m.replaceSnapshot(r.snap)

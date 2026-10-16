@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -363,11 +364,13 @@ func splitKey(key string) (target, name string, ok bool) {
 	return "", key, false
 }
 
-// registry is set by the CLI so lock-only removals can resolve targets.
-var registry *targets.Registry
+// registryPtr is set by the CLI so lock-only removals can resolve targets.
+// It is atomic: the dashboard opens the library from two goroutines when
+// it checks upstream while an operation runs.
+var registryPtr atomic.Pointer[targets.Registry]
 
 // SetRegistry installs the registry used for lock-only lookups.
-func SetRegistry(r *targets.Registry) { registry = r }
+func SetRegistry(r *targets.Registry) { registryPtr.Store(r) }
 
 // sourceInLibrary reports whether a recorded link source is a clean
 // library-relative path that stays inside the library.
@@ -395,6 +398,7 @@ func appSource(src, name string, lib *library.Library) bool {
 
 // knownTargetDir reports whether dir is the directory of a registered target.
 func knownTargetDir(dir string) bool {
+	registry := registryPtr.Load()
 	if registry == nil {
 		return false
 	}
@@ -415,6 +419,7 @@ func evalClean(p string) string {
 }
 
 func regTarget(lib *library.Library, name string) (targets.Target, error) {
+	registry := registryPtr.Load()
 	if registry == nil {
 		return targets.Target{}, fmt.Errorf("target %q: registry not initialised", name)
 	}

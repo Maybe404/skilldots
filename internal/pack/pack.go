@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -81,7 +82,29 @@ func CachePath(repo string) string {
 	return filepath.Join(library.CacheDir(), strings.ReplaceAll(repo, "/", "__"))
 }
 
-// Fetch clones or updates the cache clone and returns its path and HEAD commit.
+var (
+	holdMu sync.Mutex
+	holds  = map[string]*sync.Mutex{}
+)
+
+// Hold locks repo's cache clone against other users in this process (the
+// dashboard checks upstream in the background while an update may run)
+// and returns the unlock function. Fetch, Scan of a clone and anything
+// copied out of it belong inside one Hold. It is not reentrant.
+func Hold(repo string) (unlock func()) {
+	holdMu.Lock()
+	m := holds[repo]
+	if m == nil {
+		m = &sync.Mutex{}
+		holds[repo] = m
+	}
+	holdMu.Unlock()
+	m.Lock()
+	return m.Unlock
+}
+
+// Fetch clones or updates the cache clone and returns its path and HEAD
+// commit. Callers Hold the repository.
 func Fetch(src Source) (dir, commit string, err error) {
 	dir = CachePath(src.Repo)
 	if !fsutil.Exists(filepath.Join(dir, ".git")) {
