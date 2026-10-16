@@ -570,7 +570,7 @@ func purgePack(c *ctx, p *manifest.Pack) error {
 		}
 	}
 	sort.Strings(links)
-	c.printf("%s %s: remove vendor/%s and %s\n", bad("purge"), bold(p.Repo), p.Repo, plural(len(links), "link"))
+	c.printf("%s %s: unlink %s and move vendor/%s to the trash\n", warn("purge"), bold(p.Repo), plural(len(links), "link"), p.Repo)
 	for _, l := range links {
 		c.printf("  %s %s\n", bad("−"), l)
 	}

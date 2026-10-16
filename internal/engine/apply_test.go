@@ -54,7 +54,7 @@ func TestForceApplyBacksUpUnmanagedDir(t *testing.T) {
 	if st, err := os.Lstat(stale); err != nil || st.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("%s should now be a symlink", stale)
 	}
-	matches, _ := filepath.Glob(filepath.Join(agents, BackupDir, "*", "mine", "notes.txt"))
+	matches, _ := filepath.Glob(filepath.Join(root, TrashDir, "*", "mine", "notes.txt"))
 	if len(matches) != 1 {
 		t.Fatalf("user data not preserved in backup: %v", matches)
 	}

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -151,23 +150,19 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 	return plan
 }
 
-// BackupDir is the folder inside a target where displaced files are kept.
-const BackupDir = ".skilldots-backup"
-
 // Result reports what Apply did beyond the plan.
 type Result struct {
-	// Backups lists "<dest> → <backup path>" for every real directory that
-	// was moved aside rather than deleted.
+	// Backups lists "<dest> → <trash path>" for every real directory that
+	// was moved into the library trash rather than deleted.
 	Backups []string
 }
 
 // Apply executes the plan and updates the lock. The caller saves the library.
 // A symlink in the way is simply replaced; anything else (a real directory,
-// or a copy modified since skilldots wrote it) is moved into the target's
-// BackupDir first, never deleted.
+// or a copy modified since skilldots wrote it) is moved into the library
+// trash first, never deleted.
 func Apply(lib *library.Library, plan Plan) (*Result, error) {
 	res := &Result{}
-	stamp := time.Now().Format("20060102-150405")
 	clear := func(op Op, prev *lock.Link) error {
 		if !fsutil.Lexists(op.Dest) {
 			return nil
@@ -180,15 +175,11 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		if disposable {
 			return os.RemoveAll(op.Dest)
 		}
-		bdir := filepath.Join(op.Target.Path, BackupDir, stamp)
-		if err := os.MkdirAll(bdir, 0o755); err != nil {
-			return err
+		to, err := Trash(lib, op.Dest)
+		if err != nil {
+			return fmt.Errorf("moving %s to trash: %w", op.Dest, err)
 		}
-		to := filepath.Join(bdir, op.Name)
-		if err := os.Rename(op.Dest, to); err != nil {
-			return fmt.Errorf("backing up %s: %w", op.Dest, err)
-		}
-		res.Backups = append(res.Backups, op.Dest+" → "+to)
+		res.Backups = append(res.Backups, op.Dest+" → "+lib.Rel(to))
 		return nil
 	}
 	for _, op := range plan.Ops {

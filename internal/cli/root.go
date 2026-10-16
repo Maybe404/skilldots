@@ -114,7 +114,7 @@ func Root() *cobra.Command {
 	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
 	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), enableCmd(), disableCmd(),
-		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd())
+		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd())
 	return root
 }
 

@@ -29,7 +29,7 @@ Most of the time it is not a person running `skd` but the agent on their machine
 
 - `skd init` installs the [`skilldots` skill](skills/skilldots/SKILL.md) into the library, so every agent on the machine knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
 - Every command works without a terminal: `--json` for structured results, `--yes` for prompts, `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
-- Destructive steps (`apply --force`, `purge`) are the only ones that need a human; the skill tells agents to preview and ask.
+- Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. `skd trash empty` is the one irreversible command and it only runs for a person at a terminal, so an agent can do everything short of permanent deletion.
 - People get the interactive menu (`skd` with no arguments) for looking around and vetoing.
 
 ## Install
@@ -68,6 +68,9 @@ Prebuilt binaries will follow.
 | `skd fork <skill> [--private] [--as name]` | copy a vendored skill into `skills/` to edit it; upstream no longer touches it |
 | `skd path <skill>` | print where a skill's files live, for editing |
 | `skd new <name> [--private]` | scaffold a skill of your own and link it |
+| `skd scan` | inventory every agent skill directory: managed, copies, links, broken |
+| `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own, enable per agent |
+| `skd trash [restore <id> \| empty]` | what skd set aside; restore it; or (interactively) delete for good |
 | `skd targets` | known agent directories and which exist on this machine |
 | `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
 | `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
@@ -116,7 +119,7 @@ Every directory containing a `SKILL.md` is a skill. Hidden and test directories 
 - **Roll back an update:** the library is a git repository. With `skd update --commit` every update is one commit, so `git revert <commit> && skd apply` undoes it. Without `--commit`, `git checkout -- vendor skills.lock && skd apply`.
 - **Remove:** `skd disable` unlinks but keeps the files; `skd remove` also drops a vendored skill from the library; `skd purge` deletes a whole pack.
 
-Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights), so a skill exists once on disk.
+Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`.
 
 ## Unattended updates
 
@@ -128,7 +131,7 @@ Agent directories only ever contain symlinks into the library (copies on Windows
 
 ## Status
 
-Early. Linking, vendoring, updates and per-agent control work; `scan`/`adopt` for taking over skills installed by other tools, Windows copy-mode fallback hardening, and Homebrew/scoop packages are next. See the [design notes](docs/design.md).
+Early. Linking, vendoring, updates, per-agent control, scan/adopt and the trash work; Windows copy-mode hardening and Homebrew/scoop packages are next. See the [design notes](docs/design.md).
 
 ## License
 

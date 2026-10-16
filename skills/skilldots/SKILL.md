@@ -63,9 +63,11 @@ skd targets                                 # agents known on this machine
 
 ## Remove
 
-- `skd disable <skill>` — unlink, keep files. Safe.
+- `skd disable <skill>` — unlink, keep files.
 - `skd remove <skill>` — also drop a vendored skill from the library.
-- `skd purge owner/repo` — delete a whole repository subscription. **Confirm with the user first.**
+- `skd purge owner/repo --yes` — drop a whole repository subscription. Tell the user what you are purging.
+
+None of these delete anything: files go to the library trash (`skd trash`), and `skd trash restore <id>` brings them back. **Never run `skd trash empty`** — permanent deletion is reserved for the user at a terminal; it refuses to run otherwise.
 
 ## Change a third-party skill
 
@@ -90,9 +92,18 @@ skd sync --remote <git-url> # set the remote first (ask the user for the URL)
 ```
 Run `skd sync` after adding, updating or writing skills unless the user says otherwise. `private/` is a separate repository and is never pushed by `sync`.
 
+## Take over skills installed by other tools
+
+```bash
+skd scan                    # inventory of every agent directory: managed, copies, links, broken
+skd adopt --dry-run         # proposals: subscribe, register app, copy as own, enable per agent
+skd adopt --yes             # apply them; displaced directories go to the trash
+```
+Run this on first use and whenever `skd scan` reports unmanaged entries.
+
 ## Rules
 
-- `skd apply -n` previews; plain `skd apply` only touches links skd created. `skd apply --force` moves other people's directories into `<agent dir>/.skilldots-backup/<timestamp>/` — show the user the `-n` preview and get agreement before `--force`.
-- Do not delete anything under an agent's skill directory yourself; use `skd disable`/`remove`/`purge`.
+- `skd apply -n` previews; plain `skd apply` only touches links skd created. `skd apply --force` moves other directories to the trash first — show the user the `-n` preview before `--force`.
+- Do not delete or edit anything under an agent's skill directory yourself; use `skd disable`/`remove`/`purge`/`adopt`.
 - If a skill the user wants is already present under a different name, say so instead of installing a duplicate.
 - When `skd` is not installed, tell the user how: `go install github.com/Maybe404/skilldots/cmd/skd@latest` or the installer at https://github.com/Maybe404/skilldots.

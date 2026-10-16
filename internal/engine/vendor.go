@@ -92,7 +92,9 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			rep.Changed = append(rep.Changed, s.Name)
 		}
 		if prev != nil && prev.Category != s.Category {
-			os.RemoveAll(filepath.Join(packDir, filepath.FromSlash(prev.Category), s.Name))
+			if old := filepath.Join(packDir, filepath.FromSlash(prev.Category), s.Name); fsutil.Lexists(old) {
+				Trash(lib, old)
+			}
 		}
 		if err := fsutil.CopyTree(s.Dir, dest); err != nil {
 			return nil, err
@@ -115,7 +117,11 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			continue
 		}
 		rep.Dropped = append(rep.Dropped, n)
-		os.RemoveAll(filepath.Join(packDir, filepath.FromSlash(ls.Category), n))
+		if old := filepath.Join(packDir, filepath.FromSlash(ls.Category), n); fsutil.Lexists(old) {
+			if _, err := Trash(lib, old); err != nil {
+				return nil, err
+			}
+		}
 		delete(lp.Skills, n)
 	}
 	pruneEmpty(packDir)
@@ -133,10 +139,12 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	return rep, nil
 }
 
-// RemovePack deletes a pack's vendored files and lock entry.
+// RemovePack moves a pack's vendored files to the trash and drops its lock entry.
 func RemovePack(lib *library.Library, repo string) error {
-	if err := os.RemoveAll(lib.PackDir(repo)); err != nil {
-		return err
+	if fsutil.Lexists(lib.PackDir(repo)) {
+		if _, err := Trash(lib, lib.PackDir(repo)); err != nil {
+			return err
+		}
 	}
 	delete(lib.Lock.Packs, repo)
 	pruneEmpty(filepath.Dir(lib.PackDir(repo)))

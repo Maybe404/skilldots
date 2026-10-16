@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/engine"
@@ -25,6 +26,8 @@ const (
 const gitignore = `.DS_Store
 # Machine-local skills: a separate git repository that is never pushed with this one.
 /private/
+# Where skd parks anything it takes out of the way. Empty with: skd trash empty
+/.trash/
 `
 
 func initCmd() *cobra.Command {
@@ -65,8 +68,14 @@ func initCmd() *cobra.Command {
 			gi := filepath.Join(root, ".gitignore")
 			if !fsutil.Exists(gi) {
 				os.WriteFile(gi, []byte(gitignore), 0o644)
-			} else if b, _ := os.ReadFile(gi); !strings.Contains(string(b), "/private/") {
-				os.WriteFile(gi, append(b, []byte("\n/private/\n")...), 0o644)
+			} else {
+				b, _ := os.ReadFile(gi)
+				for _, line := range []string{"/private/", "/.trash/"} {
+					if !strings.Contains(string(b), line) {
+						b = append(b, []byte("\n"+line+"\n")...)
+					}
+				}
+				os.WriteFile(gi, b, 0o644)
 			}
 			if err := library.EnsureGit(root); err != nil {
 				return err
@@ -306,7 +315,7 @@ func applyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&dry, "dry-run", "n", false, "show the plan without changing anything")
-	cmd.Flags().BoolVar(&force, "force", false, "replace unmanaged or modified entries (they are moved into <target>/"+engine.BackupDir+"/, not deleted)")
+	cmd.Flags().BoolVar(&force, "force", false, "replace unmanaged or modified entries (they are moved to the library trash, not deleted)")
 	return cmd
 }
 
@@ -467,4 +476,81 @@ func useCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func trashCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "trash",
+		Short: "What skd has set aside: list, restore, or empty (empty is for a person at a terminal)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			items, err := engine.ListTrash(c.lib)
+			if err != nil {
+				return err
+			}
+			if c.jsonOut(items) {
+				return nil
+			}
+			if len(items) == 0 {
+				c.printf("%s\n", dim("trash is empty"))
+				return nil
+			}
+			home, _ := os.UserHomeDir()
+			t := newTable("ID", "FROM", "WHEN")
+			for _, it := range items {
+				t.Row(it.ID, dim(strings.Replace(it.Origin, home, "~", 1)), dim(it.When.Format("2006-01-02 15:04")))
+			}
+			c.printf("%s\n%s\n", t.Render(), dim("skd trash restore <id>   ·   skd trash empty"))
+			return nil
+		},
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "restore <id>",
+		Short: "Put a parked directory back where it came from",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			dest, err := engine.Restore(c.lib, args[0])
+			if err != nil {
+				return err
+			}
+			c.printf("%s restored to %s\n", ok("✓"), dest)
+			return nil
+		},
+	}, &cobra.Command{
+		Use:   "empty",
+		Short: "Permanently delete everything in the trash (interactive only; --yes is ignored)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			if !isTerminal() {
+				return fmt.Errorf("skd trash empty is irreversible and only runs interactively; ask the user to run it")
+			}
+			items, _ := engine.ListTrash(c.lib)
+			if len(items) == 0 {
+				c.printf("%s\n", dim("trash is empty"))
+				return nil
+			}
+			c.printf("%s %s\n", bad("permanently delete"), plural(len(items), "parked directory"))
+			var sure bool
+			if err := huh.NewConfirm().Title(fmt.Sprintf("Delete %d item(s) forever?", len(items))).Affirmative("Delete").Negative("Keep").Value(&sure).Run(); err != nil || !sure {
+				return nil
+			}
+			n, err := engine.EmptyTrash(c.lib)
+			if err != nil {
+				return err
+			}
+			c.printf("%s deleted %d\n", ok("✓"), n)
+			return nil
+		},
+	})
+	return cmd
 }
