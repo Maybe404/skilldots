@@ -365,3 +365,28 @@ func Inside(dir, p string, loose bool) bool {
 		p = d
 	}
 }
+
+// LinkOnPath returns the first symbolic link on the way from root (not
+// included: the root itself may be reached through links) down to p
+// (included), or "" when there is none. p must be inside root lexically;
+// when it is not, p itself is returned. Parts that do not exist end the
+// walk: nothing below them can be a link yet.
+func LinkOnPath(root, p string) string {
+	root, p = filepath.Clean(root), filepath.Clean(p)
+	if !Within(root, p) {
+		return p
+	}
+	rel, _ := filepath.Rel(root, p)
+	q := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		q = filepath.Join(q, part)
+		st, err := os.Lstat(q)
+		if err != nil {
+			return ""
+		}
+		if st.Mode()&os.ModeSymlink != 0 {
+			return q
+		}
+	}
+	return ""
+}

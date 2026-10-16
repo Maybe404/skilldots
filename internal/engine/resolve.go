@@ -47,6 +47,10 @@ type Entry struct {
 	UnknownTargets []string `json:",omitempty"`
 	// Missing is set when the source dir is absent (e.g. not vendored yet).
 	Missing bool
+	// LinkedVia is the symbolic link inside the library on the way to Dir,
+	// if any: skd neither links nor copies such a skill (its files are
+	// wherever the link points, outside the library).
+	LinkedVia string `json:",omitempty"`
 	// Conflict is set when another entry wants the same LinkName. Neither
 	// is linked until the clash is resolved; existing links stay as they are.
 	Conflict string `json:",omitempty"`
@@ -63,9 +67,15 @@ type Entry struct {
 func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, error) {
 	out, warnings := collect(lib)
 
-	unknown, withheld := map[string][]string{}, map[string][]string{}
+	unknown, withheld, linked := map[string][]string{}, map[string][]string{}, map[string][]string{}
 	for i := range out {
 		e := &out[i]
+		if e.Kind != KindApp {
+			if l := sourceLink(lib, e.Dir); l != "" {
+				e.LinkedVia = l
+				linked[l] = append(linked[l], e.LinkName)
+			}
+		}
 		if _, err := os.Stat(e.Dir); err != nil {
 			e.Missing = true
 		} else if e.Description == "" {
@@ -86,6 +96,10 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 			}
 			e.Targets = append(e.Targets, t)
 		}
+	}
+	for _, l := range sortedKeys(linked) {
+		warnings = append(warnings, fmt.Sprintf("%s in the library is a symbolic link; skd does not link or copy skills through it (skipped: %s); make it a directory of its own",
+			lib.Rel(l), strings.Join(linked[l], ", ")))
 	}
 	for _, n := range sortedKeys(unknown) {
 		warnings = append(warnings, fmt.Sprintf("unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name",

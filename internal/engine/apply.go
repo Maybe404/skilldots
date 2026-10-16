@@ -116,6 +116,11 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				}
 				continue
 			}
+			if e.LinkedVia != "" {
+				op.Action, op.Reason = "skip", "its directory goes through "+lib.Rel(e.LinkedVia)+", a symbolic link inside the library"
+				plan.Ops = append(plan.Ops, op)
+				continue
+			}
 			if e.Missing {
 				op.Action, op.Reason = "skip", "source directory missing"
 				plan.Ops = append(plan.Ops, op)
@@ -240,7 +245,8 @@ type Result struct {
 	Backups []string
 	// Refused lists "<dest>: <why>" for every planned change not made
 	// because its target no longer leads to the directory the registry
-	// found (targets.Target.Intact); its lock record is left as it was.
+	// found (targets.Target.Intact) or its source is reached through a
+	// symbolic link inside the library; its lock record is left as it was.
 	Refused []string
 }
 
@@ -301,6 +307,10 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		switch op.Action {
 		case "create", "replace":
 			if !intact(op) {
+				continue
+			}
+			if l := sourceLink(lib, op.Source); l != "" {
+				res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: its source goes through %s, a symbolic link inside the library", op.Dest, lib.Rel(l)))
 				continue
 			}
 			if err := os.MkdirAll(op.Target.Path, 0o755); err != nil {
@@ -427,6 +437,18 @@ func ownLink(dest string, prev *lock.Link, lib *library.Library) bool {
 	}
 	src := libSource(prev.Source, lib)
 	return src != "" && isLinkTo(dest, src)
+}
+
+// sourceLink returns the first symbolic link on the way from the library
+// root down to src (a source inside the library), or "": a link there
+// would make the skill's files whatever it points at, outside the
+// library. The library root itself may be reached through links. A
+// source outside the library (an app's) is not checked.
+func sourceLink(lib *library.Library, src string) string {
+	if !fsutil.Within(lib.Root, src) {
+		return ""
+	}
+	return fsutil.LinkOnPath(lib.Root, src)
 }
 
 // current reports whether dest still is what the lock says we wrote.
