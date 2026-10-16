@@ -362,8 +362,9 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			s.logf(Detail, "removed link %s (adopted as %s)", p.Item.Path, n)
 			continue
 		}
+		// Reported with the apply's own backups (printed once, after the
+		// link changes), not logged here as well.
 		ap.Backups = append(ap.Backups, p.Item.Path+" → "+lib.Rel(to))
-		s.logf(Detail, "moved aside %s → %s (adopted as %s)", p.Item.Path, lib.Rel(to), n)
 	}
 	if out.Failed > 0 {
 		return out, fmt.Errorf("%d repositories could not be fetched", out.Failed)

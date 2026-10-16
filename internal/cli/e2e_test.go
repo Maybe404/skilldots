@@ -238,7 +238,10 @@ func TestAdoptDirNameDiffersFromSkillName(t *testing.T) {
 	e.ok("", "init", lib, "--no-skill")
 	e.skill(".agents/skills/dirx", "namey")
 	e.write(".agents/skills/dirx/notes.txt", "mine\n")
-	e.ok("", "adopt", "--yes")
+	out := e.ok("", "adopt", "--yes")
+	if n := strings.Count(out, "moved aside"); n != 1 {
+		t.Errorf("\"moved aside\" printed %d times, want once:\n%s", n, out)
+	}
 	entries, _ := os.ReadDir(e.p(".agents/skills"))
 	if len(entries) != 1 || entries[0].Name() != "namey" {
 		var names []string
