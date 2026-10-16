@@ -276,6 +276,9 @@ func sortedKeys[V any](m map[string]V) []string {
 }
 
 func warnLicense(c *ctx, rep *engine.SyncReport) {
+	for _, w := range rep.Warnings {
+		fmt.Fprintf(os.Stderr, "%s %s: %s\n", warn("!"), rep.Repo, w)
+	}
 	if rep.NoLicense {
 		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
 	}

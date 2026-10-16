@@ -172,6 +172,12 @@ func Pristine(dir, hash string) bool {
 }
 
 func copyFile(src, dst string) error {
+	// Never follow a symlink: its target may be anywhere on the machine.
+	if st, err := os.Lstat(src); err != nil {
+		return err
+	} else if !st.Mode().IsRegular() {
+		return fmt.Errorf("copy %s: not a regular file", src)
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -207,20 +213,40 @@ func Lexists(p string) bool {
 	return err == nil
 }
 
-// FindLicense returns the first LICENSE-like file directly under dir.
+// IsLicenseName reports whether a file name looks like a license.
+func IsLicenseName(name string) bool {
+	n := strings.ToUpper(name)
+	return strings.HasPrefix(n, "LICENSE") || strings.HasPrefix(n, "LICENCE") || strings.HasPrefix(n, "COPYING")
+}
+
+// FindLicense returns the first LICENSE-like regular file directly under
+// dir. Symlinks are ignored: in an untrusted repository they could point
+// at any file on this machine.
 func FindLicense(dir string) string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return ""
 	}
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		n := strings.ToUpper(e.Name())
-		if strings.HasPrefix(n, "LICENSE") || strings.HasPrefix(n, "LICENCE") || strings.HasPrefix(n, "COPYING") {
+		if e.Type().IsRegular() && IsLicenseName(e.Name()) {
 			return filepath.Join(dir, e.Name())
 		}
 	}
 	return ""
+}
+
+// LicenseLinks lists LICENSE-like entries directly under dir that are not
+// regular files (symlinks and the like), which FindLicense ignores.
+func LicenseLinks(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && !e.Type().IsRegular() && IsLicenseName(e.Name()) {
+			out = append(out, e.Name())
+		}
+	}
+	return out
 }

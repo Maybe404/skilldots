@@ -35,8 +35,11 @@ type SyncReport struct {
 	Backups []string
 	// Renamed maps newly vendored skills whose name was already taken to
 	// the `as` link name assigned (and written into the manifest).
-	Renamed  map[string]string `json:",omitempty"`
-	Upstream []pack.Skill      `json:"-"`
+	Renamed map[string]string `json:",omitempty"`
+	// Warnings are other things the user should know (e.g. a LICENSE
+	// that is a symlink and was not copied).
+	Warnings []string     `json:",omitempty"`
+	Upstream []pack.Skill `json:"-"`
 }
 
 // PackDir returns where a pack is vendored, refusing repo keys that would
@@ -144,6 +147,9 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	}
 
 	repoLicense := fsutil.FindLicense(clone)
+	for _, n := range fsutil.LicenseLinks(clone) {
+		rep.Warnings = append(rep.Warnings, n+" is a symlink, not a file; it was not copied into vendor/")
+	}
 	wanted := map[string]bool{}
 	for _, s := range upstream {
 		if !p.Selected(s.Name, s.Category) {

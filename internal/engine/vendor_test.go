@@ -263,3 +263,37 @@ func TestSyncCategoryChangeRenames(t *testing.T) {
 		t.Errorf("lock category %q", got)
 	}
 }
+
+// A LICENSE that is a symlink must not pull a file from elsewhere on the
+// machine into vendor/.
+func TestSyncIgnoresSymlinkedLicense(t *testing.T) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, _, _ := newTestLib(t)
+	secret := filepath.Join(world, "secret.txt")
+	os.WriteFile(secret, []byte("TOP-SECRET"), 0o600)
+	up := filepath.Join(world, "up")
+	writeSkillMD(t, filepath.Join(up, "skills", "a"), "a")
+	os.Symlink(secret, filepath.Join(up, "LICENSE"))
+	os.Symlink(secret, filepath.Join(up, "skills", "a", "LICENSE.md"))
+	gitRepo(t, up)
+	p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+	rep, err := Sync(lib, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], "LICENSE") {
+		t.Errorf("warnings %v", rep.Warnings)
+	}
+	filepath.WalkDir(lib.Root, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if b, _ := os.ReadFile(p); strings.Contains(string(b), "TOP-SECRET") {
+				t.Errorf("secret copied into %s", p)
+			}
+			if strings.HasPrefix(d.Name(), "LICENSE") {
+				t.Errorf("license copied: %s", p)
+			}
+		}
+		return nil
+	})
+}
