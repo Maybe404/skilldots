@@ -418,3 +418,21 @@ func TestSyncNeverCommitsSaveTemporaries(t *testing.T) {
 		t.Fatalf("tracked files:\n%s", files)
 	}
 }
+
+// --alias may not look like a repo or a qualified key, nor spell a
+// subscribed repo; it is rejected before anything is fetched.
+func TestAddRejectsAliasThatShadows(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	before, _ := os.ReadFile(filepath.Join(lib, "skills.toml"))
+	for _, a := range []string{"acme/skills", "x:y", "a/b/c"} {
+		_, errOut, code := e.skd("", "--library", lib, "add", "nobody/nothing", "--alias", a)
+		if code == 0 || !strings.Contains(errOut, "--alias") {
+			t.Errorf("--alias %q: exit %d, %s", a, code, errOut)
+		}
+	}
+	if after, _ := os.ReadFile(filepath.Join(lib, "skills.toml")); string(after) != string(before) {
+		t.Errorf("skills.toml changed:\n%s", after)
+	}
+}

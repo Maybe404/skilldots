@@ -43,7 +43,7 @@ path = "~/.myagent/skills"
 
 [[pack]]
 repo    = "mattpocock/skills"
-alias   = "matt"
+alias   = "matt"                                 # 不含 / \ :，不能等于已订阅的 repo
 use     = ["tdd", "grill-me", "code-review"]   # 或 "*" 配 skip = ["in-progress/*"]
 targets = ["agents"]                            # 覆盖默认
 

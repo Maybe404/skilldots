@@ -108,11 +108,35 @@ func (m *Manifest) Save(path string) error {
 	return fsutil.WriteAtomic(path, []byte(header+string(b)))
 }
 
-// FindPack returns the pack matching repo or alias.
+// FindPack returns the pack matching repo or alias. An exact repo match
+// wins, so an alias that spells another pack's repo cannot shadow it.
 func (m *Manifest) FindPack(key string) *Pack {
+	for _, p := range m.Packs {
+		if p.Repo == key {
+			return p
+		}
+	}
 	for _, p := range m.Packs {
 		if p.Repo == key || (p.Alias != "" && p.Alias == key) || strings.EqualFold(p.DisplayName(), key) {
 			return p
+		}
+	}
+	return nil
+}
+
+// CheckAlias reports why alias cannot name a pack: it may not contain
+// "/" (it would read as a repo) or ":" (it would split a qualified
+// "<pack>:<skill>" key), nor spell a subscribed repo.
+func (m *Manifest) CheckAlias(alias string) error {
+	if alias == "" {
+		return nil
+	}
+	if strings.ContainsAny(alias, `/\:`) {
+		return fmt.Errorf(`--alias %q may not contain "/", "\" or ":"; pick a short name such as "acme"`, alias)
+	}
+	for _, p := range m.Packs {
+		if strings.EqualFold(p.Repo, alias) {
+			return fmt.Errorf("--alias %q is the repository of a subscribed pack; pick another", alias)
 		}
 	}
 	return nil

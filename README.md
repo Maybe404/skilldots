@@ -90,7 +90,7 @@ path = "~/.myagent/skills"
 
 [[pack]]
 repo = "mattpocock/skills"
-alias = "matt"
+alias = "matt"                               # no "/", "\" or ":"; never a subscribed repo
 use = ["tdd", "grill-me", "code-review"]     # or "*" to follow everything, with skip = [...]
 
 [pack.skill.code-review]
