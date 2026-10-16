@@ -373,9 +373,29 @@ func applyProposals(c *ctx, props []proposal) error {
 	if err != nil {
 		return err
 	}
+	// A real directory is only replaced by a link when the library holds
+	// exactly its content; otherwise it may be the user's only copy of
+	// something, so it stays where it is.
+	keep := map[string]bool{}
+	for _, p := range props {
+		if p.Kind == "skip" || p.Kind == "drop" || p.Item.LinkTo != "" {
+			continue
+		}
+		e := engine.Find(entries, adoptedAs(p.Item))
+		if e == nil {
+			continue
+		}
+		h, err := fsutil.HashTree(e.Dir)
+		if err == nil && fsutil.Pristine(p.Item.Path, h) {
+			continue
+		}
+		keep[p.Item.Target+"/"+p.Item.Name] = true
+		c.printf("%s %s differs from the library's %s (%s); left in place — compare them and remove one by hand\n",
+			warn("!"), p.Item.Path, adoptedAs(p.Item), e.Dir)
+	}
 	want := map[string][]string{}
 	for _, p := range props {
-		if p.Kind == "skip" || p.Kind == "drop" {
+		if p.Kind == "skip" || p.Kind == "drop" || keep[p.Item.Target+"/"+p.Item.Name] {
 			continue
 		}
 		want[adoptedAs(p.Item)] = append(want[adoptedAs(p.Item)], p.Item.Target)
@@ -397,7 +417,7 @@ func applyProposals(c *ctx, props []proposal) error {
 	// that is modified or unmanaged keeps being skipped.
 	force := map[string]bool{}
 	for _, p := range props {
-		if p.Kind != "skip" && p.Kind != "drop" {
+		if p.Kind != "skip" && p.Kind != "drop" && !keep[p.Item.Target+"/"+p.Item.Name] {
 			force[p.Item.Target+"/"+p.Item.Name] = true
 		}
 	}
@@ -409,7 +429,7 @@ func applyProposals(c *ctx, props []proposal) error {
 	// to it; move the original aside so the agent does not see the skill twice.
 	for _, p := range props {
 		n := adoptedAs(p.Item)
-		if p.Kind == "skip" || p.Kind == "drop" || n == p.Item.Name {
+		if p.Kind == "skip" || p.Kind == "drop" || n == p.Item.Name || keep[p.Item.Target+"/"+p.Item.Name] {
 			continue
 		}
 		t, err := c.reg.Get(p.Item.Target)

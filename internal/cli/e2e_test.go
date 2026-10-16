@@ -252,3 +252,33 @@ func TestAdoptDirNameDiffersFromSkillName(t *testing.T) {
 		t.Fatal("original directory not in the trash")
 	}
 }
+
+// adopt never leaves the user's only copy of something in the trash: a
+// directory whose content differs from what the library already holds
+// under that name stays in place.
+func TestAdoptKeepsDifferingDirectory(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.ok("", "new", "namey")
+	e.skill(".agents/skills/dirx", "namey")
+	e.write(".agents/skills/dirx/unique.txt", "only here\n")
+	// Same name, same content as the library would be fine; so would a
+	// .git that the library copy lacks — that also stays.
+	e.skill(".claude/skills/withgit", "withgit")
+	e.write(".claude/skills/withgit/.git/HEAD", "ref\n")
+	out, errOut, code := e.skd("", "adopt", "--yes")
+	if code != 0 {
+		t.Fatalf("adopt: %d\n%s\n%s", code, out, errOut)
+	}
+	if b, err := os.ReadFile(e.p(".agents/skills/dirx/unique.txt")); err != nil || string(b) != "only here\n" {
+		t.Fatal("differing directory was moved away")
+	}
+	if !strings.Contains(out+errOut, "differs from the library") {
+		t.Fatalf("no warning:\n%s%s", out, errOut)
+	}
+	if _, err := os.Stat(e.p(".claude/skills/withgit/.git/HEAD")); err != nil {
+		t.Fatal("directory with .git was replaced although the library copy lacks .git")
+	}
+	isLink(t, e.p(".agents/skills/namey"), lib)
+}
