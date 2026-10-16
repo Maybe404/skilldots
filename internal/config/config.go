@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -156,20 +155,18 @@ func write(name, value string) error {
 	} else {
 		raw[name] = value
 	}
-	keys := make([]string, 0, len(raw))
-	for k := range raw {
-		keys = append(keys, k)
+	// One document, so the keys of this file stay above any table (a
+	// [section] a newer skd or a person added) and the tables keep theirs.
+	body, err := toml.Marshal(raw)
+	if err != nil {
+		return err
 	}
-	sort.Strings(keys)
+	if err := toml.Unmarshal(body, &map[string]any{}); err != nil {
+		return fmt.Errorf("%s: would not read back (%v); left as it was", p, err)
+	}
 	var b strings.Builder
 	b.WriteString("# skilldots settings: skd config list | get | set\n")
-	for _, k := range keys {
-		line, err := toml.Marshal(map[string]any{k: raw[k]})
-		if err != nil {
-			return err
-		}
-		b.Write(line)
-	}
+	b.Write(body)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}

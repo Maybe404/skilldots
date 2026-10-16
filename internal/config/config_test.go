@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func sandbox(t *testing.T) {
@@ -69,4 +71,34 @@ func TestSetRefuses(t *testing.T) {
 func read(t *testing.T) string {
 	b, _ := os.ReadFile(Path())
 	return string(b)
+}
+
+// A file with tables (a newer skd's, or a person's): settings stay
+// top-level keys, the tables keep theirs, and the file reads back after
+// every change.
+func TestSetKeepsTables(t *testing.T) {
+	sandbox(t)
+	os.MkdirAll(filepath.Dir(Path()), 0o755)
+	os.WriteFile(Path(), []byte("library = \"/x/lib\"\nzeta = \"top\"\n\n[extra]\nkey = 1\nname = \"in table\"\n\n[extra.deep]\nlist = [1, 2]\n"), 0o644)
+	for _, c := range [][2]string{{Theme, "light"}, {Editor, "vim"}, {Theme, "dark"}, {Lang, "en"}} {
+		if err := Set(c[0], c[1]); err != nil {
+			t.Fatalf("set %s: %v\n%s", c[0], err, read(t))
+		}
+	}
+	var raw map[string]any
+	if err := toml.Unmarshal([]byte(read(t)), &raw); err != nil {
+		t.Fatalf("file does not parse: %v\n%s", err, read(t))
+	}
+	for k, v := range map[string]string{"library": "/x/lib", "zeta": "top", "theme": "dark", "editor": "vim", "lang": "en"} {
+		if raw[k] != v {
+			t.Errorf("top-level %s = %v, want %q\n%s", k, raw[k], v, read(t))
+		}
+	}
+	extra, _ := raw["extra"].(map[string]any)
+	if len(extra) != 3 || extra["name"] != "in table" || extra["key"] != int64(1) {
+		t.Errorf("table changed: %v\n%s", extra, read(t))
+	}
+	if deep, _ := extra["deep"].(map[string]any); deep == nil || len(deep["list"].([]any)) != 2 {
+		t.Errorf("nested table changed: %v", extra["deep"])
+	}
 }

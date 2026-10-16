@@ -90,6 +90,16 @@ func setupTheme(flag string) error {
 	}
 	if mode == "" {
 		mode, src = strings.ToLower(strings.TrimSpace(config.Get(config.Theme))), "the theme setting (skd config set theme)"
+		// A bad setting must not stop every command, `skd config set
+		// theme` included: it falls back to auto, with a warning on
+		// stderr (never stdout, which may carry JSON).
+		if k, _ := config.Lookup(config.Theme); k.Check(mode) != nil {
+			if !themeWarned {
+				themeWarned = true
+				fmt.Fprintf(os.Stderr, "warning: the theme setting %q is not light, dark or auto; using auto (skd config set theme auto fixes it)\n", mode)
+			}
+			mode = "auto"
+		}
 	}
 	// The menu runs commands in-process; ask the terminal once.
 	if mode == themeDone {
@@ -118,6 +128,9 @@ func setupTheme(flag string) error {
 
 // themeDone is the mode setupTheme last settled.
 var themeDone = "-"
+
+// themeWarned is set once a bad theme setting was reported.
+var themeWarned bool
 
 // detectBackground and stdoutIsTerminal are replaceable in tests.
 var (
