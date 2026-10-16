@@ -294,3 +294,57 @@ func freeName(taken func(string) bool, name, prefix string) string {
 	}
 	return alt
 }
+
+// Qualified names an entry unambiguously: "owner/repo:name" for vendored
+// skills, "skills:name", "private:name" or "app:name" otherwise.
+func Qualified(e Entry) string {
+	if e.Kind == KindVendor {
+		return e.Origin + ":" + e.LinkName
+	}
+	return string(e.Kind) + ":" + e.LinkName
+}
+
+// Lookup finds the one entry a user means by key: a link name, an
+// upstream name, or a qualified "<owner/repo|skills|private|app>:<name>".
+// Link names win over upstream names. When several entries match (same
+// name, disjoint targets) it fails and lists the qualified candidates.
+// It returns (nil, nil) when nothing matches.
+func Lookup(entries []Entry, key string) (*Entry, error) {
+	qual, name := "", key
+	if i := strings.LastIndex(key, ":"); i > 0 {
+		qual, name = key[:i], key[i+1:]
+	}
+	match := func(e *Entry) bool {
+		if qual == "" {
+			return true
+		}
+		if e.Kind == KindVendor {
+			return e.Origin == qual
+		}
+		return string(e.Kind) == qual
+	}
+	for _, byLink := range []bool{true, false} {
+		var hits []*Entry
+		for i := range entries {
+			e := &entries[i]
+			n := e.Name
+			if byLink {
+				n = e.LinkName
+			}
+			if n == name && match(e) {
+				hits = append(hits, e)
+			}
+		}
+		switch {
+		case len(hits) == 1:
+			return hits[0], nil
+		case len(hits) > 1:
+			var c []string
+			for _, e := range hits {
+				c = append(c, Qualified(*e))
+			}
+			return nil, fmt.Errorf("%q matches several skills; name one of: %s", key, strings.Join(c, ", "))
+		}
+	}
+	return nil, nil
+}

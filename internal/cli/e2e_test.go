@@ -282,3 +282,44 @@ func TestAdoptKeepsDifferingDirectory(t *testing.T) {
 	}
 	isLink(t, e.p(".agents/skills/namey"), lib)
 }
+
+// Two skills named foo for disjoint agents: a bare name is ambiguous and
+// must not silently pick one; a qualified name picks exactly one.
+func TestAmbiguousNameNeedsQualifier(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.skill("up/skills/foo", "foo")
+	e.skill("up/skills/other", "other")
+	up := e.repo("up")
+	e.ok("", "add", up, "--all", "--agent", "agents", "--alias", "upa")
+	e.ok("", "new", "foo")
+	f, _ := os.OpenFile(filepath.Join(lib, "skills.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString("\n[[local]]\nname = \"foo\"\ntargets = [\"claude\"]\n")
+	f.Close()
+	e.ok("", "apply")
+
+	for _, args := range [][]string{{"path", "foo"}, {"disable", "foo", "--agent", "claude"}, {"fork", "foo"}, {"remove", "foo"}} {
+		out, errOut, code := e.skd("", args...)
+		if code == 0 || !strings.Contains(errOut, up+":foo") || !strings.Contains(errOut, "skills:foo") {
+			t.Fatalf("skd %v: want an ambiguity error listing both, got %d\n%s%s", args, code, out, errOut)
+		}
+	}
+	if p := strings.TrimSpace(e.ok("", "path", "skills:foo")); p != filepath.Join(lib, "skills", "foo") {
+		t.Fatalf("path skills:foo = %s", p)
+	}
+	if p := strings.TrimSpace(e.ok("", "path", "upa:foo")); !strings.HasPrefix(p, filepath.Join(lib, "vendor")) {
+		t.Fatalf("path upa:foo = %s", p)
+	}
+	e.ok("", "disable", "skills:foo", "--agent", "claude")
+	if _, err := os.Lstat(e.p(".claude/skills/foo")); !os.IsNotExist(err) {
+		t.Fatal("skills:foo still linked into claude")
+	}
+	isLink(t, e.p(".agents/skills/foo"), filepath.Join(lib, "vendor"))
+	// Unambiguous names behave as before.
+	e.ok("", "path", "other")
+	e.ok("", "remove", up+":foo")
+	if _, err := os.Lstat(e.p(".agents/skills/foo")); !os.IsNotExist(err) {
+		t.Fatal("vendored foo still linked after remove")
+	}
+}

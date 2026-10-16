@@ -118,7 +118,7 @@ A skill's name (frontmatter `name`, else its directory) must be letters, digits,
 
 ## Name clashes
 
-The first skill to use a name keeps it. When `skd add` or `skd update` vendors a skill whose name is already taken, it is linked as `<repo>-<name>` and the `as` is written to `skills.toml`. Names are compared case-insensitively. Two skills may share a name if they go to different agents; if they would land in the same agent directory (for example you create `skills/foo` while a pack provides `foo` to the same agents), both are skipped with a warning naming both directories, existing links stay as they are, and everything else is linked as usual. `skd fork` renames the frontmatter to the fork's name, so a fork never clashes with its upstream.
+The first skill to use a name keeps it. When `skd add` or `skd update` vendors a skill whose name is already taken, it is linked as `<repo>-<name>` and the `as` is written to `skills.toml`. Names are compared case-insensitively. Two skills may share a name if they go to different agents (commands then need a qualified name: `owner/repo:foo` or `<alias>:foo`, `skills:foo`, `private:foo`, `app:foo`, and fail listing the candidates otherwise); if they would land in the same agent directory (for example you create `skills/foo` while a pack provides `foo` to the same agents), both are skipped with a warning naming both directories, existing links stay as they are, and everything else is linked as usual. `skd fork` renames the frontmatter to the fork's name, so a fork never clashes with its upstream.
 
 ## Editing, rolling back, removing
 

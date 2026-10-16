@@ -426,7 +426,10 @@ func setTargets(c *ctx, key string, edit func(cur []string) []string) error {
 	if err != nil {
 		return err
 	}
-	e := engine.Find(entries, key)
+	e, err := lookup(c, entries, key)
+	if err != nil {
+		return err
+	}
 	if e == nil {
 		if p := c.lib.Manifest.FindPack(key); p != nil {
 			cur := e2names(c.lib.Manifest.Targets.Default)
@@ -550,7 +553,10 @@ func removeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			e := engine.Find(entries, args[0])
+			e, err := lookup(c, entries, args[0])
+			if err != nil {
+				return err
+			}
 			if e == nil {
 				return fmt.Errorf("no skill %q", args[0])
 			}
@@ -686,7 +692,10 @@ func pathCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			e := engine.Find(entries, args[0])
+			e, err := lookup(c, entries, args[0])
+			if err != nil {
+				return err
+			}
 			if e == nil {
 				return fmt.Errorf("no skill %q", args[0])
 			}
@@ -714,7 +723,10 @@ func forkCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			e := engine.Find(entries, args[0])
+			e, err := lookup(c, entries, args[0])
+			if err != nil {
+				return err
+			}
 			if e == nil {
 				return fmt.Errorf("no skill %q", args[0])
 			}
@@ -871,4 +883,15 @@ func showCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// lookup resolves a user-supplied skill key (see engine.Lookup); a pack
+// alias is accepted in place of owner/repo before the colon.
+func lookup(c *ctx, entries []engine.Entry, key string) (*engine.Entry, error) {
+	if i := strings.LastIndex(key, ":"); i > 0 {
+		if p := c.lib.Manifest.FindPack(key[:i]); p != nil {
+			key = p.Repo + key[i:]
+		}
+	}
+	return engine.Lookup(entries, key)
 }

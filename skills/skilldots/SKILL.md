@@ -106,5 +106,6 @@ Run this on first use and whenever `skd scan` reports unmanaged entries.
 - `skd apply -n` previews; plain `skd apply` only touches links skd created. `skd apply --force` moves other directories to the trash first — show the user the `-n` preview before `--force`.
 - Do not delete or edit anything under an agent's skill directory yourself; use `skd disable`/`remove`/`purge`/`adopt`.
 - If a skill the user wants is already present under a different name, say so instead of installing a duplicate.
+- If a command answers that a name "matches several skills", repeat it with one of the qualified names it lists (e.g. `owner/repo:foo` or `skills:foo`); ask the user which one they mean.
 - A warning that two skills provide the same name means neither is linked until one is renamed: set `as` under `[pack.skill.<name>]` in skills.toml (or rename the user's own skill) after asking the user, then `skd apply`.
 - When `skd` is not installed, tell the user how: `go install github.com/Maybe404/skilldots/cmd/skd@latest` or the installer at https://github.com/Maybe404/skilldots.

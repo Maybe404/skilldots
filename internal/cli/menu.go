@@ -137,7 +137,10 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		if !ok {
 			return nil
 		}
-		e := engine.Find(entries, name)
+		e, _ := engine.Lookup(entries, name)
+		if e == nil {
+			return nil
+		}
 		var how string
 		opts := []huh.Option[string]{
 			huh.NewOption("Unlink from all agents, keep in library  (skd disable)", "disable"),
@@ -160,7 +163,10 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		if !ok {
 			return nil
 		}
-		e := engine.Find(entries, name)
+		e, _ := engine.Lookup(entries, name)
+		if e == nil {
+			return nil
+		}
 		var opts []huh.Option[string]
 		for _, t := range c.reg.Present() {
 			opts = append(opts, huh.NewOption(fmt.Sprintf("%-12s %s", t.Name, dim(t.Path)), t.Name))
@@ -211,7 +217,7 @@ func pickEntry(title string, entries []engine.Entry) (string, bool) {
 	var opts []huh.Option[string]
 	for _, e := range entries {
 		label := fmt.Sprintf("%-28s %s", e.LinkName, dim(engine.Describe(e)))
-		opts = append(opts, huh.NewOption(label, e.LinkName))
+		opts = append(opts, huh.NewOption(label, engine.Qualified(e)))
 	}
 	var name string
 	if err := ask(huh.NewSelect[string]().Title(title).Options(opts...).Filtering(true).Height(16).Value(&name)); err != nil {
