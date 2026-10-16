@@ -104,3 +104,34 @@ func TestDoc(t *testing.T) {
 		t.Errorf("normal text reported: %v", d)
 	}
 }
+
+// Known places are strict; the rest only refuses what is never text.
+func TestDocSchema(t *testing.T) {
+	doc := map[string]any{
+		"pack": []any{map[string]any{
+			"use":   []any{"a\tb"},
+			"note":  "x\ty\nz\r",
+			"bad":   "e\x1b[8m",
+			"skill": map[string]any{"s\t": map[string]any{"as": "a\n", "why": "w\n"}},
+		}},
+		"notes\t": map[string]any{"k\n": "v\t", "b\u202e": "ok"},
+		"del":     "\x7f",
+	}
+	got := strings.Join(DocSchema(doc, []string{"pack.use", "pack.skill.*", "pack.skill.*.as"}), "\n")
+	want := strings.Join([]string{
+		`del = "\x7f"`,
+		`key "notes\t"."b\u202e"`,
+		`pack[0].bad = "e\x1b[8m"`,
+		`key pack[0].skill."s\t"`,
+		`pack[0].skill."s\t".as = "a\n"`,
+		`pack[0].use[0] = "a\tb"`,
+	}, "\n")
+	if got != want {
+		t.Errorf("DocSchema =\n%s\nwant\n%s", got, want)
+	}
+	for s, want := range map[string]bool{"a\tb\r\n": false, "中文 🚀": false, "\x1b": true, "\x07": true, "\x7f": true, "\u0085": true, "‮": true, "\x0b": true, "\xff": true} {
+		if Dangerous(s) != want {
+			t.Errorf("Dangerous(%q) = %v", s, !want)
+		}
+	}
+}

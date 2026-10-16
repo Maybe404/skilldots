@@ -54,3 +54,34 @@ func TestControlCharactersRefused(t *testing.T) {
 		t.Errorf("Save: %v", err)
 	}
 }
+
+// A field this version does not know (a newer skd's) may hold tabs and
+// line breaks; the fields skd reads may not, and nothing may hold an
+// escape, C1 or a bidi control.
+func TestUnknownLockFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	const head = "version = 1\n[packs.\"x/y\"]\ncommit = \"abcdef1\"\n"
+	for _, body := range []string{
+		head + "note = \"a\\tb\\nc\"\n",
+		"note = \"\"\"\nline\n\tmore\n\"\"\"\n" + head + "[packs.\"x/y\".skills.s]\nhash = \"h\"\nwhy = \"\\r\\n\"\n",
+	} {
+		os.WriteFile(path, []byte(body), 0o644)
+		if _, err := Load(path); err != nil {
+			t.Errorf("%q: %v", body, err)
+		}
+	}
+	for place, body := range map[string]string{
+		"note":                         head + "note = \"a\\u001b[2J\"\n",
+		"packs.\"x/y\".why":            head + "why = \"\\u202e\"\n",
+		"packs.\"x/y\".upstream[0]":    head + "upstream = [\"a\\tb\"]\n",
+		"key packs.\"x/y\".skills.":    head + "[packs.\"x/y\".skills.\"a\\nb\"]\nhash = \"h\"\n",
+		"links.\"agents/a\".source":    "version = 1\n[links.\"agents/a\"]\nmode = \"link\"\nsource = \"s\\t\"\n",
+		"key links.":                   "version = 1\n[links.\"agents/a\\t\"]\nmode = \"link\"\nsource = \"s\"\n",
+		"packs.\"x/y\".skills.s.extra": head + "[packs.\"x/y\".skills.s]\nhash = \"h\"\nextra = \"\\u009b\"\n",
+	} {
+		os.WriteFile(path, []byte(body), 0o644)
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), place) {
+			t.Errorf("%s: %v", place, err)
+		}
+	}
+}

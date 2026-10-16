@@ -86,3 +86,52 @@ func TestControlCharactersRefused(t *testing.T) {
 		t.Error("CheckAlias accepts control characters")
 	}
 }
+
+// What skd reads is held to "no control characters at all"; a table or
+// key it does not know (someone's notes) may hold tabs and line breaks,
+// but never an escape, BEL, DEL, C1, a bidi control or invalid UTF-8.
+func TestUnknownPlacesMayHoldNotes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	const head = "[targets]\ndefault = [\"agents\"]\n"
+	for what, body := range map[string]string{
+		"multi-line note":                 head + "[notes]\ntext = \"\"\"\nline one\n\tindented\r\nline three\n\"\"\"\n",
+		"tab in a top-level unknown key":  "\"a\\tb\" = 1\n" + head,
+		"tab in an unknown pack field":    head + "[[pack]]\nrepo = \"x/y\"\nuse = []\nnote = \"a\\tb\"\n",
+		"line break in a skill's field":   head + "[[pack]]\nrepo = \"x/y\"\nuse = []\n[pack.skill.tdd]\nwhy = \"a\\nb\\r\\n\"\n",
+		"tab in an unknown custom field":  head + "[targets.custom.my]\npath = \"/x\"\ncomment = \"\\t\"\n",
+		"array of notes":                  head + "[notes]\nlist = [\"a\\tb\", \"c\\nd\"]\n",
+		"unknown key under unknown table": head + "[notes.\"x\\ty\"]\nv = 1\n",
+	} {
+		os.WriteFile(path, []byte(body), 0o644)
+		if _, err := Load(path); err != nil {
+			t.Errorf("%s: %v", what, err)
+		}
+	}
+	for what, c := range map[string]struct{ body, place string }{
+		"escape in a note":            {head + "[notes]\ntext = \"a\\u001b[2Jb\"\n", "notes.text"},
+		"BEL in a note":               {head + "[notes]\ntext = \"a\\u0007\"\n", "notes.text"},
+		"C1 in a note":                {head + "[notes]\ntext = \"a\\u009b31m\"\n", "notes.text"},
+		"bidi in a note":              {head + "[notes]\ntext = \"a\\u202eb\"\n", "notes.text"},
+		"DEL in a note":               {"notes = \"a\\u007f\"\n" + head, "notes"},
+		"vertical tab in a note":      {"notes = \"a\\u000b\"\n" + head, "notes"},
+		"escape in an unknown key":    {"\"k\\u001b\" = 1\n" + head, "key "},
+		"escape in a note array":      {head + "[notes]\nlist = [\"ok\", \"\\u001b]0;t\\u0007\"]\n", "notes.list[1]"},
+		"tab in a selected skill":     {head + "[[pack]]\nrepo = \"x/y\"\nuse = [\"a\\tb\"]\n", "pack[0].use[0]"},
+		"line break in a skill key":   {head + "[[pack]]\nrepo = \"x/y\"\nuse = []\n[pack.skill.\"a\\nb\"]\nas = \"z\"\n", "key pack[0].skill."},
+		"tab in a custom target name": {head + "[targets.custom.\"a\\tb\"]\npath = \"/x\"\n", "key targets.custom."},
+		"CR in an app path":           {head + "[[app]]\nname = \"a\"\npath = \"/x\\r\"\n", "app[0].path"},
+		"tab in a target":             {"[targets]\ndefault = [\"agents\\t\"]\n", "targets.default[0]"},
+		"line break in an alias":      {head + "[[pack]]\nrepo = \"x/y\"\nalias = \"a\\n\"\nuse = []\n", "pack[0].alias"},
+	} {
+		os.WriteFile(path, []byte(c.body), 0o644)
+		_, err := Load(path)
+		if err == nil || !strings.Contains(err.Error(), c.place) || !strings.Contains(err.Error(), "control characters") {
+			t.Errorf("%s: %v, want a refusal naming %s", what, err, c.place)
+		}
+	}
+	// Invalid UTF-8 never loads.
+	os.WriteFile(path, []byte(head+"[notes]\ntext = \"a\xffb\"\n"), 0o644)
+	if _, err := Load(path); err == nil {
+		t.Error("invalid UTF-8 in a note loaded")
+	}
+}

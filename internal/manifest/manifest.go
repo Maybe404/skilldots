@@ -94,13 +94,24 @@ func Load(path string) (*Manifest, error) {
 	return m, nil
 }
 
+// known are the places of the manifest skd reads: names, paths and
+// settings that commands print or pass on.
+var known = []string{
+	"targets.default", "targets.custom.*", "targets.custom.*.path", "targets.custom.*.mode",
+	"pack.repo", "pack.ref", "pack.alias", "pack.use", "pack.skip", "pack.targets",
+	"pack.skill.*", "pack.skill.*.as", "pack.skill.*.targets",
+	"app.name", "app.path", "app.targets", "local.name", "local.targets",
+}
+
 // checkText refuses a manifest that holds control characters, bidi
-// controls or invalid UTF-8 anywhere: in any value, array element or key
-// (repo, ref, alias, use, skip, targets, skill overrides and their as,
-// app and local entries, custom targets with their path and mode, and
-// tables this version does not know). Every one of them is a name, a
-// path or a setting that commands print or pass on, nothing skd writes
-// has them, so the file was written to attack a terminal. The error names
+// controls or invalid UTF-8 in a place skd reads (known: repo, ref,
+// alias, use, skip, targets, skill overrides and their as, app and
+// local entries, custom targets with their path and mode, and the keys
+// naming them). Nothing skd writes has them there, so the file was
+// written to attack a terminal. Tables and keys this version does not
+// know are refused only for what could never be meant as text (an
+// escape, BEL, DEL, C1, a bidi control, invalid UTF-8): a multi-line
+// string with tabs is someone's note, not an attack. The error names
 // each place, quoted so it prints safely.
 func checkText(b []byte) error {
 	raw := map[string]any{}
@@ -108,7 +119,7 @@ func checkText(b []byte) error {
 		return err
 	}
 	var errs []error
-	for _, p := range safetext.Doc(raw) {
+	for _, p := range safetext.DocSchema(raw, known) {
 		errs = append(errs, fmt.Errorf("%s has control characters; fix it by hand", p))
 	}
 	return errors.Join(errs...)

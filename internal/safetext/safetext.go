@@ -6,6 +6,7 @@ package safetext
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,39 +132,93 @@ func sgrLen(s string) int {
 // text, as `place = "value"` with both quoted so the list itself prints
 // safely: `pack[0].use[1] = "tdd\x1b[2J"`, `key pack[0].skill."a\u202e"`.
 // Keys and indexes are visited in order, so the list is stable.
-func Doc(v any) []string {
+func Doc(v any) []string { return doc(v, nil) }
+
+// DocSchema is Doc for a document of which skd knows the places in
+// strict: those (names, paths, settings skd prints or uses) are held to
+// Has, as Doc does. Everything else, the tables and keys of a newer
+// version or of the person editing the file, is only held to Dangerous,
+// so a multi-line string with tabs there does not make the file
+// unreadable. A pattern is a dotted list of keys, array indexes left
+// out, with "*" for any key: "pack.use" is every pack[i].use[j],
+// "pack.skill.*" every key of a pack's skill table (and its value when
+// it is a string), "pack.skill.*.as" each of their as.
+func DocSchema(v any, strict []string) []string {
+	pats := make([][]string, len(strict))
+	for i, p := range strict {
+		pats[i] = strings.Split(p, ".")
+	}
+	return doc(v, pats)
+}
+
+// Dangerous reports whether s holds what must never reach a terminal
+// even as text skd does not use: invalid UTF-8, or an unsafe character
+// other than tab, line feed and carriage return (ESC, BEL, other C0
+// controls, DEL, C1, bidi controls).
+func Dangerous(s string) bool {
+	return !utf8.ValidString(s) || strings.ContainsFunc(s, func(r rune) bool {
+		return Unsafe(r) && r != '\t' && r != '\n' && r != '\r'
+	})
+}
+
+// doc walks v; with pats nil every place is strict.
+func doc(v any, pats [][]string) []string {
+	match := func(keys []string) bool {
+		if pats == nil {
+			return true
+		}
+	next:
+		for _, p := range pats {
+			if len(p) != len(keys) {
+				continue
+			}
+			for i := range p {
+				if p[i] != "*" && p[i] != keys[i] {
+					continue next
+				}
+			}
+			return true
+		}
+		return false
+	}
+	bad := func(s string, strict bool) bool {
+		if strict {
+			return Has(s)
+		}
+		return Dangerous(s)
+	}
 	var out []string
-	var walk func(path string, v any)
-	walk = func(path string, v any) {
+	var walk func(path string, keys []string, v any)
+	walk = func(path string, keys []string, v any) {
 		switch v := v.(type) {
 		case string:
-			if Has(v) {
+			if bad(v, match(keys)) {
 				out = append(out, path+" = "+strconv.Quote(v))
 			}
 		case []any:
 			for i, e := range v {
-				walk(fmt.Sprintf("%s[%d]", path, i), e)
+				walk(fmt.Sprintf("%s[%d]", path, i), keys, e)
 			}
 		case []map[string]any:
 			for i, e := range v {
-				walk(fmt.Sprintf("%s[%d]", path, i), e)
+				walk(fmt.Sprintf("%s[%d]", path, i), keys, e)
 			}
 		case map[string]any:
-			keys := make([]string, 0, len(v))
+			names := make([]string, 0, len(v))
 			for k := range v {
-				keys = append(keys, k)
+				names = append(names, k)
 			}
-			sort.Strings(keys)
-			for _, k := range keys {
+			sort.Strings(names)
+			for _, k := range names {
 				p := docKey(path, k)
-				if Has(k) {
+				if bad(k, match(append(slices.Clone(keys), "*"))) {
 					out = append(out, "key "+p)
 				}
-				walk(p, v[k])
+				walk(p, append(slices.Clone(keys), k), v[k])
 			}
 		}
 	}
-	walk("", v)
+	walk("", nil, v)
 	return out
 }
 

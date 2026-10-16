@@ -96,18 +96,28 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// known are the places of the lock skd reads.
+var known = []string{
+	"packs.*", "packs.*.commit", "packs.*.ref", "packs.*.upstream",
+	"packs.*.skills.*", "packs.*.skills.*.category", "packs.*.skills.*.hash",
+	"links.*", "links.*.mode", "links.*.source", "links.*.hash", "links.*.path",
+}
+
 // checkText refuses a lock holding control characters, bidi controls or
-// invalid UTF-8 anywhere, in a value or a key (pack and skill names,
+// invalid UTF-8 in a place skd reads (known: pack and skill names,
 // categories, link records and their paths): skd writes none, and every
 // one of them ends up printed or used as a path, so the file was written
-// to attack a terminal. Each place is named, quoted so it prints safely.
+// to attack a terminal. Places this version does not know (a newer
+// skd's fields) are refused only for an escape, BEL, DEL, C1, a bidi
+// control or invalid UTF-8, like the manifest's. Each place is named,
+// quoted so it prints safely.
 func checkText(b []byte) error {
 	raw := map[string]any{}
 	if err := toml.Unmarshal(b, &raw); err != nil {
 		return err
 	}
 	var errs []error
-	for _, p := range safetext.Doc(raw) {
+	for _, p := range safetext.DocSchema(raw, known) {
 		errs = append(errs, fmt.Errorf("%s has control characters; restore the file (git checkout -- %s) or remove the line", p, FileName))
 	}
 	return errors.Join(errs...)
