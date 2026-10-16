@@ -60,6 +60,21 @@ func Run(o Options) error {
 	m := New(ops, snap, o.Theme, o.Version)
 	m.replay = replayKeys(o.Input)
 	p := tea.NewProgram(m, tea.WithAltScreen())
+	return runDashboard(p, m, sigs, hup, func() error { return stopDescendants(os.Getpid(), stopGrace) })
+}
+
+// program is what runDashboard needs of a bubbletea program.
+type program interface {
+	Run() (tea.Model, error)
+	Kill()
+}
+
+// runDashboard runs p, the dashboard built from m, then winds down what it
+// started: a background check is cancelled, a running job waited for (see
+// waitJobs, which stop and sigs are for). A signal on hup closes the
+// dashboard at once and stops the job instead of waiting for it, and the
+// error says the terminal hung up.
+func runDashboard(p program, m Model, sigs, hup <-chan os.Signal, stop func() error) error {
 	ran := make(chan struct{})
 	hungUp := make(chan bool, 1)
 	go func() {
@@ -95,7 +110,6 @@ func Run(o Options) error {
 	if !m.checks.stop(checkGrace) {
 		fmt.Fprintln(os.Stderr, "skd: the upstream check did not stop in time; its git may still be running")
 	}
-	stop := func() error { return stopDescendants(os.Getpid(), stopGrace) }
 	if werr := waitJobs(m.jobs, label, sigs, force, stop); werr != nil {
 		return werr
 	}
