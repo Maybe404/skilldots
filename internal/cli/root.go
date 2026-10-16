@@ -131,6 +131,13 @@ func Root() *cobra.Command {
 			if !isTerminal() {
 				return errNoTTY
 			}
+			// A library named explicitly must exist: falling through to
+			// the setup menu would offer to create one somewhere else.
+			if flags.library != "" {
+				if _, err := library.Locate(flags.library); err != nil {
+					return err
+				}
+			}
 			if lib, ok := dashboardLibrary(simple); ok {
 				return runDashboard(lib)
 			}
@@ -157,10 +164,10 @@ func Main() int {
 
 // dashboardLibrary reports whether `skd` should open the full-screen
 // dashboard, and on which library: stdout must be a terminal at least
-// tui.MinWidth columns wide and a library must exist (setup stays in the
-// menu).
+// tui.MinWidth columns wide and able to draw it (not TERM=dumb), and a
+// library must exist (setup stays in the menu).
 func dashboardLibrary(simple bool) (string, bool) {
-	if simple || !term.IsTerminal(int(os.Stdout.Fd())) {
+	if simple || os.Getenv("TERM") == "dumb" || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return "", false
 	}
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err != nil || w < tui.MinWidth {
