@@ -8,7 +8,9 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,13 +34,7 @@ type Options struct {
 // Run opens the dashboard and blocks until the user quits. The terminal is
 // restored on return.
 func Run(o Options) error {
-	// git must never prompt on the terminal the dashboard owns: a
-	// credential or passphrase prompt would draw over it and hang. Fail
-	// instead; the error shows in the status line.
-	os.Setenv("GIT_TERMINAL_PROMPT", "0")
-	if os.Getenv("GIT_SSH_COMMAND") == "" && os.Getenv("GIT_SSH") == "" {
-		os.Setenv("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
-	}
+	quietGit(o.Root)
 	ops := &libOps{root: o.Root, self: o.Self}
 	snap, err := ops.Load()
 	if err != nil {
@@ -66,6 +62,31 @@ func Run(o Options) error {
 	}
 	waitJobs(m.jobs, label, sigs)
 	return err
+}
+
+// quietGit keeps git from prompting on the terminal the dashboard owns: a
+// credential or passphrase prompt would draw over it and hang. git fails
+// instead and the error shows in the status line. ssh gets BatchMode only
+// when the user has not chosen an ssh command of their own: GIT_SSH_COMMAND
+// would override a core.sshCommand (a different key, a proxy, a wrapper).
+func quietGit(root string) {
+	os.Setenv("GIT_TERMINAL_PROMPT", "0")
+	if os.Getenv("GIT_SSH_COMMAND") != "" || os.Getenv("GIT_SSH") != "" || gitSSHCommand(root) != "" {
+		return
+	}
+	os.Setenv("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+}
+
+// gitSSHCommand is core.sshCommand as git sees it in the library
+// (system, global, include and repository config), or "".
+func gitSSHCommand(root string) string {
+	cmd := exec.Command("git", "config", "--get", "core.sshCommand")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // waitJobs blocks until no job runs, telling the user why. Signals that
