@@ -323,3 +323,28 @@ func TestAmbiguousNameNeedsQualifier(t *testing.T) {
 		t.Fatal("vendored foo still linked after remove")
 	}
 }
+
+// A pack alias may not hijack the reserved qualifiers.
+func TestReservedQualifiers(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.skill("up/skills/foo", "foo")
+	up := e.repo("up")
+	for _, a := range []string{"skills", "private", "app", "vendor"} {
+		if _, errOut, code := e.skd("", "add", up, "--all", "--alias", a); code == 0 || !strings.Contains(errOut, "reserved") {
+			t.Fatalf("--alias %s accepted: %s", a, errOut)
+		}
+	}
+	e.ok("", "add", up, "--all", "--agent", "agents")
+	// An alias "skills" written into skills.toml by hand.
+	b, _ := os.ReadFile(filepath.Join(lib, "skills.toml"))
+	os.WriteFile(filepath.Join(lib, "skills.toml"), []byte(strings.Replace(string(b), "repo = ", "alias = 'skills'\nrepo = ", 1)), 0o644)
+	e.ok("", "new", "foo")
+	f, _ := os.OpenFile(filepath.Join(lib, "skills.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString("\n[[local]]\nname = \"foo\"\ntargets = [\"claude\"]\n")
+	f.Close()
+	if p := strings.TrimSpace(e.ok("", "path", "skills:foo")); p != filepath.Join(lib, "skills", "foo") {
+		t.Fatalf("skills:foo = %s, want the local skill", p)
+	}
+}

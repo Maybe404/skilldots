@@ -304,6 +304,16 @@ func Qualified(e Entry) string {
 	return string(e.Kind) + ":" + e.LinkName
 }
 
+// ReservedQualifier reports whether q names a kind of local entry in a
+// qualified key ("skills:foo"), so it can never stand for a pack alias.
+func ReservedQualifier(q string) bool {
+	switch Kind(q) {
+	case KindSkill, KindPrivate, KindApp, KindVendor:
+		return true
+	}
+	return false
+}
+
 // Lookup finds the one entry a user means by key: a link name, an
 // upstream name, or a qualified "<owner/repo|skills|private|app>:<name>".
 // Link names win over upstream names. When several entries match (same

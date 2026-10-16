@@ -32,6 +32,9 @@ func addCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if engine.ReservedQualifier(alias) {
+				return fmt.Errorf("--alias %q is reserved (it names your own skills in skills:<name>); pick another", alias)
+			}
 			m := c.lib.Manifest
 			arg := args[0]
 			if existing := m.FindPack(arg); existing != nil {
@@ -886,9 +889,10 @@ func showCmd() *cobra.Command {
 }
 
 // lookup resolves a user-supplied skill key (see engine.Lookup); a pack
-// alias is accepted in place of owner/repo before the colon.
+// alias is accepted in place of owner/repo before the colon, except the
+// reserved "skills", "private", "app" and "vendor".
 func lookup(c *ctx, entries []engine.Entry, key string) (*engine.Entry, error) {
-	if i := strings.LastIndex(key, ":"); i > 0 {
+	if i := strings.LastIndex(key, ":"); i > 0 && !engine.ReservedQualifier(key[:i]) {
 		if p := c.lib.Manifest.FindPack(key[:i]); p != nil {
 			key = p.Repo + key[i:]
 		}
