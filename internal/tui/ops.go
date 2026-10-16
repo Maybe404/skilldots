@@ -327,10 +327,26 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 	var reports []*engine.SyncReport
 	var failed []string
 	for _, p := range packs {
+		before := knownUpstream(p.Repo)
 		rep, err := engine.Sync(lib, p)
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", p.Repo, err))
 			continue
+		}
+		// engine reports every unselected skill missing from the lock as
+		// "upstream new", i.e. all of them on every update. Against the
+		// cache clone as it was before this fetch, only the skills that
+		// really appeared are new.
+		if before != nil {
+			var fresh []string
+			for _, n := range rep.UpstreamNew {
+				if !before[n] {
+					fresh = append(fresh, n)
+				}
+			}
+			cp := *rep
+			cp.UpstreamNew = fresh
+			rep = &cp
 		}
 		reports = append(reports, rep)
 	}
@@ -355,6 +371,24 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 		return reports, msg, fmt.Errorf("%s", strings.Join(failed, "; "))
 	}
 	return reports, msg, nil
+}
+
+// knownUpstream lists the skills in a pack's cache clone before it is
+// fetched again, or nil when there is no clone yet.
+func knownUpstream(repo string) map[string]bool {
+	dir := pack.CachePath(repo)
+	if !fsutil.Exists(filepath.Join(dir, ".git")) {
+		return nil
+	}
+	up, err := pack.Scan(dir)
+	if err != nil {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, s := range up {
+		known[s.Name] = true
+	}
+	return known
 }
 
 // deselect drops a vendored skill from its pack's selection.

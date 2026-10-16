@@ -5,8 +5,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -186,8 +188,8 @@ func TestOpsEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(reps) != 1 || !slices.Contains(reps[0].Changed, "tdd") || !slices.Contains(reps[0].UpstreamNew, "fresh") {
-		t.Fatalf("update report: %+v", reps)
+	if len(reps) != 1 || !slices.Contains(reps[0].Changed, "tdd") || !slices.Equal(reps[0].UpstreamNew, []string{"fresh"}) {
+		t.Fatalf("update report (grill existed before, only fresh is new): %+v", reps[0])
 	}
 	if !strings.Contains(msg, "1 changed") {
 		t.Fatalf("update message: %s", msg)
@@ -250,6 +252,19 @@ func TestOpsEndToEnd(t *testing.T) {
 	}
 	_ = engine.KindVendor
 	_ = library.DirVendor
+}
+
+func TestAgo(t *testing.T) {
+	now := time.Unix(1_000_000_000, 0)
+	for in, want := range map[int64]string{0: "just now", 59: "just now", 60: "1 minute ago", 7200: "2 hours ago",
+		86400 * 3: "3 days ago", 86400 * 65: "2 months ago", 86400 * 800: "2 years ago"} {
+		if got := ago(strconv.FormatInt(now.Unix()-in, 10), now); got != want {
+			t.Errorf("ago(-%d) = %q, want %q", in, got, want)
+		}
+	}
+	if ago("x", now) != "" {
+		t.Error("bad input")
+	}
 }
 
 func dirExists(p string) bool {

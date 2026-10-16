@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
@@ -217,14 +218,16 @@ func packMeta(lib *library.Library, lp *lock.Pack, pk *Pack) {
 		pk.Commit = lp.Commit
 	}
 	cache := pack.CachePath(pk.Repo)
+	// Unix times, formatted here: git's own %cr follows the user's locale
+	// and would mix languages in the dashboard.
 	if pk.Commit != "" && fsutil.Exists(filepath.Join(cache, ".git")) {
-		if out, err := library.Git(cache, "log", "-1", "--format=%cr", pk.Commit); err == nil {
-			pk.When = out
+		if out, err := library.Git(cache, "log", "-1", "--format=%ct", pk.Commit); err == nil {
+			pk.When = ago(out, time.Now())
 		}
 	}
 	if pk.When == "" {
-		if out, err := lib.Git("log", "-1", "--format=%cr", "--", "vendor/"+pk.Repo); err == nil && out != "" {
-			pk.When = "vendored " + out
+		if out, err := lib.Git("log", "-1", "--format=%ct", "--", "vendor/"+pk.Repo); err == nil && out != "" {
+			pk.When = "vendored " + ago(out, time.Now())
 		}
 	}
 	dir := lib.PackDir(pk.Repo)
@@ -235,6 +238,34 @@ func packMeta(lib *library.Library, lp *lock.Pack, pk *Pack) {
 	} else {
 		pk.NoLicense = true
 	}
+}
+
+// ago renders a unix timestamp as "3 days ago".
+func ago(unix string, now time.Time) string {
+	sec, err := strconv.ParseInt(strings.TrimSpace(unix), 10, 64)
+	if err != nil {
+		return ""
+	}
+	d := now.Sub(time.Unix(sec, 0))
+	unit := func(n int, w string) string {
+		if n == 1 {
+			return "1 " + w + " ago"
+		}
+		return strconv.Itoa(n) + " " + w + "s ago"
+	}
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return unit(int(d.Minutes()), "minute")
+	case d < 24*time.Hour:
+		return unit(int(d.Hours()), "hour")
+	case d < 30*24*time.Hour:
+		return unit(int(d.Hours()/24), "day")
+	case d < 365*24*time.Hour:
+		return unit(int(d.Hours()/24/30), "month")
+	}
+	return unit(int(d.Hours()/24/365), "year")
 }
 
 // licenseName recognises the common licenses by their text.
