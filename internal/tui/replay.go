@@ -50,6 +50,11 @@ func replayKeys(b []byte) []tea.Msg {
 			}
 			out = append(out, tea.KeyMsg{Type: tea.KeyEscape})
 			i++
+		case c == '\n':
+			// Enter, if the terminal turned its CR into LF (ICRNL) while
+			// it was read; nobody types ctrl+j by accident in that window.
+			out = append(out, tea.KeyMsg{Type: tea.KeyEnter})
+			i++
 		case c == ' ':
 			out = append(out, tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
 			i++

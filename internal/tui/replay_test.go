@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,5 +20,18 @@ func TestReplayKeys(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %q, want %q", got, want)
 		}
+	}
+}
+
+// Enter typed while the terminal was in cbreak mode may arrive as LF
+// (ICRNL turns CR into LF); it is still enter, not ctrl+j.
+func TestReplayKeysNewline(t *testing.T) {
+	var got []string
+	for _, m := range replayKeys([]byte("j\nl\r")) {
+		got = append(got, m.(tea.KeyMsg).String())
+	}
+	want := []string{"j", "enter", "l", "enter"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

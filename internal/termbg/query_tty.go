@@ -18,7 +18,8 @@ import (
 // cancelled, so nothing is left to swallow later keystrokes.
 //
 // The terminal is put in cbreak mode, not raw: ISIG stays on, so ctrl+c
-// and ctrl+\ still interrupt skd (the terminal is restored first). Keys
+// and ctrl+\ still interrupt skd (the terminal is restored first); input
+// is otherwise passed through as in raw mode (no CR→LF, no flow control). Keys
 // the user typed before the query are left alone: when input is already
 // waiting nothing is asked. Keys typed during the wait are read with the
 // replies; they are returned as unread for the dashboard to replay.
@@ -40,6 +41,12 @@ func query(timeout time.Duration) (reply string, unread []byte, ok bool) {
 	}
 	cb := *old
 	cb.Lflag &^= unix.ICANON | unix.ECHO
+	// Keys arrive as the dashboard's raw mode would deliver them: Enter as
+	// CR (ICRNL would make it LF, read as ctrl+j), ctrl+s and ctrl+q as
+	// keys rather than flow control (IXON), ctrl+v and ctrl+o as keys
+	// rather than literal-next and discard-output (IEXTEN). ISIG stays.
+	cb.Iflag &^= unix.ICRNL | unix.IXON
+	cb.Lflag &^= unix.IEXTEN
 	cb.Cc[unix.VMIN], cb.Cc[unix.VTIME] = 1, 0
 	// Set without flushing: type-ahead stays in the input queue.
 	if err := unix.IoctlSetTermios(fd, setTermios, &cb); err != nil {
