@@ -5,7 +5,6 @@ import { AppProvider, useApp } from "@/lib/app-state"
 import { CommandPalette } from "@/components/app/command-palette"
 import { AppSidebar, PendingBanner, Toolbar, searchInputId } from "@/components/app/shell"
 import { Dialogs } from "@/components/dialogs/dialogs"
-import { EditorPage } from "@/components/editor/editor-page"
 import { AgentsPage } from "@/components/pages/agents-page"
 import { HistoryPage } from "@/components/pages/history-page"
 import { Onboarding } from "@/components/pages/onboarding"
@@ -17,6 +16,9 @@ import { TrashPage } from "@/components/pages/trash-page"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+
+// CodeMirror and the Markdown renderer load only when a skill is opened.
+const EditorPage = React.lazy(() => import("@/components/editor/editor-page").then((m) => ({ default: m.EditorPage })))
 
 export default function App() {
   return (
@@ -90,7 +92,9 @@ function Shell() {
       <AppSidebar />
       <SidebarInset className="h-[calc(100svh-1rem)] min-h-0 overflow-hidden">
         {view === "editor" && editing ? (
-          <EditorPage skillRef={editing} />
+          <React.Suspense fallback={null}>
+            <EditorPage skillRef={editing} />
+          </React.Suspense>
         ) : (
           <>
             <Toolbar />

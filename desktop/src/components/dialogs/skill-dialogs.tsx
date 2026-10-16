@@ -74,7 +74,7 @@ export function NewSkillDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent closeLabel={t("close")} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("newTitle")}</DialogTitle>
         </DialogHeader>
@@ -158,7 +158,7 @@ export function ForkDialog({ skillRef, thenEdit, onClose }: { skillRef: Ref; the
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent closeLabel={t("close")} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("forkTitle", { name: skill.linkName })}</DialogTitle>
           <DialogDescription>{t("forkBody")}</DialogDescription>

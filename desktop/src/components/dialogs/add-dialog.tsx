@@ -127,7 +127,7 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[min(44rem,calc(100svh-4rem))] flex-col gap-0 p-0 sm:max-w-2xl">
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(44rem,calc(100svh-4rem))] flex-col gap-0 p-0 sm:max-w-2xl">
         <DialogHeader className="px-5 pt-5 pb-4">
           <DialogTitle>{t("addTitle")}</DialogTitle>
           <DialogDescription>{t("addInputHint")}</DialogDescription>

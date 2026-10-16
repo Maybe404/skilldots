@@ -48,7 +48,7 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[min(42rem,calc(100svh-4rem))] flex-col gap-0 p-0 sm:max-w-xl">
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(42rem,calc(100svh-4rem))] flex-col gap-0 p-0 sm:max-w-xl">
         <DialogHeader className="px-5 pt-5 pb-4">
           <DialogTitle>{t("updateTitle")}</DialogTitle>
           <DialogDescription>{t("updateHint")}</DialogDescription>
@@ -191,7 +191,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent closeLabel={t("close")} className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t("applyTitle")}</DialogTitle>
           <DialogDescription>{t("applyHint")}</DialogDescription>
@@ -258,7 +258,7 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent closeLabel={t("close")} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("syncTitle")}</DialogTitle>
           <DialogDescription>{t("syncHint")}</DialogDescription>
@@ -300,7 +300,17 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
 
 // Library: use / clone / init -----------------------------------------------
 
-export function LibraryForm({ mode, onDone, onCancel }: { mode: "use" | "clone" | "init"; onDone: () => void; onCancel?: () => void }) {
+export function LibraryForm({
+  mode,
+  onDone,
+  onCancel,
+  autoFocus = true,
+}: {
+  mode: "use" | "clone" | "init"
+  onDone: () => void
+  onCancel?: () => void
+  autoFocus?: boolean
+}) {
   const { t, run, reload } = useApp()
   const [dir, setDir] = React.useState(mode === "init" ? "~/.skilldots" : mode === "clone" ? "~/.skilldots" : "")
   const [url, setUrl] = React.useState("")
@@ -335,13 +345,13 @@ export function LibraryForm({ mode, onDone, onCancel }: { mode: "use" | "clone" 
       {mode === "clone" && (
         <Field>
           <FieldLabel htmlFor="lib-url">{t("gitUrl")}</FieldLabel>
-          <Input id="lib-url" autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="git@github.com:you/agent-skills.git" className="font-mono text-[0.82rem]" spellCheck={false} />
+          <Input id="lib-url" autoFocus={autoFocus} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="git@github.com:you/agent-skills.git" className="font-mono text-[0.82rem]" spellCheck={false} />
         </Field>
       )}
       <Field>
         <FieldLabel htmlFor="lib-dir">{mode === "clone" ? t("cloneInto") : t("folder")}</FieldLabel>
         <div className="flex gap-2">
-          <Input id="lib-dir" autoFocus={mode !== "clone"} value={dir} onChange={(e) => setDir(e.target.value)} className="font-mono text-[0.82rem]" spellCheck={false} />
+          <Input id="lib-dir" autoFocus={autoFocus && mode !== "clone"} value={dir} onChange={(e) => setDir(e.target.value)} className="font-mono text-[0.82rem]" spellCheck={false} />
           <Button type="button" variant="outline" onClick={pick}>
             {t("choose")}
           </Button>
@@ -368,7 +378,7 @@ export function LibraryDialog({ mode, onClose }: { mode: "use" | "clone" | "init
   const title = mode === "use" ? t("switchTitle") : mode === "clone" ? t("importTitle") : t("newLibraryTitle")
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent closeLabel={t("close")} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

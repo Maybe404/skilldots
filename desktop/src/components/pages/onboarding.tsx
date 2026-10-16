@@ -57,7 +57,7 @@ export function Onboarding() {
         </div>
 
         <div className="mt-5 border-t pt-5">
-          <LibraryForm key={mode} mode={mode} onDone={() => navigate(mode === "init" ? "scan" : "skills")} />
+          <LibraryForm key={mode} mode={mode} autoFocus={false} onDone={() => navigate(mode === "init" ? "scan" : "skills")} />
         </div>
 
         {status && status.unmanaged > 0 && <p className="mt-5 text-[0.8rem] text-muted-foreground">{t("obFound", { n: status.unmanaged })}</p>}
