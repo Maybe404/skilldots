@@ -18,7 +18,7 @@ func TestSaveReplacesAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, _ := os.Stat(path)
-	l.Packs["a/b"] = &Pack{Commit: "abc"}
+	l.Packs["a/b"] = &Pack{Commit: "abcdef0"}
 	if err := l.Save(path); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestSaveReplacesAtomically(t *testing.T) {
 		t.Error("Save wrote over the file in place instead of renaming a new one over it")
 	}
 	got, err := Load(path)
-	if err != nil || got.Packs["a/b"] == nil || got.Packs["a/b"].Commit != "abc" {
+	if err != nil || got.Packs["a/b"] == nil || got.Packs["a/b"].Commit != "abcdef0" {
 		t.Fatalf("reload: %+v %v", got, err)
 	}
 	entries, _ := os.ReadDir(dir)
@@ -85,5 +85,24 @@ func TestSaveRefusesReadOnlyFile(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(path); string(after) != string(before) {
 		t.Error("read-only skills.lock was replaced")
+	}
+}
+
+// The commit of a pack is passed to git: Load refuses anything but a hash,
+// so a lock written to attack cannot hand git an option.
+func TestLoadRefusesACommitThatIsNotAHash(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	for commit, ok := range map[string]bool{
+		"": true, "abcdef0": true, strings.Repeat("a1", 20): true, strings.Repeat("F", 64): true,
+		"abc": false, "--output=/tmp/x": false, "-p": false, strings.Repeat("a", 65): false, "abcdefg": false, "HEAD": false,
+	} {
+		os.WriteFile(path, []byte("version = 1\n[packs.'a/b']\ncommit = '"+commit+"'\n"), 0o644)
+		_, err := Load(path)
+		if (err == nil) != ok {
+			t.Errorf("commit %q: err %v", commit, err)
+		}
+		if err != nil && (!strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "a/b")) {
+			t.Errorf("commit %q: the error does not say where: %v", commit, err)
+		}
 	}
 }

@@ -208,7 +208,7 @@ func packMeta(lib *library.Library, lp *lock.Pack, pk *Pack) {
 	// Unix times, formatted here: git's own %cr follows the user's locale
 	// and would mix languages in the dashboard.
 	if pk.Commit != "" && fsutil.Exists(filepath.Join(cache, ".git")) {
-		if out, err := library.Git(cache, "log", "-1", "--format=%ct", pk.Commit); err == nil {
+		if out, err := library.Git(cache, "log", "-1", "--format=%ct", "--end-of-options", pk.Commit, "--"); err == nil {
 			pk.When = ago(out, time.Now())
 		}
 	}

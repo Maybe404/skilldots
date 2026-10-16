@@ -3,7 +3,9 @@
 package lock
 
 import (
+	"fmt"
 	"os"
+	"regexp"
 	"sort"
 
 	"github.com/pelletier/go-toml/v2"
@@ -66,7 +68,27 @@ func Load(path string) (*Lock, error) {
 	if l.Links == nil {
 		l.Links = map[string]*Link{}
 	}
+	for _, repo := range sortedKeys(l.Packs) {
+		if p := l.Packs[repo]; p != nil && p.Commit != "" && !commitRE.MatchString(p.Commit) {
+			return nil, fmt.Errorf("%s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line", path, repo, p.Commit, FileName)
+		}
+	}
 	return l, nil
+}
+
+// commitRE is a commit as skd writes it: a hash, 7 to 64 hex digits
+// (SHA-1 or SHA-256). The commit is passed to git, so anything else, an
+// option such as --output=<file> above all, is refused when the lock is
+// read.
+var commitRE = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (l *Lock) Save(path string) error {

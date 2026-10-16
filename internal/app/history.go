@@ -184,7 +184,7 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 	// and still not be reachable from the new one: the history between
 	// them was not fetched.
 	reachable := func() bool {
-		_, err := library.GitContext(ctx, clone, "merge-base", "--is-ancestor", r.From, r.To)
+		_, err := library.GitContext(ctx, clone, "merge-base", "--is-ancestor", "--end-of-options", r.From, r.To)
 		return err == nil
 	}
 	if !reachable() {
@@ -197,7 +197,7 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 			return
 		}
 	}
-	args := append([]string{"log", "--no-merges", "--format=%H%x1f%s", fmt.Sprintf("-n%d", MaxCommits+1), r.From + ".." + r.To, "--"}, specs...)
+	args := append([]string{"log", "--no-merges", "--format=%H%x1f%s", fmt.Sprintf("-n%d", MaxCommits+1), "--end-of-options", r.From + ".." + r.To, "--"}, specs...)
 	out, err := library.GitContext(ctx, clone, args...)
 	if err != nil {
 		r.CommitsUnknown = true
