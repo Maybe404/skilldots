@@ -4,8 +4,10 @@ package tui
 
 import (
 	"bufio"
+	"errors"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -96,5 +98,50 @@ garbage
 	}
 	if len(descendants(tab, 300)) != 0 {
 		t.Error("a leaf has descendants")
+	}
+}
+
+// When ps fails after part of the tree is frozen, nothing is left
+// stopped: the frozen processes are asked to stop and continued.
+func TestStopDescendantsPSFailsMidway(t *testing.T) {
+	sh := exec.Command("sh", "-c", `sleep 300 & echo $!; sleep 300 & echo $!; wait`)
+	out, err := sh.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sh.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sh.Process.Kill()
+	var pids []int
+	sc := bufio.NewScanner(out)
+	for len(pids) < 2 && sc.Scan() {
+		pid, err := strconv.Atoi(sc.Text())
+		if err != nil {
+			t.Fatal(err)
+		}
+		pids = append(pids, pid)
+	}
+	for _, p := range pids {
+		defer syscall.Kill(p, syscall.SIGKILL)
+	}
+	calls := 0
+	listProcs = func() (map[int]proc, error) {
+		calls++
+		if calls > 1 {
+			return nil, errors.New("ps failed")
+		}
+		return processTable()
+	}
+	defer func() { listProcs = processTable }()
+	if err := stopDescendants(sh.Process.Pid, 200*time.Millisecond); err == nil {
+		t.Fatal("ps failure not reported")
+	}
+	time.Sleep(200 * time.Millisecond)
+	for _, p := range pids {
+		st, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(p)).Output()
+		if err == nil && strings.HasPrefix(strings.TrimSpace(string(st)), "T") {
+			t.Errorf("process %d left stopped (%s)", p, strings.TrimSpace(string(st)))
+		}
 	}
 }

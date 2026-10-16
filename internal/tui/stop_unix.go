@@ -19,6 +19,9 @@ type proc struct {
 	start string
 }
 
+// listProcs reads the process table; tests replace it to make ps fail.
+var listProcs = processTable
+
 // processTable lists every process with `ps`, leaving out ps itself.
 func processTable() (map[int]proc, error) {
 	cmd := exec.Command("ps", "-A", "-o", "pid=", "-o", "ppid=", "-o", "lstart=")
@@ -79,14 +82,22 @@ func descendants(t map[int]proc, parent int) map[int]proc {
 // The tree is frozen first (SIGSTOP) so nothing forks or is reparented
 // away while it is collected, then asked to stop (SIGTERM, which lets git
 // remove its .lock files), and what is still there after grace is killed.
-// A pid is only signalled while its start time matches the one seen in
-// the tree, so a process that reused the pid of one that exited is left
-// alone.
+// SIGKILL only goes to a pid whose start time still matches the one seen
+// in the tree, so a process that reused the pid of one that exited is not
+// killed. If ps fails part-way, whatever was frozen is still sent SIGTERM
+// and SIGCONT before the error is returned: nothing is left stopped.
 func stopDescendants(parent int, grace time.Duration) error {
 	tree := map[int]proc{}
+	release := func() {
+		for pid := range tree {
+			syscall.Kill(pid, syscall.SIGTERM)
+			syscall.Kill(pid, syscall.SIGCONT)
+		}
+	}
 	for range 50 {
-		t, err := processTable()
+		t, err := listProcs()
 		if err != nil {
+			release()
 			return err
 		}
 		added := false
@@ -105,13 +116,10 @@ func stopDescendants(parent int, grace time.Duration) error {
 	if len(tree) == 0 {
 		return nil
 	}
-	for pid := range tree {
-		syscall.Kill(pid, syscall.SIGTERM)
-		syscall.Kill(pid, syscall.SIGCONT)
-	}
+	release()
 	deadline := time.Now().Add(grace)
 	for {
-		t, err := processTable()
+		t, err := listProcs()
 		if err != nil {
 			return err
 		}
