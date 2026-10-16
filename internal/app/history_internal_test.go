@@ -131,7 +131,7 @@ func TestSettleKeepsConcurrentAppend(t *testing.T) {
 		}
 	}
 	defer func() { settleHook = nil }()
-	s.settleApplyErrors()
+	s.settleApplyErrors(nil)
 	if err := <-appended; err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestSettleKeepsAppendOfAnotherProcess(t *testing.T) {
 		}
 	}
 	defer func() { settleHook = nil }()
-	s.settleApplyErrors()
+	s.settleApplyErrors(nil)
 	in.Close()
 	if err := <-done; err != nil {
 		t.Fatalf("helper: %v\n%s", err, out.String())

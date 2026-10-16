@@ -58,7 +58,7 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 		return out, nil
 	}
 	if !plan.Changes() {
-		s.settleApplyErrors()
+		s.settleApplyErrors(plan.Unlinked())
 		return out, nil
 	}
 	res, err := engine.Apply(s.Lib, plan)
@@ -72,7 +72,7 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 		return out, err
 	}
 	out.Applied = true
-	s.settleApplyErrors()
+	s.settleApplyErrors(plan.Unlinked())
 	return out, nil
 }
 

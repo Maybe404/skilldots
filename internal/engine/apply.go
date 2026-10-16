@@ -65,6 +65,20 @@ func (p Plan) Counts() map[string]int {
 	return c
 }
 
+// Unlinked are the packs (by repository) with a skill this plan leaves
+// unlinked in a target it should be in: skipped because something is in
+// the way or was modified, a name conflict, its source missing, or an
+// unknown target.
+func (p Plan) Unlinked() map[string]bool {
+	out := map[string]bool{}
+	for _, o := range p.Ops {
+		if o.Action == "skip" && o.entry != nil && o.entry.Kind == KindVendor {
+			out[o.entry.Origin] = true
+		}
+	}
+	return out
+}
+
 // Changes reports whether anything would be written.
 func (p Plan) Changes() bool {
 	for _, o := range p.Ops {
@@ -142,7 +156,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			// Leave whatever is recorded for this target alone.
 			desired[n+"/"+e.LinkName] = true
 			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: n}, Name: e.LinkName,
-				Reason: "unknown target " + n})
+				Reason: "unknown target " + n, entry: e})
 		}
 	}
 	// Anything in the lock no longer desired gets removed.

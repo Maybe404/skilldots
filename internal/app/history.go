@@ -288,13 +288,15 @@ func (s *Session) holdHistory() (unlock func()) {
 var settleHook func()
 
 // settleApplyErrors takes applyError out of the history once an apply
-// has linked everything: the updates it was about are finished, and the
-// history should stop telling the person to run skd apply. Only those
-// lines change (their other fields, unknown ones included, are kept);
+// has linked everything of a pack: the updates it was about are finished,
+// and the history should stop telling the person to run skd apply. The
+// records of the packs in unlinked (a skill still skipped: something in
+// the way, a conflict, a missing source, an unknown target) keep it. Only
+// those lines change (their other fields, unknown ones included, are kept);
 // every other line stays byte for byte. It holds the history lock from
 // reading to replacing, so a record another skd appends meanwhile waits
 // and is kept. A failure is only warned about.
-func (s *Session) settleApplyErrors() {
+func (s *Session) settleApplyErrors(unlinked map[string]bool) {
 	defer s.holdHistory()()
 	p := s.HistoryPath()
 	b, err := os.ReadFile(p)
@@ -313,6 +315,10 @@ func (s *Session) settleApplyErrors() {
 			continue
 		}
 		if _, ok := m["applyError"]; !ok {
+			continue
+		}
+		var repo string
+		if json.Unmarshal(m["repo"], &repo) == nil && unlinked[repo] {
 			continue
 		}
 		delete(m, "applyError")

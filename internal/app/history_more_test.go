@@ -243,3 +243,45 @@ func TestHistoryRecordsApplyFailure(t *testing.T) {
 		t.Fatalf("after apply: %+v\n%s", recs, b)
 	}
 }
+
+// An apply that still leaves a pack's skill unlinked (something in the
+// way, so it is skipped) has not finished that pack's failed update: its
+// record keeps saying linking failed, while another pack's record, all
+// linked, is settled. Once the skill is linked, its record is settled too.
+func TestApplySettlesOnlyLinkedPacks(t *testing.T) {
+	up := upstream(t)
+	home, root := side(t, up)
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd", "--skill", "review")
+	os.Remove(filepath.Join(home, ".agents", "skills", "review")) // the apply does link something
+	p := filepath.Join(root, app.HistoryFile)
+	mine := `{"time":"2026-01-01T00:00:00Z","repo":"acme/skills","from":"a","to":"b","applyError":"permission denied"}`
+	other := `{"time":"2026-01-01T00:00:00Z","repo":"other/pack","from":"a","to":"b","applyError":"permission denied"}`
+	write(t, p, mine+"\n"+other+"\n")
+	link := filepath.Join(home, ".agents", "skills", "tdd")
+	os.Remove(link)
+	write(t, filepath.Join(link, "SKILL.md"), skillMD("tdd")) // not ours: skipped
+	s, _ := app.Open(root)
+	out, err := s.Apply(app.ApplyOptions{})
+	if err != nil || out.Plan.Counts()["skip"] != 1 || !out.Applied {
+		t.Fatalf("apply: %v %+v", err, out)
+	}
+	b, _ := os.ReadFile(p)
+	lines := strings.Split(string(b), "\n")
+	if !strings.Contains(lines[0], "applyError") || strings.Contains(lines[1], "applyError") {
+		t.Fatalf("after an apply that skipped tdd:\n%s", b)
+	}
+	// Again, with nothing else to do: still skipped, still not settled.
+	if out, err := s.Apply(app.ApplyOptions{}); err != nil || out.Applied {
+		t.Fatalf("second apply: %v %+v", err, out)
+	}
+	if b, _ := os.ReadFile(p); !strings.Contains(string(b), "applyError") {
+		t.Fatalf("after an apply with only the skip:\n%s", b)
+	}
+	os.RemoveAll(link)
+	if _, err := s.Apply(app.ApplyOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); strings.Contains(string(b), "applyError") {
+		t.Fatalf("after tdd was linked:\n%s", b)
+	}
+}
