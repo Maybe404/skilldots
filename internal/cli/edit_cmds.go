@@ -61,7 +61,7 @@ func editCmd() *cobra.Command {
 				c.printf("%s forked %s → %s\n", ok("✓"), out.Entry.LinkName, out.Fork.Path)
 				printApply(c, out.Fork.Apply)
 			}
-			c.printf("%s %s %s\n", dim("opening"), out.Dir, dim("with "+out.Editor.Name()+" ("+out.Editor.From+")"))
+			c.printf("%s %s %s\n", dim("opening"), txt(out.Dir), dim("with "+txt(out.Editor.Name())+" ("+out.Editor.From+")"))
 			var runErr error
 			if out.Editor.Terminal && foreground {
 				ed := out.Editor.Command(out.Dir)

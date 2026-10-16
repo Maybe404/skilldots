@@ -67,13 +67,16 @@ func skillMD(name, desc string) string {
 // Upstream makes dir a git repository of skills whose descriptions,
 // licence, frontmatter, directory names, categories and commit subjects
 // carry Evil. Skills: tdd and review (category eng, review with a Normal
-// description), weird (in a directory named with Evil), and two that skd
-// must reject: one in a category named with Evil, one whose name has it.
+// description), weird (in a directory named with Evil, and a second copy
+// with other content in another one), and two that skd must reject: one in a category named with Evil, one whose name has it.
 func Upstream(dir string, git Git) {
 	write(filepath.Join(dir, "LICENSE"), "MIT License "+Evil+"\n\nPermission is hereby granted\n")
 	write(filepath.Join(dir, "skills", "eng", "tdd", "SKILL.md"), skillMD("tdd", "tests first "+Evil))
 	write(filepath.Join(dir, "skills", "eng", "review", "SKILL.md"), skillMD("review", Normal))
 	write(filepath.Join(dir, "skills", "x"+Evil, "SKILL.md"), skillMD("weird", Evil))
+	// Another copy of weird, with other content: show names both
+	// directories.
+	write(filepath.Join(dir, "x", "weird", "SKILL.md"), skillMD("weird", "other "+Evil))
 	write(filepath.Join(dir, "skills", "cat"+Evil, "hidden", "SKILL.md"), skillMD("hidden", Evil))
 	write(filepath.Join(dir, "skills", "badname", "SKILL.md"), skillMD("bad"+Evil, Evil))
 	git(dir, "init", "-q")

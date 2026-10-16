@@ -662,7 +662,7 @@ func showCmd() *cobra.Command {
 			for _, r := range rows {
 				if len(r.Variants) > 0 {
 					c.printf("%s\n", dim(fmt.Sprintf("%s: uses %s; %d other copies with different content are ignored (%s)",
-						r.Name, r.Dir, len(r.Variants), truncate(strings.Join(r.Variants, ", "), 80))))
+						r.Name, txt(r.Dir), len(r.Variants), truncate(strings.Join(txts(r.Variants), ", "), 80))))
 				}
 			}
 			c.printf("%s\n", dim("install: skd add "+src.Repo+" --skill <name>   or   --category <category>   or   --all"))
