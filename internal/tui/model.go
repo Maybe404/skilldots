@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -124,12 +125,65 @@ type Model struct {
 	ov *overlay
 
 	busy      string // label of the running job, "" when idle
+	busyNote  string // why a key was refused while busy
 	spin      spinner.Model
 	status    string
 	statusLvl level
 	reports   map[string]*engine.SyncReport
+	// jobs counts operations still running, shared by every copy of the
+	// model so Run can wait for them after the program stops.
+	jobs *tracker
 
-	quitting bool
+	// quitAfter is set by ctrl+c while a job runs: the dashboard quits
+	// when it finishes instead of leaving git half-way.
+	quitAfter bool
+	quitting  bool
+}
+
+// tracker counts running jobs. Once closed it refuses new ones, so a job
+// whose command is dispatched after the program stopped never starts.
+type tracker struct {
+	mu     sync.Mutex
+	n      int
+	closed bool
+	idle   chan struct{} // closed when n drops to 0 after close
+}
+
+func newTracker() *tracker { return &tracker{} }
+
+func (t *tracker) begin() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return false
+	}
+	t.n++
+	return true
+}
+
+func (t *tracker) end() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.n--
+	if t.n == 0 && t.idle != nil {
+		close(t.idle)
+		t.idle = nil
+	}
+}
+
+// close stops new jobs and returns a channel that is closed once the
+// running ones end (already closed when none run).
+func (t *tracker) close() <-chan struct{} {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.closed = true
+	ch := make(chan struct{})
+	if t.n == 0 {
+		close(ch)
+	} else {
+		t.idle = ch
+	}
+	return ch
 }
 
 // New builds the dashboard around an initial snapshot.
@@ -139,7 +193,7 @@ func New(ops Ops, snap *Snapshot, theme Theme, version string) Model {
 	fi.CharLimit = 64
 	sp := spinner.New(spinner.WithSpinner(spinner.MiniDot))
 	m := Model{ops: ops, theme: theme, surf: theme.surfaces(), version: version, snap: snap,
-		finput: fi, spin: sp, reports: map[string]*engine.SyncReport{}}
+		finput: fi, spin: sp, reports: map[string]*engine.SyncReport{}, jobs: newTracker()}
 	m.spin.Style = m.spin.Style.Foreground(theme.Accent)
 	m.left.cur = m.firstSelectable(m.leftRows())
 	if len(snap.Warnings) > 0 {
@@ -304,6 +358,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finish(msg.res)
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			if m.busy != "" {
+				// Quitting now would leave git or `skd sync` running
+				// on their own, possibly half-way through a write.
+				m.quitAfter = true
+				m.busyNote = "quitting when it finishes"
+				return m, nil
+			}
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -432,7 +493,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.start(job{label: "reloading", run: func(o Ops) result { return result{msg: "reloaded"} }})
 	}
 	if m.busy != "" && strings.Contains(" aAudesf", k.String()) {
-		m.status, m.statusLvl = "wait — "+m.busy+" is still running", lvWarn
+		m.busyNote = "wait until it finishes"
 		return m, nil
 	}
 	switch k.String() {
@@ -478,7 +539,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.busy != "" {
-		m.status, m.statusLvl = m.busy+" is still running; q again when it finishes (ctrl+c forces)", lvWarn
+		m.busyNote = "q again when it finishes · ctrl+c quits once it is done"
 		return m, nil
 	}
 	m.quitting = true
@@ -719,12 +780,16 @@ func (m Model) clearFilter(f focus) Model {
 
 func (m Model) start(j job) (tea.Model, tea.Cmd) {
 	if m.busy != "" {
-		m.status, m.statusLvl = "wait — "+m.busy+" is still running", lvWarn
+		m.busyNote = "wait until it finishes"
 		return m, nil
 	}
-	m.busy = j.label
-	ops := m.ops
+	m.busy, m.busyNote = j.label, ""
+	ops, jobs := m.ops, m.jobs
 	run := func() tea.Msg {
+		if !jobs.begin() {
+			return nil // the dashboard already stopped
+		}
+		defer jobs.end()
 		res := j.run(ops)
 		if res.browse == nil {
 			snap, err := ops.Load()
@@ -740,12 +805,23 @@ func (m Model) start(j job) (tea.Model, tea.Cmd) {
 
 func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	label := m.busy
-	m.busy = ""
+	m.busy, m.busyNote = "", ""
+	if m.quitAfter {
+		// ctrl+c was pressed while the job ran; Run prints the outcome.
+		m = m.setResult(label, r)
+		m.quitting = true
+		return m, tea.Quit
+	}
 	if r.browse != nil && r.err == nil {
 		m.ov = m.browseOverlay(r.src, r.browse)
 		m.status, m.statusLvl = fmt.Sprintf("%s · %d skills · pick and press enter", r.browse.Repo, len(r.browse.Skills)), lvInfo
 		return m, nil
 	}
+	return m.setResult(label, r), nil
+}
+
+// setResult takes in a finished job's reports, snapshot and status line.
+func (m Model) setResult(label string, r result) Model {
 	for _, rep := range r.reports {
 		m.reports[rep.Repo] = rep
 	}
@@ -766,7 +842,7 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	default:
 		m.status, m.statusLvl = label+" done", lvOK
 	}
-	return m, nil
+	return m
 }
 
 // replaceSnapshot swaps in fresh data and keeps the cursor on the same

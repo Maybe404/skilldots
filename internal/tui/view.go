@@ -531,7 +531,15 @@ func wrap(s string, w, n int) []string {
 func (m Model) viewStatus() string {
 	t := m.theme
 	if m.busy != "" {
-		return paint(1, "") + m.spin.View() + paint(m.w-1-ansi.StringWidth(m.spin.View()), "", sg(" "+m.busy+"…", t.Accent))
+		note := m.busyNote
+		if m.quitAfter {
+			note = "quitting when it finishes"
+		}
+		segs := []seg{sg(" "+m.busy+"…", t.Accent)}
+		if note != "" {
+			segs = append(segs, sg(" · "+note, t.Warn))
+		}
+		return paint(1, "") + m.spin.View() + paint(m.w-1-ansi.StringWidth(m.spin.View()), "", segs...)
 	}
 	icon := map[level]seg{lvInfo: sg("· ", t.Muted), lvOK: sg("✓ ", t.OK), lvWarn: sg("! ", t.Warn), lvErr: sg("✗ ", t.Err)}[m.statusLvl]
 	fg := t.Muted

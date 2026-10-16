@@ -6,7 +6,10 @@
 package tui
 
 import (
+	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -41,7 +44,61 @@ func Run(o Options) error {
 	if err != nil {
 		return err
 	}
-	p := tea.NewProgram(New(ops, snap, o.Theme, o.Version), tea.WithAltScreen())
-	_, err = p.Run()
+	// From here on SIGINT and SIGTERM never kill skd outright: bubbletea
+	// turns the first one into a quit, and below skd waits for the running
+	// job so no git or `skd sync` is left behind on its own.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+
+	m := New(ops, snap, o.Theme, o.Version)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	final, err := p.Run()
+	label := "the running operation"
+	if fm, ok := final.(Model); ok {
+		if fm.quitAfter && fm.status != "" {
+			// ctrl+c during a job: say how it ended.
+			fmt.Println(statusText(fm.statusLvl, fm.status))
+		}
+		if fm.busy != "" {
+			label = fm.busy
+		}
+	}
+	waitJobs(m.jobs, label, sigs)
 	return err
+}
+
+// waitJobs blocks until no job runs, telling the user why. Signals that
+// arrive meanwhile only repeat the notice: a git process interrupted from
+// here would be left running, while a ctrl+c on the terminal reaches it
+// directly and makes the job end sooner.
+func waitJobs(t *tracker, label string, sigs <-chan os.Signal) {
+drain: // signals delivered while the dashboard ran already made it quit
+	for {
+		select {
+		case <-sigs:
+		default:
+			break drain
+		}
+	}
+	idle := t.close()
+	select {
+	case <-idle:
+		return
+	default:
+	}
+	fmt.Fprintf(os.Stderr, "skd: waiting for %s to finish…\n", label)
+	for {
+		select {
+		case <-idle:
+			return
+		case <-sigs:
+			fmt.Fprintf(os.Stderr, "skd: still waiting for %s; it is not safe to stop half-way\n", label)
+		}
+	}
+}
+
+func statusText(l level, s string) string {
+	icon := map[level]string{lvInfo: "·", lvOK: "✓", lvWarn: "!", lvErr: "✗"}[l]
+	return icon + " " + clean(s)
 }
