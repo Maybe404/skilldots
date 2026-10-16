@@ -41,7 +41,7 @@ Most of the time it is not a person running `skd` but the agent on their machine
 go install github.com/Maybe404/skilldots/cmd/skd@latest
 ```
 
-Prebuilt binaries will follow.
+Prebuilt binaries will follow. skd runs `git` (2.24 or later) for everything it fetches and commits.
 
 ## Library layout
 

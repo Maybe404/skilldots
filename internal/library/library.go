@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -182,6 +183,9 @@ func GitContext(ctx context.Context, dir string, args ...string) (string, error)
 		msg := strings.TrimSpace(errb.String())
 		if msg == "" {
 			msg = err.Error()
+		}
+		if slices.Contains(args, "--end-of-options") && strings.Contains(msg, "end-of-options") {
+			msg += "\n(skd needs git 2.24 or later: this git does not know --end-of-options)"
 		}
 		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
