@@ -105,6 +105,31 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		lp.Skills = map[string]*lock.Skill{}
 	}
 	rep.OldCommit = lp.Commit
+
+	// Upstream renamed a skill only in case (Foo → foo): carry the lock
+	// entry, the vendored directory, the manifest references and, where
+	// the file system folds case, the link records over to the new name,
+	// instead of treating it as one skill gone and another added.
+	upExact := map[string]bool{}
+	for _, s := range upstream {
+		upExact[s.Name] = true
+	}
+	for _, s := range upstream {
+		if lp.Skills[s.Name] != nil {
+			continue
+		}
+		for _, k := range sortedKeys(lp.Skills) {
+			if k == s.Name || upExact[k] || !strings.EqualFold(k, s.Name) {
+				continue
+			}
+			if err := renameCase(lib, p, lp, packDir, k, s.Name); err != nil {
+				return nil, err
+			}
+			rep.Moved = append(rep.Moved, fmt.Sprintf("%s: renamed from %s upstream", s.Name, k))
+			break
+		}
+	}
+
 	known := map[string]bool{}
 	for n := range lp.Skills {
 		known[n] = true
@@ -270,6 +295,79 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		sort.Strings(l)
 	}
 	return rep, nil
+}
+
+// renameCase moves a vendored skill from name old to name new (which
+// differ only in case) everywhere skilldots records it.
+func renameCase(lib *library.Library, p *manifest.Pack, lp *lock.Pack, packDir, old, new string) error {
+	ls := lp.Skills[old]
+	oldDir, err := skillDir(packDir, ls.Category, old)
+	if err != nil {
+		return err
+	}
+	newDir, err := skillDir(packDir, ls.Category, new)
+	if err != nil {
+		return err
+	}
+	if fsutil.Lexists(oldDir) {
+		// Two steps, so a case-only rename also works where the file
+		// system folds case.
+		tmp := oldDir + ".skd-rename"
+		if err := os.Rename(oldDir, tmp); err != nil {
+			return err
+		}
+		if err := os.Rename(tmp, newDir); err != nil {
+			return err
+		}
+	}
+	lp.Skills[new] = ls
+	delete(lp.Skills, old)
+
+	rename := func(u string) string {
+		if u == old {
+			return new
+		}
+		if strings.HasSuffix(u, "/"+old) {
+			return strings.TrimSuffix(u, old) + new
+		}
+		return u
+	}
+	for i, u := range p.Use {
+		p.Use[i] = rename(u)
+	}
+	for i, u := range p.Skip {
+		p.Skip[i] = rename(u)
+	}
+	hasAs := false
+	if o := p.Skill[old]; o != nil {
+		if p.Skill[new] == nil {
+			p.Skill[new] = o
+			delete(p.Skill, old)
+		}
+		hasAs = o.As != ""
+	}
+	if hasAs {
+		return nil // the link name does not change
+	}
+	// Link records "<target>/<old>": where the target directory folds case
+	// the existing link already is "<target>/<new>", so re-key the record;
+	// elsewhere the old link is a separate entry that apply removes.
+	for key, l := range lib.Lock.Links {
+		t, n, _ := splitKey(key)
+		if n != old || l.Path == "" || l.Source != lib.Rel(oldDir) {
+			continue
+		}
+		newPath := filepath.Join(filepath.Dir(l.Path), new)
+		a, err1 := os.Lstat(l.Path)
+		b, err2 := os.Lstat(newPath)
+		if err1 != nil || err2 != nil || !os.SameFile(a, b) {
+			continue
+		}
+		l.Path = newPath
+		lib.Lock.Links[t+"/"+new] = l
+		delete(lib.Lock.Links, key)
+	}
+	return nil
 }
 
 // RemovePack moves a pack's vendored files to the trash and drops its lock entry.

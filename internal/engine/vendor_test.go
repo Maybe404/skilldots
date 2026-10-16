@@ -371,3 +371,78 @@ func TestSyncNestedPathsStable(t *testing.T) {
 		}
 	}
 }
+
+// Upstream renames a skill only in case (Foo → foo): after the update the
+// lock knows only foo, it is linked, nothing went to the trash, and a
+// second update changes nothing.
+func TestSyncCaseOnlyRename(t *testing.T) {
+	for _, use := range [][]string{{"Foo"}, {"*"}} {
+		t.Run(use[0], func(t *testing.T) { testSyncCaseOnlyRename(t, use) })
+	}
+}
+
+func testSyncCaseOnlyRename(t *testing.T, use []string) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, reg, home := newTestLib(t)
+	up := filepath.Join(world, "up")
+	writeSkillMD(t, filepath.Join(up, "skills", "Foo"), "Foo")
+	gitRepo(t, up)
+	p := &manifest.Pack{Repo: up, Use: append([]string(nil), use...)}
+	lib.Manifest.Packs = append(lib.Manifest.Packs, p)
+	apply := func() Plan {
+		entries, warnings, _ := Resolve(lib, reg)
+		if len(warnings) > 0 {
+			t.Fatalf("warnings: %v", warnings)
+		}
+		plan := MakePlan(lib, entries, false)
+		if _, err := Apply(lib, plan); err != nil {
+			t.Fatal(err)
+		}
+		return plan
+	}
+	if _, err := Sync(lib, p); err != nil {
+		t.Fatal(err)
+	}
+	apply()
+
+	gitIn(t, up, "mv", "skills/Foo", "skills/tmp")
+	gitIn(t, up, "mv", "skills/tmp", "skills/foo")
+	writeSkillMD(t, filepath.Join(up, "skills", "foo"), "foo")
+	gitIn(t, up, "commit", "-qam", "rename")
+	rep, err := Sync(lib, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Dropped) != 0 || len(rep.UpstreamGone) != 0 || len(rep.Added) != 0 {
+		t.Fatalf("rename treated as drop/add: %+v", rep)
+	}
+	apply()
+	if _, ok := lib.Lock.Packs[up].Skills["Foo"]; ok || lib.Lock.Packs[up].Skills["foo"] == nil {
+		t.Fatalf("lock skills %v", lib.Lock.Packs[up].Skills)
+	}
+	if len(p.Use) != 1 || (p.Use[0] != "foo" && p.Use[0] != "*") {
+		t.Fatalf("use %v", p.Use)
+	}
+	pd, _ := PackDir(lib, up)
+	link := filepath.Join(home, ".agents", "skills", "foo")
+	if b, err := os.ReadFile(filepath.Join(link, "SKILL.md")); err != nil || !strings.Contains(string(b), "name: foo") {
+		t.Fatalf("link does not serve the new skill: %v", err)
+	}
+	if !isLinkTo(link, filepath.Join(pd, "foo")) && !isLinkTo(filepath.Join(home, ".agents", "skills", "Foo"), filepath.Join(pd, "foo")) {
+		t.Fatal("not linked to vendor foo")
+	}
+	if des, _ := os.ReadDir(filepath.Join(home, ".agents", "skills")); len(des) != 1 || des[0].Name() != "foo" {
+		t.Errorf("agent dir entries %v, want exactly foo", des)
+	}
+	if _, err := os.Stat(filepath.Join(lib.Root, TrashDir)); !os.IsNotExist(err) {
+		t.Error("something went to the trash")
+	}
+	rep, _ = Sync(lib, p)
+	if len(rep.Changed)+len(rep.Added)+len(rep.Dropped)+len(rep.Moved) != 0 {
+		t.Fatalf("second update not stable: %+v", rep)
+	}
+	if plan := apply(); plan.Changes() {
+		t.Fatalf("second apply not stable: %+v", plan.ChangeList())
+	}
+}
