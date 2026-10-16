@@ -33,7 +33,7 @@ No library: ask the user whether to create one (`skd init`), clone their backup 
    Never run `skd add` without `--skill`, `--category` or `--all`: it opens an interactive picker meant for humans.
 3. `add` vendors the files into the library and links them. If a name clashes with an existing skill, skd links it as `<repo>-<name>` (written as `as` in skills.toml) and says so; tell the user. The same happens when `update` brings in a new upstream skill. Skills with unsafe names (e.g. containing `/` or `..`) are skipped with a warning; mention it if the user wanted one of them. On a pack that follows everything, `--skill x` un-skips `x`; if a wildcard in `skip` (e.g. `eng/*`) excludes it, `add` fails with exit 1 — relay the message: the user decides how to change `skip` in skills.toml, then run `skd update owner/repo`. `skd new <name>` accepts only names made of letters, digits, `.`, `_`, `-`.
 
-Sources: `owner/repo`, a GitHub URL, any git URL, optionally `@ref` to pin a branch or tag.
+Sources: `owner/repo`, a GitHub URL, any git URL, optionally `@ref` to pin a branch or tag. If the user hands you an install line from a README (`npx skills add owner/repo --skill x`, also bunx / pnpm dlx / `npx add-skill`), a skills.sh page or a GitHub link to a skill directory or its `SKILL.md`, pass it to `skd add` as one quoted argument instead of running it: skd only parses it, and the skills it names become the selection (`skd add "npx skills add owner/repo --skill x" --json`). The branch in a GitHub link is not pinned; add `@ref` only if the user asks to pin.
 
 ## See what is installed
 
@@ -43,6 +43,7 @@ skd list --all      # every skill
 skd list --agent claude
 skd path <skill>    # directory of a skill's files
 ```
+In `skd list --json`, `ClaudeDisabled: true` means the user turned the skill off inside Claude Code (its own settings); skd still links it. Mention it when relevant. To keep a skill out of Claude entirely, `skd disable <skill> --agent claude` (ask first). Never edit `~/.claude/settings.json` for this.
 
 ## Update
 
@@ -87,7 +88,11 @@ Never edit `vendor/`; the next update overwrites it. Instead:
 ```bash
 skd fork <skill>            # copies it into skills/ as the user's own; upstream is deselected
 ```
-Then edit the directory `skd path <skill>` prints.
+Then edit the directory `skd path <skill>` prints. You edit files yourself; `skd edit <skill>` is for opening a skill in the user's editor when they ask for that. For a vendored skill it refuses without a terminal: ask the user whether to fork it (`skd edit <skill> --fork`) or open the vendored files anyway (`--force`, lost on the next update).
+
+## Settings
+
+`skd config list --json`; `skd config set editor "<command>"` (or `theme light|dark|auto`) when the user asks. `lang` is reserved.
 
 ## Create a new skill for the user
 

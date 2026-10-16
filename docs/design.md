@@ -24,6 +24,7 @@ skilldots（命令 `skd`）：声明式管理本机所有 agent 工具的 skills
 <库>/
 ├── skills.toml        清单（人和 agent 都可改）
 ├── skills.lock        锁（工具写）
+├── skills.history.jsonl  更新记录（工具追加，一行一条，随库提交推送）
 ├── skills/<名>/       自写，随库公开
 ├── private/<名>/      自写，本机；独立 git 仓库，被外层 .gitignore 忽略
 ├── .trash/            被挪开的目录（gitignore），`skd trash` 查看与恢复
@@ -68,20 +69,23 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | 命令 | 作用 |
 |---|---|
 | `skd init [--from 路径]` | 建库（默认 `~/.skilldots`），库根和 private/ 各自 git init（即使位于更大的仓库内），生成清单；`--from` 接管已有仓库 |
-| `skd add <来源> [--skill a,b \| --all \| --category x]` | 克隆到缓存，扫描 SKILL.md，交互选择（按分类折叠），拷入 vendor，写清单与锁，链接。`--skill`/`--category` 给的名字和分类先逐个校验，不存在就报错、什么都不改；`--all` 把 pack 设为 `use = ["*"]`（已有 skip 保留），同时给的 `--skill`/`--category` 只做这项校验。对已是 `"*"` 的 pack，`--skill x` 把 skip 里直接写 `x` 或 `分类/x` 的项移出；x 被通配（如 `eng/*`）排除时不拆通配，报错退出 1，提示手改 skills.toml（删掉或换成具体名字）后 `skd update <repo>` |
+| `skd add <来源> [--skill a,b \| --all \| --category x]` | 来源除 owner/repo、GitHub URL、git URL（`@ref` 锁定）外，还接受：整行粘贴的安装命令（`npx`/`bunx`/`pnpx`/`pnpm dlx`/`yarn dlx`/`npm exec`/`bun x` + `skills add`（或 `a`/`install`/`i`）或 `add-skill`，以及 `skd add`；`-s`/`--skill`/`--skills` 可重复、可逗号分隔、一个 flag 后可跟多个名字，`-a`/`--agent` 的值被跳过，其他 flag 忽略；遇到 `&&` `||` `;` `|` 截断；只取第一行，去掉行首提示符）、skills.sh 页面（`skills.sh/<owner>/<repo>[/<skill>]`）、GitHub `/tree/<ref>/<路径>`（skill 目录或包含多个 skill 的目录）与 `/blob/<ref>/…`（`SKILL.md` 或 skill 内任意文件）。文本只按 shell 规则分词，不展开、不执行。解析出仓库后照常 fetch，链接/参数指定的 skill 在选择界面预选（名字按 frontmatter 名或目录名匹配；路径按仓库内相对目录匹配，ref 含 `/` 时从路径前部逐段丢弃再试），匹配不上的告警。**链接里的 ref 不锁定**：那只是浏览位置，pack 跟随默认分支，与 `owner/repo` 一致，要锁定用 `@ref`。无终端（或 `--json`/`--yes`）且未给 `--skill`/`--category`/`--all` 时，预选的 skill 就是选择；指定的名字都不存在时报错。交互终端不带参数时提示输入来源。之后：克隆到缓存，扫描 SKILL.md，交互选择（按分类折叠），拷入 vendor，写清单与锁，链接。`--skill`/`--category` 给的名字和分类先逐个校验，不存在就报错、什么都不改；`--all` 把 pack 设为 `use = ["*"]`（已有 skip 保留），同时给的 `--skill`/`--category` 只做这项校验。对已是 `"*"` 的 pack，`--skill x` 把 skip 里直接写 `x` 或 `分类/x` 的项移出；x 被通配（如 `eng/*`）排除时不拆通配，报错退出 1，提示手改 skills.toml（删掉或换成具体名字）后 `skd update <repo>` |
 | `skd list [pack] [--all] [--flat] [--agent x]` | 顶层按 pack 折叠一行一仓库；展开、平铺、按 agent 视角 |
 | `skd apply [--dry-run]` | 使电脑与清单一致：建链接、删多余链接、拷贝模式下按哈希识别自己放的文件 |
 | `skd enable <skill> [--agent a,b]` / `skd disable <skill> [--agent a,b]` | 改 targets 并 apply；不带 `--agent` 用默认集合 |
 | `skd remove <skill\|pack>` | 从所有 agent 目录移除链接/拷贝，**库里保留**，清单里 targets 置空 |
 | `skd purge <skill\|pack>` | 从清单、锁、vendor 彻底清除，并移除所有 agent 目录里的链接/拷贝；先列后删，`--yes` 跳过确认 |
-| `skd update [pack] [--yes] [--commit]` | 按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送。“上游新增”= 未选中、且不在锁的 `upstream` 名单（上次 `update` 记入，从未 update 的则是 `add` 订阅时）里的 skill（旧锁没有名单时以更新前的缓存克隆为准，两者都没有则不报）；`--json` 的 `packs[].UpstreamNew` 同此含义，仪表盘 `u` 用同一份计算 |
+| `skd update [pack] [--yes] [--commit]` | 交互终端且无 `--yes`/`--json` 时先确认：对给定的 pack（不给为全部）跑一次与 `outdated` 相同的检查，逐包列出 skill 级变化（changed / 将加入 / 上游新增 / 上游删除 / moved），默认全选，可逐个取消，回车只更新勾选的包，ctrl+c 取消；未勾选的包 vendor、锁、链接都不动。不给 pack 时只列 `HasUpdates` 的包（只有 moved 或只有新 commit 的不列），点名的 pack 只要 commit 变了或有 moved 也列。确认后 `update` 重新 fetch，确认与执行之间上游再变的以执行时为准。非交互、`--yes`、`--json` 行为不变（agent 路径）。之后：按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送。“上游新增”= 未选中、且不在锁的 `upstream` 名单（上次 `update` 记入，从未 update 的则是 `add` 订阅时）里的 skill（旧锁没有名单时以更新前的缓存克隆为准，两者都没有则不报）；`--json` 的 `packs[].UpstreamNew` 同此含义，仪表盘 `u` 用同一份计算 |
+| `skd history [pack] [--json] [-n N]` | 更新记录：每次 update 成功后，对 commit 变了或 skill 有变化的每个 pack 追加一条到库根的 `skills.history.jsonl`（不在 gitignore 里，`--commit`/`sync` 一并提交推送，换机器 clone 后可见）：时间（UTC）、pack、旧→新 commit、changed / added / moved / gone / dropped / new（上游新增未选）、上游在这些 skill 目录下的提交标题（`git log --no-merges 旧..新 -- 目录`，gone 的按 `**/<名>/**`，最多 20 条，超过标 `moreCommits`）。缓存克隆是浅克隆：旧 commit 不是新 commit 的祖先时先 `fetch --deepen=200`，仍不可达（上游改写了历史）标 `commitsUnknown`。读记录只读库内文件，无网可用；读不懂的行（合并冲突残留）跳过并告警；按时间倒序（两台机器的记录合并后可能乱序）。默认显示 20 条，`-n 0` 全部。仪表盘 `h` |
+| `skd edit <skill> [--fork [--private] [--as 名] \| --force]` | 用编辑器打开 skill 目录。编辑器：配置项 `editor` → `$VISUAL` → `$EDITOR` → 自动探测 VS Code、Cursor、Zed、Sublime（PATH 里的 `code`/`cursor`/`zed`/`subl`，再看 macOS 的 `/Applications`、`~/Applications` 下的 .app，用 `open -a`）→ 系统默认（macOS `open`、Linux `xdg-open`、Windows `explorer`）。命令按 shell 规则分词但不展开、不经 shell。已知窗口型编辑器（code、cursor、zed、subl、open 等）后台启动不等待；其余视为终端编辑器，CLI 前台运行，仪表盘交出终端（`tea.ExecProcess`），无终端时报错。vendor/app 来源的 skill 更新时会被覆盖：交互时提示并给出“fork 到 skills/ 再打开”“fork 到 private/ 再打开”“仍然打开”；非交互（无终端、`--json`、`--yes`）时拒绝，必须显式 `--fork`（走现有 fork 流程后打开副本）或 `--force`（打开 vendor 里的文件）。仪表盘 `o` |
+| `skd config list \| get <键> \| set <键> [值]` | 用户设置，存在现有用户配置文件 config.toml（与 `library` 同一文件，写入时保留其他键，包括不认识的；文件损坏时拒绝写入）：`editor`、`theme`（`auto`/`light`/`dark`，优先级 `--theme` > `$SKILLDOTS_THEME` > 设置 > auto）、`lang`（预留，`auto`/`en`/`zh`，暂无翻译）；`library` 只读显示，用 `skd use` 改。不给值即删除该键。仪表盘 `,` |
 | `skd outdated [pack]` | 只查不改：逐个 pack fetch 到缓存克隆（vendor/、skills.lock、skills.toml 不动），对比缓存 HEAD 与锁里的 commit，精确到 skill：changed（已选且已 vendor、上游内容变了）、moved（内容没变、只换了分类目录，update 只会改名，不算更新、不计入 ↑ 和 `U`，人类输出单独一行 `moved x (path only)`，仪表盘右栏标 moved）、new（不在锁的 `upstream` 名单、也没 vendor；锁里没有名单时不报，避免把缓存当基线）、gone（已 vendor、名单里有、现在上游没了）、pending（已选未 vendor，update 会拷入）。结果连同时间写入用户配置目录（与 config.toml 同目录）的 `outdated.json`，按库根目录分开记；失败的 pack 单列且保留上次记录，退出码非 0，其余照常；文件损坏时告警一次并重写。`skd list` 概览、问答菜单只读这份记录（不联网）：`↑ N updates available · checked 2h ago`，N 为有更新的 pack 数，超过 24 小时标 stale；锁里 commit 已变的 pack 视为未知不计。`update` 成功后把对应 pack 记为最新 |
 | `skd new <名> [--private]` | 在 skills/ 或 private/ 生成模板并链接到默认 agent；名字按 skill 名规则校验（见关键规则），不合规或目录已存在则报错 |
 | `skd scan` | 扫描本机所有已知 agent 目录，列出每个 skill：来源、链接/拷贝、是否受管、重复、断链 |
 | `skd adopt` | 把 scan 到的未受管 skill 收编：能识别来源的（npx `.skill-lock.json`、git remote、App 路径）自动填，否则询问。提案按名字排序；断链提案在执行时重新检查，路径已变成文件、目录或有效链接时不动并告警 |
 | `skd doctor` | 体检：Windows 符号链接权限、target 不存在、锁与清单不一致、断链 |
 
-所有命令 `--json`；破坏性命令先列清单再确认。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`）选配色，`NO_COLOR` 关闭颜色。
+所有命令 `--json`；破坏性命令先列清单再确认。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`，再次是 `skd config set theme`）选配色，`NO_COLOR` 关闭颜色。
 
 ## 仪表盘
 
@@ -91,20 +95,27 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 |---|---|---|
 | `space` | 启用/停用；上游未装的直接安装 | `enable` / `disable` / `add --skill` |
 | `a` | 加仓库：勾选 skill 或整个分类（`*` 跟随全部），再选 alias、目标 agent，均可留空 | `add` |
-| `u` / `U` | 更新当前包 / 所有检查出有更新的包（检查未成功前为全部） | `update` |
+| `u` / `U` | 先检查上游并展示将变化什么：`u` 当前包，确认后更新（无变化也可确认，用于补回缺失文件）；`U` 列出有更新的包及 skill 级变化，默认全选、可取消，只更新勾选的。检查结果并入顶栏和右栏标记 | `update` |
+| `h` | 更新记录列表，回车看某条的 skill 变化与上游提交标题 | `history` |
 | `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆加锁，与 update/add 及其他 skd 进程串行；退出时取消检查：git 及其子进程收到 SIGTERM（独立 session、独立进程组，git 借此清理锁文件），1 秒后仍在的被杀，退出最多等 2 秒，不留 git 进程；独立 session 没有控制终端，要从 /dev/tty 读口令的 core.sshCommand 直接失败、显示为 check failed，而不是被挂起；终端挂断（SIGHUP，如关窗口、`tmux kill-session`）时仪表盘关闭，按退出流程取消检查并立即停掉在跑的操作，skd 以非 0 退出）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream` / `moved upstream (path only)`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
 | `e` | 选目标 agent | `enable/disable --agent` |
 | `f` | fork，可改名，选 skills/ 或 private/ | `fork [--as] [--private]` |
+| `o` | 用编辑器打开 skill；vendor/app 来源先问：fork 后打开 / 仍然打开 | `edit` |
 | `d` | 删 vendor skill（进 trash）/ 取消链接自己的 / purge 包 | `remove` / `disable` / `purge` |
 | `n` | 新建 skill，建好即链接并选中 | `new` |
 | `S` | 按 agent、状态列出扫描结果，勾选后 adopt | `scan` / `adopt` |
 | `t` | 回收站：恢复；清空需两次确认，第二次只认 `D` | `trash restore` / `trash empty` |
 | `s` | 备份 | `sync` |
+| `,` | 设置页：editor、theme（下次启动生效）、lang | `config` |
 | `A` / `r` / `/` / `?` / `q` | 应用 / 重载 / 过滤 / 全部键位 / 退出 | `apply` |
+
+`h` 原为“切到左栏”，现改为更新记录；切栏用 `←`、`tab`。
+
+**Claude Code 里关闭的 skill**：Claude Code 把用户在它里面关掉的 skill 记在 `~/.claude/settings.json`（设置了 `$CLAUDE_CONFIG_DIR` 时为其下的 `settings.json`）的 `skillOverrides`，形如 `{"name": "off"}`（`"disabled"` 或 `false` 也算）。skd 只读、**绝不写**该文件，缺失或格式错误静默忽略；按链接名或 skill 名匹配，在 `skd list`、仪表盘左右栏和详情里标 “off in Claude Code”，`list --json` 每项多 `ClaudeDisabled`。skd 照常链接；要彻底不装到 Claude，用 `e` 去掉 claude 目标（`skd disable <skill> --agent claude`）。
 
 有操作在跑时，会启动新操作的键一律拒绝；错误显示在状态行。
 
-**共享流程**：所有写操作在 `internal/app`（targets 编辑与继承、取消选择、add、fork、remove/purge、enable/disable、new、adopt、update、apply、trash、sync 的 git 操作）。`internal/cli` 和 `internal/tui` 只负责收集输入和展示结果，`internal/app` 的测试用同一夹具分别走两条路径并比对清单、锁、文件和链接。
+**共享流程**：所有写操作在 `internal/app`（targets 编辑与继承、取消选择、add（含粘贴来源解析 `ParseAddText` 与预选 `Preselect`）、fork、remove/purge、enable/disable、new、adopt、update（含 `PlanUpdate` 与更新记录）、history、edit（编辑器选择 `FindEditor`）、Claude 关闭状态、apply、trash、sync 的 git 操作）；用户设置在更底层的 `internal/config`。`internal/cli` 和 `internal/tui` 只负责收集输入和展示结果，`internal/app` 的测试用同一夹具分别走两条路径并比对清单、锁、文件和链接。
 
 **配色**：两套调色板同一组色相（紫色强调、青色、绿/黄/红状态色）。文字分 Text、Muted、Faint 三级，依次变淡，Muted 和 Faint 在终端底色和仪表盘各层底色上都不低于 4.5:1（`TestPaletteContrast` 检查）；选中行上 Faint 按 Muted 画。边框、分隔线和各层底色的色调用单独的 Line 色，不承载文字。`auto` 时向终端发 OSC 11 加 DA1（所有终端都回 DA1，所以不支持 OSC 11 的终端也立即结束），300ms 无回应按深色；`--json`、`NO_COLOR`、`TERM=dumb`、stdout 非终端、后台进程组时不询问。询问期间终端处于 cbreak（关回显、行缓冲、ICRNL、IXON、IEXTEN，按键与仪表盘 raw 模式下读到的一致，Enter 仍是 CR；保留 ISIG：ctrl+c、ctrl+\ 照常中断，退出前恢复终端模式）；切换后若已有待读输入（用户预先敲的键，含未回车的半行）就不询问、按深色，键留给后续读取者；等待期间读到的非回复字节由仪表盘在启动时按序重放（`termbg.Unread`）；DA1 之后的字节都算按键，紧跟其后被截断的转义序列（ESC、`ESC [`）再等至多 100ms 补全。问答菜单和普通命令拿不到这些字节：不回应的终端上，在这 300ms 内敲的键对它们会丢失。Bubble Tea 的包 init 会让 termenv 询问背景并最多等 5 秒，所以 `internal/termbg` 的 init 抢先设定背景值（Go 按导入路径顺序初始化，`github.com/Maybe404/…` 排在 `github.com/charmbracelet/…` 之前）。
 
@@ -118,7 +129,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 - **链接 vs 拷贝**：默认软链接；Windows 无权限或 target 要求拷贝时降级，锁里记录哈希。拷贝只有"原样"（哈希一致且没有哈希看不到的 `.git`、`node_modules`、符号链接）时才直接替换，否则整份移入 trash；用户改过的文件不覆盖并警告
 - **库目录移动**：链接指向"另一个根 + 锁里记录的相对路径"时识别为旧位置的链接，`apply` 直接重建
 - **不删除**：除 `skd trash empty` 外不永久删除用户数据。trash 用 rename，仅跨设备（EXDEV）时回退为完整拷贝（含 `.git`、符号链接、权限）后再删源，其他错误原样返回
-- **`--json`**：stdout 只有一份 JSON，进度和告警走 stderr；失败时 stdout 为空、退出码非 0（`update` 例外：输出 `{packs, failed, apply, committed}` 后以非 0 退出；`outdated` 同理输出 `{checked, packs, failed, updates}`，`packs[]` 为 `{repo, commit, latest, changed, moved, new, gone, pending, checked}`）
+- **`--json`**：stdout 只有一份 JSON，进度和告警走 stderr；失败时 stdout 为空、退出码非 0（`update` 例外：输出 `{packs, failed, apply, committed, history}` 后以非 0 退出；`outdated` 同理输出 `{checked, packs, failed, updates}`，`packs[]` 为 `{repo, commit, latest, changed, moved, new, gone, pending, checked}`）
 - **更新安全**：锁定 commit，`update` 永远显式；上游删除不自动删本地
 - **许可证**：vendor 时拷 LICENSE；找不到（根目录、skill 目录、frontmatter `license:`）的仓库提示，自写来源不检查
 - **private/**：独立 git 仓库、无远端；工具只链接、不提交、不清理
