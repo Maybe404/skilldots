@@ -394,7 +394,7 @@ func deselect(p *manifest.Pack, e *engine.Entry) {
 	} else {
 		var use []string
 		for _, u := range p.Use {
-			if u != e.Name && u != e.Category+"/"+e.Name {
+			if !manifest.UseNames(u, e.Name) {
 				use = append(use, u)
 			}
 		}
