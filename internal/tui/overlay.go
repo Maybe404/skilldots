@@ -124,7 +124,7 @@ var helpKeys = [][2]string{
 	{"a", "add a repository: pick skills or categories, alias, agents"},
 	{"u / U", "update this pack / every pack"},
 	{"e", "choose agents for the skill or pack"},
-	{"f", "fork a vendored or app skill into your library, optionally renamed"},
+	{"f", "fork a vendored or app skill into your library (rename it there)"},
 	{"d", "remove skill (to trash) · unlink yours · purge pack"},
 	{"n", "new skill of your own in skills/ or private/"},
 	{"S", "scan agent directories and adopt what skd does not manage"},
