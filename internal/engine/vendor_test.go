@@ -297,3 +297,41 @@ func TestSyncIgnoresSymlinkedLicense(t *testing.T) {
 		return nil
 	})
 }
+
+// Two skills whose names differ only in case: one is vendored, the other
+// rejected, nothing is trashed, and a second update is a no-op. A local
+// skill differing only in case from a new upstream one gets it an alias.
+func TestSyncCaseClash(t *testing.T) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, reg, _ := newTestLib(t)
+	writeSkill(t, filepath.Join(lib.Root, "skills", "Bar"), "Bar")
+	up := filepath.Join(world, "up")
+	writeSkillMD(t, filepath.Join(up, "skills", "x", "foo"), "foo")
+	writeSkillMD(t, filepath.Join(up, "skills", "y", "Foo"), "Foo")
+	writeSkillMD(t, filepath.Join(up, "skills", "bar"), "bar")
+	gitRepo(t, up)
+	p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+	lib.Manifest.Packs = append(lib.Manifest.Packs, p)
+	for round := 0; round < 2; round++ {
+		rep, err := Sync(lib, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Rejected) != 1 {
+			t.Fatalf("round %d: rejected %v", round, rep.Rejected)
+		}
+		if round == 1 && len(rep.Changed)+len(rep.Added)+len(rep.Dropped) != 0 {
+			t.Fatalf("second update not stable: %+v", rep)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(lib.Root, TrashDir)); !os.IsNotExist(err) {
+		t.Error("something went to the trash")
+	}
+	if o := p.Skill["bar"]; o == nil || o.As == "" {
+		t.Errorf("bar vs local Bar: no alias assigned (%+v)", o)
+	}
+	if _, warnings, _ := Resolve(lib, reg); len(warnings) != 0 {
+		t.Errorf("warnings: %v", warnings)
+	}
+}

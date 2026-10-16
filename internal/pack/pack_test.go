@@ -187,3 +187,19 @@ func TestParseSource(t *testing.T) {
 		}
 	}
 }
+
+func TestScanCaseClash(t *testing.T) {
+	root := t.TempDir()
+	mk(t, root, "skills/a/foo", "skills/b/x")
+	os.WriteFile(filepath.Join(root, "skills", "b", "x", "SKILL.md"), []byte("---\nname: Foo\n---\n"), 0o644)
+	got, rej, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := names(got); len(n) != 1 || n["foo"] != "a" {
+		t.Fatalf("got %v", n)
+	}
+	if len(rej) != 1 || rej[0].Name != "Foo" || !strings.Contains(rej[0].Reason, "case") {
+		t.Fatalf("rejected %+v", rej)
+	}
+}

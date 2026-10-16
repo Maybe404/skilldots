@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -135,14 +136,14 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	others, _ := collect(lib)
 	for _, e := range others {
 		if !(e.Kind == KindVendor && e.Origin == p.Repo) {
-			taken[e.LinkName] = Describe(e) + " (" + e.Dir + ")"
+			taken[strings.ToLower(e.LinkName)] = Describe(e) + " (" + e.Dir + ")"
 		}
 	}
 	for _, s := range upstream {
 		if o := p.Override(s.Name, false); o != nil && o.As != "" {
-			taken[o.As] = "vendor:" + p.Repo
+			taken[strings.ToLower(o.As)] = "vendor:" + p.Repo
 		} else if lp.Skills[s.Name] != nil {
-			taken[s.Name] = "vendor:" + p.Repo
+			taken[strings.ToLower(s.Name)] = "vendor:" + p.Repo
 		}
 	}
 
@@ -189,10 +190,10 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			}
 		}
 		if prev == nil {
-			if o := p.Override(s.Name, false); (o == nil || o.As == "") && taken[s.Name] != "" {
-				as := freeName(func(n string) bool { return taken[n] != "" }, s.Name, p.Prefix())
+			if o := p.Override(s.Name, false); (o == nil || o.As == "") && taken[strings.ToLower(s.Name)] != "" {
+				as := freeName(func(n string) bool { return taken[strings.ToLower(n)] != "" }, s.Name, p.Prefix())
 				p.Override(s.Name, true).As = as
-				taken[as] = "vendor:" + p.Repo
+				taken[strings.ToLower(as)] = "vendor:" + p.Repo
 				if rep.Renamed == nil {
 					rep.Renamed = map[string]string{}
 				}

@@ -194,9 +194,12 @@ func inherit(parent []string, child *[]string) []string {
 
 // markConflicts flags every entry whose LinkName another entry also wants.
 func markConflicts(entries []Entry) []string {
+	// Names that differ only in case clash too: on a case-insensitive
+	// file system they are the same directory entry.
 	byName := map[string][]int{}
 	for i, e := range entries {
-		byName[e.LinkName] = append(byName[e.LinkName], i)
+		k := strings.ToLower(e.LinkName)
+		byName[k] = append(byName[k], i)
 	}
 	var warnings []string
 	for _, name := range sortedKeys(byName) {
@@ -208,7 +211,7 @@ func markConflicts(entries []Entry) []string {
 		for _, i := range idx {
 			who = append(who, fmt.Sprintf("%s (%s)", Describe(entries[i]), entries[i].Dir))
 		}
-		msg := fmt.Sprintf("%q is provided by %s", name, strings.Join(who, " and "))
+		msg := fmt.Sprintf("%q is provided by %s", entries[idx[0]].LinkName, strings.Join(who, " and "))
 		for _, i := range idx {
 			entries[i].Conflict = msg
 		}

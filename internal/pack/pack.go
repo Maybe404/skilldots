@@ -222,7 +222,32 @@ func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
 		}
 		skills = append(skills, kept)
 	}
+	skills, rejected = dropCaseClashes(root, skills, rejected)
 	return skills, rejected, nil
+}
+
+// dropCaseClashes keeps one of several skills whose names differ only in
+// case: on case-insensitive file systems (macOS, Windows defaults) their
+// directories and links would overwrite each other.
+func dropCaseClashes(root string, skills []Skill, rejected []Rejected) ([]Skill, []Rejected) {
+	seen := map[string]int{}
+	var out []Skill
+	for _, s := range skills {
+		k := strings.ToLower(s.Name)
+		i, ok := seen[k]
+		if !ok {
+			seen[k] = len(out)
+			out = append(out, s)
+			continue
+		}
+		if rank(root, s.Dir) < rank(root, out[i].Dir) {
+			out[i], s = s, out[i]
+		}
+		rel, _ := filepath.Rel(root, s.Dir)
+		rejected = append(rejected, Rejected{Name: s.Name, Dir: filepath.ToSlash(rel),
+			Reason: fmt.Sprintf("skipped: name differs only in case from %q (they would overwrite each other on case-insensitive file systems)", out[i].Name)})
+	}
+	return out, rejected
 }
 
 // walk returns the skill directories under root, sorted.
