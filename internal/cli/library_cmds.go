@@ -356,7 +356,11 @@ func runApply(c *ctx, dry, force bool) error {
 	}
 	counts := plan.Counts()
 	if !plan.Changes() {
-		c.printf("%s %s\n", ok("✓"), dim(fmt.Sprintf("up to date, %d linked", counts["keep"])))
+		msg := fmt.Sprintf("up to date, %d linked", counts["keep"])
+		if counts["skip"] > 0 {
+			msg += fmt.Sprintf(", %d skipped", counts["skip"])
+		}
+		c.printf("%s %s\n", ok("✓"), dim(msg))
 		return nil
 	}
 	if dry {

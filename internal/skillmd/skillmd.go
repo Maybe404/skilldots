@@ -72,3 +72,30 @@ func IsSkillDir(dir string) bool {
 	st, err := os.Stat(filepath.Join(dir, "SKILL.md"))
 	return err == nil && !st.IsDir()
 }
+
+// SetName rewrites the frontmatter name of dir/SKILL.md, adding the key
+// (or a frontmatter block) when missing. The rest of the file is kept.
+func SetName(dir, name string) error {
+	p := filepath.Join(dir, "SKILL.md")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(b), "\n")
+	nameLine := "name: " + name
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return os.WriteFile(p, []byte("---\n"+nameLine+"\n---\n"+string(b)), 0o644)
+	}
+	for i := 1; i < len(lines); i++ {
+		l := lines[i]
+		if strings.TrimSpace(l) == "---" {
+			break
+		}
+		if k, _, ok := strings.Cut(l, ":"); ok && !strings.HasPrefix(l, " ") && !strings.HasPrefix(l, "\t") && strings.TrimSpace(k) == "name" {
+			lines[i] = nameLine
+			return os.WriteFile(p, []byte(strings.Join(lines, "\n")), 0o644)
+		}
+	}
+	lines = append(lines[:1], append([]string{nameLine}, lines[1:]...)...)
+	return os.WriteFile(p, []byte(strings.Join(lines, "\n")), 0o644)
+}

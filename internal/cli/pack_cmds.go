@@ -16,6 +16,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
+	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
 func addCmd() *cobra.Command {
@@ -114,24 +115,11 @@ func addCmd() *cobra.Command {
 				return nil
 			}
 
-			// Give new skills a free link name before resolving.
-			entries, _ := c.resolve()
-			for _, s := range upstream {
-				if !p.Selected(s.Name, s.Category) {
-					continue
-				}
-				if prev := engine.Find(entries, s.Name); prev != nil && !(prev.Kind == engine.KindVendor && prev.Origin == p.Repo) {
-					if o := p.Override(s.Name, true); o.As == "" {
-						o.As = engine.FreeName(entries, s.Name, p.Prefix())
-						c.printf("%s %q already exists (%s); linking as %q\n", warn("!"), s.Name, engine.Describe(*prev), o.As)
-					}
-				}
-			}
-
 			rep, err := engine.Sync(c.lib, p)
 			if err != nil {
 				return err
 			}
+			printRenamed(c, rep)
 			if err := c.lib.Save(); err != nil {
 				return err
 			}
@@ -258,6 +246,23 @@ func nonNil[T any](s []T) []T {
 	return s
 }
 
+// printRenamed tells about skills linked under another name because the
+// upstream name was already taken in the library.
+func printRenamed(c *ctx, rep *engine.SyncReport) {
+	for _, n := range sortedKeys(rep.Renamed) {
+		fmt.Fprintf(os.Stderr, "%s %s: %q is already used in the library; linking it as %q (as in skills.toml)\n", warn("!"), rep.Repo, n, rep.Renamed[n])
+	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func warnLicense(c *ctx, rep *engine.SyncReport) {
 	if rep.NoLicense {
 		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
@@ -302,6 +307,7 @@ func updateCmd() *cobra.Command {
 			changed := false
 			for _, r := range reports {
 				printReport(c, r)
+				printRenamed(c, r)
 				warnLicense(c, r)
 				changed = changed || len(r.Changed)+len(r.Added)+len(r.Dropped) > 0
 			}
@@ -667,6 +673,9 @@ func forkCmd() *cobra.Command {
 			}
 			name := e.LinkName
 			if as != "" {
+				if err := manifest.CheckName(as); err != nil {
+					return fmt.Errorf("--as: %w", err)
+				}
 				name = as
 			}
 			base := c.lib.SkillsDir()
@@ -679,6 +688,13 @@ func forkCmd() *cobra.Command {
 			}
 			if err := fsutil.CopyTree(e.Dir, dest); err != nil {
 				return err
+			}
+			// The fork is known by its directory name; make the frontmatter
+			// agree, or an aliased fork would clash with the upstream name.
+			if meta, err := skillmd.Read(dest); err == nil && meta.Name != name {
+				if err := skillmd.SetName(dest, name); err != nil {
+					return err
+				}
 			}
 			note := fmt.Sprintf("\n<!-- forked by skilldots from %s -->\n", engine.Describe(*e))
 			f, err := os.OpenFile(filepath.Join(dest, "SKILL.md"), os.O_APPEND|os.O_WRONLY, 0o644)

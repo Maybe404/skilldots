@@ -180,3 +180,42 @@ func TestSyncWithoutLockKeepsLocalEdits(t *testing.T) {
 		t.Fatal("vendor copy not restored to upstream content")
 	}
 }
+
+// A followed-everything pack whose upstream gains a skill named like one
+// of the user's own gets an `as`, and nothing conflicts.
+func TestSyncAliasesNewcomerClash(t *testing.T) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, reg, _ := newTestLib(t)
+	writeSkill(t, filepath.Join(lib.Root, "skills", "foo"), "foo")
+	up := filepath.Join(world, "src", "team-skills")
+	writeSkillMD(t, filepath.Join(up, "skills", "bar"), "bar")
+	gitRepo(t, up)
+	p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+	lib.Manifest.Packs = append(lib.Manifest.Packs, p)
+	if _, err := Sync(lib, p); err != nil {
+		t.Fatal(err)
+	}
+
+	writeSkillMD(t, filepath.Join(up, "skills", "foo"), "foo")
+	gitIn(t, up, "add", "-A")
+	gitIn(t, up, "commit", "-qm", "foo")
+	rep, err := Sync(lib, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Skill["foo"]; got == nil || got.As != "team-skills-foo" {
+		t.Fatalf("as = %+v, want team-skills-foo (renamed %v)", got, rep.Renamed)
+	}
+	entries, warnings, _ := Resolve(lib, reg)
+	if len(warnings) > 0 {
+		t.Errorf("warnings: %v", warnings)
+	}
+	if e := Find(entries, "team-skills-foo"); e == nil || e.Conflict != "" || e.Kind != KindVendor {
+		t.Errorf("aliased entry: %+v", e)
+	}
+	// The user's own skill keeps its name.
+	if e := Find(entries, "foo"); e == nil || e.Kind != KindSkill {
+		t.Errorf("own entry: %+v", e)
+	}
+}

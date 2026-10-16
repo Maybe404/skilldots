@@ -31,8 +31,11 @@ type SyncReport struct {
 	Rejected []pack.Rejected
 	// Backups lists vendored directories that held something other than
 	// what skilldots wrote and were moved to the trash before replacing.
-	Backups  []string
-	Upstream []pack.Skill `json:"-"`
+	Backups []string
+	// Renamed maps newly vendored skills whose name was already taken to
+	// the `as` link name assigned (and written into the manifest).
+	Renamed  map[string]string `json:",omitempty"`
+	Upstream []pack.Skill      `json:"-"`
 }
 
 // PackDir returns where a pack is vendored, refusing repo keys that would
@@ -122,6 +125,23 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		return nil
 	}
 
+	// Link names used by everything else in the library, so a skill this
+	// pack vendors for the first time can be given a free one.
+	taken := map[string]string{}
+	others, _ := collect(lib)
+	for _, e := range others {
+		if !(e.Kind == KindVendor && e.Origin == p.Repo) {
+			taken[e.LinkName] = Describe(e) + " (" + e.Dir + ")"
+		}
+	}
+	for _, s := range upstream {
+		if o := p.Override(s.Name, false); o != nil && o.As != "" {
+			taken[o.As] = "vendor:" + p.Repo
+		} else if lp.Skills[s.Name] != nil {
+			taken[s.Name] = "vendor:" + p.Repo
+		}
+	}
+
 	repoLicense := fsutil.FindLicense(clone)
 	wanted := map[string]bool{}
 	for _, s := range upstream {
@@ -144,6 +164,17 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			return nil, err
 		}
 		prev := lp.Skills[s.Name]
+		if prev == nil {
+			if o := p.Override(s.Name, false); (o == nil || o.As == "") && taken[s.Name] != "" {
+				as := freeName(func(n string) bool { return taken[n] != "" }, s.Name, p.Prefix())
+				p.Override(s.Name, true).As = as
+				taken[as] = "vendor:" + p.Repo
+				if rep.Renamed == nil {
+					rep.Renamed = map[string]string{}
+				}
+				rep.Renamed[s.Name] = as
+			}
+		}
 		switch {
 		case prev == nil && fsutil.Pristine(dest, newHash):
 			// Already there (e.g. the lock was lost): just record it.

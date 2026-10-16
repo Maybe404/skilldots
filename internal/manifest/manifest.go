@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"sort"
 	"strings"
 
@@ -123,16 +124,29 @@ func (p *Pack) DisplayName() string {
 	return p.Repo
 }
 
-// Prefix is the string used to namespace conflicting skill names.
+// Prefix is the string used to namespace conflicting skill names: the
+// alias, else the last segment of the repo ("owner/repo" → "repo",
+// "gitlab.com/g/sub/repo" → "repo", "/path/to/repo.git" → "repo"),
+// reduced to characters valid in a skill name.
 func (p *Pack) Prefix() string {
-	if p.Alias != "" {
-		return p.Alias
+	base := p.Alias
+	if base == "" {
+		r := strings.TrimRight(strings.ReplaceAll(p.Repo, `\`, "/"), "/")
+		base = strings.TrimSuffix(path.Base(r), ".git")
 	}
-	_, repo, _ := strings.Cut(p.Repo, "/")
-	if repo == "" {
-		repo = p.Repo
+	var b strings.Builder
+	for _, c := range base {
+		if c < 0x80 && (c == '-' || c == '_' || c == '.' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+			b.WriteRune(c)
+		} else {
+			b.WriteRune('-')
+		}
 	}
-	return repo
+	out := strings.Trim(b.String(), ".-")
+	if CheckName(out) != nil {
+		return "pack"
+	}
+	return out
 }
 
 // UsesAll reports whether the pack follows every upstream skill.

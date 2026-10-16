@@ -77,6 +77,7 @@ func (p Plan) Changes() bool {
 func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 	var plan Plan
 	desired := map[string]bool{}
+	conflictShown := map[string]bool{}
 	for i := range entries {
 		e := &entries[i]
 		for _, t := range e.Targets {
@@ -85,8 +86,11 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 			desired[key] = true
 			op := Op{Target: t, Name: e.LinkName, Dest: dest, Source: e.Dir, Mode: t.Mode, entry: e}
 			if e.Conflict != "" {
-				op.Action, op.Reason = "skip", "name conflict: "+e.Conflict
-				plan.Ops = append(plan.Ops, op)
+				if !conflictShown[key] {
+					conflictShown[key] = true
+					op.Action, op.Reason = "skip", "name conflict: "+e.Conflict
+					plan.Ops = append(plan.Ops, op)
+				}
 				continue
 			}
 			if e.Missing {
