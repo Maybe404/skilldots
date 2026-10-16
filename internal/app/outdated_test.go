@@ -67,3 +67,29 @@ func TestRecordedOutdated(t *testing.T) {
 		t.Fatalf("after update: %+v", rec)
 	}
 }
+
+// A pack just added has a baseline for "new" and "gone" too: a check
+// (which replaces the cache clone) between add and the first update
+// must not hide what appeared upstream.
+func TestNewAfterAddSurvivesCheck(t *testing.T) {
+	up := upstream(t)
+	repo := filepath.Join(up, "acme", "skills.git")
+	_, root := side(t, up)
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd,grill")
+	write(t, filepath.Join(repo, "skills", "eng", "a3", "SKILL.md"), skillMD("a3"))
+	os.RemoveAll(filepath.Join(repo, "skills", "prod", "grill"))
+	git(t, repo, "add", "-A")
+	git(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a3")
+
+	s, _ := app.Open(root)
+	out, err := s.Outdated(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := out.Packs[0]; !slices.Equal(st.New, []string{"a3"}) || !slices.Equal(st.Gone, []string{"grill"}) {
+		t.Fatalf("outdated right after add: %+v", st)
+	}
+	if got := cliUpdateNew(t, root); !slices.Equal(got, []string{"a3"}) {
+		t.Fatalf("first update after add and a check: upstream new = %v, want [a3]", got)
+	}
+}

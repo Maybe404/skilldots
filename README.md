@@ -61,7 +61,7 @@ Prebuilt binaries will follow.
 | `skd list [pack] [--all] [--flat] [--agent x]` | overview; expand a pack; flat list; what one agent receives |
 | `skd apply [-n] [--force]` | link/unlink to match the manifest; `-n` previews |
 | `skd update [pack…] [--commit]` | fetch upstream, re-vendor selected skills, report changed / new / gone |
-| `skd outdated [pack…]` | check upstream without changing anything: per pack, the selected skills that changed, skills new upstream since the last update, skills gone upstream; exits non-zero if a pack could not be fetched. `skd list` and the menu show the last result (`↑ 2 updates available · checked 2h ago`, stale after a day) without fetching |
+| `skd outdated [pack…]` | check upstream without changing anything: per pack, the selected skills that changed, skills new upstream since the last update (or since `add`, for a pack never updated), skills gone upstream; exits non-zero if a pack could not be fetched. `skd list` and the menu show the last result (`↑ 2 updates available · checked 2h ago`, stale after a day) without fetching |
 | `skd enable <skill\|pack> [--agent a,b]` | link into agents (default set when omitted) |
 | `skd disable <skill\|pack> [--agent a,b]` | unlink from agents (all when omitted); the library keeps it |
 | `skd remove <skill>` | deselect a vendored skill: unlinked everywhere, dropped from `vendor/` |

@@ -194,6 +194,7 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 		}
 		return nil, err
 	}
+	s.recordBaseline(p.Repo, rep)
 	ap, err := s.saveAndApply()
 	if err != nil {
 		return nil, err
@@ -218,6 +219,7 @@ func (s *Session) Subscribe(p *manifest.Pack) (*engine.SyncReport, *ApplyOutcome
 		m.Packs = m.Packs[:len(m.Packs)-1]
 		return nil, nil, err
 	}
+	s.recordBaseline(p.Repo, rep)
 	ap, err := s.saveAndApply()
 	return rep, ap, err
 }
@@ -335,6 +337,24 @@ func (s *Session) markUpstreamNew(p *manifest.Pack, rep *engine.SyncReport, know
 	if lp := s.Lib.Lock.Packs[p.Repo]; lp != nil {
 		lp.Upstream = dedupe(names)
 	}
+}
+
+// recordBaseline gives a pack that has no upstream list in the lock yet
+// (just subscribed, or a lock from before the list existed) the skills
+// upstream has now, so the next `update` and `outdated` can tell what is
+// new without the cache clone, which a check replaces. An existing list
+// is kept: it is the last update's, and what appeared since is still new.
+func (s *Session) recordBaseline(repo string, rep *engine.SyncReport) {
+	lp := s.Lib.Lock.Packs[repo]
+	if lp == nil || len(lp.Upstream) > 0 {
+		return
+	}
+	var names []string
+	for _, sk := range rep.Upstream {
+		names = append(names, sk.Name)
+	}
+	sort.Strings(names)
+	lp.Upstream = dedupe(names)
 }
 
 // deselect drops a vendored skill from its pack's selection.
