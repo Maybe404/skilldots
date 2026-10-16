@@ -163,9 +163,12 @@ func IsBuiltin(name string) bool {
 // checkPath refuses, or a directory that is, is inside or holds another
 // custom target's (each target's entries are written through that
 // target only; another target's writes could put a link on the way).
-// Only other custom targets whose own paths checkPath allows count, so
-// one bad entry does not withhold the rest.
-func (r *Registry) inspect(name string) (string, error) {
+// Only other custom targets a person approved (in approved, with the
+// directory and mode they have now) count: a library cannot withhold a
+// target the user approved by adding an unapproved one inside it, and
+// one bad entry does not withhold the rest. The unapproved one is not
+// used anyway, and cannot be approved while the other is.
+func (r *Registry) inspect(name string, approved []Approval) (string, error) {
 	c := r.custom[name]
 	real, err := checkPath(c.Path, r.home, r.lib)
 	switch {
@@ -186,7 +189,7 @@ func (r *Registry) inspect(name string) (string, error) {
 			continue
 		}
 		o, err := checkPath(r.custom[n].Path, r.home, r.lib)
-		if err != nil {
+		if err != nil || !isApproved(approved, n, o, r.custom[n].Mode) {
 			continue
 		}
 		if fsutil.Inside(o, real, true) || fsutil.Inside(real, o, true) {
@@ -264,7 +267,11 @@ func (r *Registry) Approve(shown Withheld, typed string) error {
 	if c.Path != shown.Path || c.Mode != shown.Mode {
 		return fmt.Errorf("custom target %q is now %q (%s) in skills.toml, not %q (%s) as shown; nothing was approved", name, c.Path, c.Mode, shown.Path, shown.Mode)
 	}
-	real, err := r.inspect(name)
+	list, err := Approvals()
+	if err != nil {
+		return fmt.Errorf("%w; fix or remove it first", err)
+	}
+	real, err := r.inspect(name, list)
 	if err != nil {
 		return fmt.Errorf("custom target %q cannot be approved: %w", name, err)
 	}
@@ -273,10 +280,6 @@ func (r *Registry) Approve(shown Withheld, typed string) error {
 	}
 	if Unusual(real) && typed != name {
 		return fmt.Errorf("custom target %q leads to %s, which is not named skills; it is approved only when its name is typed to confirm; nothing was approved", name, real)
-	}
-	list, err := Approvals()
-	if err != nil {
-		return fmt.Errorf("%w; fix or remove it first", err)
 	}
 	if isApproved(list, name, real, c.Mode) {
 		return nil

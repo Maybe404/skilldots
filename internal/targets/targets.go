@@ -134,7 +134,7 @@ func NewRegistry(lib string, custom map[string]struct{ Path, Mode string }) (*Re
 	}
 	for name, c := range r.custom {
 		w := Withheld{Name: name, Path: c.Path, Mode: c.Mode}
-		real, err := r.inspect(name)
+		real, err := r.inspect(name, approved)
 		w.Real = real
 		switch {
 		case err != nil:

@@ -43,35 +43,70 @@ func TestCheckPathRefusesAutoloadPlacesTheLibraryAndBuiltinInsides(t *testing.T)
 	}
 }
 
-// A custom target inside (or holding, or being) another one is withheld,
-// both of them: each target's entries are written through it alone. One
-// whose own path is refused does not count.
+// A custom target inside (or holding, or being) another one a person
+// approved is withheld and cannot be approved: each target's entries are
+// written through it alone. Only approved targets count, so a library
+// cannot withhold the user's approved target by adding an unapproved one
+// inside it (the decoy is withheld, the approved one stays in use); one
+// whose own path is refused does not count either. Two approved ones
+// nested (approved before this rule) are both withheld.
 func TestNestedCustomTargetsAreWithheld(t *testing.T) {
 	sandbox(t)
-	reg, err := NewRegistry("", map[string]struct{ Path, Mode string }{
+	custom := map[string]struct{ Path, Mode string }{
 		"outer": {Path: "~/tools/skills"},
 		"inner": {Path: "~/tools/skills/x"},
 		"same":  {Path: "~/same/skills"},
 		"same2": {Path: "~/same/skills/"},
 		"bad":   {Path: "~"},
 		"alone": {Path: "~/alone/skills"},
-	})
+	}
+	reg, err := NewRegistry("", custom)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range []string{"outer", "inner", "same", "same2"} {
+	// None approved yet: none holds another back.
+	for _, n := range []string{"outer", "inner", "same", "same2", "alone"} {
+		if w, ok := reg.WithheldTarget(n); !ok || !w.Approvable {
+			t.Errorf("%s: %+v", n, w)
+		}
+	}
+	for _, n := range []string{"outer", "same"} {
+		w, _ := reg.WithheldTarget(n)
+		if err := reg.Approve(w, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg, _ = NewRegistry("", custom)
+	for _, n := range []string{"outer", "same"} {
+		if _, err := reg.Get(n); err != nil {
+			t.Errorf("approved %s not used: %v", n, err)
+		}
+	}
+	for _, n := range []string{"inner", "same2"} {
 		w, ok := reg.WithheldTarget(n)
 		if !ok || w.Approvable || !strings.Contains(w.Problem, "custom target") {
 			t.Errorf("%s: %+v", n, w)
 		}
+		// Approving it is refused, and the approved one stays in use.
+		if err := reg.Approve(w, n); err == nil {
+			t.Errorf("approved %s, nested in an approved target", n)
+		}
 	}
-	if w, ok := reg.WithheldTarget("alone"); !ok || !w.Approvable {
-		t.Errorf("alone: %+v", w)
+	reg, _ = NewRegistry("", custom)
+	if _, err := reg.Get("outer"); err != nil {
+		t.Errorf("outer withheld after the decoy: %v", err)
 	}
-	// Approving one of them is refused too.
-	w, _ := reg.WithheldTarget("inner")
-	if err := reg.Approve(w, "inner"); err == nil {
-		t.Error("approved a target nested in another")
+	// Both approved (as an older skd allowed): both withheld.
+	list, _ := Approvals()
+	inner, _ := CheckPath("~/tools/skills/x", "")
+	if err := writeApprovals(append(list, Approval{Name: "inner", Path: inner, Mode: "link"})); err != nil {
+		t.Fatal(err)
+	}
+	reg, _ = NewRegistry("", custom)
+	for _, n := range []string{"outer", "inner"} {
+		if w, ok := reg.WithheldTarget(n); !ok || !strings.Contains(w.Problem, "custom target") {
+			t.Errorf("both approved, %s: %+v", n, w)
+		}
 	}
 }
 
