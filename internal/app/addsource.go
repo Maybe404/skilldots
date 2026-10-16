@@ -60,7 +60,7 @@ func ParseAddText(text string) (AddHint, error) {
 		// One source as typed (a path may contain spaces).
 		return parseLink(text)
 	}
-	words, err := shellWords(text)
+	words, err := shellWords(text, goos == "windows")
 	if err != nil {
 		return AddHint{}, err
 	}
@@ -305,8 +305,11 @@ func parseLink(s string) (AddHint, error) {
 
 // shellWords splits a command line the way a POSIX shell would split
 // words, with single and double quotes and backslash escapes, and nothing
-// else: no expansion, no substitution, nothing is run.
-func shellWords(s string) ([]string, error) {
+// else: no expansion, no substitution, nothing is run. Inside double
+// quotes a backslash escapes only $ ` " \ and a line break, as in POSIX.
+// With windows set a backslash is never an escape: it separates path
+// components (C:\Program Files\…).
+func shellWords(s string, windows bool) ([]string, error) {
 	var out []string
 	var cur strings.Builder
 	in := false
@@ -315,17 +318,23 @@ func shellWords(s string) ([]string, error) {
 	for _, r := range s {
 		switch {
 		case escaped:
-			cur.WriteRune(r)
 			escaped, in = false, true
+			if r == '\n' {
+				continue // a line continuation
+			}
+			if quote == '"' && !strings.ContainsRune("$`\"\\", r) {
+				cur.WriteRune('\\')
+			}
+			cur.WriteRune(r)
 		case quote != 0:
 			if r == quote {
 				quote = 0
-			} else if r == '\\' && quote == '"' {
+			} else if r == '\\' && quote == '"' && !windows {
 				escaped = true
 			} else {
 				cur.WriteRune(r)
 			}
-		case r == '\\':
+		case r == '\\' && !windows:
 			escaped, in = true, true
 		case r == '\'' || r == '"':
 			quote, in = r, true
@@ -343,6 +352,9 @@ func shellWords(s string) ([]string, error) {
 	if quote != 0 {
 		return nil, fmt.Errorf("unterminated %c quote in %q", quote, s)
 	}
+	if escaped {
+		cur.WriteRune('\\')
+	}
 	if in {
 		out = append(out, cur.String())
 	}
@@ -353,8 +365,9 @@ func shellWords(s string) ([]string, error) {
 }
 
 // SplitCommand splits a command line (an editor setting, $VISUAL) into
-// words like ParseAddText does, without running anything.
-func SplitCommand(s string) ([]string, error) { return shellWords(s) }
+// words like ParseAddText does, without running anything. On Windows a
+// backslash is part of a path, not an escape.
+func SplitCommand(s string) ([]string, error) { return shellWords(s, goos == "windows") }
 
 // ParseAddText is ParseAdd for anything ParseAddText accepts: it returns
 // the source and what the text preselects.

@@ -62,3 +62,27 @@ func TestFindEditorOrder(t *testing.T) {
 		t.Fatalf("bad setting: %v", err)
 	}
 }
+
+// Editor commands split as a POSIX shell would, and on Windows a
+// backslash is part of a path, never an escape.
+func TestSplitCommandQuoting(t *testing.T) {
+	realGOOS := goos
+	t.Cleanup(func() { goos = realGOOS })
+	cases := []struct {
+		goos, in string
+		want     []string
+	}{
+		{"darwin", `code --wait "a\"b" "c\d" "e\\f" "g\$h" 'i\j' k\ l`, []string{"code", "--wait", `a"b`, `c\d`, `e\f`, `g$h`, `i\j`, "k l"}},
+		{"linux", `vim "a\` + "`" + `b"`, []string{"vim", "a`b"}},
+		{"windows", `"C:\Program Files\Microsoft VS Code\bin\code.cmd" --wait`, []string{`C:\Program Files\Microsoft VS Code\bin\code.cmd`, "--wait"}},
+		{"windows", `C:\tools\nvim.exe -p`, []string{`C:\tools\nvim.exe`, "-p"}},
+		{"windows", `notepad++.exe "D:\x y\"`, []string{"notepad++.exe", `D:\x y\`}},
+	}
+	for _, c := range cases {
+		goos = c.goos
+		got, err := SplitCommand(c.in)
+		if err != nil || !slices.Equal(got, c.want) {
+			t.Errorf("%s %s: got %q %v, want %q", c.goos, c.in, got, err, c.want)
+		}
+	}
+}
