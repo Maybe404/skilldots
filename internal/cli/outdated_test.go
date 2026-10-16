@@ -267,3 +267,29 @@ func TestStaleCacheLockCleared(t *testing.T) {
 		t.Fatal("stale shallow.lock still there")
 	}
 }
+
+// An unreadable state file is replaced, with one warning, instead of
+// failing to record every check.
+func TestCorruptStateReplaced(t *testing.T) {
+	e := newEnv(t)
+	e.ok("", "init", "--no-skill", e.p("lib"))
+	e.skill("up/skills/a", "a")
+	up := e.repo("up")
+	e.ok("", "add", up, "--skill", "a")
+	os.MkdirAll(filepath.Dir(e.statePath()), 0o755)
+	os.WriteFile(e.statePath(), []byte("{not json"), 0o644)
+	out, errOut, code := e.skd("", "outdated")
+	if code != 0 || !strings.Contains(out+errOut, "unreadable") {
+		t.Fatalf("first check: exit %d, stderr:\n%s", code, errOut)
+	}
+	b, _ := os.ReadFile(e.statePath())
+	if !json.Valid(b) {
+		t.Fatalf("state file not replaced:\n%s", b)
+	}
+	if out, errOut, _ := e.skd("", "outdated"); strings.Contains(out+errOut, "unreadable") || strings.Contains(out+errOut, "could not record") {
+		t.Fatalf("second check warns again:\n%s", errOut)
+	}
+	if out := e.ok("", "list"); !strings.Contains(out, "checked just now") {
+		t.Fatalf("list:\n%s", out)
+	}
+}

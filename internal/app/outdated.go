@@ -232,6 +232,9 @@ type stateFile struct {
 	Libraries map[string]*Outdated `json:"libraries"`
 }
 
+// errCorrupt marks a state file that exists but cannot be parsed.
+var errCorrupt = errors.New("unreadable")
+
 func readState() (*stateFile, error) {
 	st := &stateFile{Version: 1, Libraries: map[string]*Outdated{}}
 	b, err := os.ReadFile(OutdatedPath())
@@ -242,7 +245,7 @@ func readState() (*stateFile, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(b, st); err != nil {
-		return nil, fmt.Errorf("%s: %w", OutdatedPath(), err)
+		return nil, fmt.Errorf("%w: %v", errCorrupt, err)
 	}
 	if st.Libraries == nil {
 		st.Libraries = map[string]*Outdated{}
@@ -269,6 +272,12 @@ func (s *Session) record(o *Outdated) error {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	st, err := readState()
+	if errors.Is(err, errCorrupt) {
+		// It only caches checks: start it afresh rather than fail every
+		// time. The warning is shown once, as the file is valid after.
+		s.logf(Warn, "%s: %v; replacing it", OutdatedPath(), err)
+		st, err = &stateFile{Version: 1, Libraries: map[string]*Outdated{}}, nil
+	}
 	if err != nil {
 		return err
 	}
