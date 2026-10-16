@@ -275,3 +275,76 @@ func fileExists(p string) bool {
 	_, err := os.Lstat(p)
 	return err == nil
 }
+
+// The library named by another spelling of its path (another case, or
+// another Unicode normalisation, where the file system ignores them, as
+// macOS does: skd --library ~/Code/lib after ~/code/lib) still has its
+// vendor/ entries restorable; places outside vendor/ are still refused.
+func TestRestoreVendorThroughAnotherSpelling(t *testing.T) {
+	lib, reg, home := restoreLib(t)
+	base := realTemp(t)
+	for _, c := range []struct{ made, used string }{
+		{"Lib", "lib"},
+		{"caf\u00e9", "cafe\u0301"}, // NFC, NFD
+	} {
+		root := filepath.Join(base, c.made)
+		os.MkdirAll(root, 0o755)
+		if _, err := os.Stat(filepath.Join(base, c.used)); err != nil {
+			t.Logf("%q and %q are different directories here", c.made, c.used)
+			continue
+		}
+		lib.Root = root
+		origins := map[string]bool{
+			filepath.Join(root, "vendor", "o", "r", "s"): true,
+			filepath.Join(root, "vendor", "o", "p"):      true,
+			filepath.Join(root, "skills", "x"):           false,
+			filepath.Join(root, "vendorx", "y"):          false,
+			filepath.Join(home, "elsewhere", "z"):        false,
+		}
+		for o := range origins {
+			writeSkill(t, o, filepath.Base(o))
+			if _, err := Trash(lib, o); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// vendor/ itself is not a place skd parks anything from.
+		park(t, filepath.Join(root, TrashDir, "b9"), "vendor", filepath.Join(root, "vendor"))
+		origins[filepath.Join(root, "vendor")] = false
+		// Now the library is named the other way.
+		lib.Root = filepath.Join(base, c.used)
+		items, err := ListTrash(lib, reg)
+		if err != nil || len(items) != len(origins) {
+			t.Fatalf("%+v %v", items, err)
+		}
+		for _, it := range items {
+			want := origins[it.Origin]
+			if it.Restorable != want {
+				t.Errorf("%s from %s: restorable %v (%s)", c.used, it.Origin, it.Restorable, it.Problem)
+			}
+			if _, err := Restore(lib, reg, it.ID); (err == nil) != want {
+				t.Errorf("%s: restore %s: %v", c.used, it.ID, err)
+			}
+		}
+		os.RemoveAll(filepath.Join(root, TrashDir))
+	}
+}
+
+// An agent's directory named by another spelling of its path, where the
+// file system ignores case, is still that agent's directory.
+func TestRestoreTargetThroughAnotherSpelling(t *testing.T) {
+	lib, reg, home := restoreLib(t)
+	agents := filepath.Join(home, ".agents", "skills")
+	os.MkdirAll(agents, 0o755)
+	other := filepath.Join(home, ".AGENTS", "Skills")
+	if _, err := os.Stat(other); err != nil {
+		t.Skip("this file system tells case apart")
+	}
+	p := park(t, filepath.Join(lib.Root, TrashDir, "b1"), "a", filepath.Join(other, "a"))
+	items, err := ListTrash(lib, reg)
+	if err != nil || len(items) != 1 || !items[0].Restorable {
+		t.Fatalf("%+v %v", items, err)
+	}
+	if _, err := Restore(lib, reg, "b1/a"); err != nil || fileExists(p) || !fileExists(filepath.Join(agents, "a", "SKILL.md")) {
+		t.Fatalf("restore: %v", err)
+	}
+}

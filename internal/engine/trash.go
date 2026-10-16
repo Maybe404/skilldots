@@ -273,7 +273,7 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 	if reg != nil {
 		var custom []string
 		for _, t := range reg.All() {
-			if tp, err := filepath.Abs(t.Path); err == nil && (parent == tp || at == resolve(tp)) {
+			if tp, err := filepath.Abs(t.Path); err == nil && (parent == tp || fsutil.SameDir(at, resolve(tp), false)) {
 				if t.Builtin {
 					return nil
 				}
@@ -291,14 +291,23 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 		}
 	}
 	// vendor/ itself must be the library's own directory: a link there
-	// would make anywhere it points "inside vendor/".
-	if vd, err := filepath.Abs(lib.VendorDir()); err == nil && fsutil.Within(resolve(vd), filepath.Join(at, base)) {
+	// would make anywhere it points "inside vendor/". The comparison is by
+	// file identity, so another spelling of the library's path (case, or
+	// Unicode normalisation, on a file system that ignores them, as macOS
+	// does) is still the library.
+	if vd, err := filepath.Abs(lib.VendorDir()); err == nil && insideStrict(resolve(vd), filepath.Join(at, base)) {
 		if err := realDir(vd); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("the library's vendor/ %w", err)
 		}
 		return nil
 	}
 	return fmt.Errorf("where it came from (%q) is neither in an agent's skill directory nor in the library's vendor/", origin)
+}
+
+// insideStrict reports whether p is inside dir and not dir itself,
+// comparing by file identity (fsutil.Inside).
+func insideStrict(dir, p string) bool {
+	return !fsutil.SameDir(p, dir, false) && fsutil.Inside(dir, p, false)
 }
 
 // resolve is fsutil.Resolve.
