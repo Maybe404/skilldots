@@ -55,6 +55,12 @@ func Trash(lib *library.Library, src string) (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(lib.Root, TrashDir, batch())
+	// The trash must be the library's own directory: a cloned library's
+	// .trash can be a link to anywhere (a directory that is cleaned up,
+	// or shared), and what is moved there would go with it.
+	if l := fsutil.LinkOnPath(lib.Root, dir); l != "" {
+		return "", fmt.Errorf("the trash %s is reached through the symbolic link %s; skd moves nothing there (make it a directory of its own)", dir, l)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

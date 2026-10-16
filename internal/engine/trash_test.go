@@ -161,3 +161,31 @@ func TestCopyModeDSStoreDirectoryGoesToTrash(t *testing.T) {
 		t.Fatal("notes.txt under a .DS_Store directory was deleted on disable")
 	}
 }
+
+// A trash that is a link (a cloned library's .trash pointing at a
+// directory that is cleaned up, or shared) receives nothing: Trash fails
+// and what it was to move stays where it is.
+func TestTrashRefusesALinkedTrash(t *testing.T) {
+	for _, linked := range []string{"trash", "batch"} {
+		lib, _, home := newTestLib(t)
+		elsewhere := filepath.Join(home, "elsewhere")
+		os.MkdirAll(elsewhere, 0o755)
+		if linked == "trash" {
+			os.Symlink(elsewhere, filepath.Join(lib.Root, TrashDir))
+		} else {
+			os.MkdirAll(filepath.Join(lib.Root, TrashDir), 0o755)
+			os.Symlink(elsewhere, filepath.Join(lib.Root, TrashDir, batch()))
+		}
+		victim := filepath.Join(home, "victim")
+		writeSkill(t, victim, "victim")
+		if to, err := Trash(lib, victim); err == nil {
+			t.Fatalf("%s: moved to %s", linked, to)
+		}
+		if !fileExists(filepath.Join(victim, "SKILL.md")) {
+			t.Fatalf("%s: victim moved", linked)
+		}
+		if m, _ := filepath.Glob(filepath.Join(elsewhere, "*")); len(m) != 0 {
+			t.Fatalf("%s: wrote %v", linked, m)
+		}
+	}
+}
