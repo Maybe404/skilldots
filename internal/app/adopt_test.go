@@ -103,6 +103,14 @@ func TestAdoptDropKeepsWhatReplacedTheBrokenLink(t *testing.T) {
 		if _, err := os.Lstat(path); !os.IsNotExist(err) {
 			t.Fatalf("broken link %s still there (err %v)", path, err)
 		}
+		// Not deleted: skd did not make it. It is in the trash, as it was.
+		items, err := s.Trash()
+		if err != nil || len(items) != 1 || items[0].Origin != path || items[0].Restorable {
+			t.Fatalf("trash %+v %v", items, err)
+		}
+		if to, err := os.Readlink(items[0].Path); err != nil || to != filepath.Join(home, "gone") {
+			t.Fatalf("the link in the trash: %q %v", to, err)
+		}
 	})
 }
 

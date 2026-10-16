@@ -45,15 +45,14 @@ func batch() string {
 	return trashBatch
 }
 
-// Trash moves src into the library trash and records its origin.
-// Symlinks are simply removed: they hold no data.
+// Trash moves src into the library trash and records its origin. A
+// symbolic link is moved as it is (the link, not what it points at): it
+// may be someone's own, and only links skd can tell it made are removed
+// outright (Apply). `skd trash` lists such an entry, but restore leaves
+// it to a person (see ListTrash).
 func Trash(lib *library.Library, src string) (string, error) {
-	st, err := os.Lstat(src)
-	if err != nil {
+	if _, err := os.Lstat(src); err != nil {
 		return "", err
-	}
-	if st.Mode()&os.ModeSymlink != 0 {
-		return "", os.Remove(src)
 	}
 	dir := filepath.Join(lib.Root, TrashDir, batch())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -120,7 +119,8 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 		}
 		items, _ := os.ReadDir(filepath.Join(root, b.Name()))
 		for _, it := range items {
-			if !it.IsDir() {
+			link := it.Type()&os.ModeSymlink != 0
+			if !it.IsDir() && !(link && fsutil.Lexists(filepath.Join(root, b.Name(), it.Name())+".origin")) {
 				continue
 			}
 			p := filepath.Join(root, b.Name(), it.Name())
@@ -130,6 +130,14 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 			if err == nil {
 				e.Origin = origin
 				err = checkOrigin(lib, reg, origin)
+			}
+			if link {
+				// A link moved aside (apply --force, adopt). Restoring one
+				// would put a link to anywhere into an agent's directory,
+				// and a cloned library's trash may hold any: a person
+				// moves it back.
+				to, _ := os.Readlink(p)
+				err = fmt.Errorf("it is a symbolic link (to %q); skd does not restore links, move it back by hand", to)
 			}
 			e.Restorable = err == nil
 			if err != nil {

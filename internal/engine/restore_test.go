@@ -85,9 +85,11 @@ func TestRestoreRefusesIDsOutsideTheTrash(t *testing.T) {
 			t.Fatalf("Restore(%q) moved the victim", id)
 		}
 	}
-	// The listing does not follow the links either.
+	// The listing does not follow the links either: a linked batch is
+	// left out, and a linked entry with a record (as Trash makes of a
+	// link it moves aside) is listed, never restorable.
 	items, err := ListTrash(lib, reg)
-	if err != nil || len(items) != 0 {
+	if err != nil || len(items) != 1 || items[0].ID != "b3/dirA" || items[0].Restorable || !strings.Contains(items[0].Problem, "symbolic link") {
 		t.Errorf("trash lists %+v %v", items, err)
 	}
 

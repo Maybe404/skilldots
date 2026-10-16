@@ -72,7 +72,7 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 		p := Proposal{Item: it}
 		switch {
 		case it.State == scan.Broken:
-			p.Kind, p.Label = "drop", "broken link; remove"
+			p.Kind, p.Label = "drop", "broken link; move to the trash"
 		case manifest.CheckName(it.Name) != nil:
 			// It would become a directory and a link of that name.
 			p.Kind, p.Label = "skip", "not a valid skill name (letters, digits, '.', '_' and '-'); rename it first"
@@ -196,7 +196,7 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				s.logf(Done, "copied %s → %s", p.Item.Name, lib.Rel(dest))
 			}
 		case "drop":
-			// A dangling link holds no data. The path may have changed since
+			// A dangling link holds only where it pointed. The path may have changed since
 			// the scan (a dialog can stay open for a while): anything that is
 			// not a dangling link any more is left alone, and so is one of
 			// a target that no longer leads where it did.
@@ -216,10 +216,13 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				s.logf(Warn, "%s is no longer a broken link (it points at something now); left in place", p.Item.Path)
 				continue
 			}
-			if err := os.Remove(p.Item.Path); err != nil {
+			// Not made by skd (it is unmanaged): moved to the trash, link
+			// and all, like anything else skd takes out of the way.
+			to, err := engine.Trash(lib, p.Item.Path)
+			if err != nil {
 				return nil, err
 			}
-			s.logf(Done, "removed broken link %s", p.Item.Path)
+			s.logf(Done, "moved broken link %s to %s", p.Item.Path, lib.Rel(to))
 		}
 	}
 	out := &AdoptOutcome{}
@@ -370,10 +373,6 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		to, err := engine.Trash(lib, p.Item.Path)
 		if err != nil {
 			return nil, err
-		}
-		if to == "" {
-			s.logf(Detail, "removed link %s (adopted as %s)", p.Item.Path, n)
-			continue
 		}
 		// Reported with the apply's own backups (printed once, after the
 		// link changes), not logged here as well.

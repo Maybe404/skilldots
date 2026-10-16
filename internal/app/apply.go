@@ -62,6 +62,7 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 		return out, nil
 	}
 	if !plan.Changes() {
+		engine.Remember(s.Lib, plan)
 		s.settleApplyErrors(plan.Unlinked())
 		return out, nil
 	}

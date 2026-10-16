@@ -99,6 +99,7 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key string) bool) Plan {
 	var plan Plan
 	desired := map[string]bool{}
+	placed := loadPlaced()
 	conflictShown := map[string]bool{}
 	for i := range entries {
 		e := &entries[i]
@@ -130,9 +131,17 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				} else {
 					op.Action, op.Reason = "replace", "source changed"
 				}
+			case prev != nil && prev.Mode == "link" && t.Mode == "link" && isLinkTo(dest, e.Dir):
+				// Already the link wanted (an app's, whose source is outside
+				// the library): nothing to do.
+				op.Action = "keep"
 			case prev != nil && staleRoot(dest, prev, lib) != "":
-				// Our link, made when the library lived somewhere else.
+				// Our link, made when the library lived somewhere else
+				// (removed outright when skd's record confirms it, else
+				// moved to the trash).
 				op.Action, op.Reason = "replace", "points at the previous library location "+staleRoot(dest, prev, lib)
+			case prev != nil && confirms(placed, dest):
+				op.Action, op.Reason = "replace", "source changed"
 			case prev != nil:
 				// We placed it, but it was modified or replaced since.
 				if forceKey(key) {
@@ -200,15 +209,18 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		}
 		dest := filepath.Join(t.Path, name)
 		op := Op{Target: t, Name: name, Dest: dest, Source: prev.Source, Mode: prev.Mode}
+		// Nothing wants this entry any more. Only what skd can tell it
+		// made goes, with --force too: the record may be forged, and the
+		// entry the user's own.
 		switch {
 		case !fsutil.Lexists(dest):
 			op.Action, op.Reason = "remove", "already gone"
-		case current(dest, prev, lib) || forceKey(key):
+		case current(dest, prev, lib) || confirms(placed, dest):
 			op.Action = "remove"
 		case staleRoot(dest, prev, lib) != "":
 			op.Action, op.Reason = "remove", "points at the previous library location "+staleRoot(dest, prev, lib)
 		default:
-			op.Action, op.Reason = "skip", "modified since skilldots wrote it; use --force to remove"
+			op.Action, op.Reason = "skip", "no longer wanted, but skd cannot tell it made it (changed since, or not made by skd); left in place: remove it yourself if it should go"
 		}
 		plan.Ops = append(plan.Ops, op)
 	}
@@ -223,8 +235,8 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 
 // Result reports what Apply did beyond the plan.
 type Result struct {
-	// Backups lists "<dest> → <trash path>" for every real directory that
-	// was moved into the library trash rather than deleted.
+	// Backups lists "<dest> → <trash path>" for everything that was moved
+	// into the library trash rather than removed.
 	Backups []string
 	// Refused lists "<dest>: <why>" for every planned change not made
 	// because its target no longer leads to the directory the registry
@@ -233,33 +245,43 @@ type Result struct {
 }
 
 // Apply executes the plan and updates the lock. The caller saves the library.
-// A symlink in the way is simply replaced; anything else (a real directory,
-// or a copy modified since skilldots wrote it) is moved into the library
-// trash first, never deleted.
+// Only what skd can tell it made is removed outright: a link into the
+// library (ownLink) or what the placed file records (confirms). Anything
+// else in the way, a directory, a file or a link, is moved into the
+// library trash, never deleted.
 func Apply(lib *library.Library, plan Plan) (*Result, error) {
 	res := &Result{}
+	placedMu.Lock()
+	defer placedMu.Unlock()
+	placed := loadPlaced()
+	dirty := false
+	defer func() {
+		if dirty {
+			savePlaced(placed)
+		}
+	}()
 	clear := func(op Op, prev *lock.Link) error {
 		if !fsutil.Lexists(op.Dest) {
 			return nil
 		}
-		st, err := os.Lstat(op.Dest)
-		if err != nil {
-			return err
+		if ownLink(op.Dest, prev, lib) || confirms(placed, op.Dest) {
+			// A link skd made holds no data, and a copy exactly as skd
+			// wrote it is reproducible from the library. RemoveAll does
+			// not follow a link: it removes the link itself.
+			if err := os.RemoveAll(op.Dest); err != nil {
+				return err
+			}
+		} else {
+			to, err := Trash(lib, op.Dest)
+			if err != nil {
+				return fmt.Errorf("moving %s to trash: %w", op.Dest, err)
+			}
+			res.Backups = append(res.Backups, op.Dest+" → "+lib.Rel(to))
 		}
-		// A symlink holds no data. A copy is only discarded when it is
-		// exactly what skilldots wrote: nothing added that the hash does
-		// not see (.git, node_modules, symlinks). Anything else is trashed.
-		if st.Mode()&os.ModeSymlink != 0 {
-			return os.Remove(op.Dest)
+		if _, ok := placed[placedKey(op.Dest)]; ok {
+			delete(placed, placedKey(op.Dest))
+			dirty = true
 		}
-		if prev != nil && prev.Mode == "copy" && fsutil.Pristine(op.Dest, prev.Hash) {
-			return os.RemoveAll(op.Dest)
-		}
-		to, err := Trash(lib, op.Dest)
-		if err != nil {
-			return fmt.Errorf("moving %s to trash: %w", op.Dest, err)
-		}
-		res.Backups = append(res.Backups, op.Dest+" → "+lib.Rel(to))
 		return nil
 	}
 	// intact reports whether op's target still leads where the registry
@@ -287,17 +309,26 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 			if !intact(op) {
 				continue
 			}
+			mode := op.Mode
+			l := &lock.Link{Mode: mode, Source: lib.Rel(op.Source), Path: op.Dest}
+			if mode == "link" && isLinkTo(op.Dest, op.Source) {
+				// Already the link wanted (adopting one made by hand):
+				// nothing to remove or write.
+				lib.Lock.Links[key] = l
+				continue
+			}
 			if err := clear(op, lib.Lock.Links[key]); err != nil {
 				return res, err
 			}
-			mode := op.Mode
-			l := &lock.Link{Mode: mode, Source: lib.Rel(op.Source), Path: op.Dest}
 			if mode == "link" {
 				if err := os.Symlink(op.Source, op.Dest); err != nil {
 					if runtime.GOOS != "windows" {
 						return res, fmt.Errorf("%s: %w", op.Dest, err)
 					}
 					mode = "copy"
+				} else {
+					placed[placedKey(op.Dest)] = placedEntry{Link: op.Source}
+					dirty = true
 				}
 			}
 			if mode == "copy" {
@@ -309,6 +340,8 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 					return res, err
 				}
 				l.Mode, l.Hash = "copy", h
+				placed[placedKey(op.Dest)] = placedEntry{Hash: h}
+				dirty = true
 			}
 			lib.Lock.Links[key] = l
 		case "remove":
@@ -321,15 +354,92 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 			delete(lib.Lock.Links, key)
 		case "forget":
 			delete(lib.Lock.Links, key)
+		case "keep":
+			if remember(placed, op, lib) {
+				dirty = true
+			}
 		}
 	}
 	return res, nil
 }
 
+// remember records in placed a link op keeps that skd made from the
+// library (ownLink) but placed does not have yet (made by a version of
+// skd that kept no record), and reports whether it did. Then, after the
+// library moves, the link is still known as skd's. Nothing else is
+// taken on: a copy's hash or an app's link may be someone's own.
+func remember(placed map[string]placedEntry, op Op, lib *library.Library) bool {
+	k := placedKey(op.Dest)
+	if _, ok := placed[k]; ok || !ownLink(op.Dest, lib.Lock.Links[op.Target.Name+"/"+op.Name], lib) {
+		return false
+	}
+	got, err := os.Readlink(op.Dest)
+	if err != nil {
+		return false
+	}
+	placed[k] = placedEntry{Link: got}
+	return true
+}
+
+// Remember records the links a plan keeps that skd made from the library
+// but has no record of (see remember). Apply does the same; this is for a
+// plan with nothing to change, which is not applied.
+func Remember(lib *library.Library, plan Plan) {
+	if placedFile() == "" {
+		return
+	}
+	placedMu.Lock()
+	defer placedMu.Unlock()
+	placed := loadPlaced()
+	dirty := false
+	for _, op := range plan.Ops {
+		if op.Action == "keep" && remember(placed, op, lib) {
+			dirty = true
+		}
+	}
+	if dirty {
+		savePlaced(placed)
+	}
+}
+
+// libSource is where a recorded source is when it lies inside the
+// library (as skd records the sources it links from the library), else
+// "": a source outside it (an absolute path elsewhere, or a relative one
+// whose ".." leads out) may name anything on the machine.
+func libSource(src string, lib *library.Library) string {
+	if src == "" {
+		return ""
+	}
+	p := lib.Abs(src)
+	if !fsutil.Within(lib.Root, p) {
+		return ""
+	}
+	return p
+}
+
+// ownLink reports whether dest is a link skd made from the library: a
+// symbolic link to the library-relative source prev records (libSource).
+// Such a link holds no data and points into the library, so it is
+// removed outright; any other link is moved to the trash.
+func ownLink(dest string, prev *lock.Link, lib *library.Library) bool {
+	if prev == nil || prev.Mode != "link" {
+		return false
+	}
+	src := libSource(prev.Source, lib)
+	return src != "" && isLinkTo(dest, src)
+}
+
 // current reports whether dest still is what the lock says we wrote.
+// A link counts only when its recorded source is inside the library
+// (libSource); a copy only when dest is a directory with that hash, which
+// a forged record can match, so a copy that is current is still moved to
+// the trash, not deleted, unless skd's own record confirms it (Apply).
 func current(dest string, prev *lock.Link, lib *library.Library) bool {
 	if prev.Mode == "link" {
-		return isLinkTo(dest, lib.Abs(prev.Source))
+		return ownLink(dest, prev, lib)
+	}
+	if st, err := os.Lstat(dest); err != nil || !st.IsDir() {
+		return false
 	}
 	h, err := fsutil.HashTree(dest)
 	return err == nil && h == prev.Hash

@@ -11,8 +11,10 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -67,6 +69,7 @@ func Open(root string) (*Session, error) {
 		return nil, err
 	}
 	engine.SetRegistry(reg)
+	engine.SetPlacedFile(PlacedFile())
 	return &Session{Lib: lib, Reg: reg}, nil
 }
 
@@ -185,4 +188,12 @@ func dedupe(in []string) []string {
 		}
 	}
 	return out
+}
+
+// PlacedFile is where skd records the links and copies it placed in agent
+// directories: beside the settings file (config.toml), per user and per
+// machine, never in a library. Only what it records (or a link into the
+// library) is ever removed outright; see engine.SetPlacedFile.
+func PlacedFile() string {
+	return filepath.Join(filepath.Dir(config.Path()), "placed.json")
 }

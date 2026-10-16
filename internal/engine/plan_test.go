@@ -66,7 +66,11 @@ func TestMakePlanTable(t *testing.T) {
 		{"copy, edited", true, true, copyPrev, edited, "skip", "replace", "modified"},
 		{"undesired, current", false, false, link("skills/s"), toSrc, "remove", "remove", ""},
 		{"undesired, gone", false, false, link("skills/s"), absent, "remove", "remove", "already gone"},
-		{"undesired, replaced by dir", false, false, link("skills/s"), userDir, "skip", "remove", "modified"},
+		{"undesired, replaced by dir", false, false, link("skills/s"), userDir, "skip", "skip", "cannot tell it made it"},
+		{"undesired, relinked elsewhere", false, false, link("skills/s"), toElse, "skip", "skip", "cannot tell it made it"},
+		{"undesired, record escapes the library", false, false, link("../s"), userDir, "skip", "skip", "cannot tell it made it"},
+		{"undesired copy, pristine", true, false, copyPrev, copyOf, "remove", "remove", ""},
+		{"undesired copy, edited", true, false, copyPrev, edited, "skip", "skip", "cannot tell it made it"},
 		{"undesired, library moved", false, false, link("skills/s"), toMoved, "remove", "remove", "previous library location"},
 	}
 	for _, tc := range cases {

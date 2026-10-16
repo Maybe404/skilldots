@@ -13,12 +13,14 @@ import (
 )
 
 // newTestLib returns an empty library under a temp dir, with HOME pointed
-// at another temp dir and the registry installed.
+// at another temp dir, the registry installed and skd's record of what it
+// placed kept in that home.
 func newTestLib(t *testing.T) (*library.Library, *targets.Registry, string) {
 	t.Helper()
 	root := t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	SetPlacedFile(filepath.Join(home, "placed.json"))
 	lib := &library.Library{Root: root, Manifest: manifest.New([]string{"agents"}),
 		Lock: &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{}}}
 	reg, err := targets.NewRegistry("", nil)
