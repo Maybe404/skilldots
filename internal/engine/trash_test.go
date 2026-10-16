@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
-
-	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // richDir builds a directory with everything a hash-based copy ignores.
@@ -90,10 +88,7 @@ func TestTrashRoundTrip(t *testing.T) {
 // is moved to the trash whole when skilldots unlinks it.
 func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	lib, _, home := newTestLib(t)
-	reg, err := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 	SetRegistry(reg)
 	lib.Manifest.Targets.Default = []string{"box"}
 	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
@@ -148,7 +143,7 @@ func TestCopyModeExtrasGoToTrash(t *testing.T) {
 
 func TestCopyModeDSStoreDirectoryGoesToTrash(t *testing.T) {
 	lib, _, home := newTestLib(t)
-	reg, _ := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
+	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 	SetRegistry(reg)
 	lib.Manifest.Targets.Default = []string{"box"}
 	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")

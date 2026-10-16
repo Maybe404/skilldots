@@ -324,7 +324,7 @@ func TestHelpListsEveryKey(t *testing.T) {
 	m, _ := newModel(t, sampleSnapshot(), 120, 60)
 	m, _ = press(t, m, "?")
 	text := strings.Join(m.ov.lines, "\n")
-	for _, k := range []string{"j k", "pgup", "g G", "tab", "enter", "/", "space", "a ", "u / U", "e ", "f ", "d ", "n ", "S ", "t ", "s ", "A ", "r ", "c ", ",", "?", "q esc", "ctrl+c"} {
+	for _, k := range []string{"j k", "pgup", "g G", "tab", "enter", "/", "space", "a ", "u / U", "e ", "f ", "d ", "n ", "S ", "t ", "T ", "s ", "A ", "r ", "c ", ",", "?", "q esc", "ctrl+c"} {
 		if !strings.Contains(text, k) {
 			t.Errorf("help lacks %q", k)
 		}
@@ -627,6 +627,47 @@ func TestDialogsKeepTheirKeysOnSmallScreens(t *testing.T) {
 			if !strings.Contains(v, m.ov.title) && size[1] > 12 {
 				t.Errorf("%s at %dx%d: title gone:\n%s", name, size[0], size[1], v)
 			}
+		}
+	}
+}
+
+// T lists the agent targets; a approves a custom target of skills.toml
+// a person may approve, after showing where it leads, and only explains
+// the others.
+func TestTargetsViewApproves(t *testing.T) {
+	m, f := newModel(t, sampleSnapshot(), 120, 40)
+	f.targets = []TargetRow{
+		{Name: "agents", Path: "/h/.agents/skills", Raw: "/h/.agents/skills", Mode: "link", Builtin: true, Active: true},
+		{Name: "evil", Raw: "~", Path: "/h", Mode: "link", Problem: "its path \"~\" is your home directory itself"},
+		{Name: "mytool", Raw: "~/my-tool/skills", Path: "/h/my-tool/skills", Mode: "link", Approvable: true, Problem: "not approved"},
+	}
+	var cmd tea.Cmd
+	m, cmd = press(t, m, "T")
+	m = settle(t, m, cmd)
+	if m.ov == nil || !strings.Contains(m.view(), "Agent targets") {
+		t.Fatalf("no targets view:\n%s", m.view())
+	}
+	// The ones not in use come first: evil, then mytool.
+	m, _ = press(t, m, "a")
+	if m.ov == nil || !strings.Contains(m.view(), "Cannot approve evil") || !strings.Contains(m.view(), "home directory itself") {
+		t.Fatalf("evil:\n%s", m.view())
+	}
+	m, _ = press(t, m, "esc")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "T")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "j", "a")
+	if !strings.Contains(m.view(), "Approve custom target mytool") || !strings.Contains(m.view(), "/h/my-tool/skills") {
+		t.Fatalf("mytool:\n%s", m.view())
+	}
+	m, cmd = press(t, m, "y")
+	settle(t, m, cmd)
+	if !slices.Contains(f.calls, "trust mytool /h/my-tool/skills") {
+		t.Fatalf("calls: %v", f.calls)
+	}
+	for _, c := range f.calls {
+		if strings.HasPrefix(c, "trust evil") || strings.HasPrefix(c, "trust agents") {
+			t.Fatalf("approved %s", c)
 		}
 	}
 }

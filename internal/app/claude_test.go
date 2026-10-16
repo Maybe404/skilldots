@@ -9,6 +9,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 func TestClaudeDisabled(t *testing.T) {
@@ -74,12 +75,16 @@ func TestClaudeDisabled(t *testing.T) {
 // settings) links for Claude as much as the claude target does.
 func TestClaudeDisabledThroughCustomTarget(t *testing.T) {
 	up := upstream(t)
-	_, root := side(t, up)
-	dir := t.TempDir()
+	home, root := side(t, up)
+	dir := filepath.Join(home, "claude-config")
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
 	os.MkdirAll(filepath.Join(dir, "skills"), 0o755)
 	m := manifest.New([]string{"mine"})
 	m.Targets.Custom["mine"] = manifest.CustomTarget{Path: filepath.Join(dir, "skills") + "/"}
+	// A person approved it on this machine.
+	if err := targets.Approve("mine", filepath.Join(dir, "skills")+"/", filepath.Join(dir, "skills")); err != nil {
+		t.Fatal(err)
+	}
 	if err := m.Save(filepath.Join(root, manifest.FileName)); err != nil {
 		t.Fatal(err)
 	}

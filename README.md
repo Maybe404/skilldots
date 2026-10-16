@@ -32,7 +32,7 @@ Most of the time it is not a person running `skd` but the agent on their machine
 
 - `skd init` installs the [`skilldots` skill](skills/skilldots/SKILL.md) into the library, so every agent on the machine knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
 - Every command works without a terminal (stdin or stdout not a terminal, so `skd update | cat` never waits on a hidden prompt): `--json` for structured results, `--yes` for prompts, `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
-- Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. `skd trash empty` is the one irreversible command and it only runs for a person at a terminal, so an agent can do everything short of permanent deletion.
+- Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. `skd trash empty` is the one irreversible command and it only runs for a person at a terminal, so an agent can do everything short of permanent deletion. Approving a custom target (a directory `skills.toml` names for skd to write into) is likewise for a person at a terminal: see [skills.toml](#skillstoml).
 - People get a full-screen dashboard (`skd` with no arguments) that does everything the commands do, for looking around and vetoing.
 
 ## Install
@@ -79,8 +79,8 @@ Prebuilt binaries will follow. skd runs `git` for everything it fetches and comm
 | `skd scan` | inventory every agent skill directory: managed, copies, links, broken |
 | `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own, enable per agent |
 | `skd trash [restore <id> \| empty]` | what skd set aside; restore it; or (interactively) delete for good |
-| `skd targets` | known agent directories and which exist on this machine |
-| `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
+| `skd targets [trust <name> \| untrust <name>]` | known agent directories, which exist on this machine, and the custom targets of `skills.toml` that are not used, with why; `trust` approves a custom target (a person at a terminal only), `untrust` withdraws that |
+| `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere; lists its custom targets first and, at a terminal, asks whether to approve each |
 | `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
 | `skd use <dir>` | point skd at an existing library from any directory |
 | `skd [--simple]` | with no arguments: the full-screen dashboard (below); `--simple`, a narrow terminal or `TERM=dumb` give a question-and-answer menu instead |
@@ -110,6 +110,7 @@ Nothing skd prints for a person carries control characters (escape sequences, BE
 | `n` | new skill in `skills/` or `private/`, linked and selected | `new [--private]` |
 | `S` | scan agent directories by agent and state; adopt what you tick | `scan`, `adopt` |
 | `t` | trash: restore an entry, or empty it (asks twice; the second answer is `D`) | `trash restore`, `trash empty` |
+| `T` | agent targets; the custom ones not in use come first, with why; `a` approves one after showing its directory | `targets`, `targets trust` |
 | `s` | back up: commit and push | `sync` |
 | `A` / `r` | apply pending link changes / reload | `apply` |
 | `,` | settings: editor, editor kind, theme (applies next start) | `config` |
@@ -151,6 +152,8 @@ targets = ["agents"]
 
 Targets inherit: global default → pack → skill. `targets = []` keeps a skill in the library without linking it anywhere.
 
+**Custom targets need your approval on each machine.** A `skills.toml` may come from someone else's library (`skd clone`), and skd writes links and copies into a target, restores trash entries there, and with `--force` moves what is in the way into the trash. So a `[targets.custom.<name>]` is used only after a person approves it at a terminal: `skd targets trust <name>` shows the directory it leads to (`~` expanded, symbolic links resolved) and asks; `T` in the dashboard does the same (it lists the targets; `a` approves). The approval is the name together with that directory, kept beside the settings file (`trusted-targets.toml`), never in a library: when `skills.toml` points the target somewhere else it needs approving again, and `skd targets untrust <name>` withdraws it. Without a terminal, with `--yes` or with `--json` nothing can be approved, so an agent cannot do it. Until then the target is ignored everywhere (apply, enable, add, update, restore, the dashboard), with a warning saying why; `skd clone` lists the library's custom targets before it applies and, at a terminal, asks about each. Some directories are refused even with approval: anything outside your home directory, the home directory itself, and anything that is, is inside or holds `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.password-store`, `~/.config/gcloud`, `~/.config/gh`, `~/.config/git`, `~/.config/autostart`, `~/.config/systemd`, `~/.config/environment.d`, `~/.local/bin`, `~/bin`, `~/Library/LaunchAgents`, `~/Library/Keychains`, the Windows Startup folder or skd's own settings directory, or that holds a built-in target's directory (such as `~/.claude`). A custom target may not take a built-in target's name: the built-in one is used and the custom one ignored.
+
 ## How skills are found in a repository
 
 Every directory containing a `SKILL.md` is a skill. Test directories are skipped, and so are hidden directories (except `.agents/`, the cross-agent convention) — unless the repository has skills nowhere else, as when it ships them only in `.claude/skills/`. Repositories that copy the same skill into many agent folders are collapsed to one, preferring `skills/` or `.agents/skills/`; `skd show` lists the other copies whose content differs.
@@ -173,7 +176,7 @@ The first skill to use a name keeps it. When `skd add` or `skd update` vendors a
 
 - **Moved the library:** `skd use <new dir>` then `skd apply`; links into the old location are recognised and re-pointed.
 
-Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights, or for targets with `mode = "copy"`), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`: a copy is only discarded when it is exactly what skd wrote, and a vendored directory only when it matches the lock. `skd trash restore` only puts a directory back where skd takes them from, an entry of an agent's skill directory or a place inside the library's `vendor/`; a trash entry recorded as coming from anywhere else, or reached through a symbolic link, is listed as not restorable with the reason, and is left for you to move by hand (a library cloned from someone else carries their `.trash/` too). `skd remove` of a pack's last skill drops the pack.
+Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights, or for targets with `mode = "copy"`), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`: a copy is only discarded when it is exactly what skd wrote, and a vendored directory only when it matches the lock. `skd trash restore` only puts a directory back where skd takes them from, an entry of an agent's skill directory (for an approved custom target, only an entry named like a skill, so never `.ssh`) or a place inside the library's `vendor/`; a trash entry recorded as coming from anywhere else, or reached through a symbolic link, is listed as not restorable with the reason, and is left for you to move by hand (a library cloned from someone else carries their `.trash/` too). `skd remove` of a pack's last skill drops the pack.
 
 ## Unattended updates
 

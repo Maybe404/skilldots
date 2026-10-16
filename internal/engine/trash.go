@@ -12,6 +12,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
@@ -245,6 +246,9 @@ func readOrigin(p string) (string, error) {
 //   - an entry of an agent's skill directory (a target in reg: apply
 //     --force, disable, remove and adopt move what is in the way or
 //     adopted there), that is a direct child of the target's directory;
+//     for a custom target (reg has one only when a person approved it on
+//     this machine) also named like a skill (manifest.CheckName: not
+//     ".ssh"), as apply only ever writes such names there;
 //   - inside the library's vendor/ (update and remove move vendored
 //     skills, purge a whole pack).
 //
@@ -267,10 +271,23 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 	}
 	at := resolve(parent)
 	if reg != nil {
+		var custom []string
 		for _, t := range reg.All() {
 			if tp, err := filepath.Abs(t.Path); err == nil && (parent == tp || at == resolve(tp)) {
-				return nil
+				if t.Builtin {
+					return nil
+				}
+				custom = append(custom, t.Name)
 			}
+		}
+		// A custom target (in reg only when approved here) gets back only
+		// what apply puts there: an entry named like a skill. Not ".ssh"
+		// or anything else starting with a dot.
+		if len(custom) > 0 {
+			if err := manifest.CheckName(base); err != nil {
+				return fmt.Errorf("where it came from (%q) is in the custom target %s, and %q is not a skill's name", origin, custom[0], base)
+			}
+			return nil
 		}
 	}
 	// vendor/ itself must be the library's own directory: a link there
@@ -284,22 +301,8 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 	return fmt.Errorf("where it came from (%q) is neither in an agent's skill directory nor in the library's vendor/", origin)
 }
 
-// resolve is p with every symbolic link resolved: of its longest part
-// that exists, with the rest appended as it is.
-func resolve(p string) string {
-	var rest []string
-	for {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return filepath.Join(append([]string{r}, rest...)...)
-		}
-		d := filepath.Dir(p)
-		if d == p {
-			return filepath.Join(append([]string{p}, rest...)...)
-		}
-		rest = append([]string{filepath.Base(p)}, rest...)
-		p = d
-	}
-}
+// resolve is fsutil.Resolve.
+func resolve(p string) string { return fsutil.Resolve(p) }
 
 // EmptyTrash deletes everything parked. Irreversible.
 func EmptyTrash(lib *library.Library) (int, error) {

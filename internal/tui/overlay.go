@@ -138,6 +138,7 @@ var helpKeys = [][2]string{
 	{"n", "new skill of your own in skills/ or private/"},
 	{"S", "scan agent directories and adopt what skd does not manage"},
 	{"t", "trash: restore what skd set aside, or empty it"},
+	{"T", "agent targets: approve a custom target of skills.toml (skd targets trust)"},
 	{"s", "back up: commit and push the library"},
 	{"A", "apply pending link changes"},
 	{"r", "reload"},

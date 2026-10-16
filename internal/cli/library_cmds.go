@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -437,54 +436,6 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 	}
 	if out.Applied {
 		c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
-	}
-}
-
-func targetsCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "targets",
-		Short: "List known agent targets and whether they exist here",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := open()
-			if err != nil {
-				return err
-			}
-			def := map[string]bool{}
-			for _, d := range c.lib.Manifest.Targets.Default {
-				def[d] = true
-			}
-			type row struct {
-				Name, Path, Mode string
-				Present, Default bool
-				Builtin          bool
-			}
-			var rows []row
-			for _, t := range c.reg.All() {
-				rows = append(rows, row{t.Name, t.Path, t.Mode, fsutil.Exists(t.Path) || fsutil.Exists(filepath.Dir(t.Path)), def[t.Name], t.Builtin})
-			}
-			if c.jsonOut(rows) {
-				return nil
-			}
-			sort.Slice(rows, func(i, j int) bool {
-				if rows[i].Present != rows[j].Present {
-					return rows[i].Present
-				}
-				return rows[i].Name < rows[j].Name
-			})
-			t := newTable("", "TARGET", "", "PATH")
-			for _, r := range rows {
-				flag, d := dim("·"), ""
-				if r.Present {
-					flag = ok("●")
-				}
-				if r.Default {
-					d = accent("default")
-				}
-				t.Row(flag, r.Name, d, dim(r.Path))
-			}
-			c.printf("%s\n", t.Render())
-			return nil
-		},
 	}
 }
 

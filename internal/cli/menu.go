@@ -327,6 +327,17 @@ func cloneCmd() *cobra.Command {
 			if _, err := c.lib.Git("status", "--short"); err != nil {
 				return err
 			}
+			// Someone else's library may name custom targets anywhere:
+			// none is used until a person approves it here.
+			approved, err := reviewCustomTargets(c.reg.Withheld())
+			if err != nil {
+				return err
+			}
+			if approved {
+				if c, err = open(); err != nil {
+					return err
+				}
+			}
 			// Vendored skills come with the clone; only links need creating.
 			out, err := c.Apply(app.ApplyOptions{})
 			if out != nil {
@@ -335,7 +346,7 @@ func cloneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			jsonOut(map[string]any{"library": dir, "apply": out})
+			jsonOut(map[string]any{"library": dir, "apply": out, "withheld": c.reg.Withheld()})
 			return nil
 		},
 	}

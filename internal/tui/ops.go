@@ -12,6 +12,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/scan"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // Ops is everything the dashboard can do to a library. Each method opens
@@ -71,6 +72,24 @@ type Ops interface {
 	Settings() ([]Setting, error)
 	// SetSetting changes one (skd config set; "" unsets it).
 	SetSetting(key, value string) (string, error)
+	// Targets lists the agent targets: those in use, and the custom ones
+	// of skills.toml that are not (skd targets).
+	Targets() ([]TargetRow, error)
+	// TrustTarget approves the custom target name, which the person was
+	// shown leads to real (skd targets trust).
+	TrustTarget(name, real string) (string, error)
+}
+
+// TargetRow is one agent target. A custom target not in use has Active
+// false, and Problem says why; Approvable when a person can approve it.
+type TargetRow struct {
+	Name string
+	// Path is the directory (links resolved for a custom target not in
+	// use); Raw is the path as skills.toml has it.
+	Path, Raw, Mode string
+	Builtin, Active bool
+	Approvable      bool
+	Problem         string
 }
 
 // Setting is one user setting with its current value.
@@ -570,6 +589,40 @@ func (o *libOps) Settings() ([]Setting, error) {
 		out = append(out, Setting{Key: k, Value: all[k.Name]})
 	}
 	return out, nil
+}
+
+func (o *libOps) Targets() ([]TargetRow, error) {
+	s, err := o.open()
+	if err != nil {
+		return nil, err
+	}
+	out := []TargetRow{}
+	for _, t := range s.Reg.All() {
+		raw := t.Path
+		if c, ok := s.Lib.Manifest.Targets.Custom[t.Name]; ok && !t.Builtin {
+			raw = c.Path
+		}
+		out = append(out, TargetRow{Name: t.Name, Path: t.Path, Raw: raw, Mode: t.Mode, Builtin: t.Builtin, Active: true})
+	}
+	for _, w := range s.Reg.Withheld() {
+		out = append(out, TargetRow{Name: w.Name, Path: w.Real, Raw: w.Path, Mode: w.Mode, Approvable: w.Approvable, Problem: w.Problem})
+	}
+	return out, nil
+}
+
+func (o *libOps) TrustTarget(name, real string) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	c, ok := s.Lib.Manifest.Targets.Custom[name]
+	if !ok {
+		return "", fmt.Errorf("skills.toml has no custom target %q", name)
+	}
+	if err := targets.Approve(name, c.Path, real); err != nil {
+		return "", err
+	}
+	return "approved custom target " + name + " → " + real + " · A applies", nil
 }
 
 func (o *libOps) SetSetting(key, value string) (string, error) {

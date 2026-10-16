@@ -73,6 +73,7 @@ type fakeOps struct {
 	check    *app.Outdated
 	checkErr error
 	history  []app.UpdateRecord
+	targets  []TargetRow
 	// foreground is what Edit returns to run in the foreground.
 	foreground *exec.Cmd
 }
@@ -214,6 +215,14 @@ func (f *fakeOps) Settings() ([]Setting, error) {
 		out = append(out, Setting{Key: k})
 	}
 	return out, nil
+}
+func (f *fakeOps) Targets() ([]TargetRow, error) {
+	f.rec("targets-list")
+	return append([]TargetRow{}, f.targets...), nil
+}
+func (f *fakeOps) TrustTarget(name, real string) (string, error) {
+	f.rec("trust " + name + " " + real)
+	return "ok", nil
 }
 func (f *fakeOps) SetSetting(k, v string) (string, error) {
 	f.rec("set " + k + "=" + v)

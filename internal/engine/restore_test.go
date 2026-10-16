@@ -221,10 +221,7 @@ func TestRestoreRefusesALinkedVendor(t *testing.T) {
 func TestRestoreAcceptsWhatSkdParks(t *testing.T) {
 	lib, _, home := restoreLib(t)
 	custom := filepath.Join(home, "box")
-	reg, err := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: custom, Mode: "copy"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: custom, Mode: "copy"}})
 	SetRegistry(reg)
 	agents := filepath.Join(home, ".agents", "skills")
 	os.MkdirAll(agents, 0o755)

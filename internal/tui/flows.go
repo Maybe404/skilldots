@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -355,6 +356,63 @@ func (m Model) settingsView(settings []Setting) (tea.Model, tea.Cmd) {
 		})}
 	}}
 	m.ov = listOverlay("Settings", "per user and per machine (skd config) · the theme applies the next time skd starts", "no settings", items, change)
+	return m, nil
+}
+
+// targetsView is `skd targets`: the agent targets, and the custom ones
+// of skills.toml skd does not use; a approves one (skd targets trust).
+// The dashboard runs at a terminal, so whoever presses a is a person.
+func (m Model) targetsView(rows []TargetRow) (tea.Model, tea.Cmd) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].Active != rows[j].Active {
+			return !rows[i].Active
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	var items []pickItem
+	byName := map[string]TargetRow{}
+	for _, r := range rows {
+		byName[r.Name] = r
+		detail := tildify(r.Path)
+		switch {
+		case !r.Active && r.Approvable:
+			detail = "not approved · a approves · " + tildify(r.Path)
+		case !r.Active:
+			detail = "not used · " + tildify(r.Raw)
+		case !r.Builtin:
+			detail = "custom · " + tildify(r.Path)
+		}
+		items = append(items, pickItem{label: r.Name, detail: detail, value: r.Name})
+	}
+	approve := listAction{key: "a", label: "approve", run: func(it pickItem) step {
+		r := byName[it.value]
+		switch {
+		case r.Active && r.Builtin:
+			return step{next: textOverlay(clean(r.Name), []string{"A built-in target: always in use.", tildify(r.Path)})}
+		case r.Active:
+			return step{next: textOverlay(clean(r.Name), []string{"Approved already: skd links skills into", tildify(r.Path)})}
+		case !r.Approvable:
+			return step{next: textOverlay("Cannot approve "+clean(r.Name), wrap(r.Problem, 64, 8))}
+		}
+		verb := "link"
+		if r.Mode == "copy" {
+			verb = "copy"
+		}
+		name, real := r.Name, r.Path
+		return step{next: confirmOverlay("Approve custom target "+clean(name), []string{
+			"skills.toml path  " + r.Raw,
+			"directory         " + real,
+			"",
+			"skd will " + verb + " skills into this directory, put back trash entries",
+			"that came from it, and with --force move what is in their way into",
+			"the library trash. Approve only a directory you meant for skills.",
+		}, jobChoice("y", "approve", job{label: "approving " + clean(name), run: func(o Ops) result {
+			msg, err := o.TrustTarget(name, real)
+			return result{msg: msg, err: err}
+		}}))}
+	}}
+	m.ov = listOverlay("Agent targets", "where skd links skills · a custom target of skills.toml is used once you approve it here (skd targets trust)",
+		"no targets", items, approve)
 	return m, nil
 }
 

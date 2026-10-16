@@ -318,3 +318,50 @@ func WriteAtomic(path string, data []byte) error {
 	}
 	return err
 }
+
+// Resolve is p with every symbolic link resolved: of its longest part
+// that exists, with the rest appended as it is.
+func Resolve(p string) string {
+	var rest []string
+	for {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return filepath.Join(append([]string{r}, rest...)...)
+		}
+		d := filepath.Dir(p)
+		if d == p {
+			return filepath.Join(append([]string{p}, rest...)...)
+		}
+		rest = append([]string{filepath.Base(p)}, rest...)
+		p = d
+	}
+}
+
+// SameDir reports whether a and b are the same place: the same path, or
+// both exist and are the same file (two spellings of one directory on a
+// file system that ignores case or Unicode normalisation, as macOS and
+// Windows do by default). Loose also counts paths that differ only in
+// case: use it only to refuse, never to allow.
+func SameDir(a, b string, loose bool) bool {
+	if a == b || (loose && strings.EqualFold(a, b)) {
+		return true
+	}
+	sa, err1 := os.Stat(a)
+	sb, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
+}
+
+// Inside reports whether p is dir or inside it, comparing p and each of
+// its parents with dir by SameDir. Both should be clean, absolute and
+// have their links resolved (Resolve).
+func Inside(dir, p string, loose bool) bool {
+	for {
+		if SameDir(p, dir, loose) {
+			return true
+		}
+		d := filepath.Dir(p)
+		if d == p {
+			return false
+		}
+		p = d
+	}
+}

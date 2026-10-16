@@ -58,6 +58,8 @@ var hostileCommands = [][]string{
 	{"list", "--agent", "agents"},
 	{"list", "--agent", "nope@evil"},
 	{"targets"},
+	{"targets", "trust", "nope@evil"},
+	{"targets", "untrust", "nope@evil"},
 	{"path", "tdd"},
 	{"path", "nope@evil"},
 	{"enable", "tdd", "--agent", "claude"},

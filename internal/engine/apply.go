@@ -155,8 +155,14 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		for _, n := range e.UnknownTargets {
 			// Leave whatever is recorded for this target alone.
 			desired[n+"/"+e.LinkName] = true
+			why := "unknown target " + n
+			if r := registryPtr.Load(); r != nil {
+				if _, held := r.WithheldTarget(n); held {
+					why = "custom target " + n + " is not used (see skd targets)"
+				}
+			}
 			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: n}, Name: e.LinkName,
-				Reason: "unknown target " + n, entry: e})
+				Reason: why, entry: e})
 		}
 	}
 	// Anything in the lock no longer desired gets removed.
@@ -174,9 +180,15 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		t, err := regTarget(lib, tname)
 		trusted := err == nil
 		if err != nil {
+			state := "is no longer defined"
+			if r := registryPtr.Load(); r != nil {
+				if _, held := r.WithheldTarget(tname); held {
+					state = "is not used (see skd targets)"
+				}
+			}
 			forget := func(why string) {
 				plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
-					Reason: fmt.Sprintf("target %q is no longer defined and %s; forgetting the record (nothing on disk is touched)", tname, why)})
+					Reason: fmt.Sprintf("target %q %s and %s; forgetting the record (nothing on disk is touched)", tname, state, why)})
 			}
 			p := prev.Path
 			if p == "" || !filepath.IsAbs(p) || filepath.Clean(p) != p || filepath.Base(p) != name {

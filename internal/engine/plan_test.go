@@ -8,7 +8,6 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/lock"
-	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // TestMakePlanTable covers the plan decision for every combination that
@@ -73,7 +72,7 @@ func TestMakePlanTable(t *testing.T) {
 	for _, tc := range cases {
 		for _, force := range []bool{false, true} {
 			lib, _, home := newTestLib(t)
-			reg, _ := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
+			reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 			SetRegistry(reg)
 			target, dir := "agents", filepath.Join(home, ".agents", "skills")
 			if tc.copy {

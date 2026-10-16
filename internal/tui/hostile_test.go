@@ -137,6 +137,9 @@ func TestHostileLibraryDrawsClean(t *testing.T) {
 			t.Errorf("restoring moved %q", p)
 		}
 	}
+	key("agent targets", "T")
+	key("approve", "a")
+	closeAll("close")
 	key("settings", ",")
 	drawn("settings")
 	key("editor", "enter")

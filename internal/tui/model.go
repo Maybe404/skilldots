@@ -110,6 +110,7 @@ type result struct {
 	scan     *ScanResult
 	trash    []engine.TrashEntry
 	settings []Setting
+	targets  []TargetRow
 	// history is the update history (h); historyRead is set even when it
 	// is empty.
 	history     []app.UpdateRecord
@@ -629,7 +630,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.startCheck()
 	}
-	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntSoh,", k.String()) {
+	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntTSoh,", k.String()) {
 		m.busyNote = "wait until it finishes"
 		return m, nil
 	}
@@ -644,6 +645,11 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.start(job{label: "reading the trash", run: func(o Ops) result {
 			items, err := o.TrashList()
 			return result{trash: items, err: err}
+		}})
+	case "T":
+		return m.start(job{label: "reading the agent targets", run: func(o Ops) result {
+			rows, err := o.Targets()
+			return result{targets: rows, err: err}
 		}})
 	case "S":
 		return m.start(job{label: "scanning agent directories", run: func(o Ops) result {
@@ -1026,7 +1032,7 @@ func (m Model) start(j job) (tea.Model, tea.Cmd) {
 		}
 		defer jobs.end()
 		res := j.run(ops)
-		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil && !res.historyRead && res.plan == nil {
+		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil && res.targets == nil && !res.historyRead && res.plan == nil {
 			snap, err := ops.Load()
 			if err != nil && res.err == nil {
 				res.err = err
@@ -1071,6 +1077,8 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 		return m.trashView(r.trash)
 	case r.settings != nil:
 		return m.settingsView(r.settings)
+	case r.targets != nil:
+		return m.targetsView(r.targets)
 	case r.plan != nil:
 		return m.planView(r.planFor, r.plan)
 	}

@@ -63,7 +63,7 @@ type Entry struct {
 func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, error) {
 	out, warnings := collect(lib)
 
-	unknown := map[string][]string{}
+	unknown, withheld := map[string][]string{}, map[string][]string{}
 	for i := range out {
 		e := &out[i]
 		if _, err := os.Stat(e.Dir); err != nil {
@@ -77,7 +77,11 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 			t, err := reg.Get(n)
 			if err != nil {
 				e.UnknownTargets = append(e.UnknownTargets, n)
-				unknown[n] = append(unknown[n], e.LinkName)
+				if _, held := reg.WithheldTarget(n); held {
+					withheld[n] = append(withheld[n], e.LinkName)
+				} else {
+					unknown[n] = append(unknown[n], e.LinkName)
+				}
 				continue
 			}
 			e.Targets = append(e.Targets, t)
@@ -86,6 +90,17 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 	for _, n := range sortedKeys(unknown) {
 		warnings = append(warnings, fmt.Sprintf("unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name",
 			n, strings.Join(unknown[n], ", ")))
+	}
+	// A custom target skd does not use (not approved here, in a place it
+	// never writes, or named like a built-in one) is said every time,
+	// used or not: it may be how someone else's library tried to write
+	// outside the agents' directories.
+	for _, w := range reg.Withheld() {
+		msg := fmt.Sprintf("custom target %q in skills.toml is not used: %s", w.Name, w.Problem)
+		if used := withheld[w.Name]; len(used) > 0 {
+			msg += fmt.Sprintf(" (skipped for %s)", strings.Join(used, ", "))
+		}
+		warnings = append(warnings, msg)
 	}
 
 	warnings = append(warnings, markConflicts(out)...)

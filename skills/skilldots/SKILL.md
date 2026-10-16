@@ -18,6 +18,8 @@ skd list --json        # fails with a clear message if there is no library yet
 
 No library: ask the user whether to create one (`skd init`), clone their backup (`skd clone <git-url>`), or point at an existing directory (`skd use <dir>`). Do not pick for them.
 
+A library cloned from someone else decides where its custom targets point. Before `skd clone` of a library that is not the user's own, and whenever skd warns that a custom target "is not used", show the user the `[targets.custom.*]` part of `skills.toml` (or `skd targets --json`: rows with `"Active": false` and their `Problem`). You cannot approve a custom target — `skd targets trust` refuses without a terminal, and with `--yes` or `--json`. If the user wants one, ask them to run `skd targets trust <name>` in their own terminal (it shows the directory and asks them), then run `skd apply`. Never edit skd's approvals file (`trusted-targets.toml` beside its settings) or point a custom target somewhere to work around a refusal.
+
 ## Install a skill from a repository
 
 1. Look before installing — repositories often hold dozens of skills:
@@ -71,7 +73,7 @@ Every update is recorded in the library (`skills.history.jsonl`, committed with 
 skd enable <skill> --agent codex,cursor     # add agents
 skd disable <skill> --agent codex           # remove from one agent
 skd disable <skill>                         # unlink everywhere, keep in library
-skd targets                                 # agents known on this machine
+skd targets                                 # agents known on this machine; custom ones not in use, with why
 ```
 
 ## Remove
