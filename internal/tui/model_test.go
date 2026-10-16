@@ -342,6 +342,9 @@ func TestFilter(t *testing.T) {
 	if m.filter[focusLeft] != "" || m.quitting {
 		t.Fatal("esc clears the filter first")
 	}
+	if p := m.currentPack(); p == nil || p.Repo != "kepano/obsidian-skills" {
+		t.Fatalf("clearing the filter keeps the selection: %+v", p)
+	}
 	// Right column filter.
 	m, _ = press(t, m, "up", "up", "tab", "/", "r", "e", "v")
 	if got := m.rightRows(); len(got) != 1 || got[0].Name != "code-review" {

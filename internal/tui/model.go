@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -393,9 +394,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.quit()
 	case "esc":
 		if m.filter[m.focus] != "" {
-			m.filter[m.focus] = ""
-			m.clampAll()
-			return m, nil
+			return m.clearFilter(m.focus), nil
 		}
 		return m.quit()
 	case "up", "k":
@@ -662,10 +661,8 @@ func (m Model) updateFilter(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "esc":
 		m.filtering = false
-		m.filter[m.focus] = ""
 		m.finput.Blur()
-		m.clampAll()
-		return m, nil
+		return m.clearFilter(m.focus), nil
 	case "enter", "tab":
 		m.filtering = false
 		m.finput.Blur()
@@ -687,6 +684,34 @@ func (m Model) updateFilter(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.clampAll()
 	return m, cmd
+}
+
+// clearFilter drops the filter of column f and keeps the cursor on the
+// row it was on.
+func (m Model) clearFilter(f focus) Model {
+	var leftKey, rightKey string
+	if r := m.currentLeft(); r != nil {
+		leftKey = r.key(m.snap)
+	}
+	if rows := m.rightRows(); m.right.cur >= 0 && m.right.cur < len(rows) {
+		rightKey = rows[m.right.cur].Key()
+	}
+	m.filter[f] = ""
+	if f == focusLeft {
+		for i, r := range m.leftRows() {
+			if r.selectable() && r.key(m.snap) == leftKey {
+				m.left.cur = i
+			}
+		}
+	} else {
+		for i, s := range m.rightRows() {
+			if s.Key() == rightKey {
+				m.right.cur = i
+			}
+		}
+	}
+	m.clampAll()
+	return m
 }
 
 // ---- jobs ---------------------------------------------------------------
@@ -726,7 +751,10 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	if r.snap != nil {
 		m = m.replaceSnapshot(r.snap)
 	}
+	var w warning
 	switch {
+	case errors.As(r.err, &w):
+		m.status, m.statusLvl = string(w), lvWarn
 	case r.err != nil:
 		m.status, m.statusLvl = firstLine(r.err.Error()), lvErr
 		if r.msg != "" {

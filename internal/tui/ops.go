@@ -572,8 +572,17 @@ func (o *libOps) Sync() (string, error) {
 	err := cmd.Run()
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	var clean []string
+	warned := false
 	for _, l := range lines {
-		if l = strings.TrimSpace(l); l != "" {
+		l = strings.TrimSpace(l)
+		// The CLI marks its lines; the status line has its own icon.
+		for _, mark := range []string{"✓ ", "! ", "✗ "} {
+			if strings.HasPrefix(l, mark) {
+				warned = warned || mark == "! "
+				l = strings.TrimPrefix(l, mark)
+			}
+		}
+		if l != "" {
 			clean = append(clean, l)
 		}
 	}
@@ -586,8 +595,18 @@ func (o *libOps) Sync() (string, error) {
 	if len(clean) == 0 {
 		return "backed up", nil
 	}
-	return strings.Join(clean, " · "), nil
+	msg := strings.Join(clean, " · ")
+	if warned {
+		return "", warning(msg)
+	}
+	return msg, nil
 }
+
+// warning is an error that is only worth a yellow status line: the
+// operation did what it could.
+type warning string
+
+func (w warning) Error() string { return string(w) }
 
 func dedupe(in []string) []string {
 	seen := map[string]bool{}
