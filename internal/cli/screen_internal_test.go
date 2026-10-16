@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -77,5 +79,48 @@ func TestScreenWriterDropsHidingColours(t *testing.T) {
 	}
 	if b.String() != "a\x1b[31mbc\x1b[0md\n" {
 		t.Errorf("%q", b.String())
+	}
+}
+
+// A character still unfinished when skd exits is not lost: Main flushes
+// the screen writers (it shows as U+FFFD, the rest of it never comes).
+func TestMainFlushesTheScreenWriters(t *testing.T) {
+	var out, errb bytes.Buffer
+	prevOut, prevErr, prevArgs := stdout, stderr, os.Args
+	defer func() { stdout, stderr, os.Args = prevOut, prevErr, prevArgs }()
+	stdout = &screenWriter{w: &out}
+	stderr = &screenWriter{w: &errb}
+	stderr.Write([]byte("cut \xe4\xb8"))
+	if errb.String() != "cut " {
+		t.Fatalf("written before the end: %q", errb.String())
+	}
+	os.Args = []string{"skd", "--version"}
+	if code := Main(); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if errb.String() != "cut �" || !strings.Contains(out.String(), Version) {
+		t.Errorf("stderr %q, stdout %q", errb.String(), out.String())
+	}
+	// Flushing twice, or with nothing held, writes nothing more.
+	flushOutput()
+	if errb.String() != "cut �" {
+		t.Errorf("flushed again: %q", errb.String())
+	}
+}
+
+// --json escapes DEL, C1 and bidi controls too; the values decode the
+// same.
+func TestWriteJSONEscapesBidi(t *testing.T) {
+	var b bytes.Buffer
+	v := map[string]string{"origin": "/x/a\u202eb\u009b\x7f\x1b"}
+	if err := writeJSON(&b, v); err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsFunc(strings.ReplaceAll(b.String(), "\n", ""), safetext.Unsafe) || !strings.Contains(b.String(), `\u202e`) {
+		t.Errorf("%s", b.String())
+	}
+	var back map[string]string
+	if err := json.Unmarshal(b.Bytes(), &back); err != nil || back["origin"] != v["origin"] {
+		t.Errorf("decodes to %q, %v", back, err)
 	}
 }

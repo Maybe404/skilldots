@@ -2,9 +2,11 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/charmbracelet/huh"
@@ -97,10 +99,24 @@ func jsonOut(v any) bool {
 	if !flags.json {
 		return false
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.Encode(v)
+	writeJSON(os.Stdout, v)
 	return true
+}
+
+// writeJSON writes v as indented JSON. Beyond what encoding/json escapes
+// (U+0000 to U+001F, U+2028, U+2029), DEL, the C1 controls and the bidi
+// controls are written as \u escapes too (safetext.JSON): the document
+// decodes to the same values, and `skd … --json` shown on a terminal
+// (piped to less, printed by an agent) cannot reorder or drive it.
+func writeJSON(w io.Writer, v any) error {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return err
+	}
+	_, err := w.Write(safetext.JSON(b.Bytes()))
+	return err
 }
 
 func open() (*ctx, error) {
@@ -182,6 +198,9 @@ func Root() *cobra.Command {
 
 // Main runs the CLI and returns an exit code.
 func Main() int {
+	// What the screen writers hold of a character split between writes
+	// is printed before exit (as U+FFFD: it will not be completed now).
+	defer flushOutput()
 	err := Root().Execute()
 	if w := settingsWarning(err); w != "" {
 		fmt.Fprintln(stderr, w)

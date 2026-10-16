@@ -5,6 +5,7 @@
 package safetext
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 	"sort"
@@ -353,3 +354,27 @@ func docKey(path, k string) string {
 	}
 	return path + "." + k
 }
+
+// JSON returns the encoded JSON document b with every DEL, C1 control
+// and bidi control written as a \u escape. encoding/json leaves them as
+// they are; the escaped document decodes to the same values. They can
+// only occur inside strings (the rest of JSON is ASCII), where \uXXXX
+// stands for the same character.
+func JSON(b []byte) []byte {
+	if !utf8.Valid(b) || !bytes.ContainsFunc(b, jsonEscape) {
+		return b
+	}
+	out := make([]byte, 0, len(b)+16)
+	for len(b) > 0 {
+		r, n := utf8.DecodeRune(b)
+		if jsonEscape(r) {
+			out = fmt.Appendf(out, `\u%04x`, r)
+		} else {
+			out = append(out, b[:n]...)
+		}
+		b = b[n:]
+	}
+	return out
+}
+
+func jsonEscape(r rune) bool { return r >= 0x7f && Unsafe(r) }

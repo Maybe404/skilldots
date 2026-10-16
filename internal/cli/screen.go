@@ -60,3 +60,27 @@ func (s *screenWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+// Flush writes what s holds of an unfinished UTF-8 sequence, cleaned (it
+// shows as U+FFFD), so the last bytes of the output are not lost.
+func (s *screenWriter) Flush() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.carry) == 0 {
+		return nil
+	}
+	out := s.sc.Screen(string(s.carry), false)
+	s.carry = nil
+	_, err := io.WriteString(s.w, out)
+	return err
+}
+
+// flushOutput flushes the screen writers in front of stdout and stderr
+// (none in a rawoutput build).
+func flushOutput() {
+	for _, w := range []io.Writer{stdout, stderr} {
+		if s, ok := w.(*screenWriter); ok {
+			s.Flush()
+		}
+	}
+}

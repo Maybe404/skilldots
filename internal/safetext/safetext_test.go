@@ -1,6 +1,8 @@
 package safetext
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -129,7 +131,7 @@ func TestDocSchema(t *testing.T) {
 	if got != want {
 		t.Errorf("DocSchema =\n%s\nwant\n%s", got, want)
 	}
-	for s, want := range map[string]bool{"a\tb\r\n": false, "中文 🚀": false, "\x1b": true, "\x07": true, "\x7f": true, "\u0085": true, "‮": true, "\x0b": true, "\xff": true} {
+	for s, want := range map[string]bool{"a\tb\r\n": false, "中文 🚀": false, "\x1b": true, "\x07": true, "\x7f": true, "\u0085": true, "\u202e": true, "\x0b": true, "\xff": true} {
 		if Dangerous(s) != want {
 			t.Errorf("Dangerous(%q) = %v", s, !want)
 		}
@@ -169,5 +171,25 @@ func TestScreenSGR(t *testing.T) {
 	var sc Screener
 	if got := sc.Screen("\x1b[38;2;1;2;3ma", true) + sc.Screen("\x1b[48;2;1;2;3mb", true) + sc.Screen("\x1b[0m\x1b[48;2;1;2;3mc", true); got != "\x1b[38;2;1;2;3mab\x1b[0m\x1b[48;2;1;2;3mc" {
 		t.Errorf("Screener: %q", got)
+	}
+}
+
+// JSON escapes what encoding/json leaves raw and decodes to the same.
+func TestJSON(t *testing.T) {
+	v := map[string]string{"k\u202e": "a\x1b]0;t\x07\u009b31m\u202e\u2066x\u2069\u200f\u061c\x7f\u2028 中文 🚀"}
+	b, _ := json.Marshal(v)
+	got := JSON(b)
+	if strings.ContainsFunc(string(got), Unsafe) {
+		t.Errorf("JSON left %q", got)
+	}
+	if !strings.Contains(string(got), `\u202e`) || !strings.Contains(string(got), `\u009b`) || !strings.Contains(string(got), "中文 🚀") {
+		t.Errorf("JSON = %s", got)
+	}
+	var back map[string]string
+	if err := json.Unmarshal(got, &back); err != nil || !reflect.DeepEqual(back, v) {
+		t.Errorf("decodes to %q, %v", back, err)
+	}
+	if plain := []byte(`{"a":"中文"}`); string(JSON(plain)) != string(plain) {
+		t.Error("changed plain JSON")
 	}
 }

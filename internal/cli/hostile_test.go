@@ -240,7 +240,13 @@ func TestHostileLibraryPrintsClean(t *testing.T) {
 			}
 			out, errOut, code := e.skd(lib, a...)
 			if json {
-				out = "" // data
+				// Data, as found; but every control character in it is
+				// a \u escape, so the document shown on a terminal is
+				// as harmless as the rest.
+				if i := strings.IndexFunc(strings.ReplaceAll(out, "\n", ""), safetext.Unsafe); i >= 0 {
+					t.Errorf("skd %s printed a raw control character in JSON:\n%q", name, out)
+				}
+				out = ""
 			}
 			gate(t, name, out+errOut, code)
 			if testing.Verbose() {
