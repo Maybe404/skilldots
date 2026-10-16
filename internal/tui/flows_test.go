@@ -350,6 +350,29 @@ func TestOverlaysOnSmallTerminals(t *testing.T) {
 			m, c := press(t, m, "t")
 			return drain(t, m, c)
 		},
+		"plan": func(m Model, f *fakeOps) Model {
+			m, c := press(t, m, "U")
+			return drain(t, m, c)
+		},
+		"plan one": func(m Model, f *fakeOps) Model {
+			m, c := press(t, m, "u")
+			return drain(t, m, c)
+		},
+		"history": func(m Model, f *fakeOps) Model {
+			f.history = []app.UpdateRecord{{Repo: strings.Repeat("long/", 30), From: "1", To: "2", Changed: []string{strings.Repeat("x", 90)},
+				Commits: []app.UpstreamCommit{{Hash: "abc", Subject: strings.Repeat("subject ", 30)}}}}
+			m, c := press(t, m, "h")
+			m = drain(t, m, c)
+			m, _ = press(t, m, "enter")
+			return m
+		},
+		"settings": func(m Model, f *fakeOps) Model {
+			m, c := press(t, m, ",")
+			m = drain(t, m, c)
+			m, _ = press(t, m, "enter")
+			return m
+		},
+		"edit": func(m Model, f *fakeOps) Model { m, _ = press(t, m, "tab", "o"); return m },
 		"add": func(m Model, f *fakeOps) Model {
 			f.browse = &Browse{Repo: "acme/x", Have: map[string]bool{}, Skills: []pack.Skill{{Name: "a", Category: "c"}}}
 			m, _ = press(t, m, "a", "x", "enter")
