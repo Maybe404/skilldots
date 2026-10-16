@@ -178,11 +178,19 @@ func (p *Pack) Selected(name, category string) bool {
 		return true
 	}
 	for _, u := range p.Use {
-		if u == name || u == category+"/"+name {
+		if UseNames(u, name) {
 			return true
 		}
 	}
 	return false
+}
+
+// UseNames reports whether a `use` entry ("name" or "category/name")
+// selects the skill called name. Names are unique within a pack, so the
+// category part only documents where the skill lives; it is not required
+// to match, and a skill that moves to another category stays selected.
+func UseNames(u, name string) bool {
+	return u == name || strings.HasSuffix(u, "/"+name)
 }
 
 func matchSkip(pat, name, category string) bool {

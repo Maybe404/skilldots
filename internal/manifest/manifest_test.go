@@ -21,3 +21,15 @@ func TestPrefix(t *testing.T) {
 		t.Errorf("alias: got %q", got)
 	}
 }
+
+func TestSelectedSurvivesCategoryChange(t *testing.T) {
+	p := &Pack{Use: []string{"engineering/tdd", "pr"}}
+	for _, c := range []struct {
+		name, cat string
+		want      bool
+	}{{"tdd", "engineering", true}, {"tdd", "productivity", true}, {"pr", "x", true}, {"other", "engineering", false}, {"dd", "", false}} {
+		if got := p.Selected(c.name, c.cat); got != c.want {
+			t.Errorf("%s in %q: %v", c.name, c.cat, got)
+		}
+	}
+}

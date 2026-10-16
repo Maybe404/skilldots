@@ -560,7 +560,7 @@ func removeCmd() *cobra.Command {
 			} else {
 				var use []string
 				for _, u := range p.Use {
-					if u != e.Name && u != e.Category+"/"+e.Name {
+					if !manifest.UseNames(u, e.Name) {
 						use = append(use, u)
 					}
 				}
@@ -757,7 +757,7 @@ func forkCmd() *cobra.Command {
 				} else {
 					var use []string
 					for _, u := range p.Use {
-						if u != e.Name && u != e.Category+"/"+e.Name {
+						if !manifest.UseNames(u, e.Name) {
 							use = append(use, u)
 						}
 					}
