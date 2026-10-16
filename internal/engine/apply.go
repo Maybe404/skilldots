@@ -158,10 +158,21 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		}
 		t, err := regTarget(lib, tname)
 		if err != nil {
+			forget := func(why string) {
+				plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
+					Reason: fmt.Sprintf("target %q is no longer defined and %s; forgetting the record (nothing on disk is touched)", tname, why)})
+			}
 			if prev.Path == "" || filepath.Base(prev.Path) != name {
 				// Nowhere to look: stop tracking it rather than nag forever.
-				plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
-					Reason: fmt.Sprintf("target %q is no longer defined and its location was not recorded; forgetting the record (nothing on disk is touched)", tname)})
+				forget("its location was not recorded")
+				continue
+			}
+			// The recorded path is only trusted inside a known target
+			// directory. Elsewhere (a removed custom target, or a tampered
+			// lock) only our own link may go; anything else is left alone.
+			if !knownTargetDir(filepath.Dir(prev.Path)) && fsutil.Lexists(prev.Path) &&
+				!(prev.Mode == "link" && current(prev.Path, prev, lib)) {
+				forget(fmt.Sprintf("its recorded location %s is not a link of ours inside a known target directory", prev.Path))
 				continue
 			}
 			t = targets.Target{Name: tname, Path: filepath.Dir(prev.Path), Mode: prev.Mode}
@@ -350,6 +361,27 @@ var registry *targets.Registry
 
 // SetRegistry installs the registry used for lock-only lookups.
 func SetRegistry(r *targets.Registry) { registry = r }
+
+// knownTargetDir reports whether dir is the directory of a registered target.
+func knownTargetDir(dir string) bool {
+	if registry == nil {
+		return false
+	}
+	want := evalClean(dir)
+	for _, t := range registry.All() {
+		if evalClean(t.Path) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func evalClean(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
 
 func regTarget(lib *library.Library, name string) (targets.Target, error) {
 	if registry == nil {

@@ -103,3 +103,30 @@ type (
 	lockPack  = lock.Pack
 	lockSkill = lock.Skill
 )
+
+// A lock record whose path was pointed outside every target directory
+// (tampered, or a target that is gone) never lets apply --force move a
+// real directory there; the record is forgotten.
+func TestOrphanPathOutsideTargetsIsForgotten(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	victim := filepath.Join(home, "Documents", "x")
+	writeSkill(t, victim, "x")
+	os.WriteFile(filepath.Join(victim, "thesis.txt"), []byte("precious"), 0o644)
+	lib.Lock.Links["gone/x"] = &lock.Link{Mode: "link", Source: "skills/x", Path: victim}
+	lib.Manifest.Targets.Default = []string{}
+	for _, force := range []bool{false, true} {
+		plan := MakePlan(lib, nil, force)
+		if len(plan.Ops) != 1 || plan.Ops[0].Action != "forget" || !strings.Contains(plan.Ops[0].Reason, victim) {
+			t.Fatalf("force=%v: plan %+v", force, plan.Ops)
+		}
+	}
+	if _, err := Apply(lib, MakePlan(lib, nil, true)); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(victim, "thesis.txt")); err != nil || string(b) != "precious" {
+		t.Fatal("directory outside the targets was touched")
+	}
+	if len(lib.Lock.Links) != 0 {
+		t.Fatal("record not forgotten")
+	}
+}
