@@ -189,7 +189,7 @@ func (m Model) leftRows() []leftRow {
 	case len(packs) > 0:
 		rows = append(rows, packs...)
 	case len(s.Packs) == 0:
-		rows = append(rows, leftRow{kind: rowNote, text: "none yet · a to add a repository"})
+		rows = append(rows, leftRow{kind: rowNote, text: "none yet · a adds one"})
 	default:
 		rows = append(rows, leftRow{kind: rowNote, text: "no match"})
 	}
@@ -758,7 +758,7 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	case r.err != nil:
 		m.status, m.statusLvl = firstLine(r.err.Error()), lvErr
 		if r.msg != "" {
-			m.status = r.msg + " · " + m.status
+			m.status += " · " + r.msg
 		}
 	case r.msg != "":
 		m.status, m.statusLvl = r.msg, lvOK

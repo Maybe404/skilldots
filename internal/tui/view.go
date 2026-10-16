@@ -292,7 +292,7 @@ func (m Model) packHeader(p Pack, w int) []string {
 	if !p.Upstream {
 		sel += " · upstream list unknown until u"
 	}
-	lines := []string{row(), row(title...), row(meta...), row(sg("agents ", t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint))}
+	lines := append(m.problem(w), row(), row(title...), row(meta...), row(sg("agents ", t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint)))
 	if rep := m.reports[p.Repo]; rep != nil {
 		lines = append(lines, row())
 		head := []seg{sgb("update ", t.Text)}
@@ -322,11 +322,32 @@ func (m Model) packHeader(p Pack, w int) []string {
 	return lines
 }
 
+// problem is a banner for a manifest the engine cannot resolve. Until it
+// is fixed the lists are incomplete, so it stays on screen.
+func (m Model) problem(w int) []string {
+	if m.snap.Problem == "" {
+		return nil
+	}
+	t, bg := m.theme, m.surf.panel
+	var out []string
+	for i, l := range wrap("skills.toml needs fixing: "+m.snap.Problem+" · fix it, then r reloads", w-4, 3) {
+		mark := "   "
+		if i == 0 {
+			mark = " ! "
+		}
+		out = append(out, paint(w, bg, sg(mark, t.Warn), sg(l, t.Warn)))
+	}
+	return out
+}
+
 func (m Model) viewRight(w, h int) []string {
 	t, bg := m.theme, m.surf.panel
 	row := func(segs ...seg) string { return paint(w, bg, append([]seg{sg(" ", "")}, segs...)...) }
 	var out []string
 	r := m.currentLeft()
+	if r == nil || r.kind != rowPack {
+		out = m.problem(w)
+	}
 	switch {
 	case r == nil && len(m.snap.Packs) == 0 && len(m.snap.Mine)+len(m.snap.Private)+len(m.snap.Apps) == 0:
 		out = append(out, row(), row(sgb("Your library is empty", t.Text)), row(),
@@ -336,7 +357,7 @@ func (m Model) viewRight(w, h int) []string {
 	case r == nil:
 		out = append(out, row(), row(sg("nothing selected", t.Muted)))
 	case r.kind == rowSkill:
-		out = m.skillDetail(r.skill, w)
+		out = append(out, m.skillDetail(r.skill, w)...)
 	default:
 		out = m.packView(m.snap.Packs[r.pack], w, h)
 	}
