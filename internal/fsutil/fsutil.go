@@ -155,7 +155,9 @@ func Pristine(dir, hash string) bool {
 		if p == dir {
 			return nil
 		}
-		if d.Name() == ".DS_Store" {
+		// Finder's .DS_Store file is noise; anything else by that name
+		// (a directory, a link) can hold data and counts as extra.
+		if d.Name() == ".DS_Store" && d.Type().IsRegular() {
 			return nil
 		}
 		if Skip[d.Name()] || !(d.IsDir() || d.Type().IsRegular()) {

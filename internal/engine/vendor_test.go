@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
 
@@ -444,5 +445,40 @@ func testSyncCaseOnlyRename(t *testing.T, use []string) {
 	}
 	if plan := apply(); plan.Changes() {
 		t.Fatalf("second apply not stable: %+v", plan.ChangeList())
+	}
+}
+
+// A directory named .DS_Store is not Finder noise: its files must reach
+// the trash when skilldots replaces a vendored skill or a copy.
+func TestDSStoreDirectoryIsNotDiscarded(t *testing.T) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, _, _ := newTestLib(t)
+	up := filepath.Join(world, "up")
+	writeSkillMD(t, filepath.Join(up, "skills", "foo"), "foo")
+	gitRepo(t, up)
+	p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+	if _, err := Sync(lib, p); err != nil {
+		t.Fatal(err)
+	}
+	pd, _ := PackDir(lib, up)
+	os.MkdirAll(filepath.Join(pd, "foo", ".DS_Store"), 0o755)
+	os.WriteFile(filepath.Join(pd, "foo", ".DS_Store", "notes.txt"), []byte("n"), 0o644)
+	os.WriteFile(filepath.Join(up, "skills", "foo", "more.md"), []byte("v2"), 0o644)
+	gitIn(t, up, "add", "-A")
+	gitIn(t, up, "commit", "-qm", "v2")
+	if _, err := Sync(lib, p); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := filepath.Glob(filepath.Join(lib.Root, TrashDir, "*", "foo", ".DS_Store", "notes.txt")); len(m) != 1 {
+		t.Fatal("notes.txt under a .DS_Store directory was deleted on update")
+	}
+
+	// A plain .DS_Store file is still ignored: a pristine copy plus Finder
+	// noise is discarded without a trash entry.
+	os.WriteFile(filepath.Join(pd, "foo", ".DS_Store"), []byte("finder"), 0o644)
+	h, _ := fsutil.HashTree(filepath.Join(pd, "foo"))
+	if !fsutil.Pristine(filepath.Join(pd, "foo"), h) {
+		t.Fatal("a .DS_Store file made the copy non-pristine")
 	}
 }

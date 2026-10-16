@@ -145,3 +145,24 @@ func TestCopyModeExtrasGoToTrash(t *testing.T) {
 		t.Fatalf("pristine copy trashed: %v", res.Backups)
 	}
 }
+
+func TestCopyModeDSStoreDirectoryGoesToTrash(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	reg, _ := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
+	SetRegistry(reg)
+	lib.Manifest.Targets.Default = []string{"box"}
+	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+	entries, _, _ := Resolve(lib, reg)
+	Apply(lib, MakePlan(lib, entries, false))
+	cp := filepath.Join(home, "box", "s")
+	os.MkdirAll(filepath.Join(cp, ".DS_Store"), 0o755)
+	os.WriteFile(filepath.Join(cp, ".DS_Store", "notes.txt"), []byte("n"), 0o644)
+	lib.Manifest.Targets.Default = []string{}
+	entries, _, _ = Resolve(lib, reg)
+	if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := filepath.Glob(filepath.Join(lib.Root, TrashDir, "*", "s", ".DS_Store", "notes.txt")); len(m) != 1 {
+		t.Fatal("notes.txt under a .DS_Store directory was deleted on disable")
+	}
+}
