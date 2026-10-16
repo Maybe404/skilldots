@@ -50,6 +50,18 @@ func TestHistoryCleansUpstreamSubjects(t *testing.T) {
 	if err != nil || fi.Size() > 4096 {
 		t.Fatalf("history file: %v, %d bytes", err, fi.Size())
 	}
+	// Cleaned when written, not only when read: the file is committed and
+	// read by other tools (and older skd versions).
+	raw, _ := os.ReadFile(filepath.Join(root, app.HistoryFile))
+	var onDisk app.UpdateRecord
+	if err := json.Unmarshal(raw, &onDisk); err != nil || len(onDisk.Commits) != 2 {
+		t.Fatalf("on disk: %v %s", err, raw)
+	}
+	for _, c := range onDisk.Commits {
+		if hasControl(c.Subject) || strings.ContainsRune(c.Subject, '‮') || utf8.RuneCountInString(c.Subject) > app.MaxSubject+1 {
+			t.Errorf("written uncleaned: %q", c.Subject)
+		}
+	}
 	s, _ = app.Open(root)
 	recs, skipped, err := s.History("", 0)
 	if err != nil || skipped != 0 || len(recs) != 1 || len(recs[0].Commits) != 2 {
@@ -141,6 +153,30 @@ func TestHistoryAccumulates(t *testing.T) {
 		if want := tos[len(tos)-1-i]; r.To != want {
 			t.Errorf("record %d is %s, want %s (newest first)", i, r.To, want)
 		}
+	}
+}
+
+// When the lock cannot be saved the update did not happen (the lock still
+// names the old commit): nothing is recorded, nothing linked; the next
+// update records it.
+func TestHistoryNotRecordedWhenLockSaveFails(t *testing.T) {
+	up := upstream(t)
+	repo := filepath.Join(up, "acme", "skills.git")
+	_, root := side(t, up)
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd")
+	write(t, filepath.Join(repo, "skills", "eng", "tdd", "a.md"), "a\n")
+	commit(t, repo, "tdd: a")
+	s, _ := app.Open(root)
+	// A directory where the lock goes: saving it fails.
+	lockFile := filepath.Join(root, "skills.lock")
+	os.Remove(lockFile)
+	write(t, filepath.Join(lockFile, "keep"), "x")
+	out, err := s.Update(nil, nil)
+	if err == nil {
+		t.Fatal("update saved a lock over a directory")
+	}
+	if _, serr := os.Stat(filepath.Join(root, app.HistoryFile)); serr == nil || len(out.History) != 0 || out.Apply != nil {
+		t.Fatalf("recorded or applied an update whose lock was not saved: %v %+v", serr, out)
 	}
 }
 

@@ -70,6 +70,33 @@ func TestClaudeDisabled(t *testing.T) {
 	}
 }
 
+// A custom target whose directory is Claude's (skills/ beside its
+// settings) links for Claude as much as the claude target does.
+func TestClaudeDisabledThroughCustomTarget(t *testing.T) {
+	up := upstream(t)
+	_, root := side(t, up)
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	os.MkdirAll(filepath.Join(dir, "skills"), 0o755)
+	m := manifest.New([]string{"mine"})
+	m.Targets.Custom["mine"] = manifest.CustomTarget{Path: filepath.Join(dir, "skills") + "/"}
+	if err := m.Save(filepath.Join(root, manifest.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd")
+	os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"skillOverrides": {"tdd": "off"}}`), 0o644)
+	s, _ := app.Open(root)
+	entries, err := s.Resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name == "tdd" && !e.ClaudeDisabled {
+			t.Errorf("tdd, linked into Claude's directory by a custom target, is not marked: %+v", e.Targets)
+		}
+	}
+}
+
 // Claude Code names a skill by the directory it finds, the link name, and
 // only sees what is linked into its own directory: a vendored skill
 // linked under another name, or one not linked for Claude, is not marked

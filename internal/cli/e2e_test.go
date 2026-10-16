@@ -156,6 +156,23 @@ func TestCloneFromBareRepo(t *testing.T) {
 	isLink(t, e.p(".agents/skills/mine"), e.p("lib2"))
 }
 
+// The URL given to skd clone is a repository to git even when it starts
+// with "-" (a relative path here): never an option.
+func TestCloneURLIsNeverAnOption(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.git(lib, "add", "-A")
+	e.git(lib, "commit", "-qm", "x")
+	e.git(e.home, "clone", "-q", "--bare", "--", lib, "-backup.git")
+	if out, errOut, code := e.skd("", "clone", "--", "-backup.git", e.p("lib2")); code != 0 {
+		t.Fatalf("clone -backup.git: exit %d\n%s\n%s", code, out, errOut)
+	}
+	if _, err := os.Stat(e.p("lib2/skills.toml")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInitInsideOuterRepoAndOtherLibrary(t *testing.T) {
 	e := newEnv(t)
 	// A larger repository the library lives in.

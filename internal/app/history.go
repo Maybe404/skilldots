@@ -212,7 +212,8 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 			r.MoreCommits = true
 			break
 		}
-		r.Commits = append(r.Commits, UpstreamCommit{Hash: CleanText(h, MaxName), Subject: CleanText(subj, MaxSubject)})
+		// Upstream's text: sanitize cleans and cuts it before it is written.
+		r.Commits = append(r.Commits, UpstreamCommit{Hash: h, Subject: subj})
 	}
 }
 
