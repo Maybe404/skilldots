@@ -73,6 +73,9 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 		switch {
 		case it.State == scan.Broken:
 			p.Kind, p.Label = "drop", "broken link; remove"
+		case manifest.CheckName(it.Name) != nil:
+			// It would become a directory and a link of that name.
+			p.Kind, p.Label = "skip", "not a valid skill name (letters, digits, '.', '_' and '-'); rename it first"
 		case it.Duplicate:
 			p.Kind, p.Label = "skip", "same name with different content in several agents; resolve by hand"
 		case it.State == scan.AppLink:

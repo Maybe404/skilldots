@@ -12,6 +12,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // TrashDir is the library folder where skilldots parks anything it takes
@@ -124,6 +125,12 @@ func Restore(lib *library.Library, id string) (string, error) {
 		return "", fmt.Errorf("no trash entry %q", id)
 	}
 	dest := strings.TrimSpace(string(origin))
+	// skd records where it took a directory from, and never takes one
+	// from a path with control characters: such a record was written by
+	// someone else, and restoring would create that name.
+	if safetext.Has(dest) {
+		return "", fmt.Errorf("trash entry %q: where it came from (%q) has control characters; restore it by hand from %q", id, dest, p)
+	}
 	if fsutil.Lexists(dest) {
 		return "", fmt.Errorf("%s already exists; remove it first (skd disable/remove) or restore by hand from %s", dest, p)
 	}

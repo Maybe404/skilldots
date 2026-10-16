@@ -34,7 +34,7 @@ func historyCmd() *cobra.Command {
 				return err
 			}
 			if skipped > 0 {
-				fmt.Fprintf(os.Stderr, "%s %s: %d line(s) could not be read and were skipped\n", warn("!"), c.HistoryPath(), skipped)
+				fmt.Fprintf(stderr, "%s %s: %d line(s) could not be read and were skipped\n", warn("!"), c.HistoryPath(), skipped)
 			}
 			if c.jsonOut(map[string]any{"records": recs, "skipped": skipped}) {
 				return nil
@@ -42,7 +42,7 @@ func historyCmd() *cobra.Command {
 			if len(recs) == 0 {
 				what := "no updates recorded yet"
 				if p != "" {
-					what = "no updates of " + p + " recorded"
+					what = "no updates of " + txt(p) + " recorded"
 				}
 				c.printf("%s\n", dim(what+" · skd update records each one"))
 				return nil

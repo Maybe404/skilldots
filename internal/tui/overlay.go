@@ -90,7 +90,7 @@ func inputOverlay(title, desc, placeholder, value string, t Theme, s surfaces, o
 	in.PlaceholderStyle = bg.Foreground(t.Muted)
 	in.Cursor.Style = lipgloss.NewStyle().Foreground(t.Accent)
 	in.Cursor.TextStyle = bg.Foreground(t.Text)
-	in.SetValue(value)
+	in.SetValue(clean(value)) // a setting from the file may hold anything
 	in.CursorEnd()
 	in.Focus()
 	return &overlay{kind: ovInput, title: title, desc: desc, input: in, verb: "next", onInput: onInput}

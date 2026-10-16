@@ -406,9 +406,9 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 				continue
 			}
 			mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!"), "forget": dim("?")}[op.Action]
-			line := fmt.Sprintf("  %s %-10s %s", mark, dim(op.Target.Name), op.Name)
+			line := fmt.Sprintf("  %s %-10s %s", mark, dim(txt(op.Target.Name)), txt(op.Name))
 			if op.Reason != "" {
-				line += "  " + dim(op.Reason)
+				line += "  " + dim(txt(op.Reason))
 			}
 			c.printf("%s\n", line)
 		}
@@ -427,7 +427,7 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 		return
 	}
 	for _, b := range out.Backups {
-		c.printf("  %s %s\n", dim("moved aside"), b)
+		c.printf("  %s %s\n", dim("moved aside"), txt(b))
 	}
 	if out.Applied {
 		c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
@@ -552,7 +552,7 @@ func trashCmd() *cobra.Command {
 			home, _ := os.UserHomeDir()
 			t := newTable("ID", "FROM", "WHEN")
 			for _, it := range items {
-				t.Row(it.ID, dim(strings.Replace(it.Origin, home, "~", 1)), dim(it.When.Format("2006-01-02 15:04")))
+				t.Row(txt(it.ID), dim(txt(strings.Replace(it.Origin, home, "~", 1))), dim(it.When.Format("2006-01-02 15:04")))
 			}
 			c.printf("%s\n%s\n", t.Render(), dim("skd trash restore <id>   ·   skd trash empty"))
 			return nil
@@ -571,7 +571,7 @@ func trashCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c.printf("%s restored to %s\n", ok("✓"), dest)
+			c.printf("%s restored to %s\n", ok("✓"), txt(dest))
 			c.jsonOut(map[string]any{"id": args[0], "restored": dest})
 			return nil
 		},

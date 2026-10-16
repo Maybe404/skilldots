@@ -16,6 +16,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // runMenu is what `skd` does with no arguments in a terminal: a guided
@@ -65,9 +66,9 @@ func runMenu() error {
 				updateDesc = fmt.Sprintf("%d packs have updates", n)
 			}
 		}
-		fmt.Println()
-		fmt.Println(card(lines...))
-		fmt.Println()
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, card(lines...))
+		fmt.Fprintln(stdout)
 		var choice string
 		err = ask(huh.NewSelect[string]().
 			Options(
@@ -87,13 +88,13 @@ func runMenu() error {
 			).
 			Value(&choice))
 		if err != nil || choice == "quit" {
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		}
 		if err := menuAction(c, choice, entries); err != nil {
-			fmt.Fprintln(os.Stderr, bad("error:"), err)
+			fmt.Fprintln(stderr, bad("error:"), err)
 		}
-		fmt.Println()
+		fmt.Fprintln(stdout)
 	}
 }
 
@@ -220,7 +221,7 @@ func opt(label, desc, value string) huh.Option[string] {
 
 func pickEntry(title string, entries []engine.Entry) (string, bool) {
 	if len(entries) == 0 {
-		fmt.Println(dim("nothing to choose from"))
+		fmt.Fprintln(stdout, dim("nothing to choose from"))
 		return "", false
 	}
 	var opts []huh.Option[string]
@@ -238,9 +239,9 @@ func pickEntry(title string, entries []engine.Entry) (string, bool) {
 // setupMenu runs when no library exists. It returns done=true once one does.
 func setupMenu() (bool, error) {
 	var how string
-	fmt.Println()
-	fmt.Println(card(brand(), dim("no library on this machine yet")))
-	fmt.Println()
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, card(brand(), dim("no library on this machine yet")))
+	fmt.Fprintln(stdout)
 	if err := ask(huh.NewSelect[string]().
 		Title("Where should your skills live?").
 		Description("A library is a git repository holding your skills and a skills.toml manifest.").
@@ -275,7 +276,7 @@ func setupMenu() (bool, error) {
 		if err := library.Remember(dir); err != nil {
 			return false, err
 		}
-		fmt.Printf("%s skd now uses %s\n", ok("✓"), dir)
+		fmt.Fprintf(stdout, "%s skd now uses %s\n", ok("✓"), dir)
 		return true, nil
 	}
 	if err := cmd.Execute(); err != nil {
@@ -300,6 +301,9 @@ func cloneCmd() *cobra.Command {
 			}
 			if fsutil.Lexists(dir) {
 				return fmt.Errorf("%s already exists", dir)
+			}
+			if safetext.Has(args[0]) {
+				return fmt.Errorf("%q has control characters: not a git URL", args[0])
 			}
 			if _, err := library.Git("", "clone", "-q", "--", args[0], dir); err != nil {
 				return err

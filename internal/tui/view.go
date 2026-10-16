@@ -9,8 +9,10 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // Minimum size the full layout needs; below it a notice is shown instead.
@@ -79,8 +81,16 @@ func (m Model) descLines() int {
 	return 2
 }
 
-// View renders the whole screen.
+// View renders the whole screen. Text from outside skd is cleaned where
+// it is drawn (paint, fit); as a last line of defence, anything that still
+// holds a control character or an escape sequence other than the
+// dashboard's own colours is cleaned on the way out (safetext.Screen).
+// Tests check view, so they see what the drawing code itself produces.
 func (m Model) View() string {
+	return safetext.Screen(m.view(), lipgloss.ColorProfile() != termenv.Ascii)
+}
+
+func (m Model) view() string {
 	if m.quitting || m.w == 0 || m.h == 0 {
 		return ""
 	}

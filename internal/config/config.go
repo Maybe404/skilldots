@@ -15,6 +15,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // Setting names.
@@ -136,6 +137,9 @@ func Set(name, value string) error {
 		return fmt.Errorf("%s is set with `%s`", name, k.ReadOnly)
 	}
 	value = strings.TrimSpace(value)
+	if safetext.Has(value) {
+		return fmt.Errorf("%s %q has control characters", name, value)
+	}
 	if err := k.Check(value); err != nil {
 		return err
 	}

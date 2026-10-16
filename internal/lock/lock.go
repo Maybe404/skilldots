@@ -3,6 +3,7 @@
 package lock
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 const FileName = "skills.lock"
@@ -60,7 +62,10 @@ func Load(path string) (*Lock, error) {
 		return nil, err
 	}
 	if err := toml.Unmarshal(b, l); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := checkText(b); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if l.Packs == nil {
 		l.Packs = map[string]*Pack{}
@@ -91,10 +96,30 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// checkText refuses a lock holding control characters, bidi controls or
+// invalid UTF-8 anywhere, in a value or a key (pack and skill names,
+// categories, link records and their paths): skd writes none, and every
+// one of them ends up printed or used as a path, so the file was written
+// to attack a terminal. Each place is named, quoted so it prints safely.
+func checkText(b []byte) error {
+	raw := map[string]any{}
+	if err := toml.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	var errs []error
+	for _, p := range safetext.Doc(raw) {
+		errs = append(errs, fmt.Errorf("%s has control characters; restore the file (git checkout -- %s) or remove the line", p, FileName))
+	}
+	return errors.Join(errs...)
+}
+
 func (l *Lock) Save(path string) error {
 	b, err := toml.Marshal(l)
 	if err != nil {
 		return err
+	}
+	if err := checkText(b); err != nil {
+		return fmt.Errorf("not saving %s: %w", FileName, err)
 	}
 	return fsutil.WriteAtomic(path, append([]byte("# Written by skilldots. Do not edit.\n"), b...))
 }

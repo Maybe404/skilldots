@@ -47,10 +47,10 @@ func (c *ctx) printf(format string, a ...any) { say(format, a...) }
 // say is printf for code that has no ctx yet (init, clone, use).
 func say(format string, a ...any) {
 	if flags.json {
-		fmt.Fprintf(os.Stderr, format, a...)
+		fmt.Fprintf(stderr, format, a...)
 		return
 	}
-	fmt.Fprintf(os.Stdout, format, a...)
+	fmt.Fprintf(stdout, format, a...)
 }
 
 // txt and errText are text from outside skd (upstream names and
@@ -73,7 +73,7 @@ func logLine(l app.Level, msg string) {
 	msg = safetext.Lines(msg)
 	switch l {
 	case app.Problem:
-		fmt.Fprintf(os.Stderr, "%s %s\n", warn("warning:"), msg)
+		fmt.Fprintf(stderr, "%s %s\n", warn("warning:"), msg)
 	case app.Done:
 		say("%s %s\n", ok("✓"), msg)
 	case app.Warn:
@@ -120,7 +120,7 @@ func confirm(prompt string) bool {
 		return true
 	}
 	if !isTerminal() {
-		fmt.Fprintln(os.Stderr, "refusing to proceed without a terminal; pass --yes")
+		fmt.Fprintln(stderr, "refusing to proceed without a terminal; pass --yes")
 		return false
 	}
 	var yes bool
@@ -166,6 +166,8 @@ func Root() *cobra.Command {
 			return runMenu()
 		},
 	}
+	root.SetOut(stdout)
+	root.SetErr(stderr)
 	root.Flags().BoolVar(&simple, "simple", false, "use the question-and-answer menu instead of the full-screen dashboard")
 	root.PersistentFlags().StringVar(&flags.library, "library", "", "library directory (default: $"+library.EnvLibrary+", nearest skills.toml, the one set by `skd use`, or ~/.skilldots)")
 	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
@@ -179,7 +181,7 @@ func Root() *cobra.Command {
 // Main runs the CLI and returns an exit code.
 func Main() int {
 	if err := Root().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", errText(err))
+		fmt.Fprintln(stderr, "error:", errText(err))
 		return 1
 	}
 	return 0

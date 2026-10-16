@@ -20,7 +20,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	skdBin = filepath.Join(dir, "skd")
-	out, err := exec.Command("go", "build", "-o", skdBin, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput()
+	// rawoutput: without the screen writer that cleans whatever reaches
+	// the terminal, so the tests see what each command itself prints
+	// (TestHostileLibraryPrintsClean).
+	out, err := exec.Command("go", "build", "-tags", "rawoutput", "-o", skdBin, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput()
 	if err != nil {
 		panic(string(out))
 	}

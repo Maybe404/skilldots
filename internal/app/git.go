@@ -1,10 +1,12 @@
 package app
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // commitPaths is what a library commit takes: everything under the root
@@ -52,6 +54,9 @@ const DefaultBackupMessage = "chore: update skills library"
 // when set, becomes origin first.
 func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 	lib := s.Lib
+	if safetext.Has(remote) {
+		return nil, fmt.Errorf("remote %q has control characters: not a git URL", remote)
+	}
 	if remote != "" {
 		if _, err := lib.Git("remote", "get-url", "origin"); err == nil {
 			// "--": a remote starting with "-" is a URL, never an option.

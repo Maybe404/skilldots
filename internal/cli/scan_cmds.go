@@ -127,7 +127,7 @@ Displaced directories are moved aside, never deleted.`,
 			if dry || (flags.json && !flags.yes) {
 				if !c.jsonOut(map[string]any{"proposals": props, "applied": false}) {
 					for _, p := range props {
-						c.printf("  %s %-28s %s\n", accent("→"), p.Item.Name, proposalLabel(p))
+						c.printf("  %s %-28s %s\n", accent("→"), txt(p.Item.Name), proposalLabel(p))
 					}
 					c.printf("%s\n", dim("run without --dry-run to apply (interactive) or with --yes"))
 				}
@@ -162,7 +162,7 @@ func pickProposals(props []app.Proposal) ([]app.Proposal, error) {
 		if p.Kind == "skip" {
 			continue
 		}
-		opts = append(opts, huh.NewOption(fmt.Sprintf("%-28s %s", p.Item.Name, proposalLabel(p)), i))
+		opts = append(opts, huh.NewOption(fmt.Sprintf("%-28s %s", txt(p.Item.Name), proposalLabel(p)), i))
 		pre = append(pre, i)
 	}
 	chosen := pre
@@ -180,11 +180,12 @@ func pickProposals(props []app.Proposal) ([]app.Proposal, error) {
 
 // proposalLabel colours a proposal's label by what accepting it does.
 func proposalLabel(p app.Proposal) string {
+	l := txt(p.Label)
 	switch p.Kind {
 	case "skip":
-		return warn(p.Label)
+		return warn(l)
 	case "drop":
-		return bad(p.Label)
+		return bad(l)
 	}
-	return p.Label
+	return l
 }

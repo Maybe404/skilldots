@@ -45,7 +45,7 @@ func configCmd() *cobra.Command {
 			}
 			t := newTable("SETTING", "VALUE", "")
 			for _, r := range rows {
-				v := r.Value
+				v := txt(r.Value)
 				if v == "" {
 					v = dim("unset")
 				}
@@ -72,7 +72,7 @@ func configCmd() *cobra.Command {
 				return err
 			}
 			if !jsonOut(map[string]string{"key": args[0], "value": all[args[0]]}) {
-				fmt.Println(all[args[0]])
+				fmt.Fprintln(stdout, txt(all[args[0]]))
 			}
 			return nil
 		},
@@ -92,7 +92,7 @@ func configCmd() *cobra.Command {
 			if value == "" {
 				say("%s %s unset\n", ok("✓"), args[0])
 			} else {
-				say("%s %s = %s\n", ok("✓"), args[0], value)
+				say("%s %s = %s\n", ok("✓"), args[0], txt(value))
 			}
 			jsonOut(map[string]string{"key": args[0], "value": value})
 			return nil

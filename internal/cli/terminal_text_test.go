@@ -28,7 +28,7 @@ func TestUpstreamTextReachesTheTerminalClean(t *testing.T) {
 	e := newEnv(t)
 	lib := e.p("lib")
 	e.ok("", "init", "--no-skill", lib)
-	evil := "\x1b]0;pwned\x07\x1b[2J‮evil\u009b31m"
+	evil := "\x1b]0;pwned\x07\x1b[2J\u202eevil\u009b31m"
 	e.write("up/skills/eng/tdd/SKILL.md", "---\nname: tdd\ndescription: tests first "+evil+"\n---\n")
 	e.skill("up/skills/cat"+evil+"/hidden", "hidden")
 	e.write("up/skills/badname/SKILL.md", "---\nname: bad"+evil+"\n---\n")
@@ -75,10 +75,11 @@ func TestUpstreamTextReachesTheTerminalClean(t *testing.T) {
 	e.git(up, "add", "-A")
 	e.git(up, "commit", "-qm", "more "+evil)
 	// A skill in the lock that is no longer selected (a hand-edited
-	// lock): update drops it and says so.
+	// lock): update drops it and says so. (A lock whose names hold
+	// control characters is refused: TestHostileManifestAndLockAreRefused.)
 	lockPath := filepath.Join(lib, "skills.lock")
 	b, _ := os.ReadFile(lockPath)
-	os.WriteFile(lockPath, append(b, []byte("\n[packs.'"+up+"'.skills.\"gone\\u001b[2J\\u202E\"]\nhash = 'x'\n")...), 0o644)
+	os.WriteFile(lockPath, append(b, []byte("\n[packs.'"+up+"'.skills.gone]\nhash = 'x'\n")...), 0o644)
 	out, errOut, code = e.skd(lib, "update")
 	if code != 0 {
 		t.Fatalf("update: exit %d\n%s\n%s", code, out, errOut)
@@ -93,7 +94,7 @@ func TestUpstreamTextReachesTheTerminalClean(t *testing.T) {
 	// A library file written to attack: a lock whose category holds
 	// escapes, a manifest whose repo does.
 	b, _ = os.ReadFile(lockPath)
-	bad := strings.Replace(string(b), `category = 'eng'`, `category = "eng\u001b[2J‮"`, 1)
+	bad := strings.Replace(string(b), `category = 'eng'`, `category = "eng\u001b[2J\u202e"`, 1)
 	if bad == string(b) {
 		t.Fatalf("no category in the lock:\n%s", b)
 	}

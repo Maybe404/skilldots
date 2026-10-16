@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -65,7 +64,7 @@ func addCmd() *cobra.Command {
 			}
 			pre, missing := f.Preselect(hint)
 			for _, m := range missing {
-				fmt.Fprintf(os.Stderr, "%s %s: nothing named %q upstream\n", warn("!"), src.Repo, m)
+				fmt.Fprintf(stderr, "%s %s: nothing named %q upstream\n", warn("!"), src.Repo, m)
 			}
 			sel := app.Selection{Skills: skills, Categories: categories, All: all, Alias: alias, Agents: targetNames}
 			switch {
@@ -195,7 +194,7 @@ func dedupe(in []string) []string {
 // printRejected warns about upstream SKILL.md files that were not used.
 func printRejected(c *ctx, repo string, rejected []pack.Rejected) {
 	for _, r := range rejected {
-		fmt.Fprintf(os.Stderr, "%s %s: %s\n", warn("!"), repo, r)
+		fmt.Fprintf(stderr, "%s %s: %s\n", warn("!"), repo, r)
 	}
 }
 
@@ -210,7 +209,7 @@ func nonNil[T any](s []T) []T {
 // upstream name was already taken in the library.
 func printRenamed(c *ctx, rep *engine.SyncReport) {
 	for _, n := range sortedKeys(rep.Renamed) {
-		fmt.Fprintf(os.Stderr, "%s %s: %q is already used in the library; linking it as %q (as in skills.toml)\n", warn("!"), rep.Repo, n, rep.Renamed[n])
+		fmt.Fprintf(stderr, "%s %s: %q is already used in the library; linking it as %q (as in skills.toml)\n", warn("!"), rep.Repo, n, rep.Renamed[n])
 	}
 }
 
@@ -225,7 +224,7 @@ func sortedKeys[V any](m map[string]V) []string {
 
 func warnLicense(c *ctx, rep *engine.SyncReport) {
 	for _, w := range rep.Warnings {
-		fmt.Fprintf(os.Stderr, "%s %s: %s\n", warn("!"), rep.Repo, txt(w))
+		fmt.Fprintf(stderr, "%s %s: %s\n", warn("!"), rep.Repo, txt(w))
 	}
 	if rep.NoLicense {
 		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
@@ -557,7 +556,7 @@ func pathCmd() *cobra.Command {
 				return fmt.Errorf("no skill %q", args[0])
 			}
 			if !c.jsonOut(map[string]any{"name": e.LinkName, "path": e.Dir}) {
-				fmt.Println(e.Dir)
+				fmt.Fprintln(stdout, e.Dir)
 			}
 			return nil
 		},

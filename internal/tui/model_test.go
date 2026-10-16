@@ -653,7 +653,7 @@ func TestViewStripsControlCharacters(t *testing.T) {
 	sgr := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	check := func(name string, m Model) {
 		t.Helper()
-		v := m.View()
+		v := m.view() // before the last line of defence in View
 		rest := sgr.ReplaceAllString(v, "")
 		for i := 0; i < len(rest); i++ {
 			if c := rest[i]; (c < 0x20 && c != '\n') || c == 0x7f {

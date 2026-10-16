@@ -5,6 +5,9 @@
 package safetext
 
 import (
+	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -70,4 +73,110 @@ func Lines(s string) string {
 		lines[i] = Clean(l, 0)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Screen is text on its way to a terminal, cleaned as a last line of
+// defence: line breaks stay, colour codes (SGR, ESC [ … m) stay when sgr
+// is set, and everything else is as Clean leaves it: no other escape
+// sequence can start, so nothing can move the cursor, clear the screen,
+// set the window title or write the clipboard. Text from outside skd is
+// cleaned where it is read or printed; this only catches what was missed.
+func Screen(s string, sgr bool) string {
+	if !strings.ContainsFunc(s, func(r rune) bool { return r != '\n' && (Unsafe(r) || space(r)) }) && utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	s = strings.ToValidUTF8(s, "�")
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == '\x1b' && sgr:
+			if m := sgrLen(s[i:]); m > 0 {
+				b.WriteString(s[i : i+m])
+				i += m
+				continue
+			}
+		case r == '\n':
+			b.WriteByte('\n')
+		case space(r):
+			b.WriteByte(' ')
+		case !Unsafe(r):
+			b.WriteString(s[i : i+n])
+		}
+		i += n
+	}
+	return b.String()
+}
+
+// sgrLen is the length of the SGR sequence s starts with, 0 when it does
+// not start with one.
+func sgrLen(s string) int {
+	if len(s) < 3 || s[0] != '\x1b' || s[1] != '[' {
+		return 0
+	}
+	for i := 2; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == 'm':
+			return i + 1
+		case c >= '0' && c <= '9' || c == ';' || c == ':':
+		default:
+			return 0
+		}
+	}
+	return 0
+}
+
+// Doc lists every string value and every key of a decoded document
+// (TOML or JSON decoded into maps, slices and strings) that Has unsafe
+// text, as `place = "value"` with both quoted so the list itself prints
+// safely: `pack[0].use[1] = "tdd\x1b[2J"`, `key pack[0].skill."a\u202e"`.
+// Keys and indexes are visited in order, so the list is stable.
+func Doc(v any) []string {
+	var out []string
+	var walk func(path string, v any)
+	walk = func(path string, v any) {
+		switch v := v.(type) {
+		case string:
+			if Has(v) {
+				out = append(out, path+" = "+strconv.Quote(v))
+			}
+		case []any:
+			for i, e := range v {
+				walk(fmt.Sprintf("%s[%d]", path, i), e)
+			}
+		case []map[string]any:
+			for i, e := range v {
+				walk(fmt.Sprintf("%s[%d]", path, i), e)
+			}
+		case map[string]any:
+			keys := make([]string, 0, len(v))
+			for k := range v {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				p := docKey(path, k)
+				if Has(k) {
+					out = append(out, "key "+p)
+				}
+				walk(p, v[k])
+			}
+		}
+	}
+	walk("", v)
+	return out
+}
+
+// docKey is path extended by key k, quoted unless it is a bare key.
+func docKey(path, k string) string {
+	bare := k != "" && !strings.ContainsFunc(k, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-')
+	})
+	if !bare {
+		k = strconv.Quote(k)
+	}
+	if path == "" {
+		return k
+	}
+	return path + "." + k
 }

@@ -87,7 +87,7 @@ func setupTheme(flag string) error {
 	// without a word (editor, theme); say why, once, on stderr.
 	if _, err := config.Load(); err != nil && !settingsWarned {
 		settingsWarned = true
-		fmt.Fprintf(os.Stderr, "warning: your settings are ignored: %s\n", txt(err.Error()))
+		fmt.Fprintf(stderr, "warning: your settings are ignored: %s\n", txt(err.Error()))
 	}
 	mode := strings.ToLower(strings.TrimSpace(flag))
 	src := "--theme"
@@ -102,7 +102,7 @@ func setupTheme(flag string) error {
 		if k, _ := config.Lookup(config.Theme); k.Check(mode) != nil {
 			if !themeWarned {
 				themeWarned = true
-				fmt.Fprintf(os.Stderr, "warning: the theme setting %q is not light, dark or auto; using auto (skd config set theme auto fixes it)\n", mode)
+				fmt.Fprintf(stderr, "warning: the theme setting %q is not light, dark or auto; using auto (skd config set theme auto fixes it)\n", mode)
 			}
 			mode = "auto"
 		}

@@ -88,38 +88,28 @@ func Load(path string) (*Manifest, error) {
 	if m.Targets.Custom == nil {
 		m.Targets.Custom = map[string]CustomTarget{}
 	}
-	if err := m.checkText(); err != nil {
+	if err := checkText(b); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return m, nil
 }
 
-// checkText refuses a manifest whose repositories, refs, aliases, paths
-// or target names hold control characters, bidi controls or invalid
-// UTF-8: they are printed by every command and passed to git, and nothing
-// skd writes has them, so the file was written to attack a terminal.
-func (m *Manifest) checkText() error {
-	bad := func(what, s string) error {
-		if safetext.Has(s) {
-			return fmt.Errorf("%s %q has control characters; fix it by hand", what, s)
-		}
-		return nil
+// checkText refuses a manifest that holds control characters, bidi
+// controls or invalid UTF-8 anywhere: in any value, array element or key
+// (repo, ref, alias, use, skip, targets, skill overrides and their as,
+// app and local entries, custom targets with their path and mode, and
+// tables this version does not know). Every one of them is a name, a
+// path or a setting that commands print or pass on, nothing skd writes
+// has them, so the file was written to attack a terminal. The error names
+// each place, quoted so it prints safely.
+func checkText(b []byte) error {
+	raw := map[string]any{}
+	if err := toml.Unmarshal(b, &raw); err != nil {
+		return err
 	}
 	var errs []error
-	for _, p := range m.Packs {
-		errs = append(errs, bad("pack repo", p.Repo), bad("pack ref", p.Ref), bad("pack alias", p.Alias))
-	}
-	for _, a := range m.Apps {
-		errs = append(errs, bad("app name", a.Name), bad("app path", a.Path))
-	}
-	for _, l := range m.Locals {
-		errs = append(errs, bad("local name", l.Name))
-	}
-	for n, ct := range m.Targets.Custom {
-		errs = append(errs, bad("target", n), bad("target path", ct.Path))
-	}
-	for _, n := range m.Targets.Default {
-		errs = append(errs, bad("default target", n))
+	for _, p := range safetext.Doc(raw) {
+		errs = append(errs, fmt.Errorf("%s has control characters; fix it by hand", p))
 	}
 	return errors.Join(errs...)
 }
@@ -137,6 +127,12 @@ func (m *Manifest) Save(path string) error {
 	b, err := toml.Marshal(m)
 	if err != nil {
 		return err
+	}
+	// Never write a file Load would refuse: a name with control
+	// characters that came in some other way (an option, an old file)
+	// is an error now, not a library that no longer opens.
+	if err := checkText(b); err != nil {
+		return fmt.Errorf("not saving %s: %w", FileName, err)
 	}
 	header := "# skilldots manifest — edit by hand or with `skd`.\n# Docs: https://github.com/Maybe404/skilldots\n\n"
 	return fsutil.WriteAtomic(path, []byte(header+string(b)))
@@ -165,6 +161,9 @@ func (m *Manifest) FindPack(key string) *Pack {
 func (m *Manifest) CheckAlias(alias, self string) error {
 	if alias == "" {
 		return nil
+	}
+	if safetext.Has(alias) {
+		return fmt.Errorf("--alias %q has control characters; pick a short name such as \"acme\"", alias)
 	}
 	if strings.ContainsAny(alias, `/\:`) {
 		return fmt.Errorf(`--alias %q may not contain "/", "\" or ":"; pick a short name such as "acme"`, alias)
