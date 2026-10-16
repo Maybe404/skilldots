@@ -30,7 +30,7 @@ skilldots（命令 `skd`）：声明式管理本机所有 agent 工具的 skills
 └── vendor/<owner>/<repo>/<分类>/<名>/   第三方，工具拉取，不手改；每个 repo 附 LICENSE
 ```
 
-缓存：`~/.cache/skilldots/repos/<owner>__<repo>`，浅克隆，一个仓库一份，只做加速，可随时删。每份克隆旁有 `<owner>__<repo>.lock`：fetch、扫描、拷出都在这把锁里（进程内互斥加跨进程 flock，Windows 用 LockFileEx；等锁可取消），两个 skd 同时 fetch 同一仓库时排队而不是撞 git 的 `shallow.lock`；git 因克隆里的锁文件（shallow/index/HEAD/FETCH_HEAD.lock）失败时，只有确实拿到 flock 才处理：锁文件不到 30 秒的视为有别的 git（如手动运行的）正在用，等它消失；超过 30 秒的视为被杀的 git 留下的陈旧锁，删掉；然后重试一次。flock 拿不到（锁文件建不出、文件系统不支持）或失败原因与锁文件无关时一律不碰。
+缓存：`~/.cache/skilldots/repos/<owner>__<repo>`，浅克隆，一个仓库一份，只做加速，可随时删。每份克隆旁有 `<owner>__<repo>.lock`：fetch、扫描、拷出都在这把锁里（进程内互斥加跨进程 flock，Windows 用 LockFileEx；等锁可取消），两个 skd 同时 fetch 同一仓库时排队而不是撞 git 的 `shallow.lock`；git 因克隆 `.git/` 下的锁文件失败时（从 git 报错里引号中的路径解析出是哪个，如 `index.lock`、`shallow.lock`、`refs/heads/main.lock`，中英文输出路径原样；不在本克隆 `.git/` 下的路径不算），只有确实拿到 flock 才处理，且只处理解析出的那几个：锁文件不到 30 秒的视为有别的 git（如手动运行的）正在用，等它消失；超过 30 秒的视为被杀的 git 留下的陈旧锁，删掉；然后重试，下一次撞上别的锁文件就再按同样规则处理，最多重试 5 次。flock 拿不到（锁文件建不出、文件系统不支持）或失败原因与锁文件无关时一律不碰。
 
 ## skills.toml
 

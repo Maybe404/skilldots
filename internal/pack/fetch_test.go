@@ -59,7 +59,7 @@ func fetchHeld(ctx context.Context, src Source) error {
 // lockFile writes a git lock file in the clone, age old.
 func lockFile(t *testing.T, src Source, name string, age time.Duration) string {
 	t.Helper()
-	p := filepath.Join(CachePath(src.Repo), ".git", name)
+	p := filepath.Join(CachePath(src.Repo), ".git", filepath.FromSlash(name))
 	if err := os.WriteFile(p, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -159,5 +159,84 @@ func TestFetchOtherFailureLeavesLocks(t *testing.T) {
 	}
 	if !exists(lock) {
 		t.Fatal("index.lock removed after an unrelated failure")
+	}
+}
+
+// A ref lock left by a git killed long ago (not one of the lock files
+// fetch and reset take every time) is cleared too.
+func TestFetchClearsStaleRefLock(t *testing.T) {
+	src, up := fetchEnv(t)
+	if err := fetchHeld(context.Background(), src); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, up, "2")
+	ref := lockFile(t, src, "refs/heads/main.lock", 0)
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	os.Chtimes(ref, old, old)
+	orig := lockFile(t, src, "ORIG_HEAD.lock", 10*time.Minute)
+	if err := fetchHeld(context.Background(), src); err != nil {
+		t.Fatalf("fetch with stale ref locks: %v", err)
+	}
+	if exists(ref) || exists(orig) {
+		t.Fatal("stale ref lock files still there")
+	}
+}
+
+// git leaves a live ORIG_HEAD.lock alone (reset only warns) and so does
+// Fetch.
+func TestFetchLeavesLiveOrigHeadLock(t *testing.T) {
+	src, up := fetchEnv(t)
+	if err := fetchHeld(context.Background(), src); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, up, "2")
+	orig := lockFile(t, src, "ORIG_HEAD.lock", 0)
+	if err := fetchHeld(context.Background(), src); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(orig) {
+		t.Fatal("a live ORIG_HEAD.lock was removed")
+	}
+}
+
+// The lock files are read from git's message, in any language, exactly as
+// named: ORIG_HEAD.lock is not HEAD.lock, and a path outside the clone's
+// .git (the remote's repository) is not the clone's.
+func TestLockPaths(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	os.MkdirAll(filepath.Join(gitDir, "refs", "heads"), 0o755)
+	other := t.TempDir()
+	os.MkdirAll(filepath.Join(other, ".git"), 0o755)
+	abs := filepath.ToSlash(gitDir)
+	for _, c := range []struct {
+		msg  string
+		want []string
+	}{
+		{"error: update_ref failed for ref 'ORIG_HEAD': cannot lock ref 'ORIG_HEAD': Unable to create '" + abs + "/ORIG_HEAD.lock': File exists.",
+			[]string{"ORIG_HEAD.lock"}},
+		{"错误：对引用 'HEAD' 执行 update_ref 失败：cannot lock ref 'HEAD': 无法创建 '" + abs + "/refs/heads/main.lock'：File exists。",
+			[]string{filepath.Join("refs", "heads", "main.lock")}},
+		{"致命错误：无法创建 '" + abs + "/index.lock'：文件已存在。\nfatal: Unable to create '" + abs + "/shallow.lock': File exists.",
+			[]string{"index.lock", "shallow.lock"}},
+		{"fatal: Unable to create '.git/index.lock': File exists.", []string{"index.lock"}},
+		{"fatal: Unable to create '" + filepath.ToSlash(other) + "/.git/index.lock': File exists.", nil},
+		{"fatal: Unable to create '" + abs + "/../x.lock': File exists.", nil},
+		{"fatal: unable to access 'https://example.com/repo.git/': timeout", nil},
+	} {
+		var got []string
+		for _, p := range lockPaths(dir, c.msg) {
+			rel, _ := filepath.Rel(gitDir, p)
+			got = append(got, rel)
+		}
+		if len(got) != len(c.want) {
+			t.Errorf("%q: got %v, want %v", c.msg, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%q: got %v, want %v", c.msg, got, c.want)
+			}
+		}
 	}
 }

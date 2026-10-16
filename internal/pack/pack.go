@@ -201,26 +201,24 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			_, err := library.GitContext(ctx, dir, "reset", "-q", "--hard", "FETCH_HEAD")
 			return err
 		}
-		if err := update(); err != nil {
-			// git stopped on a lock file. With the clone's file lock held
-			// no other skd is using it, but a git run by hand still can:
-			// a lock file is only taken as left by a git killed half-way
-			// once it is old. A younger one is waited for, then git runs
-			// once more.
-			if ctx.Err() != nil || !lockClash(err) || !ownsClone(src.Repo) || !clearLocks(ctx, dir) {
+		// git stops on a lock file it finds in the clone. With the clone's
+		// file lock held no other skd is using it, but a git run by hand
+		// still can: a lock file is only taken as left by a git killed
+		// half-way once it is old. A younger one is waited for. Each
+		// attempt can stop on another lock file, so git runs again for
+		// each, a few times at most.
+		err := update()
+		for try := 0; err != nil; try++ {
+			locks := lockPaths(dir, err.Error())
+			if ctx.Err() != nil || try == lockRetries || len(locks) == 0 || !ownsClone(src.Repo) || !clearLocks(ctx, locks) {
 				return "", "", err
 			}
-			if err := update(); err != nil {
-				return "", "", err
-			}
+			err = update()
 		}
 	}
 	commit, err = library.GitContext(ctx, dir, "rev-parse", "HEAD")
 	return dir, commit, err
 }
-
-// gitLocks are the lock files git takes in a clone during fetch and reset.
-var gitLocks = []string{"shallow.lock", "index.lock", "HEAD.lock", "FETCH_HEAD.lock"}
 
 // staleAge is how old a git lock file must be to count as left behind: git
 // holds one only while it writes, and a git killed on cancel (SIGTERM)
@@ -230,25 +228,62 @@ const staleAge = 30 * time.Second
 // lockPoll is how often clearLocks looks again at a lock file in use.
 const lockPoll = 200 * time.Millisecond
 
-// lockClash reports whether git failed on one of gitLocks ("Unable to
-// create '….git/index.lock': File exists").
-func lockClash(err error) bool {
-	for _, f := range gitLocks {
-		if strings.Contains(err.Error(), f) {
-			return true
+// lockRetries is how many times Fetch runs git again after clearing lock
+// files.
+const lockRetries = 5
+
+// quotedLock finds the quoted path in git's "Unable to create
+// '<path>.lock': File exists". The path is printed as is in every
+// language; the quotes are ASCII in git's own messages, the others are
+// there for translations that use their own.
+var quotedLock = regexp.MustCompile(`'([^']+\.lock)'|"([^"]+\.lock)"|“([^”]+\.lock)”|‘([^’]+\.lock)’|«\s*([^»]+?\.lock)\s*»`)
+
+// lockPaths returns the lock files inside dir's .git that git's error msg
+// names. Paths elsewhere (a remote's own repository, say) are left out.
+func lockPaths(dir, msg string) []string {
+	gitDir := filepath.Join(dir, ".git")
+	realGit, err := filepath.EvalSymlinks(gitDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range quotedLock.FindAllStringSubmatch(msg, -1) {
+		var p string
+		for _, g := range m[1:] {
+			if g != "" {
+				p = filepath.FromSlash(g)
+				break
+			}
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(dir, p) // git runs in dir
+		}
+		parent, err := filepath.EvalSymlinks(filepath.Dir(p))
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(realGit, parent)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		local := filepath.Join(gitDir, rel, filepath.Base(p))
+		if !seen[local] {
+			seen[local] = true
+			out = append(out, local)
 		}
 	}
-	return false
+	return out
 }
 
-// clearLocks waits until each git lock file in dir is gone (the git that
-// held it finished) or older than staleAge (nothing is writing it), then
-// removes the old ones. It reports false when ctx is done first.
-func clearLocks(ctx context.Context, dir string) bool {
+// clearLocks waits until each of the lock files locks is gone (the git
+// that held it finished) or older than staleAge (nothing is writing it),
+// then removes the old ones. It reports false when ctx is done first.
+func clearLocks(ctx context.Context, locks []string) bool {
 	for {
 		young := false
-		for _, f := range gitLocks {
-			fi, err := os.Lstat(filepath.Join(dir, ".git", f))
+		for _, p := range locks {
+			fi, err := os.Lstat(p)
 			if err == nil && time.Since(fi.ModTime()) < staleAge {
 				young = true
 			}
@@ -262,8 +297,7 @@ func clearLocks(ctx context.Context, dir string) bool {
 			return false
 		}
 	}
-	for _, f := range gitLocks {
-		p := filepath.Join(dir, ".git", f)
+	for _, p := range locks {
 		if fi, err := os.Lstat(p); err == nil && time.Since(fi.ModTime()) >= staleAge {
 			os.Remove(p)
 		}
