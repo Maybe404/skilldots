@@ -57,13 +57,31 @@ func TestCheckAlias(t *testing.T) {
 	m := New(nil)
 	m.Packs = []*Pack{{Repo: "acme/skills"}, {Repo: "local"}}
 	for _, bad := range []string{"acme/skills", "ACME/Skills", "a/b", "x:y", "local", "LOCAL"} {
-		if err := m.CheckAlias(bad); err == nil {
+		if err := m.CheckAlias(bad, ""); err == nil {
 			t.Errorf("alias %q accepted", bad)
 		}
 	}
 	for _, good := range []string{"", "acme", "my-skills"} {
-		if err := m.CheckAlias(good); err != nil {
+		if err := m.CheckAlias(good, ""); err != nil {
 			t.Errorf("alias %q: %v", good, err)
+		}
+	}
+}
+
+// Two packs never share an alias: the second would be unreachable by it.
+// Re-setting (or re-casing) a pack's own alias is not a clash.
+func TestCheckAliasDuplicate(t *testing.T) {
+	m := New(nil)
+	m.Packs = []*Pack{{Repo: "acme/one", Alias: "acme"}, {Repo: "acme/two"}}
+	for _, a := range []string{"acme", "ACME"} {
+		if err := m.CheckAlias(a, "acme/two"); err == nil {
+			t.Errorf("alias %q taken by acme/one accepted for acme/two", a)
+		}
+		if err := m.CheckAlias(a, "new/repo"); err == nil {
+			t.Errorf("alias %q taken by acme/one accepted for a new pack", a)
+		}
+		if err := m.CheckAlias(a, "acme/one"); err != nil {
+			t.Errorf("acme/one re-setting its own alias %q: %v", a, err)
 		}
 	}
 }

@@ -124,10 +124,11 @@ func (m *Manifest) FindPack(key string) *Pack {
 	return nil
 }
 
-// CheckAlias reports why alias cannot name a pack: it may not contain
-// "/" (it would read as a repo) or ":" (it would split a qualified
-// "<pack>:<skill>" key), nor spell a subscribed repo.
-func (m *Manifest) CheckAlias(alias string) error {
+// CheckAlias reports why alias cannot name the pack whose repo is self
+// ("" for a pack not subscribed yet): it may not contain "/" (it would
+// read as a repo) or ":" (it would split a qualified "<pack>:<skill>"
+// key), nor spell a subscribed repo or another pack's alias.
+func (m *Manifest) CheckAlias(alias, self string) error {
 	if alias == "" {
 		return nil
 	}
@@ -137,6 +138,9 @@ func (m *Manifest) CheckAlias(alias string) error {
 	for _, p := range m.Packs {
 		if strings.EqualFold(p.Repo, alias) {
 			return fmt.Errorf("--alias %q is the repository of a subscribed pack; pick another", alias)
+		}
+		if p.Repo != self && p.Alias != "" && strings.EqualFold(p.Alias, alias) {
+			return fmt.Errorf("--alias %q is already the alias of %s; pick another", alias, p.Repo)
 		}
 	}
 	return nil

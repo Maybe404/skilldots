@@ -436,3 +436,22 @@ func TestAddRejectsAliasThatShadows(t *testing.T) {
 		t.Errorf("skills.toml changed:\n%s", after)
 	}
 }
+
+// A second pack cannot take an alias another pack already has; the
+// check runs before anything is fetched.
+func TestAddRejectsDuplicateAlias(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	toml := filepath.Join(lib, "skills.toml")
+	b, _ := os.ReadFile(toml)
+	os.WriteFile(toml, append(b, []byte("\n[[pack]]\nrepo = 'acme/one'\nalias = 'acme'\n")...), 0o644)
+	before, _ := os.ReadFile(toml)
+	_, errOut, code := e.skd("", "--library", lib, "add", "acme/two", "--alias", "Acme")
+	if code == 0 || !strings.Contains(errOut, "already the alias of acme/one") {
+		t.Errorf("duplicate alias: exit %d, %s", code, errOut)
+	}
+	if after, _ := os.ReadFile(toml); string(after) != string(before) {
+		t.Errorf("skills.toml changed:\n%s", after)
+	}
+}

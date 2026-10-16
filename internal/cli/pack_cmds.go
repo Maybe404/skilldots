@@ -36,15 +36,15 @@ func addCmd() *cobra.Command {
 				return fmt.Errorf("--alias %q is reserved (it names your own skills in skills:<name>); pick another", alias)
 			}
 			m := c.lib.Manifest
-			if err := m.CheckAlias(alias); err != nil {
-				return err
-			}
 			arg := args[0]
 			if existing := m.FindPack(arg); existing != nil {
 				arg = existing.Repo
 			}
 			src, err := pack.ParseSource(arg)
 			if err != nil {
+				return err
+			}
+			if err := m.CheckAlias(alias, src.Repo); err != nil {
 				return err
 			}
 			p := m.FindPack(src.Repo)
