@@ -41,7 +41,7 @@ Most of the time it is not a person running `skd` but the agent on their machine
 go install github.com/Maybe404/skilldots/cmd/skd@latest
 ```
 
-Prebuilt binaries will follow. skd runs `git` (2.24 or later) for everything it fetches and commits.
+Prebuilt binaries will follow. skd runs `git` for everything it fetches and commits; 2.24 or later is best. An older git does not know `--end-of-options`, which skd puts before arguments read from files (commits from `skills.lock`): skd then passes them without it, but only when none of them could be taken for an option, and otherwise fails saying it needs git 2.24.
 
 ## Library layout
 

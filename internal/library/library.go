@@ -184,12 +184,39 @@ func GitContext(ctx context.Context, dir string, args ...string) (string, error)
 		if msg == "" {
 			msg = err.Error()
 		}
-		if slices.Contains(args, "--end-of-options") && strings.Contains(msg, "end-of-options") {
-			msg += "\n(skd needs git 2.24 or later: this git does not know --end-of-options)"
+		if strings.Contains(msg, "end-of-options") {
+			// git before 2.24. Without the marker git reads the arguments
+			// the same, as long as none of them up to "--" starts with "-"
+			// (commits from the lock are hex, checked when it is read).
+			if older, ok := withoutEndOfOptions(args); ok {
+				return GitContext(ctx, dir, older...)
+			}
+			if slices.Contains(args, "--end-of-options") {
+				msg += "\n(skd needs git 2.24 or later: this git does not know --end-of-options)"
+			}
 		}
 		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
 	return strings.TrimSpace(out.String()), nil
+}
+
+// withoutEndOfOptions is args without "--end-of-options", for a git that
+// does not know it; ok is false when it is not there or when an argument
+// after it (up to "--") starts with "-" and would be taken for an option.
+func withoutEndOfOptions(args []string) (out []string, ok bool) {
+	i := slices.Index(args, "--end-of-options")
+	if i < 0 {
+		return nil, false
+	}
+	for _, a := range args[i+1:] {
+		if a == "--" {
+			break
+		}
+		if strings.HasPrefix(a, "-") {
+			return nil, false
+		}
+	}
+	return append(append([]string{}, args[:i]...), args[i+1:]...), true
 }
 
 // IsGitRepo reports whether dir is the top of its own git work tree. A
