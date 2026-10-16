@@ -62,6 +62,7 @@ func TestForgedLockNeverDeletes(t *testing.T) {
 				e.write(".claude/skills/mine/notes.txt", "precious")
 				e.write(".claude/skills/dot/SKILL.md", "---\nname: dot\ndescription: dot\n---\n")
 				e.write(".claude/skills/dot/notes.txt", "precious too")
+				e.write(".claude/skills/mine2/notes.txt", "precious three")
 				for _, l := range []struct{ name, to string }{
 					{"mine3", "dot"}, {"mine4", e.p(".claude/skills/dot")}, {"mine5", "dot"}, {"mine6", "dot"},
 				} {
@@ -72,7 +73,7 @@ func TestForgedLockNeverDeletes(t *testing.T) {
 				if wanted {
 					// The library also has skills by those names, so the
 					// records are of entries it wants.
-					for _, n := range []string{"mine", "mine3", "mine4", "mine5", "mine6"} {
+					for _, n := range []string{"mine", "mine2", "mine3", "mine4", "mine5", "mine6"} {
 						e.skill("lib/skills/"+n, n)
 					}
 				}
@@ -87,6 +88,11 @@ mode = 'copy'
 source = 'skills/mine'
 hash = '`+h+`'
 path = '`+e.p(".claude/skills/mine")+`'
+
+[links.'claude/mine2']
+mode = 'link'
+source = 'skills/nothing'
+path = '`+e.p(".claude/skills/mine2")+`'
 
 [links.'claude/mine3']
 mode = 'link'
@@ -126,6 +132,15 @@ path = '`+e.p(".claude/skills/mine6")+`'
 						return err == nil && got == l.to
 					}, log)
 				}
+				// A record of a link where the user has a directory of their
+				// own, no longer wanted: left where it is, with --force too.
+				if b, err := os.ReadFile(e.p(".claude/skills/mine2/notes.txt")); !wanted && (err != nil || string(b) != "precious three") {
+					t.Errorf("~/.claude/skills/mine2 was moved: %v\n%s", err, log)
+				}
+				keptOrTrashed(t, lib, e.p(".claude/skills/mine2"), func(p string) bool {
+					b, err := os.ReadFile(filepath.Join(p, "notes.txt"))
+					return err == nil && string(b) == "precious three"
+				}, log)
 				if b, err := os.ReadFile(e.p(".claude/skills/dot/notes.txt")); err != nil || string(b) != "precious too" {
 					t.Errorf("~/.claude/skills/dot was taken: %v\n%s", err, log)
 				}
