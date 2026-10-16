@@ -223,7 +223,42 @@ func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
 		skills = append(skills, kept)
 	}
 	skills, rejected = dropCaseClashes(root, skills, rejected)
+	skills, rejected = dropNested(root, skills, rejected)
 	return skills, rejected, nil
+}
+
+// VendorPath is where a skill lives inside its pack's vendor directory.
+func (s Skill) VendorPath() string {
+	if s.Category == "" {
+		return s.Name
+	}
+	return s.Category + "/" + s.Name
+}
+
+// dropNested rejects skills whose vendor path would sit inside another
+// skill's directory (category "foo" next to a skill named "foo"): each
+// update would replace one with the other.
+func dropNested(root string, skills []Skill, rejected []Rejected) ([]Skill, []Rejected) {
+	owner := map[string]string{}
+	for _, s := range skills {
+		owner[strings.ToLower(s.VendorPath())] = s.Name
+	}
+	var out []Skill
+	for _, s := range skills {
+		segs := strings.Split(strings.ToLower(s.VendorPath()), "/")
+		clash := ""
+		for i := 1; i < len(segs) && clash == ""; i++ {
+			clash = owner[strings.Join(segs[:i], "/")]
+		}
+		if clash == "" {
+			out = append(out, s)
+			continue
+		}
+		rel, _ := filepath.Rel(root, s.Dir)
+		rejected = append(rejected, Rejected{Name: s.Name, Dir: filepath.ToSlash(rel),
+			Reason: fmt.Sprintf("skipped: its category %q would place it inside the directory of skill %q", s.Category, clash)})
+	}
+	return out, rejected
 }
 
 // dropCaseClashes keeps one of several skills whose names differ only in

@@ -335,3 +335,39 @@ func TestSyncCaseClash(t *testing.T) {
 		t.Errorf("warnings: %v", warnings)
 	}
 }
+
+// A category equal to another skill's name must not make the two vendor
+// directories nest and push each other out on every update.
+func TestSyncNestedPathsStable(t *testing.T) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, _, _ := newTestLib(t)
+	up := filepath.Join(world, "up")
+	writeSkillMD(t, filepath.Join(up, "skills", "foo"), "foo")
+	writeSkillMD(t, filepath.Join(up, "skills", "foo-cat", "bar"), "bar")
+	gitRepo(t, up)
+	// Upstream later moves bar under a "foo" category.
+	p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+	if _, err := Sync(lib, p); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(up, "plugins", "foo", "skills"), 0o755)
+	gitIn(t, up, "mv", "skills/foo-cat/bar", "plugins/foo/skills/bar")
+	gitIn(t, up, "commit", "-qm", "mv")
+	pd, _ := PackDir(lib, up)
+	for round := 0; round < 3; round++ {
+		rep, err := Sync(lib, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if round > 0 && len(rep.Changed)+len(rep.Added)+len(rep.Moved)+len(rep.Backups) != 0 {
+			t.Fatalf("round %d not stable: %+v", round, rep)
+		}
+		if _, err := os.Stat(filepath.Join(pd, "foo", "SKILL.md")); err != nil {
+			t.Fatalf("round %d: foo lost", round)
+		}
+		if _, err := os.Stat(filepath.Join(pd, "foo", "bar")); err == nil {
+			t.Fatalf("round %d: bar nested inside foo", round)
+		}
+	}
+}

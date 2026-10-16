@@ -203,3 +203,18 @@ func TestScanCaseClash(t *testing.T) {
 		t.Fatalf("rejected %+v", rej)
 	}
 }
+
+func TestScanNestedVendorPaths(t *testing.T) {
+	root := t.TempDir()
+	mk(t, root, "skills/foo", "plugins/Foo/skills/bar", "skills/other/baz")
+	got, rej, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := names(got); len(n) != 2 || n["foo"] != "" || n["baz"] != "other" {
+		t.Fatalf("got %v", n)
+	}
+	if len(rej) != 1 || rej[0].Name != "bar" {
+		t.Fatalf("rejected %+v", rej)
+	}
+}
