@@ -71,6 +71,8 @@ type Skill struct {
 	Missing        bool
 	Conflict       string   // set when another entry wants the same link name
 	Agents         []string // targets it is linked into (resolved)
+	// ClaudeOff is set when Claude Code itself turned the skill off.
+	ClaudeOff bool
 }
 
 // Key identifies a row across reloads.
@@ -168,7 +170,7 @@ func toSkill(e engine.Entry) Skill {
 	// Category and description come from upstream files: cleaned here so
 	// column widths are measured on what is printed.
 	s := Skill{Name: e.Name, LinkName: e.LinkName, Kind: e.Kind, Origin: e.Origin, Category: clean(e.Category),
-		Description: clean(e.Description), Dir: e.Dir, Installed: true, Missing: e.Missing, Conflict: clean(e.Conflict)}
+		Description: clean(e.Description), Dir: e.Dir, Installed: true, Missing: e.Missing, Conflict: clean(e.Conflict), ClaudeOff: e.ClaudeDisabled}
 	for _, t := range e.Targets {
 		s.Agents = append(s.Agents, t.Name)
 	}

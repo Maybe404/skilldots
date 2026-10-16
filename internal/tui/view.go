@@ -297,6 +297,8 @@ func (m Model) viewLeft(w, h int) []string {
 				dot, right = sg("! ", t.Warn), []seg{sg("conflict ", t.Warn)}
 			case r.skill.Missing:
 				right = []seg{sg("missing ", t.Warn)}
+			case r.skill.ClaudeOff:
+				right = []seg{sg("off in Claude ", t.Warn)}
 			}
 			left := []seg{mark, dot, name}
 			if sel {
@@ -511,6 +513,8 @@ func (m Model) packView(p Pack, w, h int) []string {
 			agents = sg("new upstream", t.Cyan)
 		case !sk.Installed && in(st.Pending, sk.Name):
 			agents = sg("selected · u vendors it", t.Muted)
+		case sk.ClaudeOff:
+			note = sg("  off in Claude Code", t.Warn)
 		}
 		cat := sk.Category
 		if cat == "" {
@@ -540,6 +544,9 @@ func (m Model) packView(p Pack, w, h int) []string {
 	if m.right.cur < len(rows) && len(rows) > 0 {
 		sk := rows[m.right.cur]
 		desc = sk.Description
+		if sk.ClaudeOff {
+			desc = claudeOffHelp + " · " + desc
+		}
 		if sk.LinkName != sk.Name {
 			desc = "linked as " + sk.LinkName + " (upstream " + sk.Name + ") · " + desc
 		}
@@ -572,6 +579,11 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 	if sk.Missing {
 		out = append(out, row(sg("source directory is missing", t.Warn)))
 	}
+	if sk.ClaudeOff {
+		for _, l := range wrap(claudeOffHelp, w-2, 3) {
+			out = append(out, row(sg(l, t.Warn)))
+		}
+	}
 	if sk.Conflict != "" {
 		for _, l := range wrap("not linked: "+tildifyAll(sk.Conflict), w-2, 3) {
 			out = append(out, row(sg(l, t.Warn)))
@@ -589,6 +601,9 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 	out = append(out, row(sg(hints, t.Faint)))
 	return out
 }
+
+// claudeOffHelp explains a skill Claude Code turned off.
+const claudeOffHelp = "off in Claude Code (its own skill settings); skd still links it · e and untick claude keeps it out of Claude entirely"
 
 // wrap word-wraps plain text to w cells, at most n lines.
 func wrap(s string, w, n int) []string {

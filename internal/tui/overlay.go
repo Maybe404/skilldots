@@ -159,7 +159,11 @@ func helpOverlay() *overlay {
 	}
 	lines = append(lines, "",
 		"Nothing is deleted outright: removed files go to <library>/.trash;",
-		"t lists them and restores them. Emptying the trash asks twice.")
+		"t lists them and restores them. Emptying the trash asks twice.",
+		"",
+		"\"off in Claude\" marks a skill turned off inside Claude Code (its own",
+		"settings); skd still links it. To keep it out of Claude entirely, press e",
+		"and untick claude.")
 	return &overlay{kind: ovHelp, title: "Keys", lines: lines}
 }
 

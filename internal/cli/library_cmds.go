@@ -299,6 +299,9 @@ func printEntries(c *ctx, entries []engine.Entry) {
 		if e.Conflict != "" {
 			name += " " + warn("conflict")
 		}
+		if e.ClaudeDisabled {
+			name += " " + warn("off in Claude Code")
+		}
 		cat := e.Category
 		if cat == "" {
 			cat = dim("·")
@@ -306,7 +309,17 @@ func printEntries(c *ctx, entries []engine.Entry) {
 		t.Row(name, cat, targetList(e), dim(truncate(e.Description, 48)))
 	}
 	c.printf("%s\n", t.Render())
+	for _, e := range entries {
+		if e.ClaudeDisabled {
+			c.printf("%s\n", dim(ClaudeOffNote))
+			break
+		}
+	}
 }
+
+// ClaudeOffNote explains "off in Claude Code" under a list that shows it.
+const ClaudeOffNote = "off in Claude Code: turned off in Claude Code's own skill settings; skd still links it. " +
+	"To keep it out of Claude entirely, remove the claude target: skd disable <skill> --agent claude (e in the dashboard)."
 
 func printGroup(c *ctx, entries []engine.Entry, kind engine.Kind, title, note string) {
 	var mine []engine.Entry

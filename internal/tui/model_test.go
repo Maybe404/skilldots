@@ -692,3 +692,20 @@ func TestViewStripsControlCharacters(t *testing.T) {
 		t.Errorf("clean: %q", got)
 	}
 }
+
+func TestClaudeOffShown(t *testing.T) {
+	s := sampleSnapshot()
+	s.Packs[0].Skills[1].ClaudeOff = true // tdd
+	s.Mine[0].ClaudeOff = true            // subagent
+	m, _ := newModel(t, s, 120, 40)
+	if !strings.Contains(screen(m), "tdd") || !strings.Contains(rightRow(t, m, "tdd"), "off in Claude Code") {
+		t.Fatalf("tdd row:\n%s", screen(m))
+	}
+	for m.currentLeft() == nil || m.currentLeft().kind != rowSkill {
+		m, _ = press(t, m, "down")
+	}
+	v := screen(m)
+	if !strings.Contains(v, "off in Claude") || !strings.Contains(v, "untick claude") {
+		t.Fatalf("own skill:\n%s", v)
+	}
+}

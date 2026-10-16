@@ -50,6 +50,10 @@ type Entry struct {
 	// Conflict is set when another entry wants the same LinkName. Neither
 	// is linked until the clash is resolved; existing links stay as they are.
 	Conflict string `json:",omitempty"`
+	// ClaudeDisabled is set when the skill is turned off inside Claude Code
+	// (skillOverrides in its settings); skd still links it. Filled in by
+	// app.Session.Resolve.
+	ClaudeDisabled bool
 }
 
 // Resolve computes every entry declared by the library. Problems confined
