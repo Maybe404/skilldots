@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -159,6 +160,21 @@ func write(name, value string) error {
 	} else {
 		raw[name] = value
 	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	// Change the key's own line, keeping the rest of the file (comments
+	// included) as it is. When the line cannot be found, or the result
+	// would not read back as exactly the settings wanted, write the whole
+	// file again instead.
+	if old, err := os.ReadFile(p); err == nil {
+		if b, ok := editLine(old, name, value); ok {
+			got := map[string]any{}
+			if toml.Unmarshal(b, &got) == nil && reflect.DeepEqual(got, raw) {
+				return fsutil.WriteAtomic(p, b)
+			}
+		}
+	}
 	// One document, so the keys of this file stay above any table (a
 	// [section] a newer skd or a person added) and the tables keep theirs.
 	body, err := toml.Marshal(raw)
@@ -171,8 +187,64 @@ func write(name, value string) error {
 	var b strings.Builder
 	b.WriteString("# skilldots settings: skd config list | get | set\n")
 	b.Write(body)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
 	return fsutil.WriteAtomic(p, []byte(b.String()))
+}
+
+// editLine sets name to value (removes it when value is "") in the
+// top-level part of a settings file, before any [table], touching only
+// that key's line: comments and the other lines stay as they are. ok is
+// false when the file holds the key in a form this does not handle (a
+// value over several lines, say); write checks the result anyway.
+func editLine(src []byte, name, value string) (out []byte, ok bool) {
+	lines := strings.SplitAfter(string(src), "\n")
+	top := len(lines) // index of the first table header
+	at := -1
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "[") {
+			top = i
+			break
+		}
+		k, _, isKey := strings.Cut(t, "=")
+		if !isKey {
+			continue
+		}
+		if k = strings.Trim(strings.TrimSpace(k), `"'`); k == name {
+			if at >= 0 {
+				return nil, false
+			}
+			at = i
+		}
+	}
+	var line string
+	if value != "" {
+		b, err := toml.Marshal(map[string]string{name: value})
+		if err != nil {
+			return nil, false
+		}
+		line = string(b)
+	}
+	switch {
+	case at >= 0:
+		lines[at] = line
+	case value == "":
+		return src, true
+	default:
+		// A new key goes after the last top-level line that is not blank
+		// (with a table below, not a comment either: that introduces the
+		// table).
+		ins := top
+		for ins > 0 {
+			t := strings.TrimSpace(lines[ins-1])
+			if t != "" && (top == len(lines) || !strings.HasPrefix(t, "#")) {
+				break
+			}
+			ins--
+		}
+		if ins > 0 && !strings.HasSuffix(lines[ins-1], "\n") {
+			lines[ins-1] += "\n"
+		}
+		lines = append(lines[:ins], append([]string{line}, lines[ins:]...)...)
+	}
+	return []byte(strings.Join(lines, "")), true
 }

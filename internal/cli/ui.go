@@ -83,6 +83,12 @@ const EnvTheme = "SKILLDOTS_THEME"
 // assumes dark when it cannot tell. Nothing is asked when no colour would
 // be printed anyway: --json, NO_COLOR, TERM=dumb, or stdout not a terminal.
 func setupTheme(flag string) error {
+	// A settings file that does not parse would otherwise be ignored
+	// without a word (editor, theme); say why, once, on stderr.
+	if _, err := config.Load(); err != nil && !settingsWarned {
+		settingsWarned = true
+		fmt.Fprintf(os.Stderr, "warning: your settings are ignored: %s\n", txt(err.Error()))
+	}
 	mode := strings.ToLower(strings.TrimSpace(flag))
 	src := "--theme"
 	if mode == "" {
@@ -129,8 +135,9 @@ func setupTheme(flag string) error {
 // themeDone is the mode setupTheme last settled.
 var themeDone = "-"
 
-// themeWarned is set once a bad theme setting was reported.
-var themeWarned bool
+// themeWarned is set once a bad theme setting was reported;
+// settingsWarned once a settings file that does not parse was.
+var themeWarned, settingsWarned bool
 
 // detectBackground, stdinIsTerminal and stdoutIsTerminal are replaceable
 // in tests.

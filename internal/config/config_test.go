@@ -102,3 +102,40 @@ func TestSetKeepsTables(t *testing.T) {
 		t.Errorf("nested table changed: %v", extra["deep"])
 	}
 }
+
+// Set changes only the key's line: a person's comments, blank lines and
+// tables stay as they were.
+func TestSetKeepsComments(t *testing.T) {
+	sandbox(t)
+	os.MkdirAll(filepath.Dir(Path()), 0o755)
+	body := "# my settings\n\n# the library on this laptop\nlibrary = \"/x/lib\"\ntheme = \"dark\" # was light\n\n# for a newer skd\n[future]\nkeep = 1\n"
+	os.WriteFile(Path(), []byte(body), 0o644)
+	if err := Set(Editor, "code --wait"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(Theme, "light"); err != nil {
+		t.Fatal(err)
+	}
+	got := read(t)
+	for _, c := range []string{"# my settings\n\n# the library on this laptop\nlibrary = \"/x/lib\"\n", "# for a newer skd\n[future]\nkeep = 1\n"} {
+		if !strings.Contains(got, c) {
+			t.Errorf("lost %q:\n%s", c, got)
+		}
+	}
+	if Get(Editor) != "code --wait" || Get(Theme) != "light" || Get(Library) != "/x/lib" {
+		t.Fatalf("values:\n%s", got)
+	}
+	// The new key is a top-level key, above the comment of the table.
+	if i, j := strings.Index(got, "editor"), strings.Index(got, "# for a newer skd"); i < 0 || i > j {
+		t.Errorf("editor not above the table's comment:\n%s", got)
+	}
+	if err := Set(Theme, ""); err != nil || strings.Contains(read(t), "theme") || !strings.Contains(read(t), "# my settings") {
+		t.Fatalf("unset: %v\n%s", err, read(t))
+	}
+	// A value over several lines is not edited in place: the file is
+	// written again, the values are right.
+	os.WriteFile(Path(), []byte("# c\neditor = \"\"\"\nvim\"\"\"\n"), 0o644)
+	if err := Set(Editor, "nano"); err != nil || Get(Editor) != "nano" {
+		t.Fatalf("multi-line: %v\n%s", err, read(t))
+	}
+}

@@ -48,9 +48,6 @@ func ConfigPath() string { return config.Path() }
 // from any directory. Other settings in the file are kept.
 func Remember(root string) error { return config.SetLibrary(root) }
 
-// remembered returns the library recorded by Remember, or "".
-func remembered() string { return config.Get(config.Library) }
-
 // Locate finds the library: explicit flag, $SKILLDOTS_LIBRARY, a skills.toml
 // in the current directory or any parent, the remembered config, then the
 // default root.
@@ -67,7 +64,22 @@ func Locate(flag string) (string, error) {
 			}
 		}
 	}
-	candidates = append(candidates, remembered(), DefaultRoot())
+	// The settings file remembers the library (skd use). When it cannot
+	// be read, say so rather than fall back to the default directory or
+	// claim there is no library.
+	settings, serr := config.Load()
+	if serr != nil {
+		for _, c := range candidates {
+			if _, err := os.Stat(filepath.Join(c, manifest.FileName)); c != "" && err == nil {
+				return c, nil
+			}
+			if c != "" && c == flag {
+				return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
+			}
+		}
+		return "", fmt.Errorf("cannot find the library: the settings file that remembers it is not valid TOML (%w); fix it, or name the library with --library or $%s", serr, EnvLibrary)
+	}
+	candidates = append(candidates, settings[config.Library], DefaultRoot())
 	for _, c := range candidates {
 		if c == "" {
 			continue

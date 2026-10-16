@@ -48,3 +48,21 @@ func TestBadThemeSetting(t *testing.T) {
 		t.Fatalf("library = %q", got)
 	}
 }
+
+// A settings file that is not valid TOML is reported with its path and
+// the parse error, not taken for "no library"; a library named on the
+// command line still works, with a warning.
+func TestBrokenSettingsFile(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	os.WriteFile(e.configPath(), []byte("library = \"unterminated\n"), 0o644)
+	_, errOut, code := e.skd("", "list")
+	if code == 0 || !strings.Contains(errOut, e.configPath()) || strings.Contains(errOut, "no skilldots library found") || !strings.Contains(errOut, "toml") {
+		t.Fatalf("list with a broken settings file: exit %d\n%s", code, errOut)
+	}
+	out, errOut, code := e.skd("", "list", "--library", lib)
+	if code != 0 || !strings.Contains(errOut, "settings are ignored") || !strings.Contains(errOut, e.configPath()) {
+		t.Fatalf("--library with a broken settings file: exit %d\n%s\n%s", code, out, errOut)
+	}
+}
