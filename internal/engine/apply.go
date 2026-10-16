@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -114,6 +115,9 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				} else {
 					op.Action, op.Reason = "replace", "source changed"
 				}
+			case prev != nil && staleRoot(dest, prev, lib) != "":
+				// Our link, made when the library lived somewhere else.
+				op.Action, op.Reason = "replace", "points at the previous library location "+staleRoot(dest, prev, lib)
 			case prev != nil:
 				// We placed it, but it was modified or replaced since.
 				if forceKey(key) {
@@ -169,6 +173,8 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			op.Action, op.Reason = "remove", "already gone"
 		case current(dest, prev, lib) || forceKey(key):
 			op.Action = "remove"
+		case staleRoot(dest, prev, lib) != "":
+			op.Action, op.Reason = "remove", "points at the previous library location "+staleRoot(dest, prev, lib)
 		default:
 			op.Action, op.Reason = "skip", "modified since skilldots wrote it; use --force to remove"
 		}
@@ -279,6 +285,38 @@ func sameAs(dest string, prev *lock.Link, want string, lib *library.Library) boo
 	}
 	h, err := fsutil.HashTree(want)
 	return err == nil && h == prev.Hash
+}
+
+// staleRoot returns the old library root when dest is a symlink skilldots
+// recorded, pointing at the recorded library-relative source under a root
+// other than the current one (the library was moved or copied). It returns
+// "" otherwise.
+func staleRoot(dest string, prev *lock.Link, lib *library.Library) string {
+	if prev.Mode != "link" || prev.Source == "" || filepath.IsAbs(prev.Source) {
+		return ""
+	}
+	got, err := os.Readlink(dest)
+	if err != nil {
+		return ""
+	}
+	if !filepath.IsAbs(got) {
+		got = filepath.Join(filepath.Dir(dest), got)
+	}
+	got = filepath.Clean(got)
+	suffix := string(filepath.Separator) + filepath.FromSlash(prev.Source)
+	if !strings.HasSuffix(got, suffix) {
+		return ""
+	}
+	old := strings.TrimSuffix(got, suffix)
+	if old == "" || old == filepath.Clean(lib.Root) {
+		return ""
+	}
+	if a, err := filepath.EvalSymlinks(old); err == nil {
+		if b, err := filepath.EvalSymlinks(lib.Root); err == nil && a == b {
+			return ""
+		}
+	}
+	return old
 }
 
 func isLinkTo(dest, src string) bool {
