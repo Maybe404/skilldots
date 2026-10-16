@@ -26,6 +26,7 @@ skilldots（命令 `skd`）：声明式管理本机所有 agent 工具的 skills
 ├── skills.lock        锁（工具写）
 ├── skills/<名>/       自写，随库公开
 ├── private/<名>/      自写，本机；独立 git 仓库，被外层 .gitignore 忽略
+├── .trash/            被挪开的目录（gitignore），`skd trash` 查看与恢复
 └── vendor/<owner>/<repo>/<分类>/<名>/   第三方，工具拉取，不手改；每个 repo 附 LICENSE
 ```
 
@@ -66,7 +67,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 
 | 命令 | 作用 |
 |---|---|
-| `skd init [--from 路径]` | 建库（默认 `~/.skilldots`），git init，生成清单；`--from` 接管已有仓库 |
+| `skd init [--from 路径]` | 建库（默认 `~/.skilldots`），库根和 private/ 各自 git init（即使位于更大的仓库内），生成清单；`--from` 接管已有仓库 |
 | `skd add <来源> [--skill a,b \| --all \| --category x]` | 克隆到缓存，扫描 SKILL.md，交互选择（按分类折叠），拷入 vendor，写清单与锁，链接 |
 | `skd list [pack] [--all] [--flat] [--agent x]` | 顶层按 pack 折叠一行一仓库；展开、平铺、按 agent 视角 |
 | `skd apply [--dry-run]` | 使电脑与清单一致：建链接、删多余链接、拷贝模式下按哈希识别自己放的文件 |
@@ -84,10 +85,15 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 
 ## 关键规则
 
-- **skill 根目录识别**：扫所有 `SKILL.md`，优先读仓库元数据（vercel `skills.sh.json`、`.claude-plugin`），否则取 SKILL.md 父目录为 skill 目录；分类 = skill 目录相对于公共根的路径
-- **skill 名**：`SKILL.md` frontmatter 的 `name`，缺失则目录名
-- **重名**：先到者占原名，后到者自动 `<alias>-<name>` 并写入 `as`，用户可改；apply 时再次校验整库无冲突
-- **链接 vs 拷贝**：默认软链接；Windows 无权限或 target 要求拷贝时降级，锁里记录哈希，`apply`/`remove` 只动哈希匹配的文件，用户改过的文件不覆盖并警告
+- **skill 根目录识别**：扫所有 `SKILL.md`，取其父目录为 skill 目录；跳过测试目录和隐藏目录（`.agents` 除外），但仓库里别处没有 skill 时再扫隐藏目录（只在 `.claude/skills` 等目录发布的仓库）。同名多份：内容相同的折叠为 AltDirs，内容不同的记为 Variants，取 `skills/`、`.agents/skills/` 优先的那份，`skd show` 列出
+- **分类**：skill 父路径去掉结构段（`skills`、`skill`、`plugins`、`plugin`、隐藏目录）后剩下的部分，只取决于该 skill 自己的位置；不做公共前缀剔除，也不剔除"等于名字的末段"，上游新增目录不会改变已有 skill 的分类。锁里的分类变化时 vendor 目录改名，不进 trash
+- **skill 名**：`SKILL.md` frontmatter 的 `name`，缺失则目录名；必须匹配 `[A-Za-z0-9_-][A-Za-z0-9._-]*`、不含 `..`、≤128 字符，否则跳过并告警（名字会拼进 vendor 和 target 路径，上游不可信）。`as`、`[[app]].name`、`[[local]].name` 同规则；显式写空的 `name:` 也拒绝
+- **重名**：先到者占原名；`add`/`update` 首次 vendor 的 skill 若名字已被占用，自动 `<前缀>-<name>` 并写入 `as`（前缀 = alias，否则仓库路径最后一段）。仍有冲突时冲突双方都跳过、已有链接不动、告警列出两个目录，其余条目照常处理；`fork` 把 frontmatter name 改成 fork 的名字
+- **单条目问题不拖垮整库**：未知 target 只跳过该 target 并告警，已记录在该 target 的链接不动；清单有 pack 而锁无记录时提示 `skd update`；锁里记录链接的绝对路径，target 被删后仍能清理
+- **链接 vs 拷贝**：默认软链接；Windows 无权限或 target 要求拷贝时降级，锁里记录哈希。拷贝只有"原样"（哈希一致且没有哈希看不到的 `.git`、`node_modules`、符号链接）时才直接替换，否则整份移入 trash；用户改过的文件不覆盖并警告
+- **库目录移动**：链接指向"另一个根 + 锁里记录的相对路径"时识别为旧位置的链接，`apply` 直接重建
+- **不删除**：除 `skd trash empty` 外不永久删除用户数据。trash 用 rename，仅跨设备（EXDEV）时回退为完整拷贝（含 `.git`、符号链接、权限）后再删源，其他错误原样返回
+- **`--json`**：stdout 只有一份 JSON，进度和告警走 stderr；失败时 stdout 为空、退出码非 0（`update` 例外：输出 `{packs, failed, apply, committed}` 后以非 0 退出）
 - **更新安全**：锁定 commit，`update` 永远显式；上游删除不自动删本地
 - **许可证**：vendor 时拷 LICENSE；找不到（根目录、skill 目录、frontmatter `license:`）的仓库提示，自写来源不检查
 - **private/**：独立 git 仓库、无远端；工具只链接、不提交、不清理

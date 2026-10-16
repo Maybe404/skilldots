@@ -55,7 +55,7 @@ Prebuilt binaries will follow.
 
 | | |
 |---|---|
-| `skd init [dir]` | create a library; the default target is `agents` (`~/.agents/skills`), which nearly every agent reads |
+| `skd init [dir]` | create a library (its own git repository, even inside another repo; `private/` is a separate one); the default target is `agents` (`~/.agents/skills`), which nearly every agent reads |
 | `skd show <owner/repo \| url>` | list what a repository offers, without installing |
 | `skd add <owner/repo \| url>[@ref]` | fetch a repo and choose skills interactively, or with `--skill`, `--category`, `--all` |
 | `skd list [pack] [--all] [--flat] [--agent x]` | overview; expand a pack; flat list; what one agent receives |
@@ -77,7 +77,7 @@ Prebuilt binaries will follow.
 | `skd use <dir>` | point skd at an existing library from any directory |
 | `skd` | with no arguments: an interactive menu for all of the above |
 
-All commands take `--json` for scripts and agents, and `--yes` to skip prompts.
+All commands take `--json` for scripts and agents, and `--yes` to skip prompts. Under `--json` stdout carries exactly one JSON document (progress and warnings go to stderr); a failing command prints nothing on stdout and exits non-zero, except `skd update`, which reports `{packs, failed, apply, committed}` and exits non-zero when any pack failed. Problems confined to one skill — an unknown target, a name clash, a pack not fetched yet — are warnings, not errors: the rest of the library keeps working.
 
 ## skills.toml
 
@@ -110,7 +110,15 @@ Targets inherit: global default → pack → skill. `targets = []` keeps a skill
 
 ## How skills are found in a repository
 
-Every directory containing a `SKILL.md` is a skill. Hidden and test directories are skipped (except `.agents/`, the cross-agent convention). Repositories that copy the same skill into many agent folders are collapsed to one. Categories come from the path with structural segments (`skills`, `plugins`) removed, so `skills/engineering/tdd` is category `engineering` and `plugins/x/skills/x` is uncategorised.
+Every directory containing a `SKILL.md` is a skill. Test directories are skipped, and so are hidden directories (except `.agents/`, the cross-agent convention) — unless the repository has skills nowhere else, as when it ships them only in `.claude/skills/`. Repositories that copy the same skill into many agent folders are collapsed to one, preferring `skills/` or `.agents/skills/`; `skd show` lists the other copies whose content differs.
+
+The category is the skill's parent path with structural segments (`skills`, `skill`, `plugins`, `plugin`, hidden directories) removed: `skills/engineering/tdd` is `engineering`, `plugins/code-improver/skills/pr-improver` is `code-improver`. It depends only on that skill's own location, so new directories upstream never recategorise existing skills; when a skill does move, its vendored directory is renamed.
+
+A skill's name (frontmatter `name`, else its directory) must be letters, digits, `.`, `_` and `-`, not starting with `.`. Skills with any other name are skipped with a warning, because the name becomes a directory and link name. The same rule applies to `as`, `[[app]].name` and `[[local]].name`.
+
+## Name clashes
+
+The first skill to use a name keeps it. When `skd add` or `skd update` vendors a skill whose name is already taken, it is linked as `<repo>-<name>` and the `as` is written to `skills.toml`. If a clash remains (for example you create `skills/foo` while a pack provides `foo`), both are skipped with a warning naming both directories, existing links stay as they are, and everything else is linked as usual. `skd fork` renames the frontmatter to the fork's name, so a fork never clashes with its upstream.
 
 ## Editing, rolling back, removing
 
@@ -119,7 +127,9 @@ Every directory containing a `SKILL.md` is a skill. Hidden and test directories 
 - **Roll back an update:** the library is a git repository. With `skd update --commit` every update is one commit, so `git revert <commit> && skd apply` undoes it. Without `--commit`, `git checkout -- vendor skills.lock && skd apply`.
 - **Remove:** `skd disable` unlinks but keeps the files; `skd remove` also drops a vendored skill from the library; `skd purge` deletes a whole pack.
 
-Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`.
+- **Moved the library:** `skd use <new dir>` then `skd apply`; links into the old location are recognised and re-pointed.
+
+Agent directories only ever contain symlinks into the library (copies on Windows without symlink rights, or for targets with `mode = "copy"`), so a skill exists once on disk. Anything skd moves out of the way lands in `<library>/.trash/`, listed by `skd trash`: a copy is only discarded when it is exactly what skd wrote, and a vendored directory only when it matches the lock. `skd remove` of a pack's last skill drops the pack.
 
 ## Unattended updates
 
