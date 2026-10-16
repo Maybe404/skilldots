@@ -574,21 +574,22 @@ func (o *libOps) Sync() (string, error) {
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	var clean []string
-	warned := false
+	var clean, warns []string
 	for _, l := range lines {
-		l = strings.TrimSpace(l)
+		l = tildifyAll(strings.TrimSpace(l))
 		// The CLI marks its lines; the status line has its own icon.
-		for _, mark := range []string{"✓ ", "! ", "✗ "} {
-			if strings.HasPrefix(l, mark) {
-				warned = warned || mark == "! "
-				l = strings.TrimPrefix(l, mark)
-			}
+		// Warnings go first so a narrow status line still shows them.
+		if strings.HasPrefix(l, "! ") {
+			warns = append(warns, strings.TrimPrefix(l, "! "))
+			continue
 		}
+		l = strings.TrimPrefix(strings.TrimPrefix(l, "✓ "), "✗ ")
 		if l != "" {
 			clean = append(clean, l)
 		}
 	}
+	warned := len(warns) > 0
+	clean = append(warns, clean...)
 	if err != nil {
 		if len(clean) > 0 {
 			return "", fmt.Errorf("%s", strings.TrimPrefix(clean[len(clean)-1], "error: "))

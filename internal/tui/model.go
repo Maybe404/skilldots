@@ -150,8 +150,9 @@ func New(ops Ops, snap *Snapshot, theme Theme, version string) Model {
 	return m
 }
 
+// firstLine flattens a message onto one status line, home paths as ~.
 func firstLine(s string) string {
-	s = strings.TrimSpace(s)
+	s = tildifyAll(strings.TrimSpace(s))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return s[:i] + " " + strings.Join(strings.Fields(s[i:]), " ")
 	}

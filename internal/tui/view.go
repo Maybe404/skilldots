@@ -27,6 +27,14 @@ func tildify(p string) string {
 	return p
 }
 
+// tildifyAll shortens every home-directory path inside a message.
+func tildifyAll(s string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" && home != "/" {
+		return strings.ReplaceAll(s, home, "~")
+	}
+	return s
+}
+
 func (m Model) bodyHeight() int { return max(1, m.h-3) }
 
 func (m Model) leftWidth() int {
@@ -334,9 +342,9 @@ func (m Model) problem(w int) []string {
 		return nil
 	}
 	t, bg := m.theme, m.surf.panel
-	text := ws[0]
+	text := tildifyAll(ws[0])
 	if len(ws) > 1 {
-		text = fmt.Sprintf("%d problems (skd apply -n lists them) · %s", len(ws), ws[0])
+		text = fmt.Sprintf("%d problems (skd apply -n lists them) · %s", len(ws), text)
 	}
 	var out []string
 	for i, l := range wrap(text+" · r reloads after a fix", w-4, 3) {
@@ -486,7 +494,7 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 		out = append(out, row(sg("source directory is missing", t.Warn)))
 	}
 	if sk.Conflict != "" {
-		for _, l := range wrap("not linked: "+sk.Conflict, w-2, 3) {
+		for _, l := range wrap("not linked: "+tildifyAll(sk.Conflict), w-2, 3) {
 			out = append(out, row(sg(l, t.Warn)))
 		}
 	}
