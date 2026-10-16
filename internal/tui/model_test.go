@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -118,6 +119,29 @@ func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
 	f.rec("update " + strings.Join(r, ","))
 	return []*engine.SyncReport{{Repo: "mattpocock/skills", OldCommit: "1111111", NewCommit: "2222222",
 		Changed: []string{"tdd"}, UpstreamNew: []string{"fresh"}}}, "updated", nil
+}
+func (f *fakeOps) PlanUpdate(repos []string) (*app.UpdatePlan, error) {
+	f.rec("plan " + strings.Join(repos, ","))
+	f.mu.Lock()
+	o := f.check
+	f.mu.Unlock()
+	if o == nil {
+		// Every pack has a change: tdd in the first.
+		o = &app.Outdated{}
+		for _, p := range f.snap.Packs {
+			o.Packs = append(o.Packs, app.PackStatus{Repo: p.Repo, Commit: p.Commit, Latest: "2222222", Changed: []string{"tdd"}})
+		}
+	}
+	plan := &app.UpdatePlan{Outdated: o}
+	for _, st := range o.Packs {
+		if len(repos) > 0 && !slices.Contains(repos, st.Repo) {
+			continue
+		}
+		if st.HasUpdates() || (len(repos) > 0 && st.Commit != st.Latest) {
+			plan.Updates = append(plan.Updates, st)
+		}
+	}
+	return plan, nil
 }
 func (f *fakeOps) Check(ctx context.Context) (*app.Outdated, error) {
 	f.rec("check")
@@ -518,8 +542,11 @@ func TestActions(t *testing.T) {
 	m, _ = press(t, m, "f", "enter")
 	m, cmd = press(t, m, "p")
 	m = drain(t, m, cmd)
-	// u updates this pack; the report shows in the right column.
+	// u shows what would change, y updates this pack; the report shows in
+	// the right column.
 	m, cmd = press(t, m, "u")
+	m = drain(t, m, cmd)
+	m, cmd = press(t, m, "y")
 	m = drain(t, m, cmd)
 	v := ansi.Strip(m.View())
 	for _, want := range []string{"1111111 → 2222222", "changed", "tdd", "upstream new", "fresh", "✓ updated"} {
@@ -558,6 +585,7 @@ func TestActions(t *testing.T) {
 		"targets tdd agents,claude",
 		"trash tdd",
 		"fork tdd true",
+		"plan mattpocock/skills",
 		"update mattpocock/skills",
 		"purge mattpocock/skills",
 		"sync",

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -233,10 +234,25 @@ func updateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [pack...]",
 		Short: "Fetch upstream changes for packs and re-vendor selected skills",
+		Long: "At a terminal, update first checks upstream and lists what would change per pack (changed, new, gone, moved), " +
+			"all ticked; untick what you do not want, and only the ticked packs are updated. With --yes, --json or without a " +
+			"terminal it updates straight away (every pack when none are named), as scripts and agents expect. " +
+			"Every update is recorded: skd history.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
+			}
+			var checkErr error
+			if isTerminal() && !flags.yes && !flags.json {
+				chosen, failed, err := confirmUpdate(c, args)
+				if err != nil {
+					return err
+				}
+				if len(chosen) == 0 {
+					return failed
+				}
+				args, checkErr = chosen, failed
 			}
 			// Whatever succeeded is saved and linked even if another pack failed.
 			out, err := c.Update(args, func(repo string, rep *engine.SyncReport, err error) {
@@ -270,11 +286,54 @@ func updateCmd() *cobra.Command {
 			if len(out.Failed) > 0 {
 				return fmt.Errorf("%d pack(s) failed: %s", len(out.Failed), out.Failed[0].Repo)
 			}
-			return nil
+			return checkErr
 		},
 	}
 	cmd.Flags().BoolVar(&commit, "commit", false, "git commit and push the library when something changed")
 	return cmd
+}
+
+// confirmUpdate is `skd update` at a terminal: check upstream, show what
+// would change and let the person pick the packs. It returns the chosen
+// packs, none when there is nothing to do or the person chose nothing,
+// and failed, an error naming the packs that could not be checked.
+func confirmUpdate(c *ctx, repos []string) (chosen []string, failed, err error) {
+	c.printf("%s\n", dim("checking upstream…"))
+	plan, err := c.PlanUpdate(context.Background(), repos, func(repo string, st *app.PackStatus, err error) {
+		if err != nil {
+			c.printf("%s %s: %v\n", bad("✗"), repo, err)
+		}
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(plan.Failed) > 0 {
+		failed = fmt.Errorf("%d pack(s) could not be checked: %s", len(plan.Failed), plan.Failed[0].Repo)
+	}
+	if len(plan.Updates) == 0 {
+		c.printf("%s\n", ok("✓ nothing to update upstream"))
+		return nil, failed, nil
+	}
+	var opts []huh.Option[string]
+	for _, st := range plan.Updates {
+		c.printf("\n")
+		printStatus(c, &st)
+		opts = append(opts, huh.NewOption(st.Repo+"  "+dim(st.Summary()), st.Repo).Selected(true))
+		chosen = append(chosen, st.Repo)
+	}
+	c.printf("\n")
+	err = ask(huh.NewMultiSelect[string]().
+		Title(fmt.Sprintf("Update %s?", plural(len(plan.Updates), "pack"))).
+		Description("space or x unticks · enter updates the ticked ones · ctrl+c cancels").
+		Options(opts...).Value(&chosen))
+	if errors.Is(err, huh.ErrUserAborted) || (err == nil && len(chosen) == 0) {
+		c.printf("%s\n", dim("nothing updated"))
+		return nil, failed, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return chosen, failed, nil
 }
 
 func printReport(c *ctx, r *engine.SyncReport) {

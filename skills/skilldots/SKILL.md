@@ -46,16 +46,23 @@ skd path <skill>    # directory of a skill's files
 
 ## Update
 
-Check first, then decide — `outdated` changes nothing in the library:
+Never update without asking. First check — `outdated` changes nothing in the library:
 
 ```bash
-skd outdated --json # per pack: changed, new, gone, pending; "updates" = packs with updates
-skd update          # all repositories; reports changed / added / upstream new / upstream gone
-skd update owner/repo
+skd outdated --json # per pack: changed, moved, new, gone, pending; "updates" = packs with updates
 ```
-When asked to keep skills current (or on a schedule), run `skd outdated --json` and only `skd update` the packs it reports, after telling the user what changed: `changed` are selected skills whose upstream content differs, `new` appeared upstream since the last update or, for a pack never updated, since it was added (offer `skd add owner/repo --skill <name>`; a pack following `"*"` gets them on update, listed in `pending` too), `gone` disappeared upstream (update keeps the local copy). `moved` skills only changed directory upstream; they are not a reason to update (a pack with only moves is not counted as having updates and the dashboard's `U` skips it), but if the pack is updated anyway (`u` or `skd update`) their vendored directories are renamed to the new path. A pack it could not fetch is in `failed` and the exit code is non-zero; the others are still reported. `skd list` shows the last check's count without fetching.
 
-With `--json`, `update` prints `{packs, failed, apply, committed}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. "upstream new" (`UpstreamNew`) lists only unselected skills that appeared since the previous `skd update`; offer to add them with `skd add owner/repo --skill <name>`. After an update, summarise what changed for the user. Upstream changes are visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
+Tell the user what it found, pack by pack: `changed` are selected skills whose upstream content differs, `pending` are selected skills not vendored yet, `new` appeared upstream since the last update or, for a pack never updated, since it was added (not installed unless the pack follows `"*"`, then they are in `pending` too; offer `skd add owner/repo --skill <name>`), `gone` disappeared upstream (update keeps the local copy), `moved` only changed directory upstream (not a reason to update; if the pack is updated anyway its vendored directories are renamed). Then ask which packs to update, and update only those, by name:
+
+```bash
+skd update owner/repo [owner/repo…] --json
+```
+
+This also applies to scheduled or "keep my skills current" requests: report and ask, unless the user explicitly said to update without asking. Without a terminal (or with `--yes`/`--json`) `skd update` does not prompt and updates every pack it is given — all of them when none are named — so always name the packs. A pack `outdated` could not fetch is in `failed` and the exit code is non-zero; the others are still reported. `skd list` shows the last check's count without fetching.
+
+With `--json`, `update` prints `{packs, failed, apply, committed, history}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. "upstream new" (`UpstreamNew`) lists only unselected skills that appeared since the previous `skd update`; offer to add them with `skd add owner/repo --skill <name>`. After an update, summarise what changed for the user.
+
+Every update is recorded in the library (`skills.history.jsonl`, committed with it): `skd history [pack] --json` lists, per update, the old and new commit, the skills changed / added / moved / gone / new upstream and the subjects of the upstream commits that touched them. Use it to answer "what changed in my skills?" — it works offline. Upstream changes are also visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
 
 ## Enable or disable per agent
 

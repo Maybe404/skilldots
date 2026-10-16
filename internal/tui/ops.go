@@ -30,6 +30,9 @@ type Ops interface {
 	Browse(src string) (*Browse, error)
 	// Add subscribes to src (if needed) and vendors what req selects.
 	Add(src string, req AddRequest) (string, error)
+	// PlanUpdate checks upstream for the packs (every pack when none) and
+	// says what updating them would change, changing nothing.
+	PlanUpdate(repos []string) (*app.UpdatePlan, error)
 	Update(repos []string) ([]*engine.SyncReport, string, error)
 	// Check fetches every pack's upstream into the cache and compares it
 	// with what is vendored, changing nothing (skd outdated).
@@ -324,6 +327,15 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 		return reports, msg, fmt.Errorf("%s", strings.Join(failed, "; "))
 	}
 	return reports, msg, nil
+}
+
+// PlanUpdate is the check `skd update` runs at a terminal before asking.
+func (o *libOps) PlanUpdate(repos []string) (*app.UpdatePlan, error) {
+	s, err := o.open()
+	if err != nil {
+		return nil, err
+	}
+	return s.PlanUpdate(context.Background(), repos, nil)
 }
 
 // Check mirrors `skd outdated`.

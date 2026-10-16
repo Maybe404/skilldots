@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +113,9 @@ type result struct {
 	// is empty.
 	history     []app.UpdateRecord
 	historyRead bool
+	// plan is what updating would change (u, U), for planFor ("" all).
+	plan    *app.UpdatePlan
+	planFor string
 	// focus is the Skill.Key of a row to put the cursor on afterwards.
 	focus string
 }
@@ -640,15 +644,11 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}})
 	case "u":
 		if p := m.currentPack(); p != nil {
-			repo := p.Repo
-			return m.start(job{label: "updating " + repo, run: func(o Ops) result {
-				reps, msg, err := o.Update([]string{repo})
-				return result{msg: msg, err: err, reports: reps}
-			}})
+			return m.planUpdate(p.Repo)
 		}
-		return m.updateAll()
+		return m.planUpdate("")
 	case "U":
-		return m.updateOutdated()
+		return m.planUpdate("")
 	case "e":
 		return m.agents()
 	case "f":
@@ -689,30 +689,21 @@ func (m Model) pageSize() int {
 	return max(1, m.leftHeight()-1)
 }
 
-func (m Model) updateAll() (tea.Model, tea.Cmd) {
+// planUpdate is u (repo set: the pack under the cursor) and U (every
+// pack): check upstream first, then show what would change and ask.
+// Nothing is updated until the person confirms (see planView).
+func (m Model) planUpdate(repo string) (tea.Model, tea.Cmd) {
 	if len(m.snap.Packs) == 0 {
-		m.status, m.statusLvl = "no packs to update · a to add one", lvInfo
-		return m, nil
+		return m.hint("no packs to update · a to add one")
 	}
-	return m.start(job{label: "updating all packs", run: func(o Ops) result {
-		reps, msg, err := o.Update(nil)
-		return result{msg: msg, err: err, reports: reps}
-	}})
-}
-
-// updateOutdated is U: update every pack the upstream check found
-// changes in. Until a check has succeeded it updates every pack.
-func (m Model) updateOutdated() (tea.Model, tea.Cmd) {
-	if m.check != checkDone {
-		return m.updateAll()
+	var repos []string
+	label := "checking upstream"
+	if repo != "" {
+		repos, label = []string{repo}, "checking "+repo
 	}
-	repos := m.packsWithUpdates()
-	if len(repos) == 0 {
-		return m.hint("no upstream updates · u updates the pack under the cursor · c checks again")
-	}
-	return m.start(job{label: "updating " + plural(len(repos), "pack"), run: func(o Ops) result {
-		reps, msg, err := o.Update(repos)
-		return result{msg: msg, err: err, reports: reps}
+	return m.start(job{label: label, run: func(o Ops) result {
+		plan, err := o.PlanUpdate(repos)
+		return result{plan: plan, err: err, planFor: repo}
 	}})
 }
 
@@ -775,19 +766,7 @@ func (m Model) finishCheck(c checkMsg) Model {
 		f := c.out.Failed[0]
 		m.check, m.checkErr, m.checkFail = checkFailed, firstLine(f.Repo+": "+f.Error), c.out.Failed
 	default:
-		m.checkFail = c.out.Failed
-		m.outdated = map[string]app.PackStatus{}
-		commits := map[string]string{}
-		for _, p := range m.snap.Packs {
-			commits[p.Repo] = p.Commit
-		}
-		for _, st := range c.out.Packs {
-			// An update that ended while the check ran already moved the
-			// pack on: what the check saw is out of date.
-			if commit, ok := commits[st.Repo]; ok && commit == st.Commit {
-				m.outdated[st.Repo] = st
-			}
-		}
+		m = m.takeCheck(c.out, true)
 	}
 	switch {
 	case m.check == checkFailed:
@@ -795,6 +774,43 @@ func (m Model) finishCheck(c checkMsg) Model {
 	case len(m.checkFail) > 0:
 		f := m.checkFail[0]
 		m.status, m.statusLvl = fmt.Sprintf("could not check %s: %s · c checks again", f.Repo, firstLine(f.Error)), lvWarn
+	}
+	return m
+}
+
+// takeCheck takes in what an upstream check found: the background check
+// (all packs, replacing what was known) or the check before an update
+// (merged in).
+func (m Model) takeCheck(o *app.Outdated, all bool) Model {
+	if all || m.outdated == nil {
+		m.outdated = map[string]app.PackStatus{}
+		m.checkFail = nil
+	}
+	if all {
+		m.check = checkDone
+	}
+	failed := map[string]bool{}
+	for _, f := range o.Failed {
+		failed[f.Repo] = true
+	}
+	var keep []app.Failure
+	for _, f := range m.checkFail {
+		if !failed[f.Repo] {
+			keep = append(keep, f)
+		}
+	}
+	m.checkFail = append(keep, o.Failed...)
+	commits := map[string]string{}
+	for _, p := range m.snap.Packs {
+		commits[p.Repo] = p.Commit
+	}
+	for _, st := range o.Packs {
+		// An update that ended while the check ran already moved the
+		// pack on: what the check saw is out of date.
+		if commit, ok := commits[st.Repo]; ok && commit == st.Commit {
+			m.outdated[st.Repo] = st
+		}
+		m.checkFail = slices.DeleteFunc(m.checkFail, func(f app.Failure) bool { return f.Repo == st.Repo })
 	}
 	return m
 }
@@ -1000,7 +1016,7 @@ func (m Model) start(j job) (tea.Model, tea.Cmd) {
 		}
 		defer jobs.end()
 		res := j.run(ops)
-		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil && !res.historyRead {
+		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil && !res.historyRead && res.plan == nil {
 			snap, err := ops.Load()
 			if err != nil && res.err == nil {
 				res.err = err
@@ -1045,6 +1061,8 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 		return m.trashView(r.trash)
 	case r.settings != nil:
 		return m.settingsView(r.settings)
+	case r.plan != nil:
+		return m.planView(r.planFor, r.plan)
 	}
 	return m.setResult(label, r), nil
 }

@@ -396,3 +396,77 @@ func recordLines(r app.UpdateRecord) []string {
 	}
 	return lines
 }
+
+// planView asks before updating (u, U): what upstream changed, per pack
+// and skill. For one pack (repo set) it is a confirmation; for every pack
+// a list with each pack ticked, and only the ticked ones are updated.
+func (m Model) planView(repo string, plan *app.UpdatePlan) (tea.Model, tea.Cmd) {
+	m = m.takeCheck(plan.Outdated, repo == "")
+	failNote := ""
+	if n := len(plan.Failed); n > 0 {
+		f := plan.Failed[0]
+		failNote = fmt.Sprintf("could not check %s: %s", f.Repo, firstLine(f.Error))
+	}
+	update := func(repos []string) *job {
+		label := "updating " + plural(len(repos), "pack")
+		if len(repos) == 1 {
+			label = "updating " + repos[0]
+		}
+		return &job{label: label, run: func(o Ops) result {
+			reps, msg, err := o.Update(repos)
+			return result{msg: msg, err: err, reports: reps}
+		}}
+	}
+	if repo != "" {
+		if failNote != "" {
+			m.status, m.statusLvl = failNote, lvErr
+			return m, nil
+		}
+		st := plan.Find(repo)
+		if st == nil {
+			return m.hint(repo + " was not checked")
+		}
+		lines := []string{short(st.Commit) + " → " + short(st.Latest) + " · " + st.Summary()}
+		if st.Commit == "" {
+			lines[0] = "not vendored yet · upstream " + short(st.Latest)
+		}
+		for _, row := range st.Rows() {
+			lines = append(lines, fit(row[0], 14)+row[1])
+		}
+		if len(plan.Updates) == 0 {
+			lines = append(lines, "", "Nothing changed upstream. Updating anyway re-vendors missing files and re-links.")
+		}
+		lines = append(lines, "", "Recorded in the update history (h).")
+		m.ov = confirmOverlay("Update "+repo, lines, choice{key: "y", label: "update", then: func() step {
+			return step{job: update([]string{repo})}
+		}})
+		return m, nil
+	}
+	if len(plan.Updates) == 0 {
+		msg, lvl := "nothing to update upstream · c checks again · u on a pack updates it anyway", lvOK
+		if failNote != "" {
+			msg, lvl = failNote, lvWarn
+		}
+		m.status, m.statusLvl = msg, lvl
+		return m, nil
+	}
+	var items []pickItem
+	for _, st := range plan.Updates {
+		items = append(items, pickItem{label: st.Repo, detail: short(st.Commit) + "→" + short(st.Latest) + " · " + st.Summary(),
+			value: st.Repo, on: true, group: st.Repo})
+		for _, row := range st.Rows() {
+			items = append(items, pickItem{label: "  " + row[0], detail: row[1], info: true, group: st.Repo})
+		}
+	}
+	desc := "every pack is ticked · space unticks one · enter updates the ticked packs · recorded in the update history (h)"
+	if failNote != "" {
+		desc = failNote + " · " + desc
+	}
+	m.ov = pickOverlay("Update "+plural(len(plan.Updates), "pack"), desc, items, false, func(values []string, _ bool) step {
+		if len(values) == 0 {
+			return step{}
+		}
+		return step{job: update(values)}
+	})
+	return m, nil
+}

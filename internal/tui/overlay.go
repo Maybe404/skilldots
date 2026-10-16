@@ -27,6 +27,9 @@ type pickItem struct {
 	// header marks a group heading; space on it toggles the whole group.
 	header bool
 	group  string
+	// info rows only describe the item above them: never selectable,
+	// never a value.
+	info bool
 }
 
 // step is what a key in an overlay leads to: another overlay, a job, or
@@ -162,7 +165,7 @@ func helpOverlay() *overlay {
 func (o *overlay) values() []string {
 	var out []string
 	for _, it := range o.items {
-		if it.on && !it.header {
+		if it.on && !it.header && !it.info {
 			out = append(out, it.value)
 		}
 	}
@@ -171,6 +174,9 @@ func (o *overlay) values() []string {
 
 func (o *overlay) selectable(i int) bool {
 	it := o.items[i]
+	if it.info {
+		return false
+	}
 	if o.kind == ovList {
 		return !it.header
 	}
@@ -226,13 +232,13 @@ func (o *overlay) toggle() {
 	}
 	all := true
 	for _, x := range o.items {
-		if !x.header && x.group == it.group && !x.locked && !x.on {
+		if !x.header && !x.info && x.group == it.group && !x.locked && !x.on {
 			all = false
 		}
 	}
 	for i := range o.items {
 		x := &o.items[i]
-		if !x.header && x.group == it.group && !x.locked {
+		if !x.header && !x.info && x.group == it.group && !x.locked {
 			x.on = !all
 		}
 	}
@@ -403,7 +409,7 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 		}
 		labelW := 0
 		for _, it := range o.items {
-			if !it.header {
+			if !it.header && !it.info {
 				labelW = max(labelW, ansi.StringWidth(it.label))
 			}
 		}
@@ -418,6 +424,11 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 			if i == o.cur {
 				rbg = s.sel
 				mark = sgb("❯ ", t.Accent)
+			}
+			if it.info {
+				segs := []seg{sg("    ", ""), sg(fit(it.label, labelW)+"  ", t.Muted), sg(it.detail, t.Text)}
+				lines = append(lines, paint(2, bg)+paint(w-2, bg, segs...))
+				continue
 			}
 			if it.header {
 				segs := []seg{mark}
@@ -486,7 +497,7 @@ func (o *overlay) box(i int, t Theme) seg {
 	if it.header {
 		n, on := 0, 0
 		for _, x := range o.items {
-			if !x.header && x.group == it.group && !x.locked {
+			if !x.header && !x.info && x.group == it.group && !x.locked {
 				n++
 				if x.on || o.all {
 					on++

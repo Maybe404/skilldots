@@ -88,7 +88,7 @@ func movedNames(moved []string) []string {
 		}
 	}
 	sort.Strings(out)
-	return dedupe(out)
+	return nonNilStrings(dedupe(out))
 }
 
 func nonNilStrings(s []string) []string {

@@ -110,10 +110,25 @@ func TestUpstreamCheckAtStart(t *testing.T) {
 		t.Errorf("code-review was upstream before: %q", r)
 	}
 
-	// U updates exactly the packs with updates; then the count is zero
-	// and the status line lists what changed.
+	// U checks again and lists the packs with updates, ticked; enter
+	// updates exactly those. Then the count is zero and the status line
+	// lists what changed.
 	m, cmd = press(t, m, "U")
-	if m.busy != "updating 1 pack" {
+	if m.busy != "checking upstream" {
+		t.Fatalf("busy = %q", m.busy)
+	}
+	m = settle(t, m, cmd)
+	if m.ov == nil || m.ov.title != "Update 1 pack" || slices.Contains(f.calls, "update mattpocock/skills") {
+		t.Fatalf("U did not ask first: %+v %v", m.ov, f.calls)
+	}
+	v := screen(m)
+	for _, want := range []string{"mattpocock/skills", "1 changed · 1 new upstream", "changed", "tdd", "upstream new", "pr (not selected)", "grill-me (kept)"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("plan lacks %q:\n%s", want, v)
+		}
+	}
+	m, cmd = press(t, m, "enter")
+	if m.busy != "updating mattpocock/skills" {
 		t.Fatalf("busy = %q", m.busy)
 	}
 	m = settle(t, m, cmd)
@@ -127,34 +142,68 @@ func TestUpstreamCheckAtStart(t *testing.T) {
 		t.Fatalf("pack still marked after U: %q", line(m, 2))
 	}
 	if r := rightRow(t, m, "tdd"); strings.Contains(r, "changed") {
-		t.Fatalf("tdd still marked: %q", r)
+		t.Fatalf("tdd row: %q", r)
 	}
 	if !strings.Contains(m.status, "updated") {
 		t.Fatalf("status after U: %q", m.status)
 	}
 
-	// Nothing left: U says so instead of fetching everything.
+	// Nothing left upstream: U says so and updates nothing.
+	f.check = &app.Outdated{Packs: []app.PackStatus{
+		{Repo: "mattpocock/skills", Commit: "49dd158aabbccdd", Latest: "49dd158aabbccdd"},
+		{Repo: "kepano/obsidian-skills", Commit: "1234567", Latest: "1234567"},
+	}}
 	n := len(f.calls)
-	m, _ = press(t, m, "U")
-	if m.busy != "" || len(f.calls) != n || !strings.Contains(m.status, "no upstream updates") {
-		t.Fatalf("U with nothing to update: busy %q, calls %v, status %q", m.busy, f.calls[n:], m.status)
+	m, cmd = press(t, m, "U")
+	m = settle(t, m, cmd)
+	if m.ov != nil || slices.ContainsFunc(f.calls[n:], func(c string) bool { return strings.HasPrefix(c, "update") }) ||
+		!strings.Contains(m.status, "nothing to update upstream") {
+		t.Fatalf("U with nothing to update: ov %+v, calls %v, status %q", m.ov, f.calls[n:], m.status)
 	}
 
-	// u keeps updating the pack under the cursor.
+	// u on a pack shows what would change and asks, even with nothing new.
 	m, cmd = press(t, m, "down", "u")
+	m = settle(t, m, cmd)
+	if m.ov == nil || m.ov.kind != ovConfirm || !strings.Contains(strings.Join(m.ov.lines, "\n"), "Nothing changed upstream") {
+		t.Fatalf("u: %+v", m.ov)
+	}
+	m, _ = press(t, m, "esc")
+	if lastCall(f) != "plan kepano/obsidian-skills" {
+		t.Fatalf("esc still updated: %v", f.calls)
+	}
+	m, cmd = press(t, m, "u")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "y")
 	m = settle(t, m, cmd)
 	if f.calls[len(f.calls)-1] != "update kepano/obsidian-skills" {
 		t.Fatalf("u: %v", f.calls)
 	}
 }
 
-// Before a check has finished, U updates every pack as it always did.
-func TestUpdateAllBeforeCheck(t *testing.T) {
+// U lists every pack with changes, ticked; only the ticked ones are
+// updated, and unticking all of them updates nothing.
+func TestUpdateAllAsksFirst(t *testing.T) {
 	m, f := newModel(t, sampleSnapshot(), 120, 40)
 	m, cmd := press(t, m, "U")
+	m = settle(t, m, cmd)
+	if m.ov == nil || m.ov.title != "Update 3 packs" {
+		t.Fatalf("plan: %+v", m.ov)
+	}
+	m, _ = press(t, m, "space")
+	m, cmd = press(t, m, "enter")
 	settle(t, m, cmd)
-	if !slices.Contains(f.calls, "update ") {
-		t.Fatalf("calls: %v", f.calls)
+	if got := lastCall(f); got != "update kepano/obsidian-skills,nobody/empty" {
+		t.Fatalf("update call = %q (%v)", got, f.calls)
+	}
+	m, _ = newModel(t, sampleSnapshot(), 120, 40)
+	m.ops = f
+	m, cmd = press(t, m, "U")
+	m = settle(t, m, cmd)
+	n := len(f.calls)
+	m, _ = press(t, m, "space", "down", "space", "down", "space")
+	m, cmd = press(t, m, "enter")
+	if cmd != nil || m.ov != nil || len(f.calls) != n {
+		t.Fatalf("nothing ticked still updated: %v", f.calls[n:])
 	}
 }
 
@@ -262,8 +311,9 @@ func TestMovedOnly(t *testing.T) {
 		t.Fatalf("tdd row: %q", r)
 	}
 	n := len(f.calls)
-	m, _ = press(t, m, "U")
-	if m.busy != "" || len(f.calls) != n {
-		t.Fatalf("U updated a pack with nothing but a move: %v", f.calls[n:])
+	m, cmd = press(t, m, "U")
+	m = settle(t, m, cmd)
+	if m.ov != nil || slices.ContainsFunc(f.calls[n:], func(c string) bool { return strings.HasPrefix(c, "update") }) {
+		t.Fatalf("U offered a pack with nothing but a move: %+v %v", m.ov, f.calls[n:])
 	}
 }
