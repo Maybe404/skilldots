@@ -398,6 +398,17 @@ func runApply(c *ctx, dry, force bool) error {
 		return err
 	}
 	c.jsonOut(out)
+	return refusedError(out)
+}
+
+// refusedError is the error `skd apply` exits with when some planned
+// change was not made (out.Refused; under --json listed as "refused" in
+// the document already printed): the agent directories do not match the
+// manifest yet.
+func refusedError(out *app.ApplyOutcome) error {
+	if n := len(out.Refused); n > 0 {
+		return fmt.Errorf("%d planned change(s) not made (listed above); the agent directories do not match skills.toml yet", n)
+	}
 	return nil
 }
 
@@ -437,7 +448,9 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 	for _, r := range out.Refused {
 		c.printf("  %s %s\n", warn("! skipped"), txt(r))
 	}
-	if out.Applied {
+	if out.Applied && len(out.Refused) > 0 {
+		c.printf("%s %s\n", warn("!"), dim(fmt.Sprintf("applied · %s · %d not changed", summary, len(out.Refused))))
+	} else if out.Applied {
 		c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
 	}
 }

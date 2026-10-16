@@ -122,6 +122,7 @@ Run this on first use and whenever `skd scan` reports unmanaged entries.
 
 ## Rules
 
+- After `skd apply`, check the exit code: non-zero with a `refused` list in the `--json` document ("N not changed" on the last line) means those changes were not made because an agent directory no longer leads where it did or a skill's directory goes through a symbolic link inside the library. Report them to the user; do not retry with `--force` or work around it. Commands that link as they go (`enable`, `disable`, `add`, `update`, `new`) report the same under `apply.refused` in `--json` and end on "N not changed"; check it there.
 - `skd apply -n` previews; plain `skd apply` only touches links skd created. `skd apply --force` moves other directories (and links) in the way of a wanted skill to the trash first — show the user the `-n` preview before `--force`. An entry the manifest no longer wants that skd "cannot tell it made" stays where it is, with `--force` too: tell the user its path; do not remove it yourself. A trash entry that is a symbolic link is put back by the user, by hand.
 - Do not delete or edit anything under an agent's skill directory yourself; use `skd disable`/`remove`/`purge`/`adopt`.
 - If a skill the user wants is already present under a different name, say so instead of installing a duplicate.
