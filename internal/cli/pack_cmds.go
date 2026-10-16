@@ -383,13 +383,13 @@ func short(s string) string {
 
 func gitCommit(c *ctx, msg string) error {
 	root := c.lib.Root
-	if _, err := c.lib.Git("add", "-A"); err != nil {
+	if _, err := c.lib.Git("add", "-A", "--", "."); err != nil {
 		return err
 	}
-	if _, err := c.lib.Git("diff", "--cached", "--quiet"); err == nil {
+	if _, err := c.lib.Git("diff", "--cached", "--quiet", "--", "."); err == nil {
 		return nil
 	}
-	if _, err := c.lib.Git("commit", "-q", "-m", msg); err != nil {
+	if _, err := c.lib.Git("commit", "-q", "-m", msg, "--", "."); err != nil {
 		return err
 	}
 	if _, err := c.lib.Git("rev-parse", "--abbrev-ref", "@{u}"); err == nil {

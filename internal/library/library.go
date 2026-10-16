@@ -178,10 +178,24 @@ func Git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(out.String()), nil
 }
 
-// IsGitRepo reports whether dir is inside a git work tree.
+// IsGitRepo reports whether dir is the top of its own git work tree. A
+// directory merely inside some larger repository does not count: the
+// library and private/ each need their own.
 func IsGitRepo(dir string) bool {
-	out, err := Git(dir, "rev-parse", "--is-inside-work-tree")
-	return err == nil && out == "true"
+	out, err := Git(dir, "rev-parse", "--show-toplevel")
+	if err != nil || out == "" {
+		return false
+	}
+	return samePath(out, dir)
+}
+
+func samePath(a, b string) bool {
+	ra, err1 := filepath.EvalSymlinks(a)
+	rb, err2 := filepath.EvalSymlinks(b)
+	if err1 != nil || err2 != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return ra == rb
 }
 
 // EnsureGit initialises dir as a git repository when it is not one,

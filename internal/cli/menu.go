@@ -332,11 +332,11 @@ func syncCmd() *cobra.Command {
 			if msg == "" {
 				msg = "chore: update skills library"
 			}
-			if _, err := c.lib.Git("add", "-A"); err != nil {
+			if _, err := c.lib.Git("add", "-A", "--", "."); err != nil {
 				return err
 			}
-			if _, err := c.lib.Git("diff", "--cached", "--quiet"); err != nil {
-				if _, err := c.lib.Git("commit", "-q", "-m", msg); err != nil {
+			if _, err := c.lib.Git("diff", "--cached", "--quiet", "--", "."); err != nil {
+				if _, err := c.lib.Git("commit", "-q", "-m", msg, "--", "."); err != nil {
 					return err
 				}
 				fmt.Printf("%s committed\n", ok("✓"))

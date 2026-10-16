@@ -92,7 +92,9 @@ func initCmd() *cobra.Command {
 				return nil
 			}
 			// Teach the machine's agents how to drive skd. Best effort: offline
-			// init still succeeds.
+			// init still succeeds. Open the new library explicitly: the
+			// current directory may sit inside another one.
+			flags.library = root
 			c, err := open()
 			if err != nil {
 				return err
