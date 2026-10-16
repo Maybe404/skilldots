@@ -386,3 +386,35 @@ func TestAdoptWithSameNamedEntries(t *testing.T) {
 		t.Fatalf("gemini should be added to exactly one entry:\n%s", b)
 	}
 }
+
+// Temporary files of an interrupted save never reach the backup: a new
+// library ignores them, `init --from` adds the pattern to an existing
+// .gitignore, and sync leaves them out even when .gitignore predates it.
+func TestSyncNeverCommitsSaveTemporaries(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	if b, _ := os.ReadFile(filepath.Join(lib, ".gitignore")); !strings.Contains(string(b), ".*.tmp-*") {
+		t.Errorf("new .gitignore lacks .*.tmp-*:\n%s", b)
+	}
+
+	e.write("old/.gitignore", "/private/\n/.trash/\n")
+	e.write("old/notes.txt", "mine\n")
+	old := e.p("old")
+	e.ok("", "init", "--from", old, "--no-skill")
+	b, _ := os.ReadFile(filepath.Join(old, ".gitignore"))
+	if !strings.Contains(string(b), ".*.tmp-*") || strings.Count(string(b), "/private/") != 1 {
+		t.Errorf("init --from .gitignore:\n%s", b)
+	}
+
+	// A library whose .gitignore was written before the pattern existed.
+	e.write("lib/.gitignore", "/private/\n/.trash/\n")
+	e.write("lib/.skills.toml.tmp-123", "torn")
+	e.write("lib/.skills.lock.tmp-456", "torn")
+	e.skill("lib/skills/mine", "mine")
+	e.ok("", "--library", lib, "sync")
+	files := e.git(lib, "ls-files")
+	if strings.Contains(files, ".tmp-") || !strings.Contains(files, "skills/mine/SKILL.md") {
+		t.Fatalf("tracked files:\n%s", files)
+	}
+}

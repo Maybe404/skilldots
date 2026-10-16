@@ -28,6 +28,8 @@ const gitignore = `.DS_Store
 /private/
 # Where skd parks anything it takes out of the way. Empty with: skd trash empty
 /.trash/
+# Temporary files of a save that was interrupted; the next save removes them.
+.*.tmp-*
 `
 
 func initCmd() *cobra.Command {
@@ -70,7 +72,7 @@ func initCmd() *cobra.Command {
 				os.WriteFile(gi, []byte(gitignore), 0o644)
 			} else {
 				b, _ := os.ReadFile(gi)
-				for _, line := range []string{"/private/", "/.trash/"} {
+				for _, line := range []string{"/private/", "/.trash/", ".*.tmp-*"} {
 					if !strings.Contains(string(b), line) {
 						b = append(b, []byte("\n"+line+"\n")...)
 					}

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSaveReplacesAtomically(t *testing.T) {
@@ -126,6 +127,44 @@ func TestSaveRefusesReadOnlyFile(t *testing.T) {
 	for _, e := range entries {
 		if strings.Contains(e.Name(), ".tmp-") {
 			t.Errorf("temporary file left behind: %s", e.Name())
+		}
+	}
+}
+
+// A temporary file left by a save that was killed half-way is removed by
+// the next save once it is clearly stale; a fresh one (another save in
+// progress) and anything not named like ours stay.
+func TestSaveRemovesStaleTemp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, FileName)
+	if err := New([]string{"agents"}).Save(path); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	mk := func(name string, stale bool) string {
+		p := filepath.Join(dir, name)
+		os.WriteFile(p, []byte("x"), 0o644)
+		if stale {
+			os.Chtimes(p, old, old)
+		}
+		return p
+	}
+	staleTmp := mk(".skills.toml.tmp-111", true)
+	fresh := mk(".skills.toml.tmp-222", false)
+	other := mk(".skills.lock.tmp-333", true)
+	user := mk("skills.toml.tmp-444", true)
+	staleDir := filepath.Join(dir, ".skills.toml.tmp-dir")
+	os.Mkdir(staleDir, 0o755)
+	os.Chtimes(staleDir, old, old)
+	if err := New([]string{"claude"}).Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(staleTmp); !os.IsNotExist(err) {
+		t.Error("stale temporary file kept")
+	}
+	for _, p := range []string{fresh, other, user, staleDir} {
+		if _, err := os.Lstat(p); err != nil {
+			t.Errorf("%s removed: %v", filepath.Base(p), err)
 		}
 	}
 }

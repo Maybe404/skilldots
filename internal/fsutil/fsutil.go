@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Skip lists directory names never copied or hashed.
@@ -253,6 +254,22 @@ func LicenseLinks(dir string) []string {
 	return out
 }
 
+// staleTemp is how old a leftover temporary file must be before a save
+// removes it. A save takes milliseconds; a younger file may belong to a
+// save running in another skd process right now.
+const staleTemp = time.Minute
+
+// removeStaleTemps deletes regular files in dir matching pattern (the
+// temporary-file pattern of WriteAtomic) that a killed save left behind.
+func removeStaleTemps(dir, pattern string) {
+	matches, _ := filepath.Glob(filepath.Join(dir, pattern))
+	for _, m := range matches {
+		if st, err := os.Lstat(m); err == nil && st.Mode().IsRegular() && time.Since(st.ModTime()) > staleTemp {
+			os.Remove(m)
+		}
+	}
+}
+
 // WriteAtomic replaces path with data so a crash or kill mid-write leaves
 // either the old file or the new one, never a torn one: write a temporary
 // file next to it, then rename over it. A symlinked file is written
@@ -276,7 +293,9 @@ func WriteAtomic(path string, data []byte) error {
 			return &fs.PathError{Op: "write", Path: path, Err: fs.ErrPermission}
 		}
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	pattern := "." + filepath.Base(path) + ".tmp-*"
+	removeStaleTemps(filepath.Dir(path), pattern)
+	f, err := os.CreateTemp(filepath.Dir(path), pattern)
 	if err != nil {
 		return err
 	}

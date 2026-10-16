@@ -401,17 +401,22 @@ func short(s string) string {
 	return s
 }
 
+// commitPaths is what a library commit takes: everything under the root
+// except the temporary files of an interrupted save, which a .gitignore
+// written before they were ignored would let through.
+var commitPaths = []string{".", ":(exclude,glob).skills.toml.tmp-*", ":(exclude,glob).skills.lock.tmp-*"}
+
 // gitCommit commits the library's own files and, with push, pushes when
 // the branch has an upstream. It reports whether a commit was made.
 func gitCommit(c *ctx, msg string, push bool) (bool, error) {
 	root := c.lib.Root
-	if _, err := c.lib.Git("add", "-A", "--", "."); err != nil {
+	if _, err := c.lib.Git(append([]string{"add", "-A", "--"}, commitPaths...)...); err != nil {
 		return false, err
 	}
-	if _, err := c.lib.Git("diff", "--cached", "--quiet", "--", "."); err == nil {
+	if _, err := c.lib.Git(append([]string{"diff", "--cached", "--quiet", "--"}, commitPaths...)...); err == nil {
 		return false, nil
 	}
-	if _, err := c.lib.Git("commit", "-q", "-m", msg, "--", "."); err != nil {
+	if _, err := c.lib.Git(append([]string{"commit", "-q", "-m", msg, "--"}, commitPaths...)...); err != nil {
 		return false, err
 	}
 	if _, err := c.lib.Git("rev-parse", "--abbrev-ref", "@{u}"); push && err == nil {
