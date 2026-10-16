@@ -336,23 +336,31 @@ func (o *overlay) update(k tea.KeyMsg) (*overlay, *job, tea.Cmd) {
 	return o, nil, nil
 }
 
-// render draws the modal at width w with at most h rows.
+// render draws the modal at width w with at most h rows. On a short
+// terminal the description goes first, then the body is cut: the key
+// hints (what each key does) always stay, since a dialog whose choices
+// cannot be seen still takes them.
 func (o *overlay) render(w, h int, t Theme, s surfaces) []string {
 	if w < 8 || h < 1 {
 		return nil
 	}
-	lines := o.renderDesc(w, h, t, s, o.desc)
+	lines, tail := o.renderDesc(w, h, t, s, o.desc)
 	if len(lines) > h && o.desc != "" {
-		// Short terminal: the key hints matter more than the description.
-		lines = o.renderDesc(w, h, t, s, "")
+		lines, tail = o.renderDesc(w, h, t, s, "")
 	}
 	if len(lines) > h {
-		lines = append(lines[:max(0, h-1)], lines[len(lines)-1])
+		foot := lines[len(lines)-tail:]
+		if h <= tail {
+			return foot[:h]
+		}
+		lines = append(lines[:h-tail:h-tail], foot...)
 	}
 	return lines
 }
 
-func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []string {
+// renderDesc draws the modal and returns its lines and how many of them
+// at the end are the key hints and the bottom margin.
+func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]string, int) {
 	bg := s.modal
 	row := func(segs ...seg) string {
 		return paint(w, bg, append([]seg{sg("  ", "")}, segs...)...)
@@ -363,34 +371,58 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 		lines = append(lines, row(sg(d, t.Muted)))
 	}
 	lines = append(lines, row())
-	var foot []seg
+	// The key hints, one group per key, laid out over as many rows as
+	// the width needs.
+	var groups [][]seg
 	key := func(k, label string) []seg { return []seg{sgb(k, t.Accent), sg(" "+label+"   ", t.Text)} }
+	footRows := func() []string {
+		var rows []string
+		var cur []seg
+		used := 0
+		for _, g := range groups {
+			gw := 0
+			for _, x := range g {
+				gw += ansi.StringWidth(x.s)
+			}
+			if used > 0 && used+gw > inner {
+				rows = append(rows, row(cur...))
+				cur, used = nil, 0
+			}
+			cur = append(cur, g...)
+			used += gw
+		}
+		return append(rows, row(cur...))
+	}
 	switch o.kind {
 	case ovHelp:
-		avail := max(1, h-len(lines)-4)
+		scrollGroups := func(off, avail int) {
+			groups = nil
+			if len(o.lines) > avail {
+				groups = append(groups, key("↑↓", "scroll"), []seg{sg(ansiRange(off, avail, len(o.lines))+"   ", t.Muted)})
+			}
+			groups = append(groups, []seg{sg("any other key closes", t.Muted)})
+		}
+		scrollGroups(0, max(1, h-len(lines)-4))
+		avail := max(1, h-len(lines)-3-len(footRows()))
 		off := min(o.off, max(0, len(o.lines)-avail))
 		for i := off; i < len(o.lines) && i < off+avail; i++ {
 			lines = append(lines, row(sg(o.lines[i], t.Text)))
 		}
-		if len(o.lines) > avail {
-			foot = append(foot, key("↑↓", "scroll")...)
-			foot = append(foot, sg(ansiRange(off, avail, len(o.lines))+"   ", t.Muted))
-		}
-		foot = append(foot, sg("any other key closes", t.Muted))
+		scrollGroups(off, avail)
 	case ovConfirm:
-		for _, l := range o.lines {
-			lines = append(lines, row(sg(l, t.Text)))
-		}
-		lines = append(lines, row())
 		for i, c := range o.choices {
 			k := c.key
 			if i == 0 && !o.noEnter {
 				k += "/enter"
 			}
-			foot = append(foot, key(k, c.label)...)
+			groups = append(groups, key(k, c.label))
 		}
-		foot = append(foot, key("esc", "cancel")...)
+		groups = append(groups, key("esc", "cancel"))
+		for _, l := range o.lines {
+			lines = append(lines, row(sg(l, t.Text)))
+		}
 	case ovInput:
+		groups = append(groups, key("enter", o.verb), key("esc", "cancel"))
 		v := o.input.View()
 		vw := ansi.StringWidth(v)
 		if vw > inner {
@@ -401,9 +433,24 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 		if o.err != "" {
 			lines = append(lines, row(sg("✗ "+o.err, t.Err)))
 		}
-		foot = append(key("enter", o.verb), key("esc", "cancel")...)
 	case ovPick, ovList:
-		avail := h - len(lines) - 4
+		if o.kind == ovPick {
+			groups = append(groups, key("space", "toggle"))
+			if o.allowAll {
+				groups = append(groups, key("*", "all"))
+			}
+			groups = append(groups, key("enter", "confirm"))
+		} else {
+			for i, a := range o.actions {
+				k := a.key
+				if i == 0 {
+					k += "/enter"
+				}
+				groups = append(groups, key(k, a.label))
+			}
+		}
+		groups = append(groups, key("esc", "cancel"))
+		avail := h - len(lines) - 3 - len(footRows())
 		if o.allowAll {
 			avail--
 		}
@@ -475,25 +522,12 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 			}
 			lines = append(lines, row(mark, sg("follow everything, including skills added upstream later", t.Text)))
 		}
-		if o.kind == ovPick {
-			foot = key("space", "toggle")
-			if o.allowAll {
-				foot = append(foot, key("*", "all")...)
-			}
-			foot = append(foot, key("enter", "confirm")...)
-		} else {
-			for i, a := range o.actions {
-				k := a.key
-				if i == 0 {
-					k += "/enter"
-				}
-				foot = append(foot, key(k, a.label)...)
-			}
-		}
-		foot = append(foot, key("esc", "cancel")...)
 	}
-	lines = append(lines, row(), row(foot...), row())
-	return lines
+	foot := footRows()
+	lines = append(lines, row())
+	lines = append(lines, foot...)
+	lines = append(lines, row())
+	return lines, len(foot) + 1
 }
 
 // box is the tick mark of pick row i; a heading shows its group's state.

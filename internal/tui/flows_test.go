@@ -582,3 +582,38 @@ func TestEditFlow(t *testing.T) {
 		}
 	}
 }
+
+// On a short terminal a dialog drops its description and then its body,
+// never the row that says which keys do what: o on a vendored skill and u
+// on a pack both take keys whose labels must stay on screen.
+func TestDialogsKeepTheirKeysOnSmallScreens(t *testing.T) {
+	lipgloss.SetColorProfile(0)
+	cases := map[string]struct {
+		open func(m Model) Model
+		want []string
+	}{
+		"o": {func(m Model) Model { m, _ = press(t, m, "tab", "o"); return m },
+			[]string{"f/enter fork into skills/ and open", "p fork into private/ and open", "o open anyway", "esc cancel"}},
+		"u": {func(m Model) Model { m, c := press(t, m, "u"); return drain(t, m, c) },
+			[]string{"y/enter update", "esc cancel"}},
+		"d": {func(m Model) Model { m, _ = press(t, m, "tab", "d"); return m }, []string{"esc cancel"}},
+	}
+	for _, size := range [][2]int{{90, 12}, {60, 12}, {61, 13}, {120, 14}} {
+		for name, c := range cases {
+			m, _ := newModel(t, sampleSnapshot(), size[0], size[1])
+			m = c.open(m)
+			if m.ov == nil {
+				t.Fatalf("%s: no dialog", name)
+			}
+			v := ansi.Strip(m.View())
+			for _, w := range c.want {
+				if !strings.Contains(v, w) {
+					t.Errorf("%s at %dx%d: %q not on screen:\n%s", name, size[0], size[1], w, v)
+				}
+			}
+			if !strings.Contains(v, m.ov.title) && size[1] > 12 {
+				t.Errorf("%s at %dx%d: title gone:\n%s", name, size[0], size[1], v)
+			}
+		}
+	}
+}
