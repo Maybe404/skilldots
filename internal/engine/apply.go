@@ -403,26 +403,67 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 	return res, nil
 }
 
-// remember records in placed a link op keeps that skd made from the
-// library (ownLink) but placed does not have yet (made by a version of
-// skd that kept no record), and reports whether it did. Then, after the
-// library moves, the link is still known as skd's. Nothing else is
-// taken on: a copy's hash or an app's link may be someone's own.
+// remember records in placed what op keeps that skd made but placed
+// does not have yet (made by a version of skd that kept no record), and
+// reports whether it did. Then, after the library moves, the app is
+// disabled or the copy is replaced, it is still known as skd's and is
+// removed outright, not moved to the trash or left behind. Only what
+// skd would make right now is taken on, so a forged lock record cannot
+// claim anything of the user's that holds data:
+//
+//   - a link skd made from the library (ownLink): a link to the
+//     recorded source inside the library;
+//   - an app's link: a symbolic link whose target is exactly the app's
+//     directory skills.toml names, as the lock records it, while that
+//     directory is a skill (CheckAppDir). A forged record and manifest
+//     can at most claim a link of the user's that says exactly that;
+//     removing it later loses a link, not the app's files;
+//   - a copy exactly as CopyTree makes it from the skill's source now
+//     (fsutil.Pristine with the source's hash, which the lock records
+//     too): nothing in it that is not in the library (or the app), so
+//     removing it later loses nothing the library does not hold.
 func remember(placed map[string]placedEntry, op Op, lib *library.Library) bool {
 	k := placedKey(op.Dest)
-	if _, ok := placed[k]; ok || !ownLink(op.Dest, lib.Lock.Links[op.Target.Name+"/"+op.Name], lib) {
+	if _, ok := placed[k]; ok {
 		return false
 	}
-	got, err := os.Readlink(op.Dest)
-	if err != nil {
+	prev := lib.Lock.Links[op.Target.Name+"/"+op.Name]
+	if prev == nil {
 		return false
 	}
-	placed[k] = placedEntry{Link: got}
-	return true
+	switch {
+	case ownLink(op.Dest, prev, lib):
+		got, err := os.Readlink(op.Dest)
+		if err != nil {
+			return false
+		}
+		placed[k] = placedEntry{Link: got}
+		return true
+	case prev.Mode == "link" && op.entry != nil && op.entry.Kind == KindApp && op.entry.Refused == "":
+		got, err := os.Readlink(op.Dest)
+		if err != nil || got != op.Source || prev.Source != op.Source || CheckAppDir(op.Source) != nil {
+			return false
+		}
+		placed[k] = placedEntry{Link: got}
+		return true
+	case prev.Mode == "copy":
+		// A kept copy's source is not reached through a link inside the
+		// library (such an entry is skipped), and has the recorded hash.
+		if !fsutil.Within(lib.Root, op.Source) && CheckAppDir(op.Source) != nil {
+			return false
+		}
+		h, err := fsutil.HashTree(op.Source)
+		if err != nil || !fsutil.Pristine(op.Dest, h) {
+			return false
+		}
+		placed[k] = placedEntry{Hash: h}
+		return true
+	}
+	return false
 }
 
-// Remember records the links a plan keeps that skd made from the library
-// but has no record of (see remember). Apply does the same; this is for a
+// Remember records what a plan keeps that skd made but has no record of
+// (see remember). Apply does the same; this is for a
 // plan with nothing to change, which is not applied.
 func Remember(lib *library.Library, plan Plan) {
 	if placedFile() == "" {
