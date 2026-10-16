@@ -24,6 +24,7 @@ type SyncReport struct {
 	UpstreamNew   []string // not selected, newly appeared upstream
 	UpstreamGone  []string // selected but no longer upstream (kept locally)
 	Dropped       []string // vendored but no longer selected (moved to the trash)
+	Moved         []string // "name: old category → new category" (directory renamed)
 	NoLicense     bool
 	NoLicenseList []string
 	// Rejected lists upstream SKILL.md files that were not used (e.g. a
@@ -164,6 +165,23 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			return nil, err
 		}
 		prev := lp.Skills[s.Name]
+		if prev != nil && prev.Category != s.Category {
+			// The skill's category changed (upstream moved it, or the
+			// categorisation rule did): rename the vendored directory.
+			old, err := skillDir(packDir, prev.Category, s.Name)
+			if err == nil && fsutil.Lexists(old) && !fsutil.Lexists(dest) {
+				if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+					return nil, err
+				}
+				if err := os.Rename(old, dest); err != nil {
+					return nil, err
+				}
+				pruneEmpty(lib, filepath.Dir(old))
+				rep.Moved = append(rep.Moved, fmt.Sprintf("%s: %q → %q", s.Name, prev.Category, s.Category))
+				prev = &lock.Skill{Category: s.Category, Hash: prev.Hash}
+				lp.Skills[s.Name] = prev
+			}
+		}
 		if prev == nil {
 			if o := p.Override(s.Name, false); (o == nil || o.As == "") && taken[s.Name] != "" {
 				as := freeName(func(n string) bool { return taken[n] != "" }, s.Name, p.Prefix())

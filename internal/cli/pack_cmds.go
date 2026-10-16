@@ -367,6 +367,7 @@ func printReport(c *ctx, r *engine.SyncReport) {
 	row("changed", accent, r.Changed)
 	row("added", ok, r.Added)
 	row("dropped", bad, r.Dropped)
+	row("moved", dim, r.Moved)
 	if n := len(r.UpstreamNew); n > 0 {
 		shown := r.UpstreamNew
 		more := ""
@@ -823,10 +824,22 @@ func showCmd() *cobra.Command {
 			type row struct {
 				Name, Category, Description string
 				Installed                   bool
+				// Dir is the copy that would be vendored; Variants are
+				// same-named directories with different content.
+				Dir      string
+				Variants []string `json:",omitempty"`
+			}
+			rel := func(d string) string {
+				r, _ := filepath.Rel(clone, d)
+				return filepath.ToSlash(r)
 			}
 			var rows []row
 			for _, s := range upstream {
-				rows = append(rows, row{s.Name, s.Category, s.Description, p != nil && p.Selected(s.Name, s.Category)})
+				var variants []string
+				for _, v := range s.Variants {
+					variants = append(variants, rel(v))
+				}
+				rows = append(rows, row{s.Name, s.Category, s.Description, p != nil && p.Selected(s.Name, s.Category), rel(s.Dir), variants})
 			}
 			if c.jsonOut(map[string]any{"repo": src.Repo, "commit": commit, "subscribed": p != nil, "skills": rows, "rejected": nonNil(rejected)}) {
 				return nil
@@ -845,6 +858,12 @@ func showCmd() *cobra.Command {
 				t.Row(mark, r.Name, cat, dim(truncate(r.Description, 60)))
 			}
 			c.printf("%s\n", t.Render())
+			for _, r := range rows {
+				if len(r.Variants) > 0 {
+					c.printf("%s\n", dim(fmt.Sprintf("%s: uses %s; %d other copies with different content are ignored (%s)",
+						r.Name, r.Dir, len(r.Variants), truncate(strings.Join(r.Variants, ", "), 80))))
+				}
+			}
 			c.printf("%s\n", dim("install: skd add "+src.Repo+" --skill <name>   or   --category <category>   or   --all"))
 			return nil
 		},

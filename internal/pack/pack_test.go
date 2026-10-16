@@ -3,6 +3,7 @@ package pack
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,20 +46,92 @@ func TestScanCategorised(t *testing.T) {
 	}
 }
 
+// trailofbits/skills layout: plugins/<plugin>/skills/<skill>. The plugin
+// is the category, including for the skill named like its plugin, so
+// `--category code-improver` selects code-improver itself.
 func TestScanPluginsLayout(t *testing.T) {
 	root := t.TempDir()
-	mk(t, root, "plugins/differential-review/skills/differential-review", "plugins/modern-python/skills/modern-python")
+	mk(t, root, "plugins/differential-review/skills/differential-review",
+		"plugins/code-improver/skills/code-improver", "plugins/code-improver/skills/pr-improver",
+		"plugins/code-improver/tests/fixtures/review-panel/skills/panel-review")
 	got, _, err := Scan(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range got {
-		if s.Category != "" {
-			t.Errorf("%s: category %q want empty", s.Name, s.Category)
+	want := map[string]string{"differential-review": "differential-review", "code-improver": "code-improver", "pr-improver": "code-improver"}
+	if n := names(got); len(n) != len(want) {
+		t.Fatalf("got %v want %v", n, want)
+	} else {
+		for k, v := range want {
+			if n[k] != v {
+				t.Errorf("%s: category %q want %q", k, n[k], v)
+			}
 		}
 	}
-	if len(got) != 2 {
-		t.Fatalf("got %d skills", len(got))
+}
+
+// Adding skills or directories upstream never changes the category of a
+// skill that did not move.
+func TestScanCategoryStable(t *testing.T) {
+	layouts := [][]string{
+		{"skills/engineering/a", "skills/engineering/b"},
+		{"plugins/p/skills/p"},
+		{"a"},
+		{"src/skills/x/a"},
+	}
+	additions := []string{"skills/misc/c", "plugins/q/skills/q", "other/deep/d", "e", ".agents/skills/f"}
+	for _, base := range layouts {
+		root := t.TempDir()
+		mk(t, root, base...)
+		before, _, err := Scan(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, add := range additions {
+			mk(t, root, add)
+			after, _, _ := Scan(root)
+			an := names(after)
+			for _, s := range before {
+				if an[s.Name] != s.Category {
+					t.Errorf("layout %v + %s: %s category %q → %q", base, add, s.Name, s.Category, an[s.Name])
+				}
+			}
+		}
+	}
+}
+
+// A repository that ships its skills only in hidden agent directories is
+// still found; elsewhere hidden directories are ignored.
+func TestScanHiddenOnly(t *testing.T) {
+	root := t.TempDir()
+	mk(t, root, ".claude/skills/one", ".cursor/skills/two")
+	os.MkdirAll(filepath.Join(root, ".github", "workflows"), 0o755)
+	got, _, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := names(got); len(n) != 2 || n["one"] != "" || n["two"] != "" {
+		t.Fatalf("got %v", n)
+	}
+	mk(t, root, "skills/three")
+	got, _, _ = Scan(root)
+	if n := names(got); len(n) != 1 {
+		t.Fatalf("with a visible skill, hidden ones should be ignored: %v", n)
+	}
+}
+
+// Same name, different content: the canonical copy wins and the others
+// are listed as variants, not silently treated as identical.
+func TestScanVariants(t *testing.T) {
+	root := t.TempDir()
+	mk(t, root, "skills/x", "plugin/skills/x", "other/x")
+	os.WriteFile(filepath.Join(root, "other", "x", "SKILL.md"), []byte("---\nname: x\n---\ndifferent\n"), 0o644)
+	got, _, err := Scan(root)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %+v err %v", got, err)
+	}
+	if len(got[0].AltDirs) != 1 || len(got[0].Variants) != 1 || !strings.HasSuffix(got[0].Variants[0], filepath.Join("other", "x")) {
+		t.Fatalf("alt %v variants %v", got[0].AltDirs, got[0].Variants)
 	}
 }
 

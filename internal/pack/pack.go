@@ -122,8 +122,12 @@ type Skill struct {
 	Dir string
 	// Category groups skills inside a pack ("" when flat).
 	Category string
-	// AltDirs are other copies of the same skill found in the repository.
-	AltDirs []string
+	// AltDirs are identical copies of the same skill elsewhere in the
+	// repository.
+	AltDirs []string `json:",omitempty"`
+	// Variants are other directories with a SKILL.md of the same name but
+	// different content (e.g. per-agent adaptations). Only Dir is used.
+	Variants []string `json:",omitempty"`
 }
 
 // Rejected is a SKILL.md that cannot be used, with the reason.
@@ -138,45 +142,37 @@ func (r Rejected) String() string { return r.Dir + ": " + r.Reason }
 // testDirs are never scanned: fixtures routinely contain throwaway skills.
 var testDirs = map[string]bool{"test": true, "tests": true, "testdata": true, "fixtures": true, "__fixtures__": true, "__tests__": true}
 
-// structural path segments carry no meaning for categorisation.
-var structural = map[string]bool{"skills": true, "skill": true, ".agents": true, "plugins": true, "plugin": true}
+// structural path segments carry no meaning for categorisation. Hidden
+// segments (".agents", ".claude", …) are structural too.
+var structural = map[string]bool{"skills": true, "skill": true, "plugins": true, "plugin": true}
 
-// Scan discovers every SKILL.md under root, ignoring Skip, hidden (except
-// .agents) and test directories, and nested skills inside another skill.
+// Scan discovers every SKILL.md under root, ignoring Skip and test
+// directories and nested skills inside another skill. Hidden directories
+// (other than .agents) usually hold a repository's own tooling, so they
+// are only searched when nothing else has a skill.
+//
 // Repositories often ship the same skill copied into several agent
-// directories; such duplicates are collapsed to one, preferring the
-// canonical skills/ or .agents/skills/ location, with the others in AltDirs.
+// directories; such copies are collapsed to one, preferring the canonical
+// skills/ or .agents/skills/ location. Identical copies are listed in
+// AltDirs, differing ones in Variants.
+//
+// The category is the skill's parent path without structural segments, so
+// it depends on that skill's own location only: adding a directory
+// upstream never changes the category of an existing skill.
 //
 // Skills whose name could not safely be used as a directory name are
 // returned in rejected and never in skills.
 func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
-	var dirs []string
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() || p == root {
-			return nil
-		}
-		name := d.Name()
-		if fsutil.Skip[name] || testDirs[name] || (strings.HasPrefix(name, ".") && name != ".agents") {
-			return filepath.SkipDir
-		}
-		if skillmd.IsSkillDir(p) {
-			dirs = append(dirs, p)
-			return filepath.SkipDir
-		}
-		return nil
-	})
+	dirs, err := walk(root, false)
+	if err == nil && len(dirs) == 0 {
+		dirs, err = walk(root, true)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	if skillmd.IsSkillDir(root) {
-		dirs = append(dirs, root)
-	}
-	sort.Strings(dirs)
 
-	var all []Skill
+	byName := map[string][]Skill{}
+	var order []string
 	for _, d := range dirs {
 		meta, err := skillmd.Read(d)
 		if err != nil {
@@ -191,67 +187,86 @@ func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
 			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter " + err.Error()})
 			continue
 		}
-		cat := rawCategory(filepath.ToSlash(rel), meta.Name)
+		cat := Category(filepath.ToSlash(rel))
 		if err := manifest.CheckCategory(cat); err != nil {
 			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: " + err.Error()})
 			continue
 		}
-		all = append(all, Skill{Name: meta.Name, Description: meta.Description, License: meta.License, Dir: d, Category: cat})
+		if _, ok := byName[meta.Name]; !ok {
+			order = append(order, meta.Name)
+		}
+		byName[meta.Name] = append(byName[meta.Name], Skill{Name: meta.Name, Description: meta.Description, License: meta.License, Dir: d, Category: cat})
 	}
 
-	// Collapse duplicates by name.
-	best := map[string]int{}
-	var kept []Skill
-	for _, s := range all {
-		i, ok := best[s.Name]
-		if !ok {
-			best[s.Name] = len(kept)
-			kept = append(kept, s)
-			continue
-		}
-		if rank(root, s.Dir) < rank(root, kept[i].Dir) {
-			s.AltDirs = append(append([]string{}, kept[i].AltDirs...), kept[i].Dir)
-			kept[i] = s
-		} else {
-			kept[i].AltDirs = append(kept[i].AltDirs, s.Dir)
-		}
-	}
-
-	// Drop the category prefix every skill shares.
-	if len(kept) > 0 {
-		prefix := strings.Split(kept[0].Category, "/")
-		for _, s := range kept[1:] {
-			p := strings.Split(s.Category, "/")
-			n := 0
-			for n < len(prefix) && n < len(p) && prefix[n] == p[n] {
-				n++
-			}
-			prefix = prefix[:n]
-		}
-		if pre := strings.Join(prefix, "/"); pre != "" {
-			for i := range kept {
-				kept[i].Category = strings.TrimPrefix(strings.TrimPrefix(kept[i].Category, pre), "/")
+	for _, name := range order {
+		group := byName[name]
+		best := 0
+		for i := range group {
+			if rank(root, group[i].Dir) < rank(root, group[best].Dir) {
+				best = i
 			}
 		}
+		kept := group[best]
+		if len(group) > 1 {
+			h, _ := fsutil.HashTree(kept.Dir)
+			for i, s := range group {
+				if i == best {
+					continue
+				}
+				if hs, _ := fsutil.HashTree(s.Dir); hs == h && h != "" {
+					kept.AltDirs = append(kept.AltDirs, s.Dir)
+				} else {
+					kept.Variants = append(kept.Variants, s.Dir)
+				}
+			}
+		}
+		skills = append(skills, kept)
 	}
-	return kept, rejected, nil
+	return skills, rejected, nil
 }
 
-// rawCategory derives a category from a skill dir's repo-relative path by
-// dropping structural segments and a trailing segment equal to the name.
-func rawCategory(rel, name string) string {
+// walk returns the skill directories under root, sorted.
+func walk(root string, hidden bool) ([]string, error) {
+	var dirs []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() || p == root {
+			return nil
+		}
+		name := d.Name()
+		if fsutil.Skip[name] || testDirs[name] || (!hidden && strings.HasPrefix(name, ".") && name != ".agents") {
+			return filepath.SkipDir
+		}
+		if skillmd.IsSkillDir(p) {
+			dirs = append(dirs, p)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if skillmd.IsSkillDir(root) {
+		dirs = append(dirs, root)
+	}
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
+// Category derives a category from a skill dir's repo-relative path: the
+// parent segments minus structural and hidden ones.
+func Category(rel string) string {
 	segs := strings.Split(rel, "/")
 	if len(segs) > 0 {
 		segs = segs[:len(segs)-1] // the skill dir itself
 	}
 	var out []string
 	for _, s := range segs {
-		if !structural[s] {
+		if s != "" && s != "." && !structural[s] && !strings.HasPrefix(s, ".") {
 			out = append(out, s)
 		}
-	}
-	if len(out) > 0 && out[len(out)-1] == name {
-		out = out[:len(out)-1]
 	}
 	return strings.Join(out, "/")
 }
@@ -265,6 +280,8 @@ func rank(root, dir string) int {
 		return 0
 	case strings.HasPrefix(rel, ".agents/skills/"):
 		return 1
+	case strings.HasPrefix(rel, "."):
+		return 100 + strings.Count(rel, "/")
 	}
 	return 10 + strings.Count(rel, "/")
 }

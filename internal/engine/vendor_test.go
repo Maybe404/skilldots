@@ -219,3 +219,47 @@ func TestSyncAliasesNewcomerClash(t *testing.T) {
 		t.Errorf("own entry: %+v", e)
 	}
 }
+
+// When a skill's category changes, its vendored directory is renamed:
+// nothing goes to the trash and the skill is not reported as changed.
+func TestSyncCategoryChangeRenames(t *testing.T) {
+	world := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+	lib, _, _ := newTestLib(t)
+	up := filepath.Join(world, "up")
+	writeSkillMD(t, filepath.Join(up, "skills", "old", "a"), "a")
+	gitRepo(t, up)
+	p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+	if _, err := Sync(lib, p); err != nil {
+		t.Fatal(err)
+	}
+	pd, _ := PackDir(lib, up)
+	marker := filepath.Join(pd, "old", "a", "SKILL.md")
+	st0, err := os.Stat(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gitIn(t, up, "mv", "skills/old", "skills/new")
+	gitIn(t, up, "commit", "-qm", "mv")
+	rep, err := Sync(lib, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Changed) != 0 || len(rep.Moved) != 1 || len(rep.Unchanged) != 1 {
+		t.Fatalf("changed %v moved %v unchanged %v", rep.Changed, rep.Moved, rep.Unchanged)
+	}
+	st1, err := os.Stat(filepath.Join(pd, "new", "a", "SKILL.md"))
+	if err != nil || !os.SameFile(st0, st1) {
+		t.Fatal("vendored directory was not renamed in place")
+	}
+	if _, err := os.Stat(filepath.Join(pd, "old")); !os.IsNotExist(err) {
+		t.Error("empty old category directory left behind")
+	}
+	if _, err := os.Stat(filepath.Join(lib.Root, TrashDir)); !os.IsNotExist(err) {
+		t.Error("category change put something in the trash")
+	}
+	if got := lib.Lock.Packs[up].Skills["a"].Category; got != "new" {
+		t.Errorf("lock category %q", got)
+	}
+}
