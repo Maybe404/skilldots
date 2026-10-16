@@ -34,7 +34,7 @@ func TestOutputIsGuarded(t *testing.T) {
 	defer lipgloss.SetColorProfile(prev)
 	lipgloss.SetColorProfile(termenv.Ascii)
 	var b bytes.Buffer
-	guard(&b).Write([]byte("a\x1b]0;t\x07‮b\n"))
+	guard(&b).Write([]byte("a\x1b]0;t\x07\u202eb\n"))
 	if b.String() != "a]0;tb\n" {
 		t.Errorf("guard: %q", b.String())
 	}
