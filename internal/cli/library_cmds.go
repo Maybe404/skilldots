@@ -68,10 +68,10 @@ func initCmd() *cobra.Command {
 			if err := library.EnsureGit(priv); err != nil {
 				return err
 			}
-			fmt.Printf("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
-			if root != library.DefaultRoot() {
-				fmt.Printf("  export %s=%s   # or run skd from inside it\n", library.EnvLibrary, root)
+			if err := library.Remember(root); err != nil {
+				return err
 			}
+			fmt.Printf("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
 			return nil
 		},
 	}
@@ -405,4 +405,26 @@ func newCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&private, "private", false, "create under private/ (never pushed)")
 	return cmd
+}
+
+func useCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "use <dir>",
+		Short: "Point skd at an existing library directory from now on",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
+			}
+			if !fsutil.Exists(filepath.Join(root, manifest.FileName)) {
+				return fmt.Errorf("%s has no %s", root, manifest.FileName)
+			}
+			if err := library.Remember(root); err != nil {
+				return err
+			}
+			fmt.Printf("%s skd now uses %s %s\n", ok("✓"), root, dim("("+library.ConfigPath()+")"))
+			return nil
+		},
+	}
 }

@@ -216,8 +216,10 @@ func setupMenu() (bool, error) {
 		if !fsutil.Exists(filepath.Join(dir, manifest.FileName)) {
 			return false, fmt.Errorf("%s has no %s", dir, manifest.FileName)
 		}
-		flags.library = dir
-		fmt.Printf("%s using %s for this session; set %s=%s to make it permanent\n", ok("✓"), dir, library.EnvLibrary, dir)
+		if err := library.Remember(dir); err != nil {
+			return false, err
+		}
+		fmt.Printf("%s skd now uses %s\n", ok("✓"), dir)
 		return true, nil
 	}
 	if err := cmd.Execute(); err != nil {
@@ -246,10 +248,10 @@ func cloneCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("%s cloned into %s\n", ok("✓"), dir)
-			if dir != library.DefaultRoot() {
-				fmt.Printf("  %s\n", dim("export "+library.EnvLibrary+"="+dir))
-				flags.library = dir
+			if err := library.Remember(dir); err != nil {
+				return err
 			}
+			flags.library = dir
 			c, err := open()
 			if err != nil {
 				return err

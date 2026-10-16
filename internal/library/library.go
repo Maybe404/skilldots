@@ -37,8 +37,41 @@ func DefaultRoot() string {
 	return filepath.Join(home, ".skilldots")
 }
 
+// ConfigPath is the small per-user file that remembers where the library is.
+func ConfigPath() string {
+	if d, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(d, "skilldots", "config.toml")
+	}
+	return filepath.Join(DefaultRoot(), "config.toml")
+}
+
+// Remember records root in the user config so later invocations find it
+// from any directory.
+func Remember(root string) error {
+	p := ConfigPath()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte("# Written by skd init/clone. The library skd uses when none is given.\nlibrary = \""+filepath.ToSlash(root)+"\"\n"), 0o644)
+}
+
+// remembered returns the library recorded by Remember, or "".
+func remembered() string {
+	b, err := os.ReadFile(ConfigPath())
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == "library" {
+			return strings.Trim(strings.TrimSpace(v), "\"'")
+		}
+	}
+	return ""
+}
+
 // Locate finds the library: explicit flag, $SKILLDOTS_LIBRARY, a skills.toml
-// in the current directory or any parent, then the default root.
+// in the current directory or any parent, the remembered config, then the
+// default root.
 func Locate(flag string) (string, error) {
 	candidates := []string{flag, os.Getenv(EnvLibrary)}
 	if cwd, err := os.Getwd(); err == nil {
@@ -52,7 +85,7 @@ func Locate(flag string) (string, error) {
 			}
 		}
 	}
-	candidates = append(candidates, DefaultRoot())
+	candidates = append(candidates, remembered(), DefaultRoot())
 	for _, c := range candidates {
 		if c == "" {
 			continue
@@ -64,7 +97,7 @@ func Locate(flag string) (string, error) {
 			return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
 		}
 	}
-	return "", errors.New("no skilldots library found; run `skd init` or set " + EnvLibrary)
+	return "", errors.New("no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`")
 }
 
 // Open loads manifest and lock from root.
