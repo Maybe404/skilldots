@@ -26,6 +26,9 @@ type Pack struct {
 	Ref    string `toml:"ref,omitempty"`
 	// Skills maps upstream skill name to its vendored content hash.
 	Skills map[string]*Skill `toml:"skills"`
+	// Upstream lists every skill name the upstream had at the last
+	// `skd update`, so the next one can tell which skills are new.
+	Upstream []string `toml:"upstream,omitempty"`
 }
 
 type Skill struct {

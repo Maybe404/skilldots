@@ -50,7 +50,7 @@ skd path <skill>    # directory of a skill's files
 skd update          # all repositories; reports changed / added / upstream new / upstream gone
 skd update owner/repo
 ```
-With `--json`, `update` prints `{packs, failed, apply, committed}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. After an update, summarise what changed for the user. Upstream changes are visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
+With `--json`, `update` prints `{packs, failed, apply, committed}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. "upstream new" (`UpstreamNew`) lists only unselected skills that appeared since the previous `skd update`; offer to add them with `skd add owner/repo --skill <name>`. After an update, summarise what changed for the user. Upstream changes are visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
 
 ## Enable or disable per agent
 

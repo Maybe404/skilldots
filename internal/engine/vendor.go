@@ -22,7 +22,7 @@ type SyncReport struct {
 	Changed       []string // selected skills whose content changed
 	Added         []string // selected skills vendored for the first time
 	Unchanged     []string
-	UpstreamNew   []string // not selected, newly appeared upstream
+	UpstreamNew   []string // not selected, new upstream since the last update (set by app.Update, not Sync)
 	UpstreamGone  []string // selected but no longer upstream (kept locally)
 	Dropped       []string // vendored but no longer selected (moved to the trash)
 	Moved         []string // "name: old category → new category" (directory renamed)
@@ -130,11 +130,6 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 	}
 
-	known := map[string]bool{}
-	for n := range lp.Skills {
-		known[n] = true
-	}
-
 	// moveAside clears dest for a new copy. A pristine copy of what the
 	// lock recorded is discarded (it is reproducible); anything else is
 	// moved to the trash.
@@ -179,9 +174,6 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	wanted := map[string]bool{}
 	for _, s := range upstream {
 		if !p.Selected(s.Name, s.Category) {
-			if !known[s.Name] && lp.Commit != "" {
-				rep.UpstreamNew = append(rep.UpstreamNew, s.Name)
-			}
 			continue
 		}
 		wanted[s.Name] = true
@@ -291,7 +283,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 	}
 	lp.Commit, lp.Ref = commit, p.Ref
-	for _, l := range [][]string{rep.Changed, rep.Added, rep.Unchanged, rep.UpstreamNew, rep.UpstreamGone, rep.Dropped} {
+	for _, l := range [][]string{rep.Changed, rep.Added, rep.Unchanged, rep.UpstreamGone, rep.Dropped} {
 		sort.Strings(l)
 	}
 	return rep, nil

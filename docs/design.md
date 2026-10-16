@@ -16,7 +16,7 @@ skilldots（命令 `skd`）：声明式管理本机所有 agent 工具的 skills
 |---|---|
 | Source 来源 | `github:owner/repo`、任意 git URL、`app:/绝对路径`（随软件发布，只链接不拷贝）、`skills/<名>`（自写，公开）、`private/<名>`（自写，本机独立 git 仓库，不推送） |
 | Target 目标 | agent 工具的 skill 目录。内置注册表（claude `~/.claude/skills`、codex `~/.codex/skills`、gemini、cursor、opencode、agents `~/.agents/skills` …），随版本更新，`skills.toml` 可自定义 |
-| State 状态 | `skills.lock`：每个 pack 的 commit、每个 skill 目录的内容哈希、实际链接/拷贝到了哪些 target |
+| State 状态 | `skills.lock`：每个 pack 的 commit、每个 skill 目录的内容哈希、上次 `update` 时上游的 skill 名单（`upstream`）、实际链接/拷贝到了哪些 target |
 
 ## 库目录
 
@@ -74,7 +74,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd enable <skill> [--agent a,b]` / `skd disable <skill> [--agent a,b]` | 改 targets 并 apply；不带 `--agent` 用默认集合 |
 | `skd remove <skill\|pack>` | 从所有 agent 目录移除链接/拷贝，**库里保留**，清单里 targets 置空 |
 | `skd purge <skill\|pack>` | 从清单、锁、vendor 彻底清除，并移除所有 agent 目录里的链接/拷贝；先列后删，`--yes` 跳过确认 |
-| `skd update [pack] [--yes] [--commit]` | 按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送 |
+| `skd update [pack] [--yes] [--commit]` | 按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送。“上游新增”= 未选中、且不在上次 `update` 记入锁的 `upstream` 名单里的 skill（旧锁没有名单时以更新前的缓存克隆为准，两者都没有则不报）；`--json` 的 `packs[].UpstreamNew` 同此含义，仪表盘 `u` 用同一份计算 |
 | `skd outdated` | 只查不改 |
 | `skd new <名> [--private]` | 在 skills/ 或 private/ 生成模板 |
 | `skd scan` | 扫描本机所有已知 agent 目录，列出每个 skill：来源、链接/拷贝、是否受管、重复、断链 |

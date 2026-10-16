@@ -248,7 +248,11 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 	}
 	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}}
 	for _, p := range packs {
+		known := s.knownUpstream(p.Repo)
 		rep, err := engine.Sync(s.Lib, p)
+		if err == nil {
+			s.markUpstreamNew(p, rep, known)
+		}
 		if each != nil {
 			each(p.Repo, rep, err)
 		}
@@ -262,6 +266,56 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 	ap, err := s.saveAndApply()
 	out.Apply = ap
 	return out, err
+}
+
+// knownUpstream is the set of skill names a pack's upstream had before
+// this update: what the lock recorded at the last update or, for a lock
+// written before that was recorded, what the cache clone holds now. It is
+// nil when neither is known (a pack never fetched here).
+func (s *Session) knownUpstream(repo string) map[string]bool {
+	lp := s.Lib.Lock.Packs[repo]
+	if lp == nil || lp.Commit == "" {
+		return nil
+	}
+	known := map[string]bool{}
+	if len(lp.Upstream) > 0 {
+		for _, n := range lp.Upstream {
+			known[n] = true
+		}
+		return known
+	}
+	dir := pack.CachePath(repo)
+	if !fsutil.Exists(filepath.Join(dir, ".git")) {
+		return nil
+	}
+	up, _, err := pack.Scan(dir)
+	if err != nil {
+		return nil
+	}
+	for _, sk := range up {
+		known[sk.Name] = true
+	}
+	return known
+}
+
+// markUpstreamNew fills rep.UpstreamNew with the unselected skills that
+// are not in known, and records the upstream's names in the lock as the
+// next update's baseline. With no baseline nothing is called new: every
+// unselected skill would be, on every update.
+func (s *Session) markUpstreamNew(p *manifest.Pack, rep *engine.SyncReport, known map[string]bool) {
+	rep.UpstreamNew = nil
+	var names []string
+	for _, sk := range rep.Upstream {
+		names = append(names, sk.Name)
+		if known != nil && !known[sk.Name] && !p.Selected(sk.Name, sk.Category) {
+			rep.UpstreamNew = append(rep.UpstreamNew, sk.Name)
+		}
+	}
+	sort.Strings(rep.UpstreamNew)
+	sort.Strings(names)
+	if lp := s.Lib.Lock.Packs[p.Repo]; lp != nil {
+		lp.Upstream = dedupe(names)
+	}
 }
 
 // deselect drops a vendored skill from its pack's selection.

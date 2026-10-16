@@ -2,13 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
-	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/scan"
 )
@@ -262,32 +260,11 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 	if len(repos) == 0 && len(s.Lib.Manifest.Packs) == 0 {
 		return nil, "no packs to update", nil
 	}
-	// engine reports every unselected skill missing from the lock as
-	// "upstream new", i.e. all of them on every update. Against the cache
-	// clones as they were before this fetch, only the skills that really
-	// appeared are new.
-	before := map[string]map[string]bool{}
-	for _, p := range s.Lib.Manifest.Packs {
-		before[p.Repo] = knownUpstream(p.Repo)
-	}
 	out, err := s.Update(repos, nil)
 	if out == nil {
 		return nil, "", err
 	}
 	reports := out.Reports
-	for i, rep := range reports {
-		if known := before[rep.Repo]; known != nil {
-			var fresh []string
-			for _, n := range rep.UpstreamNew {
-				if !known[n] {
-					fresh = append(fresh, n)
-				}
-			}
-			cp := *rep
-			cp.UpstreamNew = fresh
-			reports[i] = &cp
-		}
-	}
 	if err != nil {
 		return reports, "", err
 	}
@@ -306,24 +283,6 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 		return reports, msg, fmt.Errorf("%s", strings.Join(failed, "; "))
 	}
 	return reports, msg, nil
-}
-
-// knownUpstream lists the skills in a pack's cache clone before it is
-// fetched again, or nil when there is no clone yet.
-func knownUpstream(repo string) map[string]bool {
-	dir := pack.CachePath(repo)
-	if !fsutil.Exists(filepath.Join(dir, ".git")) {
-		return nil
-	}
-	up, _, err := pack.Scan(dir)
-	if err != nil {
-		return nil
-	}
-	known := map[string]bool{}
-	for _, s := range up {
-		known[s.Name] = true
-	}
-	return known
 }
 
 // Fork mirrors `skd fork <skill> [--private] [--as name]`.
