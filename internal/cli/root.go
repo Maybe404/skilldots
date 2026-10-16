@@ -7,12 +7,14 @@ import (
 	"os"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/targets"
+	"github.com/Maybe404/skilldots/internal/tui"
 )
 
 // Version is set at build time.
@@ -117,6 +119,7 @@ func isTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // Root builds the command tree.
 func Root() *cobra.Command {
+	var simple bool
 	root := &cobra.Command{
 		Use:           "skd",
 		Short:         "skilldots — declarative skill management for AI agents",
@@ -128,9 +131,13 @@ func Root() *cobra.Command {
 			if !isTerminal() {
 				return errNoTTY
 			}
+			if lib, ok := dashboardLibrary(simple); ok {
+				return runDashboard(lib)
+			}
 			return runMenu()
 		},
 	}
+	root.Flags().BoolVar(&simple, "simple", false, "use the question-and-answer menu instead of the full-screen dashboard")
 	root.PersistentFlags().StringVar(&flags.library, "library", "", "library directory (default: $"+library.EnvLibrary+", nearest skills.toml, the one set by `skd use`, or ~/.skilldots)")
 	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
 	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
@@ -146,4 +153,30 @@ func Main() int {
 		return 1
 	}
 	return 0
+}
+
+// dashboardLibrary reports whether `skd` should open the full-screen
+// dashboard, and on which library: stdout must be a terminal at least
+// tui.MinWidth columns wide and a library must exist (setup stays in the
+// menu).
+func dashboardLibrary(simple bool) (string, bool) {
+	if simple || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return "", false
+	}
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err != nil || w < tui.MinWidth {
+		return "", false
+	}
+	root, err := library.Locate(flags.library)
+	if err != nil {
+		return "", false
+	}
+	return root, true
+}
+
+func runDashboard(root string) error {
+	self, _ := os.Executable()
+	return tui.Run(tui.Options{Root: root, Version: Version, Self: self, Theme: tui.Theme{
+		Accent: cAccent, Cyan: cCyan, Muted: cMuted, Faint: cFaint, OK: cOK, Warn: cWarn, Err: cErr, Text: cText,
+		Ink: lipgloss.Color("#1A1B26"), // the button ink in theme()
+	}})
 }
