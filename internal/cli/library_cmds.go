@@ -16,6 +16,12 @@ import (
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
 
+// SelfRepo ships the skill that teaches agents to use skd.
+const (
+	SelfRepo  = "Maybe404/skilldots"
+	SelfSkill = "skilldots"
+)
+
 const gitignore = `.DS_Store
 # Machine-local skills: a separate git repository that is never pushed with this one.
 /private/
@@ -24,6 +30,7 @@ const gitignore = `.DS_Store
 func initCmd() *cobra.Command {
 	var from string
 	var defaults []string
+	var noSkill bool
 	cmd := &cobra.Command{
 		Use:   "init [dir]",
 		Short: "Create a library (default ~/.skilldots)",
@@ -72,11 +79,32 @@ func initCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
-			return nil
+			if noSkill {
+				return nil
+			}
+			// Teach the machine's agents how to drive skd. Best effort: offline
+			// init still succeeds.
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			p := &manifest.Pack{Repo: SelfRepo, Use: []string{SelfSkill}}
+			c.lib.Manifest.Packs = append(c.lib.Manifest.Packs, p)
+			if _, err := engine.Sync(c.lib, p); err != nil {
+				c.lib.Manifest.Packs = c.lib.Manifest.Packs[:len(c.lib.Manifest.Packs)-1]
+				fmt.Printf("  %s could not fetch the %s skill (%v); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, err, SelfRepo, SelfSkill)
+				return nil
+			}
+			if err := c.lib.Save(); err != nil {
+				return err
+			}
+			fmt.Printf("  %s\n", dim("installed the "+SelfSkill+" skill so agents on this machine know how to use skd"))
+			return runApply(c, false, false)
 		},
 	}
 	cmd.Flags().StringVar(&from, "from", "", "turn an existing directory into the library")
 	cmd.Flags().StringSliceVar(&defaults, "targets", nil, "default targets (default: agents)")
+	cmd.Flags().BoolVar(&noSkill, "no-skill", false, "do not install the skilldots skill for agents")
 	return cmd
 }
 

@@ -131,10 +131,33 @@ func addCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			warnLicense(c, rep)
 			if err := c.lib.Save(); err != nil {
 				return err
 			}
+			if flags.json {
+				entries, err := c.resolve()
+				if err != nil {
+					return err
+				}
+				plan := engine.MakePlan(c.lib, entries, false)
+				if _, err := engine.Apply(c.lib, plan); err != nil {
+					return err
+				}
+				if err := c.lib.Save(); err != nil {
+					return err
+				}
+				var linked []string
+				for _, e := range entries {
+					if e.Kind == engine.KindVendor && e.Origin == p.Repo {
+						linked = append(linked, e.LinkName)
+					}
+				}
+				c.jsonOut(map[string]any{"repo": p.Repo, "commit": rep.NewCommit, "skills": linked,
+					"added": rep.Added, "changed": rep.Changed, "unchanged": rep.Unchanged,
+					"noLicense": rep.NoLicenseList, "ops": plan.Ops})
+				return nil
+			}
+			warnLicense(c, rep)
 			c.printf("%s vendored %s from %s %s\n", ok("✓"), plural(len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), "skill"), p.Repo, dim("@ "+rep.NewCommit[:7]))
 			return runApply(c, false, false)
 		},
@@ -673,4 +696,63 @@ func forkCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&private, "private", false, "copy into private/ instead of skills/")
 	cmd.Flags().StringVar(&as, "as", "", "name for the fork (default: same name)")
 	return cmd
+}
+
+func showCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "show <owner/repo | git url>[@ref]",
+		Aliases: []string{"inspect", "browse"},
+		Short:   "List the skills a repository offers, without installing anything",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			arg := args[0]
+			if existing := c.lib.Manifest.FindPack(arg); existing != nil {
+				arg = existing.Repo
+			}
+			src, err := pack.ParseSource(arg)
+			if err != nil {
+				return err
+			}
+			clone, commit, err := pack.Fetch(src)
+			if err != nil {
+				return err
+			}
+			upstream, err := pack.Scan(clone)
+			if err != nil {
+				return err
+			}
+			p := c.lib.Manifest.FindPack(src.Repo)
+			type row struct {
+				Name, Category, Description string
+				Installed                   bool
+			}
+			var rows []row
+			for _, s := range upstream {
+				rows = append(rows, row{s.Name, s.Category, s.Description, p != nil && p.Selected(s.Name, s.Category)})
+			}
+			if c.jsonOut(map[string]any{"repo": src.Repo, "commit": commit, "subscribed": p != nil, "skills": rows}) {
+				return nil
+			}
+			c.printf("%s %s  %s\n", bold(src.Repo), dim("@ "+short(commit)), dim(plural(len(rows), "skill")))
+			t := newTable("", "SKILL", "CATEGORY", "DESCRIPTION")
+			for _, r := range rows {
+				mark := dim("·")
+				if r.Installed {
+					mark = ok("✓")
+				}
+				cat := r.Category
+				if cat == "" {
+					cat = dim("·")
+				}
+				t.Row(mark, r.Name, cat, dim(truncate(r.Description, 60)))
+			}
+			c.printf("%s\n", t.Render())
+			c.printf("%s\n", dim("install: skd add "+src.Repo+" --skill <name>   or   --category <category>   or   --all"))
+			return nil
+		},
+	}
 }
