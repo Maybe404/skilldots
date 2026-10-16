@@ -134,7 +134,8 @@ type (
 
 // A lock record whose path was pointed outside every target directory
 // (tampered, or a target that is gone) never lets apply --force move a
-// real directory there; the record is forgotten.
+// real directory there; the record is forgotten, and its path is not
+// shown (it would read as a suggestion to remove the user's directory).
 func TestOrphanPathOutsideTargetsIsForgotten(t *testing.T) {
 	lib, _, home := newTestLib(t)
 	victim := filepath.Join(home, "Documents", "x")
@@ -144,8 +145,11 @@ func TestOrphanPathOutsideTargetsIsForgotten(t *testing.T) {
 	lib.Manifest.Targets.Default = []string{}
 	for _, force := range []bool{false, true} {
 		plan := MakePlan(lib, nil, force)
-		if len(plan.Ops) != 1 || plan.Ops[0].Action != "forget" || !strings.Contains(plan.Ops[0].Reason, victim) {
+		if len(plan.Ops) != 1 || plan.Ops[0].Action != "forget" || strings.Contains(plan.Ops[0].Reason, "Documents") {
 			t.Fatalf("force=%v: plan %+v", force, plan.Ops)
+		}
+		if c := plan.ChangeList(); len(c) != 1 || strings.Contains(c[0].Path+c[0].Reason, "Documents") {
+			t.Fatalf("force=%v: changes %+v", force, c)
 		}
 	}
 	if _, err := Apply(lib, MakePlan(lib, nil, true)); err != nil {

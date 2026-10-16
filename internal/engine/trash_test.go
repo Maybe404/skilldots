@@ -85,13 +85,15 @@ func TestTrashRoundTrip(t *testing.T) {
 }
 
 // In copy mode, a copy someone added .git, node_modules or a symlink to
-// is moved to the trash whole when skilldots unlinks it.
+// is not skd's to remove: no longer wanted, it is left where it is; in
+// the way of a new copy, it is moved to the trash whole.
 func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	lib, _, home := newTestLib(t)
 	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 	SetRegistry(reg)
 	lib.Manifest.Targets.Default = []string{"box"}
-	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+	src := filepath.Join(lib.Root, "skills", "s")
+	writeSkill(t, src, "s")
 	entries, _, _ := Resolve(lib, reg)
 	if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
 		t.Fatal(err)
@@ -107,11 +109,35 @@ func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	os.MkdirAll(filepath.Join(cp, "node_modules", "m"), 0o755)
 	os.WriteFile(filepath.Join(cp, "node_modules", "m", "index.js"), []byte("js"), 0o644)
 	os.Symlink("SKILL.md", filepath.Join(cp, "link"))
+	check := func(dir string) {
+		t.Helper()
+		for _, p := range []string{".git/HEAD", "node_modules/m/index.js", "SKILL.md"} {
+			if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+				t.Errorf("%s lost", p)
+			}
+		}
+		if l, err := os.Readlink(filepath.Join(dir, "link")); err != nil || l != "SKILL.md" {
+			t.Errorf("symlink lost: %v", err)
+		}
+	}
 	lib.Manifest.Targets.Default = []string{}
 	entries, _, _ = Resolve(lib, reg)
-	plan := MakePlan(lib, entries, false)
+	plan := MakePlan(lib, entries, true)
 	res, err := Apply(lib, plan)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Backups) != 0 || len(plan.Ops) != 1 || plan.Ops[0].Action != "skip" {
+		t.Fatalf("backups %v (plan %+v)", res.Backups, plan.ChangeList())
+	}
+	check(cp)
+
+	// Wanted again with a changed source: the copy is in the way.
+	lib.Manifest.Targets.Default = []string{"box"}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: s\n---\nnew\n"), 0o644)
+	entries, _, _ = Resolve(lib, reg)
+	plan = MakePlan(lib, entries, false)
+	if res, err = Apply(lib, plan); err != nil {
 		t.Fatal(err)
 	}
 	if len(res.Backups) != 1 {
@@ -121,23 +147,13 @@ func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("trash %+v", items)
 	}
-	for _, p := range []string{".git/HEAD", "node_modules/m/index.js", "SKILL.md"} {
-		if _, err := os.Stat(filepath.Join(items[0].Path, p)); err != nil {
-			t.Errorf("%s lost", p)
-		}
-	}
-	if l, err := os.Readlink(filepath.Join(items[0].Path, "link")); err != nil || l != "SKILL.md" {
-		t.Errorf("symlink lost: %v", err)
-	}
+	check(items[0].Path)
 
-	// A pristine copy is simply replaced, nothing trashed.
-	lib.Manifest.Targets.Default = []string{"box"}
-	entries, _, _ = Resolve(lib, reg)
-	Apply(lib, MakePlan(lib, entries, false))
+	// A pristine copy skd recorded is simply removed, nothing trashed.
 	lib.Manifest.Targets.Default = []string{}
 	entries, _, _ = Resolve(lib, reg)
-	if res, _ := Apply(lib, MakePlan(lib, entries, false)); len(res.Backups) != 0 {
-		t.Fatalf("pristine copy trashed: %v", res.Backups)
+	if res, _ := Apply(lib, MakePlan(lib, entries, false)); len(res.Backups) != 0 || fileExists(cp) {
+		t.Fatalf("pristine copy trashed or left: %v", res.Backups)
 	}
 }
 
@@ -146,19 +162,20 @@ func TestCopyModeDSStoreDirectoryGoesToTrash(t *testing.T) {
 	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 	SetRegistry(reg)
 	lib.Manifest.Targets.Default = []string{"box"}
-	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+	src := filepath.Join(lib.Root, "skills", "s")
+	writeSkill(t, src, "s")
 	entries, _, _ := Resolve(lib, reg)
 	Apply(lib, MakePlan(lib, entries, false))
 	cp := filepath.Join(home, "box", "s")
 	os.MkdirAll(filepath.Join(cp, ".DS_Store"), 0o755)
 	os.WriteFile(filepath.Join(cp, ".DS_Store", "notes.txt"), []byte("n"), 0o644)
-	lib.Manifest.Targets.Default = []string{}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: s\n---\nnew\n"), 0o644)
 	entries, _, _ = Resolve(lib, reg)
 	if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
 		t.Fatal(err)
 	}
 	if m, _ := filepath.Glob(filepath.Join(lib.Root, TrashDir, "*", "s", ".DS_Store", "notes.txt")); len(m) != 1 {
-		t.Fatal("notes.txt under a .DS_Store directory was deleted on disable")
+		t.Fatal("notes.txt under a .DS_Store directory was deleted on update")
 	}
 }
 

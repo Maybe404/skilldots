@@ -157,7 +157,7 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 				// and a cloned library's trash may hold any: a person
 				// moves it back.
 				to, _ := os.Readlink(p)
-				err = fmt.Errorf("it is a symbolic link (to %q); skd does not restore links, move it back by hand", to)
+				err = fmt.Errorf("it is a symbolic link (to %q); skd does not restore links: whether to put it back is the user's decision", to)
 			}
 			e.Restorable = err == nil
 			if err != nil {

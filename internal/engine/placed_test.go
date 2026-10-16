@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
@@ -13,7 +14,7 @@ import (
 // A copy skd wrote is removed outright only while skd's own record of
 // what it placed confirms it; a copy the record does not know (written
 // by an older skd, or a directory a forged lock record's hash matches)
-// is moved to the trash, never deleted.
+// is left where it is when no longer wanted, never deleted or moved.
 func TestCopyRemovedOutrightOnlyWhenRecorded(t *testing.T) {
 	for _, recorded := range []bool{true, false} {
 		lib, _, home := newTestLib(t)
@@ -34,15 +35,14 @@ func TestCopyRemovedOutrightOnlyWhenRecorded(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fileExists(filepath.Join(home, "box", "s", "SKILL.md")) {
-			t.Fatalf("recorded %v: copy still there", recorded)
+		if got := fileExists(filepath.Join(home, "box", "s", "SKILL.md")); got == recorded {
+			t.Fatalf("recorded %v: copy there %v", recorded, got)
 		}
-		items, _ := ListTrash(lib, reg)
-		if recorded && (len(items) != 0 || len(res.Backups) != 0) {
-			t.Fatalf("recorded copy trashed: %+v", items)
+		if items, _ := ListTrash(lib, reg); len(items) != 0 || len(res.Backups) != 0 {
+			t.Fatalf("recorded %v: copy trashed: %+v", recorded, items)
 		}
-		if !recorded && (len(items) != 1 || !fileExists(filepath.Join(items[0].Path, "SKILL.md")) || !items[0].Restorable) {
-			t.Fatalf("unrecorded copy not in the trash: %+v %v", items, res.Backups)
+		if _, kept := lib.Lock.Links["box/s"]; kept == recorded {
+			t.Fatalf("recorded %v: lock record kept %v", recorded, kept)
 		}
 		if m := loadPlaced(); len(m) != 0 {
 			t.Fatalf("record kept after removal: %v", m)
@@ -191,5 +191,82 @@ func TestAdoptingALinkMovesNothing(t *testing.T) {
 	}
 	if l := lib.Lock.Links["agents/s"]; l == nil || l.Source != "skills/s" {
 		t.Fatalf("not recorded: %+v", l)
+	}
+}
+
+// Forged records of entries the manifest does not want: a copy record
+// whose hash matches the user's own directory, and a link record whose
+// source makes the user's own link look like skd's from a previous
+// library location. Neither apply nor apply --force moves or removes
+// anything; the plan says skd cannot tell it made them.
+func TestForgedOrphanRecordsTouchNothing(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		lib, reg, home := newTestLib(t)
+		lib.Manifest.Targets.Default = []string{}
+		agents := filepath.Join(home, ".agents", "skills")
+		mine := filepath.Join(agents, "mine")
+		writeSkill(t, mine, "mine")
+		h, _ := fsutil.HashTree(mine)
+		lib.Lock.Links["agents/mine"] = &lock.Link{Mode: "copy", Source: "skills/mine", Hash: h}
+		dot := filepath.Join(home, "dotfiles", "skills", "dot")
+		writeSkill(t, dot, "dot")
+		os.Symlink(dot, filepath.Join(agents, "dot"))
+		lib.Lock.Links["agents/dot"] = &lock.Link{Mode: "link", Source: "skills/dot"}
+		entries, _, _ := Resolve(lib, reg)
+		plan := MakePlan(lib, entries, force)
+		for _, o := range plan.Ops {
+			if o.Action != "skip" || !strings.Contains(o.Reason, "cannot tell it made it") {
+				t.Fatalf("force=%v: %+v", force, o)
+			}
+		}
+		res, err := Apply(lib, plan)
+		if err != nil || len(res.Backups) != 0 {
+			t.Fatalf("force=%v: %v %v", force, res.Backups, err)
+		}
+		if !fileExists(filepath.Join(mine, "SKILL.md")) {
+			t.Fatalf("force=%v: the user's directory moved", force)
+		}
+		if l, err := os.Readlink(filepath.Join(agents, "dot")); err != nil || l != dot {
+			t.Fatalf("force=%v: the user's link changed: %q %v", force, l, err)
+		}
+	}
+}
+
+// After the library moved, a link skd made at its previous location that
+// now leads nowhere holds only that path: apply removes it outright (it
+// was made before skd kept a placed record), whether the skill is still
+// wanted (a new link replaces it) or not. One that still leads somewhere
+// is never removed without the record.
+func TestStaleDanglingLinkRemovedOutright(t *testing.T) {
+	for _, wanted := range []bool{true, false} {
+		lib, reg, home := newTestLib(t)
+		src := filepath.Join(lib.Root, "skills", "s")
+		writeSkill(t, src, "s")
+		if !wanted {
+			lib.Manifest.Targets.Default = []string{}
+		}
+		agents := filepath.Join(home, ".agents", "skills")
+		os.MkdirAll(agents, 0o755)
+		dest := filepath.Join(agents, "s")
+		os.Symlink(filepath.Join(home, "old-library", "skills", "s"), dest)
+		lib.Lock.Links["agents/s"] = &lock.Link{Mode: "link", Source: "skills/s"}
+		entries, _, _ := Resolve(lib, reg)
+		plan := MakePlan(lib, entries, false)
+		if len(plan.Ops) != 1 || !strings.Contains(plan.Ops[0].Reason, filepath.Join(home, "old-library")) {
+			t.Fatalf("wanted %v: %+v", wanted, plan.Ops)
+		}
+		res, err := Apply(lib, plan)
+		if err != nil || len(res.Backups) != 0 {
+			t.Fatalf("wanted %v: %v %v", wanted, res.Backups, err)
+		}
+		if items, _ := ListTrash(lib, reg); len(items) != 0 {
+			t.Fatalf("wanted %v: trashed %+v", wanted, items)
+		}
+		if got := isLinkTo(dest, src); got != wanted {
+			t.Fatalf("wanted %v: linked %v", wanted, got)
+		}
+		if !wanted && fsutil.Lexists(dest) {
+			t.Fatal("stale link left")
+		}
 	}
 }

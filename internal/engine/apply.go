@@ -214,28 +214,30 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 					Reason: fmt.Sprintf("target %q %s; %s is a link into the library it had; skd no longer manages it: remove it yourself if it is no longer wanted", tname, state, prev.Path)})
 				continue
 			}
-			where := "nothing on disk is touched"
-			if p := prev.Path; p != "" {
-				where = fmt.Sprintf("nothing on disk is touched; remove %s yourself if it is no longer wanted", p)
-			}
+			// The record's path is not shown: it says nothing skd checked,
+			// and whoever reads this (an agent too) must not take it for
+			// something to remove.
 			plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
-				Reason: fmt.Sprintf("target %q %s; forgetting the record (%s)", tname, state, where)})
+				Reason: fmt.Sprintf("target %q %s; forgetting the record (nothing on disk is touched)", tname, state)})
 			continue
 		}
 		dest := filepath.Join(t.Path, name)
 		op := Op{Target: t, Name: name, Dest: dest, Source: prev.Source, Mode: prev.Mode}
 		// Nothing wants this entry any more. Only what skd can tell it
-		// made goes, with --force too: the record may be forged, and the
-		// entry the user's own.
+		// made goes (what clear removes outright), with --force too: the
+		// record may be forged, and the entry the user's own. Nothing of
+		// it is moved to the trash either: a copy a forged record's hash
+		// matches, or a link a forged source makes look like skd's from
+		// a previous library location, may be the user's own.
 		switch {
 		case !fsutil.Lexists(dest):
 			op.Action, op.Reason = "remove", "already gone"
-		case current(dest, prev, lib) || confirms(placed, dest):
+		case ownLink(dest, prev, lib) || confirms(placed, dest):
 			op.Action = "remove"
-		case staleRoot(dest, prev, lib) != "":
-			op.Action, op.Reason = "remove", "points at the previous library location "+staleRoot(dest, prev, lib)
+		case staleDangling(dest, prev, lib) != "":
+			op.Action, op.Reason = "remove", "a link to the previous library location "+staleDangling(dest, prev, lib)+", where nothing is any more"
 		default:
-			op.Action, op.Reason = "skip", "no longer wanted, but skd cannot tell it made it (changed since, or not made by skd); left in place: remove it yourself if it should go"
+			op.Action, op.Reason = "skip", "no longer wanted, but skd cannot tell it made it (changed since, made by an older skd, or not made by skd); left in place: it may be the user's own"
 		}
 		plan.Ops = append(plan.Ops, op)
 	}
@@ -283,10 +285,12 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		if !fsutil.Lexists(op.Dest) {
 			return nil
 		}
-		if ownLink(op.Dest, prev, lib) || confirms(placed, op.Dest) {
+		if ownLink(op.Dest, prev, lib) || confirms(placed, op.Dest) || staleDangling(op.Dest, prev, lib) != "" {
 			// A link skd made holds no data, and a copy exactly as skd
-			// wrote it is reproducible from the library. RemoveAll does
-			// not follow a link: it removes the link itself.
+			// wrote it is reproducible from the library; a link to where
+			// the library was, leading nowhere now, holds only that path
+			// (said in the plan). RemoveAll does not follow a link: it
+			// removes the link itself.
 			if err := os.RemoveAll(op.Dest); err != nil {
 				return err
 			}
@@ -526,6 +530,39 @@ func staleRoot(dest string, prev *lock.Link, lib *library.Library) string {
 		if b, err := filepath.EvalSymlinks(lib.Root); err == nil && a == b {
 			return ""
 		}
+	}
+	return old
+}
+
+// staleDangling returns the previous library root when dest is a link
+// skd made there before the library moved (staleRoot) that now leads
+// nowhere, else "". It must be exactly what skd writes: an absolute link
+// to the old root joined with the recorded source, a clean path inside
+// the library under skills/, private/ or vendor/. Such a link holds no
+// data, only a path the plan shows, so it is removed outright even when
+// skd's placed record does not know it (made before there was one).
+//
+// A forged record can claim a link of the user's only when that link,
+// in an agent's directory under the record's name, is absolute, ends in
+// /skills/<name>, /private/<name> or /vendor/.../<name>, and leads
+// nowhere: losing it loses no data, and the path is in the output.
+func staleDangling(dest string, prev *lock.Link, lib *library.Library) string {
+	if prev == nil || prev.Mode != "link" || libSource(prev.Source, lib) == "" {
+		return ""
+	}
+	if top, _, _ := strings.Cut(filepath.ToSlash(prev.Source), "/"); top != library.DirSkills && top != library.DirPrivate && top != library.DirVendor {
+		return ""
+	}
+	got, err := os.Readlink(dest)
+	if err != nil || !filepath.IsAbs(got) {
+		return ""
+	}
+	old := staleRoot(dest, prev, lib)
+	if old == "" {
+		return ""
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		return ""
 	}
 	return old
 }
