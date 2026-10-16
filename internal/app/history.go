@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -248,6 +250,7 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 		}
 		b = append(append(b, line...), '\n')
 	}
+	defer s.holdHistory()()
 	f, err := os.OpenFile(s.HistoryPath(), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return err
@@ -265,12 +268,34 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 	return f.Close()
 }
 
+// holdHistory locks this library's history file against other skd
+// processes (a file lock in the cache directory, named after the
+// library's real path) and other goroutines, and returns the unlock
+// function. Appending and settling both hold it: settling reads the file,
+// rewrites it and replaces it, and a record appended in between would be
+// lost with the old file.
+func (s *Session) holdHistory() (unlock func()) {
+	root := s.Lib.Root
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(root)))
+	return pack.Hold("skd-history-" + hex.EncodeToString(sum[:8]))
+}
+
+// settleHook, when set, runs between reading and replacing the history in
+// settleApplyErrors (tests append from another goroutine there).
+var settleHook func()
+
 // settleApplyErrors takes applyError out of the history once an apply
 // has linked everything: the updates it was about are finished, and the
 // history should stop telling the person to run skd apply. Only those
 // lines change (their other fields, unknown ones included, are kept);
-// every other line stays byte for byte. A failure is only warned about.
+// every other line stays byte for byte. It holds the history lock from
+// reading to replacing, so a record another skd appends meanwhile waits
+// and is kept. A failure is only warned about.
 func (s *Session) settleApplyErrors() {
+	defer s.holdHistory()()
 	p := s.HistoryPath()
 	b, err := os.ReadFile(p)
 	key := []byte(`"applyError"`)
@@ -302,6 +327,9 @@ func (s *Session) settleApplyErrors() {
 	}
 	if !changed {
 		return
+	}
+	if settleHook != nil {
+		settleHook()
 	}
 	if err := fsutil.WriteAtomic(p, bytes.Join(lines, nil)); err != nil {
 		s.logf(Warn, "could not mark the update history linked (%s): %v", HistoryFile, err)

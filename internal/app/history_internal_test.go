@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -103,5 +105,94 @@ func TestHugeRecordReadsBack(t *testing.T) {
 	small := &UpdateRecord{Repo: "x/y", From: "a", To: "b", Changed: []string{"tdd"}}
 	if line, _ := small.marshalFit(); small.Omitted != 0 || !strings.Contains(string(line), "tdd") {
 		t.Errorf("small record cut: %s", line)
+	}
+}
+
+// A record another skd appends while an apply settles the history (reads
+// it, takes applyError out, replaces it) is not lost with the old file:
+// both hold the history lock, so the append waits for the replacement.
+func TestSettleKeepsConcurrentAppend(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(home, "cache"))
+	s := &Session{Lib: &library.Library{Root: home}}
+	failed := `{"time":"2026-01-01T00:00:00Z","repo":"acme/skills","from":"a","to":"b","applyError":"permission denied"}` + "\n"
+	os.WriteFile(s.HistoryPath(), []byte(failed), 0o644)
+	appended := make(chan error, 1)
+	settleHook = func() {
+		go func() {
+			// Another session, as another process would have.
+			o := &Session{Lib: &library.Library{Root: home}}
+			appended <- o.appendHistory([]*UpdateRecord{{Repo: "other/pack", From: "c", To: "d", Commits: []UpstreamCommit{}}})
+		}()
+		select {
+		case err := <-appended: // no lock: the append is already done
+			appended <- err
+		case <-time.After(300 * time.Millisecond): // it waits for the lock
+		}
+	}
+	defer func() { settleHook = nil }()
+	s.settleApplyErrors()
+	if err := <-appended; err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(s.HistoryPath())
+	if got := string(b); !strings.Contains(got, "other/pack") || strings.Contains(got, "applyError") || !strings.Contains(got, "acme/skills") {
+		t.Fatalf("history after a concurrent append:\n%s", got)
+	}
+}
+
+// The same across processes: the lock is a file lock too.
+func TestSettleKeepsAppendOfAnotherProcess(t *testing.T) {
+	if root := os.Getenv("SKD_TEST_APPEND_ROOT"); root != "" {
+		t.Skip("helper of the test below")
+	}
+	home := t.TempDir()
+	cache := filepath.Join(home, "cache")
+	t.Setenv("SKILLDOTS_CACHE", cache)
+	s := &Session{Lib: &library.Library{Root: home}}
+	failed := `{"time":"2026-01-01T00:00:00Z","repo":"acme/skills","from":"a","to":"b","applyError":"permission denied"}` + "\n"
+	os.WriteFile(s.HistoryPath(), []byte(failed), 0o644)
+
+	helper := exec.Command(os.Args[0], "-test.run=^TestAppendHelperProcess$", "-test.count=1")
+	helper.Env = append(os.Environ(), "SKD_TEST_APPEND_ROOT="+home, "SKILLDOTS_CACHE="+cache)
+	in, _ := helper.StdinPipe()
+	var out strings.Builder
+	helper.Stdout = &out
+	if err := helper.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- helper.Wait() }()
+	settleHook = func() {
+		in.Write([]byte("go\n"))
+		select {
+		case err := <-done: // no lock across processes: it appended already
+			done <- err
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	defer func() { settleHook = nil }()
+	s.settleApplyErrors()
+	in.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("helper: %v\n%s", err, out.String())
+	}
+	b, _ := os.ReadFile(s.HistoryPath())
+	if got := string(b); !strings.Contains(got, "other/pack") || strings.Contains(got, "applyError") {
+		t.Fatalf("history after another process appended:\n%s\nhelper: %s", got, out.String())
+	}
+}
+
+// TestAppendHelperProcess appends one record to the history of
+// $SKD_TEST_APPEND_ROOT once a line arrives on stdin.
+func TestAppendHelperProcess(t *testing.T) {
+	root := os.Getenv("SKD_TEST_APPEND_ROOT")
+	if root == "" {
+		t.Skip("run by TestSettleKeepsAppendOfAnotherProcess")
+	}
+	bufio.NewReader(os.Stdin).ReadString('\n')
+	s := &Session{Lib: &library.Library{Root: root}}
+	if err := s.appendHistory([]*UpdateRecord{{Repo: "other/pack", From: "c", To: "d", Commits: []UpstreamCommit{}}}); err != nil {
+		t.Fatal(err)
 	}
 }
