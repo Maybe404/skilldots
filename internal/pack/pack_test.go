@@ -218,3 +218,25 @@ func TestScanNestedVendorPaths(t *testing.T) {
 		t.Fatalf("rejected %+v", rej)
 	}
 }
+
+// A source with control characters, bidi controls or invalid UTF-8 is
+// refused by ParseSource itself (it becomes the pack's name and is passed
+// to git), with the source quoted so the error prints safely; text that
+// only looks unusual is not.
+func TestParseSourceRefusesControlCharacters(t *testing.T) {
+	for _, s := range []string{"owner/re\x1b]0;t\x07po", "owner/repo\u202e", "https://example.com/a\u009bb.git", "owner/repo@ma\x1b[2Jin", "own\xffer/repo", "/path/to/re\tpo"} {
+		_, err := ParseSource(s)
+		if err == nil || !strings.Contains(err.Error(), "control characters") {
+			t.Errorf("ParseSource(%q) = %v", s, err)
+			continue
+		}
+		if strings.ContainsAny(err.Error(), "\x1b\x07\u202e\u009b\t") {
+			t.Errorf("ParseSource(%q): the error holds the characters: %q", s, err)
+		}
+	}
+	for _, s := range []string{"owner/repo", "/home/张三/my skills 🚀", "https://example.com/中文/repo.git@v1"} {
+		if _, err := ParseSource(s); err != nil {
+			t.Errorf("ParseSource(%q): %v", s, err)
+		}
+	}
+}
