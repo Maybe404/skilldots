@@ -93,3 +93,39 @@ func TestNewAfterAddSurvivesCheck(t *testing.T) {
 		t.Fatalf("first update after add and a check: upstream new = %v, want [a3]", got)
 	}
 }
+
+// A skill upstream only moved to another directory (same content, other
+// category) is not an update: update merely renames its directory.
+func TestMovedIsNotChanged(t *testing.T) {
+	up := upstream(t)
+	repo := filepath.Join(up, "acme", "skills.git")
+	_, root := side(t, up)
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd,review")
+	os.MkdirAll(filepath.Join(repo, "skills", "quality"), 0o755)
+	git(t, repo, "mv", "skills/eng/tdd", "skills/quality/tdd")
+	git(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "move tdd")
+
+	s, _ := app.Open(root)
+	out, err := s.Outdated(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := out.Packs[0]
+	if !slices.Equal(st.Moved, []string{"tdd"}) || len(st.Changed) != 0 || st.HasUpdates() || out.Updates() != 0 {
+		t.Fatalf("moved only: %+v", st)
+	}
+	s, _ = app.Open(root)
+	if rec := s.RecordedOutdated(); rec == nil || rec.Updates() != 0 {
+		t.Fatalf("recorded: %+v", rec)
+	}
+
+	// Moved and changed: changed.
+	git(t, repo, "mv", "skills/eng/review", "skills/quality/review")
+	write(t, filepath.Join(repo, "skills", "quality", "review", "more.md"), "more\n")
+	git(t, repo, "add", "-A")
+	git(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "move and change review")
+	out, _ = s.Outdated(nil, nil)
+	if st := out.Packs[0]; !slices.Equal(st.Changed, []string{"review"}) || !slices.Equal(st.Moved, []string{"tdd"}) || !st.HasUpdates() {
+		t.Fatalf("moved and changed: %+v", st)
+	}
+}

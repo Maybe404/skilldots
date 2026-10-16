@@ -246,3 +246,24 @@ func TestHeaderFitsNarrowTerminals(t *testing.T) {
 		t.Fatalf("header at 90 columns: %q", h)
 	}
 }
+
+// A pack whose only news is a skill moved upstream has no update: no ↑,
+// U leaves it alone; the skill says moved.
+func TestMovedOnly(t *testing.T) {
+	m, f := newModel(t, sampleSnapshot(), 120, 40)
+	f.check = &app.Outdated{Packs: []app.PackStatus{
+		{Repo: "mattpocock/skills", Commit: "49dd158aabbccdd", Latest: "fedcba9876", Moved: []string{"tdd"}}}}
+	nm, cmd := m.Update(m.Init()())
+	m = settle(t, nm.(Model), cmd)
+	if h := line(m, 0); !strings.Contains(h, "✓ no updates") || strings.Contains(line(m, 2), "↑") {
+		t.Fatalf("moved only shows an update:\n%s", screen(m))
+	}
+	if r := rightRow(t, m, "tdd"); !strings.Contains(r, "moved") || strings.Contains(r, "changed") {
+		t.Fatalf("tdd row: %q", r)
+	}
+	n := len(f.calls)
+	m, _ = press(t, m, "U")
+	if m.busy != "" || len(f.calls) != n {
+		t.Fatalf("U updated a pack with nothing but a move: %v", f.calls[n:])
+	}
+}

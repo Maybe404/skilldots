@@ -29,9 +29,13 @@ type PackStatus struct {
 	// HEAD just fetched (at the pack's ref).
 	Commit string `json:"commit"`
 	Latest string `json:"latest"`
-	// Changed are selected, vendored skills whose upstream content (or
-	// category) differs from what is vendored: `update` re-vendors them.
+	// Changed are selected, vendored skills whose upstream content
+	// differs from what is vendored: `update` re-vendors them.
 	Changed []string `json:"changed"`
+	// Moved are selected, vendored skills upstream moved to another
+	// category without changing them: `update` only renames their
+	// directory, so they alone are not an update.
+	Moved []string `json:"moved"`
 	// New are upstream skills that appeared since the last `update` (the
 	// lock's upstream list) and are not vendored: offered by `add`, or
 	// vendored by `update` when the pack follows everything.
@@ -144,7 +148,7 @@ func (s *Session) checkPack(p *manifest.Pack) (*PackStatus, error) {
 		return nil, fmt.Errorf("%s: no SKILL.md found", p.Repo)
 	}
 	st := &PackStatus{Repo: p.Repo, Latest: commit, Checked: time.Now(),
-		Changed: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
+		Changed: []string{}, Moved: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
 	lp := s.Lib.Lock.Packs[p.Repo]
 	vendored := map[string]*lock.Skill{}
 	// The baseline for "new" is the lock's record of the last update only:
@@ -171,8 +175,11 @@ func (s *Session) checkPack(p *manifest.Pack) (*PackStatus, error) {
 			if err != nil {
 				return nil, err
 			}
-			if h != ls.Hash || ls.Category != u.Category {
+			switch {
+			case h != ls.Hash:
 				st.Changed = append(st.Changed, u.Name)
+			case ls.Category != u.Category:
+				st.Moved = append(st.Moved, u.Name)
 			}
 		case sel:
 			st.Pending = append(st.Pending, u.Name)
@@ -186,7 +193,7 @@ func (s *Session) checkPack(p *manifest.Pack) (*PackStatus, error) {
 			st.Gone = append(st.Gone, n)
 		}
 	}
-	for _, l := range [][]string{st.Changed, st.New, st.Gone, st.Pending} {
+	for _, l := range [][]string{st.Changed, st.Moved, st.New, st.Gone, st.Pending} {
 		sort.Strings(l)
 	}
 	return st, nil
@@ -300,7 +307,7 @@ func (s *Session) refreshRecorded(commits map[string]string) error {
 	now := time.Now()
 	for _, repo := range sortedRepos(commits) {
 		fresh := PackStatus{Repo: repo, Commit: commits[repo], Latest: commits[repo], Checked: now,
-			Changed: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
+			Changed: []string{}, Moved: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
 		if e := rec.Find(repo); e != nil {
 			*e = fresh
 		} else {
@@ -354,6 +361,7 @@ func (s *Session) RecordedOutdated() *Outdated {
 		r := *e
 		has := func(n string) bool { return vendored[n] != nil }
 		r.Changed = filter(e.Changed, has)
+		r.Moved = filter(e.Moved, has)
 		r.Gone = filter(e.Gone, has)
 		r.New = filter(e.New, func(n string) bool { return !has(n) })
 		r.Pending = filter(e.Pending, func(n string) bool { return !has(n) })

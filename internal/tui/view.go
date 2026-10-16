@@ -355,7 +355,7 @@ func (m Model) packHeader(p Pack, w int) []string {
 		for _, c := range []struct {
 			n    int
 			word string
-		}{{len(st.Changed), "changed"}, {len(st.New), "new"}, {len(st.Gone), "gone"}, {len(st.Pending), "to add"}} {
+		}{{len(st.Changed), "changed"}, {len(st.Moved), "moved"}, {len(st.New), "new"}, {len(st.Gone), "gone"}, {len(st.Pending), "to add"}} {
 			if c.n > 0 {
 				what = append(what, fmt.Sprintf("%d %s", c.n, c.word))
 			}
@@ -505,6 +505,8 @@ func (m Model) packView(p Pack, w, h int) []string {
 			note = sg("  ↑ changed", t.Accent)
 		case sk.Installed && in(st.Gone, sk.Name):
 			note = sg("  gone upstream", t.Warn)
+		case sk.Installed && in(st.Moved, sk.Name):
+			note = sg("  moved upstream (path only)", t.Muted)
 		case !sk.Installed && in(st.New, sk.Name):
 			agents = sg("new upstream", t.Cyan)
 		case !sk.Installed && in(st.Pending, sk.Name):

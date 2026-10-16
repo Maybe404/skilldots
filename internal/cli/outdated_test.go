@@ -52,8 +52,8 @@ func (e *env) statePath() string {
 }
 
 type packStatus struct {
-	Repo, Commit, Latest        string
-	Changed, New, Gone, Pending []string
+	Repo, Commit, Latest               string
+	Changed, Moved, New, Gone, Pending []string
 }
 
 func statuses(t *testing.T, r map[string]any) map[string]packStatus {
@@ -176,5 +176,27 @@ func TestOutdated(t *testing.T) {
 	}
 	if out := e.ok("", "list"); !strings.Contains(out, "1 could not be checked") {
 		t.Fatalf("list does not mention the failed check:\n%s", out)
+	}
+}
+
+func TestOutdatedMoved(t *testing.T) {
+	e := newEnv(t)
+	e.ok("", "init", "--no-skill", e.p("lib"))
+	e.skill("up/skills/eng/tdd", "tdd")
+	up := e.repo("up")
+	e.ok("", "add", up, "--skill", "tdd")
+	os.MkdirAll(e.p("up/skills/quality"), 0o755)
+	e.git(up, "mv", "skills/eng/tdd", "skills/quality/tdd")
+	e.git(up, "commit", "-qm", "move")
+	r := e.js("", "outdated")
+	if st := statuses(t, r)[up]; !slices.Equal(st.Moved, []string{"tdd"}) || len(st.Changed) != 0 || r["updates"] != float64(0) {
+		t.Fatalf("moved: %v", r)
+	}
+	out := e.ok("", "outdated")
+	if !strings.Contains(out, "no skill changes") || !strings.Contains(out, "tdd (path only)") || !strings.Contains(out, "everything is up to date") {
+		t.Fatalf("outdated output:\n%s", out)
+	}
+	if out := e.ok("", "list"); strings.Contains(out, "↑") {
+		t.Fatalf("list shows an update for a move:\n%s", out)
 	}
 }

@@ -75,7 +75,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd remove <skill\|pack>` | 从所有 agent 目录移除链接/拷贝，**库里保留**，清单里 targets 置空 |
 | `skd purge <skill\|pack>` | 从清单、锁、vendor 彻底清除，并移除所有 agent 目录里的链接/拷贝；先列后删，`--yes` 跳过确认 |
 | `skd update [pack] [--yes] [--commit]` | 按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送。“上游新增”= 未选中、且不在锁的 `upstream` 名单（上次 `update` 记入，从未 update 的则是 `add` 订阅时）里的 skill（旧锁没有名单时以更新前的缓存克隆为准，两者都没有则不报）；`--json` 的 `packs[].UpstreamNew` 同此含义，仪表盘 `u` 用同一份计算 |
-| `skd outdated [pack]` | 只查不改：逐个 pack fetch 到缓存克隆（vendor/、skills.lock、skills.toml 不动），对比缓存 HEAD 与锁里的 commit，精确到 skill：changed（已选且已 vendor、上游内容或分类变了）、new（不在锁的 `upstream` 名单、也没 vendor；锁里没有名单时不报，避免把缓存当基线）、gone（已 vendor、名单里有、现在上游没了）、pending（已选未 vendor，update 会拷入）。结果连同时间写入用户配置目录（与 config.toml 同目录）的 `outdated.json`，按库根目录分开记；失败的 pack 单列且保留上次记录，退出码非 0，其余照常。`skd list` 概览、问答菜单只读这份记录（不联网）：`↑ N updates available · checked 2h ago`，N 为有更新的 pack 数，超过 24 小时标 stale；锁里 commit 已变的 pack 视为未知不计。`update` 成功后把对应 pack 记为最新 |
+| `skd outdated [pack]` | 只查不改：逐个 pack fetch 到缓存克隆（vendor/、skills.lock、skills.toml 不动），对比缓存 HEAD 与锁里的 commit，精确到 skill：changed（已选且已 vendor、上游内容变了）、moved（内容没变、只换了分类目录，update 只会改名，不算更新、不计入 ↑ 和 `U`，人类输出单独一行 `moved x (path only)`，仪表盘右栏标 moved）、new（不在锁的 `upstream` 名单、也没 vendor；锁里没有名单时不报，避免把缓存当基线）、gone（已 vendor、名单里有、现在上游没了）、pending（已选未 vendor，update 会拷入）。结果连同时间写入用户配置目录（与 config.toml 同目录）的 `outdated.json`，按库根目录分开记；失败的 pack 单列且保留上次记录，退出码非 0，其余照常。`skd list` 概览、问答菜单只读这份记录（不联网）：`↑ N updates available · checked 2h ago`，N 为有更新的 pack 数，超过 24 小时标 stale；锁里 commit 已变的 pack 视为未知不计。`update` 成功后把对应 pack 记为最新 |
 | `skd new <名> [--private]` | 在 skills/ 或 private/ 生成模板并链接到默认 agent；名字按 skill 名规则校验（见关键规则），不合规或目录已存在则报错 |
 | `skd scan` | 扫描本机所有已知 agent 目录，列出每个 skill：来源、链接/拷贝、是否受管、重复、断链 |
 | `skd adopt` | 把 scan 到的未受管 skill 收编：能识别来源的（npx `.skill-lock.json`、git remote、App 路径）自动填，否则询问。提案按名字排序；断链提案在执行时重新检查，路径已变成文件、目录或有效链接时不动并告警 |
@@ -92,7 +92,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `space` | 启用/停用；上游未装的直接安装 | `enable` / `disable` / `add --skill` |
 | `a` | 加仓库：勾选 skill 或整个分类（`*` 跟随全部），再选 alias、目标 agent，均可留空 | `add` |
 | `u` / `U` | 更新当前包 / 所有检查出有更新的包（检查未成功前为全部） | `update` |
-| `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆在进程内加锁，与 update/add 串行）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
+| `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆在进程内加锁，与 update/add 串行）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream` / `moved upstream (path only)`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
 | `e` | 选目标 agent | `enable/disable --agent` |
 | `f` | fork，可改名，选 skills/ 或 private/ | `fork [--as] [--private]` |
 | `d` | 删 vendor skill（进 trash）/ 取消链接自己的 / purge 包 | `remove` / `disable` / `purge` |
@@ -118,7 +118,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 - **链接 vs 拷贝**：默认软链接；Windows 无权限或 target 要求拷贝时降级，锁里记录哈希。拷贝只有"原样"（哈希一致且没有哈希看不到的 `.git`、`node_modules`、符号链接）时才直接替换，否则整份移入 trash；用户改过的文件不覆盖并警告
 - **库目录移动**：链接指向"另一个根 + 锁里记录的相对路径"时识别为旧位置的链接，`apply` 直接重建
 - **不删除**：除 `skd trash empty` 外不永久删除用户数据。trash 用 rename，仅跨设备（EXDEV）时回退为完整拷贝（含 `.git`、符号链接、权限）后再删源，其他错误原样返回
-- **`--json`**：stdout 只有一份 JSON，进度和告警走 stderr；失败时 stdout 为空、退出码非 0（`update` 例外：输出 `{packs, failed, apply, committed}` 后以非 0 退出；`outdated` 同理输出 `{checked, packs, failed, updates}`）
+- **`--json`**：stdout 只有一份 JSON，进度和告警走 stderr；失败时 stdout 为空、退出码非 0（`update` 例外：输出 `{packs, failed, apply, committed}` 后以非 0 退出；`outdated` 同理输出 `{checked, packs, failed, updates}`，`packs[]` 为 `{repo, commit, latest, changed, moved, new, gone, pending, checked}`）
 - **更新安全**：锁定 commit，`update` 永远显式；上游删除不自动删本地
 - **许可证**：vendor 时拷 LICENSE；找不到（根目录、skill 目录、frontmatter `license:`）的仓库提示，自写来源不检查
 - **private/**：独立 git 仓库、无远端；工具只链接、不提交、不清理

@@ -593,15 +593,22 @@ func outdatedCmd() *cobra.Command {
 // one line when not.
 func printStatus(c *ctx, st *app.PackStatus) {
 	head := bold(st.Repo)
+	moved := func() {
+		if len(st.Moved) > 0 {
+			c.printf("  %s %s\n", dim(fmt.Sprintf("%-13s", "moved")), dim(strings.Join(st.Moved, ", ")+" (path only)"))
+		}
+	}
 	switch {
 	case st.Commit == "":
 		c.printf("%s  %s\n", head, warn("not vendored yet · skd update "+st.Repo))
 		return
 	case !st.HasUpdates() && st.Commit == st.Latest:
 		c.printf("%s  %s\n", head, dim(short(st.Commit)+"  ✓ up to date"))
+		moved()
 		return
 	case !st.HasUpdates():
 		c.printf("%s  %s\n", head, dim(short(st.Commit)+" → "+short(st.Latest)+"  no skill changes"))
+		moved()
 		return
 	}
 	c.printf("%s  %s → %s\n", head, dim(short(st.Commit)), accent(short(st.Latest)))
@@ -626,4 +633,5 @@ func printStatus(c *ctx, st *app.PackStatus) {
 	}
 	row("upstream new", cyan, offered, "skd add "+st.Repo+" --skill <name>")
 	row("upstream gone", warn, st.Gone, "kept by update")
+	moved()
 }
