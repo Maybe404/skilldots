@@ -164,7 +164,11 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 	}
 	for _, n := range names {
 		if u := pack.Find(f.Skills, n); u != nil && !p.Selected(u.Name, u.Category) {
-			return nil, fmt.Errorf("%s is excluded by a skip pattern in skills.toml", n)
+			// Only skip entries naming the skill itself are taken out; a
+			// wildcard also excludes other skills, so the user decides.
+			return nil, fmt.Errorf("%s is excluded by skip = [%q] of %s in skills.toml, which excludes other skills too; "+
+				"edit skills.toml: remove %q from that skip (or replace it with the names to keep out), then run skd update %s",
+				n, p.SkipPattern(u.Name, u.Category), p.Repo, p.SkipPattern(u.Name, u.Category), p.Repo)
 		}
 	}
 	if len(p.Use) == 0 {

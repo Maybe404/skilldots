@@ -31,7 +31,7 @@ No library: ask the user whether to create one (`skd init`), clone their backup 
    skd add owner/repo --all                   # follow the whole repo, including future skills
    ```
    Never run `skd add` without `--skill`, `--category` or `--all`: it opens an interactive picker meant for humans.
-3. `add` vendors the files into the library and links them. If a name clashes with an existing skill, skd links it as `<repo>-<name>` (written as `as` in skills.toml) and says so; tell the user. The same happens when `update` brings in a new upstream skill. Skills with unsafe names (e.g. containing `/` or `..`) are skipped with a warning; mention it if the user wanted one of them.
+3. `add` vendors the files into the library and links them. If a name clashes with an existing skill, skd links it as `<repo>-<name>` (written as `as` in skills.toml) and says so; tell the user. The same happens when `update` brings in a new upstream skill. Skills with unsafe names (e.g. containing `/` or `..`) are skipped with a warning; mention it if the user wanted one of them. On a pack that follows everything, `--skill x` un-skips `x`; if a wildcard in `skip` (e.g. `eng/*`) excludes it, `add` fails with exit 1 — relay the message: the user decides how to change `skip` in skills.toml, then run `skd update owner/repo`. `skd new <name>` accepts only names made of letters, digits, `.`, `_`, `-`.
 
 Sources: `owner/repo`, a GitHub URL, any git URL, optionally `@ref` to pin a branch or tag.
 

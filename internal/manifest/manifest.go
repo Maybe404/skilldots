@@ -223,6 +223,20 @@ func UseNames(u, name string) bool {
 	return u == name || strings.HasSuffix(u, "/"+name)
 }
 
+// SkipPattern returns the skip entry that excludes a skill of a pack
+// following "*", or "" when none does.
+func (p *Pack) SkipPattern(name, category string) string {
+	if !p.UsesAll() {
+		return ""
+	}
+	for _, s := range p.Skip {
+		if matchSkip(s, name, category) {
+			return s
+		}
+	}
+	return ""
+}
+
 func matchSkip(pat, name, category string) bool {
 	if pat == name {
 		return true

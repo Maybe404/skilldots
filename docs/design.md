@@ -68,7 +68,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | 命令 | 作用 |
 |---|---|
 | `skd init [--from 路径]` | 建库（默认 `~/.skilldots`），库根和 private/ 各自 git init（即使位于更大的仓库内），生成清单；`--from` 接管已有仓库 |
-| `skd add <来源> [--skill a,b \| --all \| --category x]` | 克隆到缓存，扫描 SKILL.md，交互选择（按分类折叠），拷入 vendor，写清单与锁，链接 |
+| `skd add <来源> [--skill a,b \| --all \| --category x]` | 克隆到缓存，扫描 SKILL.md，交互选择（按分类折叠），拷入 vendor，写清单与锁，链接。`--skill`/`--category` 给的名字和分类先逐个校验，不存在就报错、什么都不改；`--all` 把 pack 设为 `use = ["*"]`（已有 skip 保留），同时给的 `--skill`/`--category` 只做这项校验。对已是 `"*"` 的 pack，`--skill x` 把 skip 里直接写 `x` 或 `分类/x` 的项移出；x 被通配（如 `eng/*`）排除时不拆通配，报错退出 1，提示手改 skills.toml（删掉或换成具体名字）后 `skd update <repo>` |
 | `skd list [pack] [--all] [--flat] [--agent x]` | 顶层按 pack 折叠一行一仓库；展开、平铺、按 agent 视角 |
 | `skd apply [--dry-run]` | 使电脑与清单一致：建链接、删多余链接、拷贝模式下按哈希识别自己放的文件 |
 | `skd enable <skill> [--agent a,b]` / `skd disable <skill> [--agent a,b]` | 改 targets 并 apply；不带 `--agent` 用默认集合 |
@@ -76,9 +76,9 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd purge <skill\|pack>` | 从清单、锁、vendor 彻底清除，并移除所有 agent 目录里的链接/拷贝；先列后删，`--yes` 跳过确认 |
 | `skd update [pack] [--yes] [--commit]` | 按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送。“上游新增”= 未选中、且不在上次 `update` 记入锁的 `upstream` 名单里的 skill（旧锁没有名单时以更新前的缓存克隆为准，两者都没有则不报）；`--json` 的 `packs[].UpstreamNew` 同此含义，仪表盘 `u` 用同一份计算 |
 | `skd outdated` | 只查不改 |
-| `skd new <名> [--private]` | 在 skills/ 或 private/ 生成模板 |
+| `skd new <名> [--private]` | 在 skills/ 或 private/ 生成模板并链接到默认 agent；名字按 skill 名规则校验（见关键规则），不合规或目录已存在则报错 |
 | `skd scan` | 扫描本机所有已知 agent 目录，列出每个 skill：来源、链接/拷贝、是否受管、重复、断链 |
-| `skd adopt` | 把 scan 到的未受管 skill 收编：能识别来源的（npx `.skill-lock.json`、git remote、App 路径）自动填，否则询问 |
+| `skd adopt` | 把 scan 到的未受管 skill 收编：能识别来源的（npx `.skill-lock.json`、git remote、App 路径）自动填，否则询问。提案按名字排序；断链提案在执行时重新检查，路径已变成文件、目录或有效链接时不动并告警 |
 | `skd doctor` | 体检：Windows 符号链接权限、target 不存在、锁与清单不一致、断链 |
 
 所有命令 `--json`；破坏性命令先列清单再确认。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`）选配色，`NO_COLOR` 关闭颜色。

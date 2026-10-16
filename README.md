@@ -57,7 +57,7 @@ Prebuilt binaries will follow.
 |---|---|
 | `skd init [dir]` | create a library (its own git repository, even inside another repo; `private/` is a separate one); the default target is `agents` (`~/.agents/skills`), which nearly every agent reads |
 | `skd show <owner/repo \| url>` | list what a repository offers, without installing |
-| `skd add <owner/repo \| url>[@ref]` | fetch a repo and choose skills interactively, or with `--skill`, `--category`, `--all` |
+| `skd add <owner/repo \| url>[@ref]` | fetch a repo and choose skills interactively, or with `--skill`, `--category`, `--all` (`--all` follows everything; names given with it are only checked). On a pack that follows `"*"`, `--skill x` takes `x` out of `skip`; if a wildcard such as `eng/*` excludes it, the command fails and tells you to edit `skills.toml` |
 | `skd list [pack] [--all] [--flat] [--agent x]` | overview; expand a pack; flat list; what one agent receives |
 | `skd apply [-n] [--force]` | link/unlink to match the manifest; `-n` previews |
 | `skd update [pack…] [--commit]` | fetch upstream, re-vendor selected skills, report changed / new / gone |
@@ -67,7 +67,7 @@ Prebuilt binaries will follow.
 | `skd purge <pack>` | delete a pack from manifest, lock, `vendor/` and every agent directory |
 | `skd fork <skill> [--private] [--as name]` | copy a vendored skill into `skills/` to edit it; upstream no longer touches it |
 | `skd path <skill>` | print where a skill's files live, for editing |
-| `skd new <name> [--private]` | scaffold a skill of your own and link it |
+| `skd new <name> [--private]` | scaffold a skill of your own and link it; the name follows the skill name rule below |
 | `skd scan` | inventory every agent skill directory: managed, copies, links, broken |
 | `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own, enable per agent |
 | `skd trash [restore <id> \| empty]` | what skd set aside; restore it; or (interactively) delete for good |
