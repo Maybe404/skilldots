@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/library"
-	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/skillmd"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
@@ -42,20 +41,66 @@ type Entry struct {
 	Targets     []targets.Target
 	// TargetNames is the resolved target list before registry lookup.
 	TargetNames []string
+	// UnknownTargets are names in TargetNames the registry does not know.
+	// They are skipped; links already recorded for them are left alone.
+	UnknownTargets []string `json:",omitempty"`
 	// Missing is set when the source dir is absent (e.g. not vendored yet).
 	Missing bool
+	// Conflict is set when another entry wants the same LinkName. Neither
+	// is linked until the clash is resolved; existing links stay as they are.
+	Conflict string `json:",omitempty"`
 }
 
-// Resolve computes every entry declared by the library.
-func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, error) {
+// Resolve computes every entry declared by the library. Problems confined
+// to one entry (an unknown target, a name clash, an invalid name) do not
+// fail the whole library: the entry is skipped or marked, and a
+// human-readable warning is returned for each problem.
+func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, error) {
+	out, warnings := collect(lib)
+
+	unknown := map[string][]string{}
+	for i := range out {
+		e := &out[i]
+		if _, err := os.Stat(e.Dir); err != nil {
+			e.Missing = true
+		} else if e.Description == "" {
+			if meta, err := skillmd.Read(e.Dir); err == nil {
+				e.Description = meta.Description
+			}
+		}
+		for _, n := range e.TargetNames {
+			t, err := reg.Get(n)
+			if err != nil {
+				e.UnknownTargets = append(e.UnknownTargets, n)
+				unknown[n] = append(unknown[n], e.LinkName)
+				continue
+			}
+			e.Targets = append(e.Targets, t)
+		}
+	}
+	for _, n := range sortedKeys(unknown) {
+		warnings = append(warnings, fmt.Sprintf("unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name",
+			n, strings.Join(unknown[n], ", ")))
+	}
+
+	warnings = append(warnings, markConflicts(out)...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].LinkName < out[j].LinkName })
+	return out, warnings, nil
+}
+
+// collect gathers entries from the manifest and the library directories
+// without touching the target registry.
+func collect(lib *library.Library) ([]Entry, []string) {
 	m := lib.Manifest
 	var out []Entry
+	var warnings []string
 
 	for _, p := range m.Packs {
 		packTargets := inherit(m.Targets.Default, p.Targets)
 		dir := lib.PackDir(p.Repo)
 		lp := lib.Lock.Packs[p.Repo]
 		if lp == nil {
+			warnings = append(warnings, fmt.Sprintf("pack %s is in skills.toml but has not been fetched; run `skd update %s`", p.Repo, p.Repo))
 			continue
 		}
 		names := make([]string, 0, len(lp.Skills))
@@ -110,28 +155,7 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, error) {
 			out = append(out, e)
 		}
 	}
-
-	for i := range out {
-		e := &out[i]
-		if _, err := os.Stat(e.Dir); err != nil {
-			e.Missing = true
-		} else if e.Description == "" {
-			if meta, err := skillmd.Read(e.Dir); err == nil {
-				e.Description = meta.Description
-			}
-		}
-		ts, err := reg.Resolve(e.TargetNames)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", e.LinkName, err)
-		}
-		e.Targets = ts
-	}
-
-	if err := checkConflicts(out); err != nil {
-		return nil, err
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].LinkName < out[j].LinkName })
-	return out, nil
+	return out, warnings
 }
 
 func inherit(parent []string, child *[]string) []string {
@@ -141,20 +165,38 @@ func inherit(parent []string, child *[]string) []string {
 	return *child
 }
 
-func checkConflicts(entries []Entry) error {
-	seen := map[string]Entry{}
-	var errs []string
-	for _, e := range entries {
-		if prev, ok := seen[e.LinkName]; ok {
-			errs = append(errs, fmt.Sprintf("%q is provided by both %s and %s", e.LinkName, Describe(prev), Describe(e)))
+// markConflicts flags every entry whose LinkName another entry also wants.
+func markConflicts(entries []Entry) []string {
+	byName := map[string][]int{}
+	for i, e := range entries {
+		byName[e.LinkName] = append(byName[e.LinkName], i)
+	}
+	var warnings []string
+	for _, name := range sortedKeys(byName) {
+		idx := byName[name]
+		if len(idx) < 2 {
 			continue
 		}
-		seen[e.LinkName] = e
+		var who []string
+		for _, i := range idx {
+			who = append(who, fmt.Sprintf("%s (%s)", Describe(entries[i]), entries[i].Dir))
+		}
+		msg := fmt.Sprintf("%q is provided by %s", name, strings.Join(who, " and "))
+		for _, i := range idx {
+			entries[i].Conflict = msg
+		}
+		warnings = append(warnings, msg+"; neither is linked until one is renamed (set `as` under [pack.skill.<name>] in skills.toml, or rename your own skill)")
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("skill name conflicts (set `as` in skills.toml):\n  %s", strings.Join(errs, "\n  "))
+	return warnings
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
-	return nil
+	sort.Strings(keys)
+	return keys
 }
 
 // Describe names an entry's origin for messages, e.g. "vendor:owner/repo".
@@ -165,10 +207,16 @@ func Describe(e Entry) string {
 	return string(e.Kind) + "/"
 }
 
-// Find returns the entry whose name or link name matches.
+// Find returns the entry whose name or link name matches. Link names win
+// over upstream names so an aliased skill is found under the name shown.
 func Find(entries []Entry, key string) *Entry {
 	for i := range entries {
-		if entries[i].LinkName == key || entries[i].Name == key {
+		if entries[i].LinkName == key {
+			return &entries[i]
+		}
+	}
+	for i := range entries {
+		if entries[i].Name == key {
 			return &entries[i]
 		}
 	}
@@ -177,14 +225,16 @@ func Find(entries []Entry, key string) *Entry {
 
 // FreeName returns name if no entry uses it, else prefix-name.
 func FreeName(entries []Entry, name, prefix string) string {
-	if Find(entries, name) == nil {
+	return freeName(func(n string) bool { return Find(entries, n) != nil }, name, prefix)
+}
+
+func freeName(taken func(string) bool, name, prefix string) string {
+	if !taken(name) {
 		return name
 	}
 	alt := prefix + "-" + name
-	for i := 2; Find(entries, alt) != nil; i++ {
+	for i := 2; taken(alt); i++ {
 		alt = fmt.Sprintf("%s-%s-%d", prefix, name, i)
 	}
 	return alt
 }
-
-var _ = manifest.ErrNotFound

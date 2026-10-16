@@ -15,7 +15,8 @@ import (
 
 // Op is one planned file-system change.
 type Op struct {
-	// Action: create, replace, remove, skip, keep.
+	// Action: create, replace, remove, forget (drop a lock record only),
+	// skip, keep.
 	Action string
 	Target targets.Target
 	Name   string
@@ -64,7 +65,7 @@ func (p Plan) Counts() map[string]int {
 // Changes reports whether anything would be written.
 func (p Plan) Changes() bool {
 	for _, o := range p.Ops {
-		if o.Action == "create" || o.Action == "replace" || o.Action == "remove" {
+		if o.Action == "create" || o.Action == "replace" || o.Action == "remove" || o.Action == "forget" {
 			return true
 		}
 	}
@@ -82,6 +83,11 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 			key := t.Name + "/" + e.LinkName
 			desired[key] = true
 			op := Op{Target: t, Name: e.LinkName, Dest: dest, Source: e.Dir, Mode: t.Mode, entry: e}
+			if e.Conflict != "" {
+				op.Action, op.Reason = "skip", "name conflict: "+e.Conflict
+				plan.Ops = append(plan.Ops, op)
+				continue
+			}
 			if e.Missing {
 				op.Action, op.Reason = "skip", "source directory missing"
 				plan.Ops = append(plan.Ops, op)
@@ -116,6 +122,12 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 			}
 			plan.Ops = append(plan.Ops, op)
 		}
+		for _, n := range e.UnknownTargets {
+			// Leave whatever is recorded for this target alone.
+			desired[n+"/"+e.LinkName] = true
+			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: n}, Name: e.LinkName,
+				Reason: "unknown target " + n})
+		}
 	}
 	// Anything in the lock no longer desired gets removed.
 	for _, key := range lib.Lock.LinkKeys() {
@@ -126,8 +138,13 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 		tname, name, _ := splitKey(key)
 		t, err := regTarget(lib, tname)
 		if err != nil {
-			plan.Ops = append(plan.Ops, Op{Action: "skip", Name: name, Reason: err.Error()})
-			continue
+			if prev.Path == "" || filepath.Base(prev.Path) != name {
+				// Nowhere to look: stop tracking it rather than nag forever.
+				plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
+					Reason: fmt.Sprintf("target %q is no longer defined and its location was not recorded; forgetting the record (nothing on disk is touched)", tname)})
+				continue
+			}
+			t = targets.Target{Name: tname, Path: filepath.Dir(prev.Path), Mode: prev.Mode}
 		}
 		dest := filepath.Join(t.Path, name)
 		op := Op{Target: t, Name: name, Dest: dest, Source: prev.Source, Mode: prev.Mode}
@@ -193,7 +210,7 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 				return res, err
 			}
 			mode := op.Mode
-			l := &lock.Link{Mode: mode, Source: lib.Rel(op.Source)}
+			l := &lock.Link{Mode: mode, Source: lib.Rel(op.Source), Path: op.Dest}
 			if mode == "link" {
 				if err := os.Symlink(op.Source, op.Dest); err != nil {
 					if runtime.GOOS != "windows" {
@@ -217,6 +234,8 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 			if err := clear(op, lib.Lock.Links[key]); err != nil {
 				return res, err
 			}
+			delete(lib.Lock.Links, key)
+		case "forget":
 			delete(lib.Lock.Links, key)
 		}
 	}

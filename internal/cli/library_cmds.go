@@ -249,6 +249,9 @@ func printEntries(c *ctx, entries []engine.Entry) {
 		if e.Missing {
 			name += " " + warn("missing")
 		}
+		if e.Conflict != "" {
+			name += " " + warn("conflict")
+		}
 		cat := e.Category
 		if cat == "" {
 			cat = dim("·")
@@ -344,7 +347,7 @@ func runApply(c *ctx, dry, force bool) error {
 		if op.Action == "keep" {
 			continue
 		}
-		mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!")}[op.Action]
+		mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!"), "forget": dim("?")}[op.Action]
 		line := fmt.Sprintf("  %s %-10s %s", mark, dim(op.Target.Name), op.Name)
 		if op.Reason != "" {
 			line += "  " + dim(op.Reason)

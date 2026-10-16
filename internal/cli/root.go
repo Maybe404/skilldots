@@ -30,9 +30,26 @@ type ctx struct {
 	lib *library.Library
 	reg *targets.Registry
 	out io.Writer
+	// warned remembers warnings already shown, so a command that resolves
+	// several times prints each one once.
+	warned map[string]bool
 }
 
-func (c *ctx) resolve() ([]engine.Entry, error) { return engine.Resolve(c.lib, c.reg) }
+// resolve computes the library's entries. Per-entry problems are printed
+// as warnings on stderr (never stdout, which may carry JSON).
+func (c *ctx) resolve() ([]engine.Entry, error) {
+	entries, warnings, err := engine.Resolve(c.lib, c.reg)
+	for _, w := range warnings {
+		if c.warned == nil {
+			c.warned = map[string]bool{}
+		}
+		if !c.warned[w] {
+			c.warned[w] = true
+			fmt.Fprintf(os.Stderr, "%s %s\n", warn("warning:"), w)
+		}
+	}
+	return entries, err
+}
 
 // printf writes human-readable progress. Under --json it goes to stderr so
 // stdout stays parseable.

@@ -38,6 +38,9 @@ type Link struct {
 	Source string `toml:"source"`
 	// Hash is set for copies so unmodified copies can be identified later.
 	Hash string `toml:"hash,omitempty"`
+	// Path is the absolute location written, so the entry can still be
+	// cleaned up after its target disappears from the manifest.
+	Path string `toml:"path,omitempty"`
 }
 
 func Load(path string) (*Lock, error) {

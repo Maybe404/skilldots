@@ -39,7 +39,7 @@ func TestForceApplyBacksUpUnmanagedDir(t *testing.T) {
 	writeSkill(t, stale, "mine")
 	os.WriteFile(filepath.Join(stale, "notes.txt"), []byte("user data"), 0o644)
 
-	entries, err := Resolve(lib, reg)
+	entries, _, err := Resolve(lib, reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestForceApplyBacksUpUnmanagedDir(t *testing.T) {
 	}
 
 	// A second apply replaces nothing and backs up nothing.
-	entries, _ = Resolve(lib, reg)
+	entries, _, _ = Resolve(lib, reg)
 	plan = MakePlan(lib, entries, true)
 	if plan.Changes() {
 		t.Fatalf("expected no changes, got %+v", plan.Counts())
