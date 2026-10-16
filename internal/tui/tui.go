@@ -26,6 +26,10 @@ type Options struct {
 	Root    string
 	Version string
 	Theme   Theme
+	// Input is what the user typed before the dashboard started that is
+	// no longer in the terminal's input queue (read while skd asked the
+	// terminal for its background); it is handled first.
+	Input []byte
 }
 
 // Run opens the dashboard and blocks until the user quits. The terminal is
@@ -45,6 +49,7 @@ func Run(o Options) error {
 	defer signal.Stop(sigs)
 
 	m := New(ops, snap, o.Theme, o.Version)
+	m.replay = replayKeys(o.Input)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
 	label := "the running operation"

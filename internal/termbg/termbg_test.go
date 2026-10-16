@@ -29,15 +29,36 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestDA1Done(t *testing.T) {
-	for s, want := range map[string]bool{
-		"\x1b]11;rgb:0/0/0\x07\x1b[?62;22c": true,
-		"\x1b[?1;2c":                        true,
-		"\x1b]11;rgb:0/0/0\x07\x1b[?62;2":   false,
-		"\x1b]11;rgb:0/0/0\x07":             false,
+func TestSplit(t *testing.T) {
+	osc := "\x1b]11;rgb:0/0/0\x07"
+	st := "\x1b]11;rgb:ffff/ffff/ffff\x1b\\"
+	da1 := "\x1b[?62;22c"
+	for _, c := range []struct {
+		in      string
+		final   bool
+		replies string
+		keys    string
+		da1     bool
+	}{
+		{osc + da1, false, osc + da1, "", true},
+		{st + da1, false, st + da1, "", true},
+		{da1, false, da1, "", true},
+		{osc + "\x1b[?62;2", false, osc, "", false}, // DA1 still arriving
+		{osc, false, osc, "", false},
+		// Keys typed while waiting, before, between and after the replies.
+		{"?" + osc + "j" + da1 + "q", false, osc + da1, "?jq", true},
+		{"\x1b[A?", true, "", "\x1b[A?", false}, // arrow key: not a reply
+		{"? ", true, "", "? ", false},
+		// An unfinished sequence at the end: a reply in progress unless the
+		// wait is over and it cannot be one.
+		{"?\x1b", false, "", "?", false},
+		{"?\x1b", true, "", "?\x1b", false},
+		{"?\x1b[", true, "", "?\x1b[", false},
+		{"?\x1b]11;rgb:00", true, "", "?", false},
 	} {
-		if got := da1Done(s); got != want {
-			t.Errorf("%q: %v", s, got)
+		replies, keys, d := split([]byte(c.in), c.final)
+		if replies != c.replies || string(keys) != c.keys || d != c.da1 {
+			t.Errorf("split(%q, %v) = %q, %q, %v; want %q, %q, %v", c.in, c.final, replies, keys, d, c.replies, c.keys, c.da1)
 		}
 	}
 }

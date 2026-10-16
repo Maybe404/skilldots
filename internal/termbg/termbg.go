@@ -9,6 +9,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,9 +18,13 @@ const Timeout = 300 * time.Millisecond
 
 // Detect reports whether the controlling terminal has a light background.
 // ok is false when it could not tell (no terminal, not in the foreground,
-// no answer within timeout, Windows); callers then assume dark.
+// input already waiting, no answer within timeout, Windows); callers then
+// assume dark. Keys typed while it waited are kept for Unread.
 func Detect(timeout time.Duration) (light, ok bool) {
-	reply, ok := query(timeout)
+	reply, keys, ok := query(timeout)
+	mu.Lock()
+	unread = append(unread, keys...)
+	mu.Unlock()
 	if !ok {
 		return false, false
 	}
@@ -28,6 +33,23 @@ func Detect(timeout time.Duration) (light, ok bool) {
 		return false, false
 	}
 	return luminance(r, g, b) > 0.5, true
+}
+
+var (
+	mu     sync.Mutex
+	unread []byte
+)
+
+// Unread returns, once, the bytes the user typed while Detect waited for
+// the terminal: they were read together with its replies and are no
+// longer in the terminal's input queue. Whoever reads the keyboard next
+// should handle them first.
+func Unread() []byte {
+	mu.Lock()
+	defer mu.Unlock()
+	b := unread
+	unread = nil
+	return b
 }
 
 // parse finds "rgb:RRRR/GGGG/BBBB" (1–4 hex digits per channel) in an
@@ -73,8 +95,65 @@ func luminance(r, g, b float64) float64 {
 	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
 }
 
-// da1Done reports whether s ends with a complete DA1 reply, ESC [ ? … c.
-func da1Done(s string) bool {
-	i := strings.LastIndex(s, "\x1b[?")
-	return i >= 0 && strings.HasSuffix(s, "c") && !strings.ContainsAny(s[i+3:len(s)-1], "\x1b")
+// split separates the terminal's replies in b — OSC sequences, ended by
+// BEL or ESC \, and the DA1 answer ESC [ ? … c — from everything else,
+// which the user typed. da1 reports whether a complete DA1 answer was
+// seen. An unfinished sequence at the end may still be a reply: it is
+// left out unless final, and then kept only if it cannot be one (a lone
+// ESC or ESC [ is the start of a key).
+func split(b []byte, final bool) (replies string, keys []byte, da1 bool) {
+	var rep []byte
+	for i := 0; i < len(b); {
+		if b[i] != 0x1b {
+			keys = append(keys, b[i])
+			i++
+			continue
+		}
+		rest := b[i+1:]
+		switch {
+		case len(rest) == 0 || (rest[0] == '[' && len(rest) == 1):
+			if final {
+				keys = append(keys, b[i:]...)
+			}
+			return string(rep), keys, da1
+		case rest[0] == ']':
+			end := -1
+			for j := 1; j < len(rest); j++ {
+				if rest[j] == 0x07 {
+					end = j + 1
+					break
+				}
+				if rest[j] == 0x1b && j+1 < len(rest) && rest[j+1] == '\\' {
+					end = j + 2
+					break
+				}
+			}
+			if end < 0 {
+				return string(rep), keys, da1
+			}
+			rep = append(rep, b[i:i+1+end]...)
+			i += 1 + end
+		case rest[0] == '[' && rest[1] == '?':
+			end := -1
+			for j := 2; j < len(rest); j++ {
+				if rest[j] >= 0x40 && rest[j] <= 0x7e {
+					end = j + 1
+					break
+				}
+			}
+			if end < 0 {
+				return string(rep), keys, da1
+			}
+			rep = append(rep, b[i:i+1+end]...)
+			da1 = da1 || rest[end-1] == 'c'
+			i += 1 + end
+		default:
+			keys = append(keys, b[i])
+			i++
+		}
+	}
+	return string(rep), keys, da1
 }
+
+// osc11Reply reports whether replies hold an answer to OSC 11.
+func osc11Reply(replies string) bool { return strings.Contains(replies, "]11;") }

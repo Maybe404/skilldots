@@ -14,7 +14,8 @@ import (
 // (script(1) with no terminal behind it). Before, Bubble Tea's package
 // init made termenv ask for the background colour and wait five seconds
 // on every command. Now only skd's own bounded query is sent, and only
-// for --theme auto.
+// for --theme auto, and not when input is already waiting: it would be
+// read along with the replies.
 func TestNoQueryBeforeDetect(t *testing.T) {
 	if _, err := exec.LookPath("script"); err != nil || (runtime.GOOS != "darwin" && runtime.GOOS != "linux") {
 		t.Skip("needs script(1)")
@@ -30,9 +31,15 @@ func TestNoQueryBeforeDetect(t *testing.T) {
 	vars = append(vars, "TERM=xterm-256color")
 	for _, c := range []struct {
 		theme       string
+		typedAhead  bool
 		ownQuery    bool
 		maxDuration time.Duration
-	}{{"auto", true, 3 * time.Second}, {"dark", false, 3 * time.Second}} {
+	}{
+		{"auto", false, true, 3 * time.Second},
+		{"dark", false, false, 3 * time.Second},
+		// script(1) passes the end of its stdin on as ^D: input waiting.
+		{"auto", true, false, 3 * time.Second},
+	} {
 		out := filepath.Join(t.TempDir(), "typescript")
 		args := []string{"-q", out, skdBin, "list", "--theme", c.theme}
 		if runtime.GOOS == "linux" {
@@ -40,12 +47,25 @@ func TestNoQueryBeforeDetect(t *testing.T) {
 		}
 		cmd := exec.Command("script", args...)
 		cmd.Env, cmd.Dir = vars, e.p("lib")
+		var hold *os.File
+		if !c.typedAhead {
+			// An open, silent stdin: nothing is typed.
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd.Stdin, hold = r, w
+		}
 		start := time.Now()
-		if b, err := cmd.CombinedOutput(); err != nil {
+		b, err := cmd.CombinedOutput()
+		if hold != nil {
+			hold.Close()
+		}
+		if err != nil {
 			t.Fatalf("script: %v\n%s", err, b)
 		}
 		took := time.Since(start)
-		b, _ := os.ReadFile(out)
+		b, _ = os.ReadFile(out)
 		s := string(b)
 		if !strings.Contains(s, "skilldots") {
 			t.Fatalf("%s: no output:\n%q", c.theme, s)
@@ -54,7 +74,7 @@ func TestNoQueryBeforeDetect(t *testing.T) {
 			t.Errorf("%s: termenv queried the terminal (OSC 11 + CSI 6n)", c.theme)
 		}
 		if got := strings.Contains(s, "\x1b]11;?"); got != c.ownQuery {
-			t.Errorf("%s: background query sent = %v", c.theme, got)
+			t.Errorf("%s (typed ahead %v): background query sent = %v", c.theme, c.typedAhead, got)
 		}
 		if took > c.maxDuration {
 			t.Errorf("%s: took %v", c.theme, took)

@@ -14,6 +14,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/targets"
+	"github.com/Maybe404/skilldots/internal/termbg"
 	"github.com/Maybe404/skilldots/internal/tui"
 )
 
@@ -185,5 +186,5 @@ func runDashboard(root string) error {
 	return tui.Run(tui.Options{Root: root, Version: Version, Theme: tui.Theme{
 		Accent: cAccent, Cyan: cCyan, Muted: cMuted, Faint: cFaint, OK: cOK, Warn: cWarn, Err: cErr, Text: cText,
 		Ink: pal.Ink, Light: pal.Light,
-	}})
+	}, Input: termbg.Unread()})
 }

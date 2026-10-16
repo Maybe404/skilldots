@@ -112,6 +112,9 @@ type doneMsg struct{ res result }
 
 // Model is the dashboard.
 type Model struct {
+	// replay are key messages to handle before any other input.
+	replay []tea.Msg
+
 	ops     Ops
 	theme   Theme
 	surf    surfaces
@@ -221,7 +224,18 @@ func firstLine(s string) string {
 	return s
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+// Init replays the keys typed before the dashboard could read them (see
+// Options.Input), in order.
+func (m Model) Init() tea.Cmd {
+	if len(m.replay) == 0 {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, msg := range m.replay {
+		cmds = append(cmds, func() tea.Msg { return msg })
+	}
+	return tea.Sequence(cmds...)
+}
 
 // ---- derived lists ------------------------------------------------------
 

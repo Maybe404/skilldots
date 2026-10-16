@@ -104,7 +104,7 @@ All commands take `--json` for scripts and agents, `--yes` to skip prompts, and 
 
 While an operation runs, keys that would start another are refused; problems show on the status line.
 
-Colours follow the terminal: skd asks it for its background colour (giving up after 300 ms and assuming dark) and uses a light or dark palette for the dashboard, the menu and every table. `--theme light` or `--theme dark` (or `SKILLDOTS_THEME`) skips the question.
+Colours follow the terminal: skd asks it for its background colour (giving up after 300 ms and assuming dark; it does not ask when you have already typed ahead, and keys typed while it waits are passed on to the dashboard) and uses a light or dark palette for the dashboard, the menu and every table. `--theme light` or `--theme dark` (or `SKILLDOTS_THEME`) skips the question.
 
 ## skills.toml
 
