@@ -75,6 +75,12 @@ func (p Plan) Changes() bool {
 
 // MakePlan compares entries against the lock and disk.
 func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
+	return MakePlanForce(lib, entries, func(string) bool { return force })
+}
+
+// MakePlanForce is MakePlan with force decided per "<target>/<name>" key,
+// so a caller can force only the entries it is responsible for.
+func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key string) bool) Plan {
 	var plan Plan
 	desired := map[string]bool{}
 	conflictShown := map[string]bool{}
@@ -110,7 +116,7 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 				}
 			case prev != nil:
 				// We placed it, but it was modified or replaced since.
-				if force {
+				if forceKey(key) {
 					op.Action, op.Reason = "replace", "modified since skilldots wrote it (--force)"
 				} else {
 					op.Action, op.Reason = "skip", "modified since skilldots wrote it; use --force"
@@ -119,7 +125,7 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 				// Exists and we never placed it.
 				if isLinkTo(dest, e.Dir) {
 					op.Action, op.Reason = "create", "adopting existing link"
-				} else if force {
+				} else if forceKey(key) {
 					op.Action, op.Reason = "replace", "unmanaged entry (--force)"
 				} else {
 					op.Action, op.Reason = "skip", "exists and not managed by skilldots; use --force"
@@ -161,7 +167,7 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 		switch {
 		case !fsutil.Lexists(dest):
 			op.Action, op.Reason = "remove", "already gone"
-		case current(dest, prev, lib) || force:
+		case current(dest, prev, lib) || forceKey(key):
 			op.Action = "remove"
 		default:
 			op.Action, op.Reason = "skip", "modified since skilldots wrote it; use --force to remove"

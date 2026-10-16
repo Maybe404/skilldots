@@ -292,7 +292,7 @@ func cloneCmd() *cobra.Command {
 			if err := library.EnsureGit(filepath.Join(dir, library.DirPrivate)); err != nil {
 				return err
 			}
-			fmt.Printf("%s cloned into %s\n", ok("✓"), dir)
+			say("%s cloned into %s\n", ok("✓"), dir)
 			if err := library.Remember(dir); err != nil {
 				return err
 			}
@@ -305,7 +305,12 @@ func cloneCmd() *cobra.Command {
 				return err
 			}
 			// Vendored skills come with the clone; only links need creating.
-			return runApply(c, false, false)
+			out, err := doApply(c, false, false, nil)
+			if err != nil {
+				return err
+			}
+			jsonOut(map[string]any{"library": dir, "apply": out})
+			return nil
 		},
 	}
 }
@@ -332,34 +337,36 @@ func syncCmd() *cobra.Command {
 			if msg == "" {
 				msg = "chore: update skills library"
 			}
-			if _, err := c.lib.Git("add", "-A", "--", "."); err != nil {
+			result := map[string]any{"committed": false, "pushed": false}
+			committed, err := gitCommit(c, msg, false)
+			if err != nil {
 				return err
 			}
-			if _, err := c.lib.Git("diff", "--cached", "--quiet", "--", "."); err != nil {
-				if _, err := c.lib.Git("commit", "-q", "-m", msg, "--", "."); err != nil {
-					return err
-				}
-				fmt.Printf("%s committed\n", ok("✓"))
+			result["committed"] = committed
+			if !committed {
+				say("%s\n", dim("nothing to commit"))
+			}
+			if url, err := c.lib.Git("remote", "get-url", "origin"); err != nil {
+				say("%s no remote configured; add one with: skd sync --remote <git-url>\n", warn("!"))
 			} else {
-				fmt.Println(dim("nothing to commit"))
-			}
-			if _, err := c.lib.Git("remote", "get-url", "origin"); err != nil {
-				fmt.Printf("%s no remote configured; add one with: skd sync --remote <git-url>\n", warn("!"))
-				return nil
-			}
-			if _, err := c.lib.Git("rev-parse", "--abbrev-ref", "@{u}"); err != nil {
-				if _, err := c.lib.Git("push", "-q", "-u", "origin", "HEAD"); err != nil {
+				result["remote"] = url
+				if _, err := c.lib.Git("rev-parse", "--abbrev-ref", "@{u}"); err != nil {
+					if _, err := c.lib.Git("push", "-q", "-u", "origin", "HEAD"); err != nil {
+						return err
+					}
+				} else if _, err := c.lib.Git("push", "-q"); err != nil {
 					return err
 				}
-			} else if _, err := c.lib.Git("push", "-q"); err != nil {
-				return err
+				result["pushed"] = true
+				say("%s pushed\n", ok("✓"))
 			}
-			fmt.Printf("%s pushed\n", ok("✓"))
 			if fsutil.Exists(filepath.Join(c.lib.PrivateDir(), ".git")) {
 				if out, _ := library.Git(c.lib.PrivateDir(), "status", "--short"); out != "" {
-					fmt.Printf("%s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n", dim("note:"))
+					result["privateUncommitted"] = true
+					say("%s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n", dim("note:"))
 				}
 			}
+			jsonOut(result)
 			return nil
 		},
 	}

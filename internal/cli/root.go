@@ -4,7 +4,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/charmbracelet/huh"
@@ -29,7 +28,6 @@ var flags struct {
 type ctx struct {
 	lib *library.Library
 	reg *targets.Registry
-	out io.Writer
 	// warned remembers warnings already shown, so a command that resolves
 	// several times prints each one once.
 	warned map[string]bool
@@ -53,20 +51,26 @@ func (c *ctx) resolve() ([]engine.Entry, error) {
 
 // printf writes human-readable progress. Under --json it goes to stderr so
 // stdout stays parseable.
-func (c *ctx) printf(format string, a ...any) {
+func (c *ctx) printf(format string, a ...any) { say(format, a...) }
+
+// say is printf for code that has no ctx yet (init, clone, use).
+func say(format string, a ...any) {
 	if flags.json {
 		fmt.Fprintf(os.Stderr, format, a...)
 		return
 	}
-	fmt.Fprintf(c.out, format, a...)
+	fmt.Fprintf(os.Stdout, format, a...)
 }
 
 // jsonOut prints v as JSON when --json is set and reports whether it did.
-func (c *ctx) jsonOut(v any) bool {
+// Every command prints at most one JSON document on stdout.
+func (c *ctx) jsonOut(v any) bool { return jsonOut(v) }
+
+func jsonOut(v any) bool {
 	if !flags.json {
 		return false
 	}
-	enc := json.NewEncoder(c.out)
+	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(v)
 	return true
@@ -90,7 +94,7 @@ func open() (*ctx, error) {
 		return nil, err
 	}
 	engine.SetRegistry(reg)
-	return &ctx{lib: lib, reg: reg, out: os.Stdout}, nil
+	return &ctx{lib: lib, reg: reg}, nil
 }
 
 // confirm asks a yes/no question unless --yes was given.

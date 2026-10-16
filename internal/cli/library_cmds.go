@@ -87,8 +87,10 @@ func initCmd() *cobra.Command {
 			if err := library.Remember(root); err != nil {
 				return err
 			}
-			fmt.Printf("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
+			say("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
+			result := map[string]any{"library": root, "defaults": defaults, "skill": false}
 			if noSkill {
+				jsonOut(result)
 				return nil
 			}
 			// Teach the machine's agents how to drive skd. Best effort: offline
@@ -103,14 +105,22 @@ func initCmd() *cobra.Command {
 			c.lib.Manifest.Packs = append(c.lib.Manifest.Packs, p)
 			if _, err := engine.Sync(c.lib, p); err != nil {
 				c.lib.Manifest.Packs = c.lib.Manifest.Packs[:len(c.lib.Manifest.Packs)-1]
-				fmt.Printf("  %s could not fetch the %s skill (%v); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, err, SelfRepo, SelfSkill)
+				say("  %s could not fetch the %s skill (%v); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, err, SelfRepo, SelfSkill)
+				result["skillError"] = err.Error()
+				jsonOut(result)
 				return nil
 			}
 			if err := c.lib.Save(); err != nil {
 				return err
 			}
-			fmt.Printf("  %s\n", dim("installed the "+SelfSkill+" skill so agents on this machine know how to use skd"))
-			return runApply(c, false, false)
+			say("  %s\n", dim("installed the "+SelfSkill+" skill so agents on this machine know how to use skd"))
+			out, err := doApply(c, false, false, nil)
+			if err != nil {
+				return err
+			}
+			result["skill"], result["apply"] = true, out
+			jsonOut(result)
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&from, "from", "", "turn an existing directory into the library")
@@ -324,50 +334,61 @@ func applyCmd() *cobra.Command {
 	return cmd
 }
 
+// applyOutcome is the machine-readable result of an apply.
+type applyOutcome struct {
+	Applied bool            `json:"applied"`
+	DryRun  bool            `json:"dryRun,omitempty"`
+	Changes []engine.Change `json:"changes"`
+	Kept    int             `json:"kept"`
+	Backups []string        `json:"backups,omitempty"`
+}
+
+// runApply applies and, under --json, prints the outcome as the command's
+// only JSON document. Commands that report more call doApply instead.
 func runApply(c *ctx, dry, force bool) error {
-	entries, err := c.resolve()
+	out, err := doApply(c, dry, force, nil)
 	if err != nil {
 		return err
 	}
-	plan := engine.MakePlan(c.lib, entries, force)
-	if flags.json {
-		if !dry && plan.Changes() {
-			res, err := engine.Apply(c.lib, plan)
-			if saveErr := c.lib.Save(); saveErr != nil && err == nil {
-				err = saveErr
-			}
-			if err != nil {
-				return err
-			}
-			c.jsonOut(map[string]any{"applied": true, "changes": plan.ChangeList(), "kept": plan.Counts()["keep"], "backups": res.Backups})
-			return nil
-		}
-		c.jsonOut(map[string]any{"applied": false, "dryRun": dry, "changes": plan.ChangeList(), "kept": plan.Counts()["keep"]})
-		return nil
+	c.jsonOut(out)
+	return nil
+}
+
+// doApply plans and applies, printing human-readable progress. force
+// forces every entry; forceKeys ("<target>/<name>") forces only those.
+func doApply(c *ctx, dry, force bool, forceKeys map[string]bool) (*applyOutcome, error) {
+	entries, err := c.resolve()
+	if err != nil {
+		return nil, err
 	}
-	for _, op := range plan.Ops {
-		if op.Action == "keep" {
-			continue
-		}
-		mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!"), "forget": dim("?")}[op.Action]
-		line := fmt.Sprintf("  %s %-10s %s", mark, dim(op.Target.Name), op.Name)
-		if op.Reason != "" {
-			line += "  " + dim(op.Reason)
-		}
-		c.printf("%s\n", line)
-	}
+	plan := engine.MakePlanForce(c.lib, entries, func(key string) bool { return force || forceKeys[key] })
 	counts := plan.Counts()
+	out := &applyOutcome{DryRun: dry, Changes: plan.ChangeList(), Kept: counts["keep"]}
+	if !flags.json {
+		for _, op := range plan.Ops {
+			if op.Action == "keep" {
+				continue
+			}
+			mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!"), "forget": dim("?")}[op.Action]
+			line := fmt.Sprintf("  %s %-10s %s", mark, dim(op.Target.Name), op.Name)
+			if op.Reason != "" {
+				line += "  " + dim(op.Reason)
+			}
+			c.printf("%s\n", line)
+		}
+	}
 	if !plan.Changes() {
 		msg := fmt.Sprintf("up to date, %d linked", counts["keep"])
 		if counts["skip"] > 0 {
 			msg += fmt.Sprintf(", %d skipped", counts["skip"])
 		}
 		c.printf("%s %s\n", ok("✓"), dim(msg))
-		return nil
+		return out, nil
 	}
+	summary := fmt.Sprintf("+%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])
 	if dry {
-		c.printf("%s\n", dim(fmt.Sprintf("dry run · +%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])))
-		return nil
+		c.printf("%s\n", dim("dry run · "+summary))
+		return out, nil
 	}
 	res, err := engine.Apply(c.lib, plan)
 	if saveErr := c.lib.Save(); saveErr != nil && err == nil {
@@ -377,10 +398,11 @@ func runApply(c *ctx, dry, force bool) error {
 		c.printf("  %s %s\n", dim("moved aside"), b)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c.printf("%s %s\n", ok("✓"), dim(fmt.Sprintf("applied · +%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])))
-	return nil
+	out.Applied, out.Backups = true, res.Backups
+	c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
+	return out, nil
 }
 
 func targetsCmd() *cobra.Command {
@@ -458,7 +480,12 @@ func newCmd() *cobra.Command {
 				return err
 			}
 			c.printf("%s created %s\n", ok("✓"), dir)
-			return runApply(c, false, false)
+			out, err := doApply(c, false, false, nil)
+			if err != nil {
+				return err
+			}
+			c.jsonOut(map[string]any{"created": args[0], "path": dir, "apply": out})
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&private, "private", false, "create under private/ (never pushed)")
@@ -481,7 +508,8 @@ func useCmd() *cobra.Command {
 			if err := library.Remember(root); err != nil {
 				return err
 			}
-			fmt.Printf("%s skd now uses %s %s\n", ok("✓"), root, dim("("+library.ConfigPath()+")"))
+			say("%s skd now uses %s %s\n", ok("✓"), root, dim("("+library.ConfigPath()+")"))
+			jsonOut(map[string]any{"library": root, "config": library.ConfigPath()})
 			return nil
 		},
 	}
@@ -530,6 +558,7 @@ func trashCmd() *cobra.Command {
 				return err
 			}
 			c.printf("%s restored to %s\n", ok("✓"), dest)
+			c.jsonOut(map[string]any{"id": args[0], "restored": dest})
 			return nil
 		},
 	}, &cobra.Command{
@@ -546,18 +575,20 @@ func trashCmd() *cobra.Command {
 			items, _ := engine.ListTrash(c.lib)
 			if len(items) == 0 {
 				c.printf("%s\n", dim("trash is empty"))
+				c.jsonOut(map[string]any{"deleted": 0})
 				return nil
 			}
 			c.printf("%s %s\n", bad("permanently delete"), plural(len(items), "parked directory"))
 			var sure bool
 			if err := ask(huh.NewConfirm().Title(fmt.Sprintf("Delete %d item(s) forever?", len(items))).Affirmative("Delete").Negative("Keep").Value(&sure)); err != nil || !sure {
-				return nil
+				return fmt.Errorf("cancelled")
 			}
 			n, err := engine.EmptyTrash(c.lib)
 			if err != nil {
 				return err
 			}
 			c.printf("%s deleted %d\n", ok("✓"), n)
+			c.jsonOut(map[string]any{"deleted": n})
 			return nil
 		},
 	})
