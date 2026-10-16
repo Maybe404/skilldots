@@ -348,3 +348,34 @@ func TestRestoreTargetThroughAnotherSpelling(t *testing.T) {
 		t.Fatalf("restore: %v", err)
 	}
 }
+
+// A record longer than skd ever writes (16 KiB) is not read, even when
+// it is a plain file naming a place restore would accept; one of exactly
+// 16 KiB still is.
+func TestRestoreRefusesAnOversizedRecord(t *testing.T) {
+	lib, reg, home := restoreLib(t)
+	agents := filepath.Join(home, ".agents", "skills")
+	batch := filepath.Join(lib.Root, TrashDir, "b1")
+	for name, size := range map[string]int{"fits": maxOrigin, "over": maxOrigin + 1} {
+		// A clean absolute path in the agents' directory, the record's
+		// line break included, size bytes long.
+		origin := filepath.Join(agents, name+"-"+strings.Repeat("a", size-len(agents)-len(name)-3))
+		p := park(t, batch, name, origin)
+		if st, err := os.Stat(p + ".origin"); err != nil || st.Size() != int64(size) {
+			t.Fatalf("%s: record is %d bytes, want %d", name, st.Size(), size)
+		}
+	}
+	items, err := ListTrash(lib, reg)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("%+v %v", items, err)
+	}
+	for _, it := range items {
+		over := it.Name == "over"
+		if it.Restorable == over || over != strings.Contains(it.Problem, "not a file skd wrote") {
+			t.Errorf("%s: restorable %v, problem %q", it.Name, it.Restorable, it.Problem)
+		}
+	}
+	if _, err := Restore(lib, reg, "b1/over"); err == nil || !strings.Contains(err.Error(), "not a file skd wrote") {
+		t.Errorf("restore of the oversized record: %v", err)
+	}
+}
