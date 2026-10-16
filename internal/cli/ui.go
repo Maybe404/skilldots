@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"golang.org/x/term"
 
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/termbg"
 )
 
@@ -76,14 +77,19 @@ func usePalette(p palette) {
 // EnvTheme overrides the theme when --theme is not given.
 const EnvTheme = "SKILLDOTS_THEME"
 
-// setupTheme picks the palette: --theme, else $SKILLDOTS_THEME, else auto.
+// setupTheme picks the palette: --theme, else $SKILLDOTS_THEME, else the
+// theme setting (skd config set theme), else auto.
 // auto asks the terminal for its background (termbg.Timeout at most) and
 // assumes dark when it cannot tell. Nothing is asked when no colour would
 // be printed anyway: --json, NO_COLOR, TERM=dumb, or stdout not a terminal.
 func setupTheme(flag string) error {
 	mode := strings.ToLower(strings.TrimSpace(flag))
+	src := "--theme"
 	if mode == "" {
-		mode = strings.ToLower(strings.TrimSpace(os.Getenv(EnvTheme)))
+		mode, src = strings.ToLower(strings.TrimSpace(os.Getenv(EnvTheme))), "$"+EnvTheme
+	}
+	if mode == "" {
+		mode, src = strings.ToLower(strings.TrimSpace(config.Get(config.Theme))), "the theme setting (skd config set theme)"
 	}
 	// The menu runs commands in-process; ask the terminal once.
 	if mode == themeDone {
@@ -104,10 +110,6 @@ func setupTheme(flag string) error {
 	case "light":
 		usePalette(lightPalette)
 	default:
-		src := "--theme"
-		if flag == "" {
-			src = "$" + EnvTheme
-		}
 		return fmt.Errorf("%s %q: use light, dark or auto", src, mode)
 	}
 	themeDone = mode

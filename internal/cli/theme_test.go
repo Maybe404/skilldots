@@ -2,14 +2,21 @@ package cli
 
 import (
 	"math"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Maybe404/skilldots/internal/config"
 )
 
 func TestSetupTheme(t *testing.T) {
+	// The theme setting is read from the user config: keep it out of reach.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	asked := 0
 	detected := true
 	detectBackground = func(time.Duration) (bool, bool) { asked++; return detected, true }
@@ -60,6 +67,18 @@ func TestSetupTheme(t *testing.T) {
 	if err := set("", "", ""); err != nil || pal.Light {
 		t.Fatalf("no answer: light %v err %v", pal.Light, err)
 	}
+	// The theme setting applies when neither --theme nor the env var is set.
+	if err := config.Set(config.Theme, "light"); err != nil {
+		t.Fatal(err)
+	}
+	if err := set("", "", ""); err != nil || !pal.Light {
+		t.Fatalf("theme setting light: light %v err %v", pal.Light, err)
+	}
+	if err := set("", "dark", ""); err != nil || pal.Light {
+		t.Fatalf("env wins over the setting: light %v err %v", pal.Light, err)
+	}
+	config.Set(config.Theme, "")
+	t.Setenv(EnvTheme, "")
 	// Asked once per process, even when the menu runs commands in-process.
 	asked = 0
 	detectBackground = func(time.Duration) (bool, bool) { asked++; return true, true }

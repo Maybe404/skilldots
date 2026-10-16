@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/scan"
@@ -54,6 +55,16 @@ type Ops interface {
 	Restore(id string) (string, error)
 	// EmptyTrash permanently deletes the trash.
 	EmptyTrash() (string, error)
+	// Settings lists the user settings (skd config list).
+	Settings() ([]Setting, error)
+	// SetSetting changes one (skd config set; "" unsets it).
+	SetSetting(key, value string) (string, error)
+}
+
+// Setting is one user setting with its current value.
+type Setting struct {
+	config.Key
+	Value string
 }
 
 // AddRequest is what the add dialog collected: skills by name (a whole
@@ -478,6 +489,35 @@ func (o *libOps) EmptyTrash() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("deleted %d item(s) from the trash for good", n), nil
+}
+
+func (o *libOps) Settings() ([]Setting, error) {
+	all, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	var out []Setting
+	for _, k := range config.Keys {
+		out = append(out, Setting{Key: k, Value: all[k.Name]})
+	}
+	return out, nil
+}
+
+func (o *libOps) SetSetting(key, value string) (string, error) {
+	if err := config.Set(key, value); err != nil {
+		return "", err
+	}
+	msg := key + " = " + value
+	if value == "" {
+		msg = key + " unset"
+	}
+	switch key {
+	case config.Theme:
+		msg += " · takes effect the next time skd starts"
+	case config.Lang:
+		msg += " · reserved: only English exists so far"
+	}
+	return msg, nil
 }
 
 // warning is an error that is only worth a yellow status line: the

@@ -136,6 +136,7 @@ var helpKeys = [][2]string{
 	{"s", "back up: commit and push the library"},
 	{"A", "apply pending link changes"},
 	{"r", "reload"},
+	{",", "settings: editor, theme (skd config)"},
 	{"?", "this help"},
 	{"q esc", "quit (esc clears a filter first)"},
 	{"ctrl+c", "quit · while busy: quit when done, twice: stop now"},

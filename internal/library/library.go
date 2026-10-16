@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
@@ -39,37 +40,16 @@ func DefaultRoot() string {
 	return filepath.Join(home, ".skilldots")
 }
 
-// ConfigPath is the small per-user file that remembers where the library is.
-func ConfigPath() string {
-	if d, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(d, "skilldots", "config.toml")
-	}
-	return filepath.Join(DefaultRoot(), "config.toml")
-}
+// ConfigPath is the small per-user file that remembers where the library
+// is, along with the settings `skd config` changes.
+func ConfigPath() string { return config.Path() }
 
 // Remember records root in the user config so later invocations find it
-// from any directory.
-func Remember(root string) error {
-	p := ConfigPath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(p, []byte("# Written by skd init/clone. The library skd uses when none is given.\nlibrary = \""+filepath.ToSlash(root)+"\"\n"), 0o644)
-}
+// from any directory. Other settings in the file are kept.
+func Remember(root string) error { return config.SetLibrary(root) }
 
 // remembered returns the library recorded by Remember, or "".
-func remembered() string {
-	b, err := os.ReadFile(ConfigPath())
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(b), "\n") {
-		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == "library" {
-			return strings.Trim(strings.TrimSpace(v), "\"'")
-		}
-	}
-	return ""
-}
+func remembered() string { return config.Get(config.Library) }
 
 // Locate finds the library: explicit flag, $SKILLDOTS_LIBRARY, a skills.toml
 // in the current directory or any parent, the remembered config, then the

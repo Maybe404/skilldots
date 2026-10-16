@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -308,7 +309,7 @@ func TestHelpListsEveryKey(t *testing.T) {
 	m, _ := newModel(t, sampleSnapshot(), 120, 60)
 	m, _ = press(t, m, "?")
 	text := strings.Join(m.ov.lines, "\n")
-	for _, k := range []string{"j k", "pgup", "g G", "tab", "enter", "/", "space", "a ", "u / U", "e ", "f ", "d ", "n ", "S ", "t ", "s ", "A ", "r ", "c ", "?", "q esc", "ctrl+c"} {
+	for _, k := range []string{"j k", "pgup", "g G", "tab", "enter", "/", "space", "a ", "u / U", "e ", "f ", "d ", "n ", "S ", "t ", "s ", "A ", "r ", "c ", ",", "?", "q esc", "ctrl+c"} {
 		if !strings.Contains(text, k) {
 			t.Errorf("help lacks %q", k)
 		}
@@ -380,5 +381,39 @@ func TestInputShowsPlaceholderAndHintsOnShortScreens(t *testing.T) {
 	m, _ = press(t, m, "n")
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "esc cancel") {
 		t.Errorf("key hints dropped on a short screen:\n%s", v)
+	}
+}
+
+func TestSettingsFlow(t *testing.T) {
+	m, f := newModel(t, sampleSnapshot(), 120, 40)
+	m, cmd := press(t, m, ",")
+	m = drain(t, m, cmd)
+	if m.ov == nil || m.ov.title != "Settings" {
+		t.Fatalf("no settings page: %+v", m.ov)
+	}
+	// The second row is the theme; a value it does not accept is refused
+	// in the dialog, a good one is saved.
+	m, _ = press(t, m, "down", "enter")
+	if m.ov == nil || m.ov.title != "Set theme" {
+		t.Fatalf("enter on theme: %+v", m.ov)
+	}
+	m, _ = press(t, m, "b", "l", "u", "e", "enter")
+	if m.ov == nil || !strings.Contains(m.ov.err, "use auto, light, dark") {
+		t.Fatalf("blue accepted: %+v", m.ov)
+	}
+	for range 4 {
+		m, _ = press(t, m, "backspace")
+	}
+	m, cmd = press(t, m, "d", "a", "r", "k", "enter")
+	m = drain(t, m, cmd)
+	if !slices.Contains(f.calls, "set theme=dark") {
+		t.Fatalf("calls: %v", f.calls)
+	}
+	// library is changed by skd use, not here.
+	m, cmd = press(t, m, ",")
+	m = drain(t, m, cmd)
+	m, _ = press(t, m, "G", "enter")
+	if m.ov == nil || !strings.Contains(strings.Join(m.ov.lines, " "), "skd use") {
+		t.Fatalf("library row: %+v", m.ov)
 	}
 }

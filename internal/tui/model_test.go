@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -170,6 +171,18 @@ func (f *fakeOps) Adopt(props []app.Proposal) (string, error) {
 func (f *fakeOps) TrashList() ([]engine.TrashEntry, error) { f.rec("trash-list"); return f.trash, nil }
 func (f *fakeOps) Restore(id string) (string, error)       { f.rec("restore " + id); return "ok", nil }
 func (f *fakeOps) EmptyTrash() (string, error)             { f.rec("empty"); return "ok", nil }
+func (f *fakeOps) Settings() ([]Setting, error) {
+	f.rec("settings")
+	var out []Setting
+	for _, k := range config.Keys {
+		out = append(out, Setting{Key: k})
+	}
+	return out, nil
+}
+func (f *fakeOps) SetSetting(k, v string) (string, error) {
+	f.rec("set " + k + "=" + v)
+	return "ok", nil
+}
 
 func newModel(t *testing.T, s *Snapshot, w, h int) (Model, *fakeOps) {
 	t.Helper()

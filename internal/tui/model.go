@@ -105,8 +105,9 @@ type result struct {
 	src     string // the add argument, for browse results
 	snap    *Snapshot
 	// scan and trash open their views when the job ends.
-	scan  *ScanResult
-	trash []engine.TrashEntry
+	scan     *ScanResult
+	trash    []engine.TrashEntry
+	settings []Setting
 	// focus is the Skill.Key of a row to put the cursor on afterwards.
 	focus string
 }
@@ -596,6 +597,11 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r":
 		return m.start(job{label: "reloading", run: func(o Ops) result { return result{msg: "reloaded"} }})
+	case ",":
+		return m.start(job{label: "reading settings", run: func(o Ops) result {
+			st, err := o.Settings()
+			return result{settings: st, err: err}
+		}})
 	case "c":
 		if m.check == checkRunning {
 			return m.hint("already checking upstream")
@@ -985,7 +991,7 @@ func (m Model) start(j job) (tea.Model, tea.Cmd) {
 		}
 		defer jobs.end()
 		res := j.run(ops)
-		if res.browse == nil && res.scan == nil && res.trash == nil {
+		if res.browse == nil && res.scan == nil && res.trash == nil && res.settings == nil {
 			snap, err := ops.Load()
 			if err != nil && res.err == nil {
 				res.err = err
@@ -1016,6 +1022,8 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 		return m.scanView(r.scan)
 	case r.trash != nil || label == "reading the trash":
 		return m.trashView(r.trash)
+	case r.settings != nil:
+		return m.settingsView(r.settings)
 	}
 	return m.setResult(label, r), nil
 }

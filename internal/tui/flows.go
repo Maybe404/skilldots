@@ -303,3 +303,39 @@ func plural(n int, word string) string {
 	}
 	return strconv.Itoa(n) + " " + word + "s"
 }
+
+// settingsView is `skd config`: every setting, enter changes one.
+func (m Model) settingsView(settings []Setting) (tea.Model, tea.Cmd) {
+	var items []pickItem
+	byKey := map[string]Setting{}
+	for _, st := range settings {
+		byKey[st.Name] = st
+		v := st.Value
+		if v == "" {
+			v = "unset · " + st.Default
+		}
+		items = append(items, pickItem{label: st.Name, detail: tildifyAll(v), value: st.Name})
+	}
+	change := listAction{key: "c", label: "change", run: func(it pickItem) step {
+		st := byKey[it.value]
+		if st.ReadOnly != "" {
+			return step{next: confirmOverlay(st.Name, []string{st.Help, "Change it with: " + st.ReadOnly})}
+		}
+		desc := st.Help + " · empty unsets it"
+		if len(st.Values) > 0 {
+			desc = st.Help + " · one of " + strings.Join(st.Values, ", ") + " · empty unsets it"
+		}
+		return step{next: inputOverlay("Set "+st.Name, desc, st.Default, st.Value, m.theme, m.surf, func(v string) (step, error) {
+			if err := st.Check(v); err != nil {
+				return step{}, err
+			}
+			key := st.Name
+			return step{job: &job{label: "saving " + key, run: func(o Ops) result {
+				msg, err := o.SetSetting(key, v)
+				return result{msg: msg, err: err}
+			}}}, nil
+		})}
+	}}
+	m.ov = listOverlay("Settings", "per user and per machine (skd config) · the theme applies the next time skd starts", "no settings", items, change)
+	return m, nil
+}
