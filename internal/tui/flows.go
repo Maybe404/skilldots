@@ -470,3 +470,40 @@ func (m Model) planView(repo string, plan *app.UpdatePlan) (tea.Model, tea.Cmd) 
 	})
 	return m, nil
 }
+
+// edit is `skd edit <skill>`: open the skill's directory in the editor. A
+// vendored or app skill is replaced on update, so it asks first: fork it
+// and open the copy, or open the files anyway.
+func (m Model) edit() (tea.Model, tea.Cmd) {
+	s, _ := m.target()
+	if s == nil {
+		return m.hint("select a skill to open")
+	}
+	sk := *s
+	if !sk.Installed {
+		return m.hint(sk.Name + " is not installed · space installs it")
+	}
+	open := func(opts app.EditOptions) func() step {
+		return func() step {
+			return step{job: &job{label: "opening " + sk.LinkName, run: func(o Ops) result {
+				msg, fg, err := o.Edit(sk, opts)
+				r := result{msg: msg, err: err, foreground: fg}
+				if opts.Fork {
+					r.focus = string(app.NewKind(opts.Private)) + "::" + sk.LinkName
+				}
+				return r
+			}}}
+		}
+	}
+	if sk.Kind != engine.KindVendor && sk.Kind != engine.KindApp {
+		return m.start(*open(app.EditOptions{})().job)
+	}
+	note := app.OverwriteNote(engine.Entry{Kind: sk.Kind, Origin: sk.Origin})
+	m.ov = confirmOverlay("Open "+sk.LinkName, []string{
+		"It " + note + ".",
+		"Fork it to edit your own copy: upstream no longer touches it.",
+	}, choice{"f", "fork into skills/ and open", open(app.EditOptions{Fork: true})},
+		choice{"p", "fork into private/ and open", open(app.EditOptions{Fork: true, Private: true})},
+		choice{"o", "open anyway", open(app.EditOptions{Force: true})})
+	return m, nil
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -116,6 +117,8 @@ type result struct {
 	// plan is what updating would change (u, U), for planFor ("" all).
 	plan    *app.UpdatePlan
 	planFor string
+	// foreground is a terminal editor to run with the screen handed over.
+	foreground *exec.Cmd
 	// focus is the Skill.Key of a row to put the cursor on afterwards.
 	focus string
 }
@@ -461,6 +464,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case doneMsg:
 		return m.finish(msg.res)
+	case editedMsg:
+		if msg.err != nil {
+			m.status, m.statusLvl = "editor: "+firstLine(msg.err.Error()), lvErr
+		}
+		return m, nil
 	case startCheckMsg:
 		return m.startCheck()
 	case checkMsg:
@@ -621,7 +629,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.startCheck()
 	}
-	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntS", k.String()) {
+	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntSoh,", k.String()) {
 		m.busyNote = "wait until it finishes"
 		return m, nil
 	}
@@ -651,6 +659,8 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.planUpdate("")
 	case "e":
 		return m.agents()
+	case "o":
+		return m.edit()
 	case "f":
 		return m.fork()
 	case "d":
@@ -1064,8 +1074,15 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	case r.plan != nil:
 		return m.planView(r.planFor, r.plan)
 	}
-	return m.setResult(label, r), nil
+	m = m.setResult(label, r)
+	if r.foreground != nil && r.err == nil {
+		return m, tea.ExecProcess(r.foreground, func(err error) tea.Msg { return editedMsg{err} })
+	}
+	return m, nil
 }
+
+// editedMsg is a terminal editor that exited.
+type editedMsg struct{ err error }
 
 // setResult takes in a finished job's reports, snapshot and status line.
 func (m Model) setResult(label string, r result) Model {

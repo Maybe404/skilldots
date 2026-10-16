@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -495,5 +497,65 @@ func TestHistoryView(t *testing.T) {
 	m, _ = press(t, m, "left")
 	if m.focus != focusLeft {
 		t.Fatal("← does not switch to the left column")
+	}
+}
+
+func TestEditFlow(t *testing.T) {
+	m, f := newModel(t, sampleSnapshot(), 120, 40)
+	// Your own skill opens straight away.
+	m, _ = press(t, m, "G")
+	for m.currentLeft() == nil || m.currentLeft().skill.LinkName != "subagent" {
+		m, _ = press(t, m, "up")
+	}
+	m, cmd := press(t, m, "o")
+	m = drain(t, m, cmd)
+	if lastCall(f) != "edit subagent fork=false private=false force=false" {
+		t.Fatalf("calls: %v", f.calls)
+	}
+	// A vendored one asks: fork, fork privately, or open anyway.
+	m, _ = newModel(t, sampleSnapshot(), 120, 40)
+	m.ops = f
+	m, _ = press(t, m, "right", "o")
+	if m.ov == nil || m.ov.kind != ovConfirm || !strings.Contains(strings.Join(m.ov.lines, " "), "skd update replaces its files") {
+		t.Fatalf("vendored: %+v", m.ov)
+	}
+	for key, want := range map[string]string{
+		"f": "edit grill-me fork=true private=false force=false",
+		"p": "edit grill-me fork=true private=true force=false",
+		"o": "edit grill-me fork=false private=false force=true",
+	} {
+		if m.ov == nil {
+			m, _ = press(t, m, "o")
+		}
+		m, cmd = press(t, m, key)
+		m = drain(t, m, cmd)
+		if got := lastCall(f); got != want {
+			t.Errorf("%s: %q, want %q", key, got, want)
+		}
+	}
+	n := len(f.calls)
+	m, _ = press(t, m, "o", "esc")
+	if len(f.calls) != n {
+		t.Fatal("esc opened it")
+	}
+	// A terminal editor gets the screen: the job ends in an exec command.
+	f.foreground = exec.Command("true")
+	m, _ = newModel(t, sampleSnapshot(), 120, 40)
+	m.ops = f
+	m, _ = press(t, m, "right", "o")
+	m, cmd = press(t, m, "o")
+	var msgs []tea.Msg
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c != nil {
+			msgs = append(msgs, c())
+		}
+	}
+	for _, msg := range msgs {
+		if d, ok := msg.(doneMsg); ok {
+			_, ec := m.Update(d)
+			if ec == nil {
+				t.Fatal("no command to hand over the terminal")
+			}
+		}
 	}
 }

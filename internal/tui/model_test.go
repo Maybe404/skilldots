@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
@@ -72,6 +73,8 @@ type fakeOps struct {
 	check    *app.Outdated
 	checkErr error
 	history  []app.UpdateRecord
+	// foreground is what Edit returns to run in the foreground.
+	foreground *exec.Cmd
 }
 
 func (f *fakeOps) rec(s string) {
@@ -199,6 +202,10 @@ func (f *fakeOps) EmptyTrash() (string, error)             { f.rec("empty"); ret
 func (f *fakeOps) History(p string) ([]app.UpdateRecord, error) {
 	f.rec("history " + p)
 	return f.history, nil
+}
+func (f *fakeOps) Edit(s Skill, o app.EditOptions) (string, *exec.Cmd, error) {
+	f.rec(fmt.Sprintf("edit %s fork=%v private=%v force=%v", s.LinkName, o.Fork, o.Private, o.Force))
+	return "opened", f.foreground, nil
 }
 func (f *fakeOps) Settings() ([]Setting, error) {
 	f.rec("settings")

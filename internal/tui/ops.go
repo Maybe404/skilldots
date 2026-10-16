@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -61,6 +62,11 @@ type Ops interface {
 	// History lists the recorded updates, newest first, of one pack or
 	// of all ("") (skd history). It never touches the network.
 	History(pack string) ([]app.UpdateRecord, error)
+	// Edit opens a skill's directory in the editor (skd edit): opts fork
+	// a vendored or app skill first, or force opening its own files. A
+	// windowed editor is started here; a terminal editor is returned for
+	// the dashboard to run in the foreground.
+	Edit(s Skill, opts app.EditOptions) (msg string, foreground *exec.Cmd, err error)
 	// Settings lists the user settings (skd config list).
 	Settings() ([]Setting, error)
 	// SetSetting changes one (skd config set; "" unsets it).
@@ -529,6 +535,29 @@ func (o *libOps) History(p string) ([]app.UpdateRecord, error) {
 		return recs, warning(fmt.Sprintf("%s: %d line(s) could not be read and were skipped", app.HistoryFile, skipped))
 	}
 	return recs, err
+}
+
+// Edit mirrors `skd edit <skill> [--fork [--private] [--as]] [--force]`.
+func (o *libOps) Edit(sk Skill, opts app.EditOptions) (string, *exec.Cmd, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", nil, err
+	}
+	out, err := s.Edit(ref(sk), opts)
+	if err != nil {
+		return "", nil, err
+	}
+	msg := "opened " + tildify(out.Dir) + " in " + out.Editor.Name()
+	if out.Fork != nil {
+		msg = withSummary("forked "+out.Entry.LinkName+" → "+s.Lib.Rel(out.Fork.Path)+" · "+msg, out.Fork.Apply)
+	}
+	if out.Editor.Terminal {
+		return msg, out.Editor.Command(out.Dir), nil
+	}
+	if err := out.Editor.Start(out.Dir); err != nil {
+		return "", nil, fmt.Errorf("%s: %w", out.Editor.Name(), err)
+	}
+	return msg, nil, nil
 }
 
 func (o *libOps) Settings() ([]Setting, error) {

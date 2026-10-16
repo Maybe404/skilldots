@@ -582,12 +582,9 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 		out = append(out, row(sg(l, t.Text)))
 	}
 	out = append(out, row())
-	hints := "space toggle · e agents · d unlink"
+	hints := "space toggle · e agents · d unlink · o open in your editor"
 	if sk.Kind == engine.KindApp {
 		hints += " · f fork"
-	}
-	if sk.Kind != engine.KindApp {
-		hints += " · edit in " + tildify(sk.Dir)
 	}
 	out = append(out, row(sg(hints, t.Faint)))
 	return out

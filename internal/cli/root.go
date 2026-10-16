@@ -151,7 +151,7 @@ func Root() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
 	root.PersistentFlags().StringVar(&flags.theme, "theme", "", "colours: light, dark or auto (default auto: ask the terminal; also $"+EnvTheme+")")
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), outdatedCmd(), enableCmd(), disableCmd(),
-		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd(), configCmd(), historyCmd())
+		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd(), configCmd(), historyCmd(), editCmd())
 	return root
 }
 

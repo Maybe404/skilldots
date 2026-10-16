@@ -133,6 +133,7 @@ var helpKeys = [][2]string{
 	{"c", "check upstream for changes again (runs at start; skd outdated)"},
 	{"e", "choose agents for the skill or pack"},
 	{"f", "fork a vendored or app skill into your library (rename it there)"},
+	{"o", "open the skill in your editor (asks to fork a vendored one first)"},
 	{"d", "remove skill (to trash) · unlink yours · purge pack"},
 	{"n", "new skill of your own in skills/ or private/"},
 	{"S", "scan agent directories and adopt what skd does not manage"},
