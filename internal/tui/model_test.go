@@ -18,7 +18,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/targets"
 )
 
-var testTheme = Theme{Accent: "#A78BFA", Cyan: "#67E8F9", Muted: "#8B8FA3", Faint: "#3F4257", OK: "#4ADE80",
+var testTheme = Theme{Accent: "#A78BFA", Cyan: "#67E8F9", Muted: "#B4B8CA", Faint: "#9599AE", Line: "#3F4257", OK: "#4ADE80",
 	Warn: "#FBBF24", Err: "#F87171", Text: "#E5E7EB", Ink: "#1A1B26"}
 
 func vendored(repo, name, cat string, agents ...string) Skill {

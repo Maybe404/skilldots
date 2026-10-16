@@ -417,6 +417,9 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 					segs = append(segs, o.box(i, t))
 				}
 				segs = append(segs, sgb(it.label, t.Muted), sg("  "+it.detail, t.Faint))
+				if rbg != bg {
+					segs = lift(t, segs)
+				}
 				lines = append(lines, paint(2, bg)+paint(w-2, rbg, segs...))
 				continue
 			}
@@ -433,6 +436,9 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 				lfg = t.Muted
 			}
 			segs = append(segs, sg(fit(it.label, labelW)+"  ", lfg), sg(detail, dfg))
+			if rbg != bg {
+				segs = lift(t, segs)
+			}
 			lines = append(lines, paint(2, bg)+paint(w-2, rbg, segs...))
 		}
 		if n := len(o.items); n > avail {

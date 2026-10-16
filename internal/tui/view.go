@@ -97,7 +97,7 @@ func (m Model) View() string {
 	lw, rw := m.leftWidth(), m.rightWidth()
 	left := m.viewLeft(lw, body)
 	right := m.viewRight(rw, body)
-	div := lipgloss.NewStyle().Foreground(t.Faint).Render("│")
+	div := lipgloss.NewStyle().Foreground(t.Line).Render("│")
 	lines := make([]string, 0, m.h)
 	lines = append(lines, m.viewHeader())
 	bodyLines := make([]string, body)
@@ -239,7 +239,7 @@ func (m Model) viewLeft(w, h int) []string {
 			if sel {
 				name.bold = true
 			}
-			out = append(out, spread(w, bg, []seg{mark, name}, []seg{sg(count, t.Cyan), sg(" ", "")}))
+			out = append(out, spread(w, bg, lift(t, []seg{mark, name}), []seg{sg(count, t.Cyan), sg(" ", "")}))
 		case rowSkill:
 			dot := sg("○ ", t.Faint)
 			if r.skill.Enabled() {
@@ -256,7 +256,11 @@ func (m Model) viewLeft(w, h int) []string {
 			case r.skill.Missing:
 				right = []seg{sg("missing ", t.Warn)}
 			}
-			out = append(out, spread(w, bg, []seg{mark, dot, name}, right))
+			left := []seg{mark, dot, name}
+			if sel {
+				left, right = lift(t, left), lift(t, right)
+			}
+			out = append(out, spread(w, bg, left, right))
 		}
 	}
 	for len(out) < h-1 {
@@ -443,7 +447,11 @@ func (m Model) packView(p Pack, w, h int) []string {
 		}
 		name := sg(fit(sk.LinkName, nameW)+"  ", nameFg)
 		name.bold = i == m.right.cur && m.focus == focusRight
-		out = append(out, paint(w, rbg, sg(" ", ""), mark, icon, name, sg(fit(cat, catW)+"  ", t.Muted), agents))
+		segs := []seg{sg(" ", ""), mark, icon, name, sg(fit(cat, catW)+"  ", t.Muted), agents}
+		if rbg != bg {
+			segs = lift(t, segs)
+		}
+		out = append(out, paint(w, rbg, segs...))
 	}
 	// Pad the list area, then scroll position and the description of the
 	// skill under the cursor.

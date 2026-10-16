@@ -14,7 +14,13 @@ import (
 // colours from internal/cli/ui.go so the dashboard, the huh menu and the
 // plain commands look like one product; tui never defines its own palette.
 type Theme struct {
+	// Text, Muted and Faint are text in decreasing importance; all three
+	// are readable (4.5:1) on every background below, except Faint on a
+	// highlighted row, which is drawn as Muted (see lift).
 	Accent, Cyan, Muted, Faint, OK, Warn, Err, Text lipgloss.Color
+	// Line is for what is not text: dividers, borders, and the tint the
+	// surfaces are mixed from.
+	Line lipgloss.Color
 	// Ink is the background end of the palette (text on accent buttons in
 	// the CLI theme): the darkest tone of a dark palette, the lightest of a
 	// light one. It anchors the surface shades below.
@@ -23,7 +29,7 @@ type Theme struct {
 	Light bool
 }
 
-// surfaces are derived from the palette: Ink tinted towards Faint or
+// surfaces are derived from the palette: Ink tinted towards Line or
 // Accent, so layers read as depth rather than as new colours.
 type surfaces struct {
 	bar, panel, sel, selDim, modal lipgloss.Color
@@ -38,23 +44,30 @@ func blend(a, b lipgloss.Color, t float64) lipgloss.Color {
 	return lipgloss.Color(ca.BlendLab(cb, t).Clamped().Hex())
 }
 
+// Backgrounds lists every background the dashboard puts text on: the
+// terminal's (taken to be Ink) and the derived surfaces.
+func (t Theme) Backgrounds() map[string]lipgloss.Color {
+	s := t.surfaces()
+	return map[string]lipgloss.Color{"ink": t.Ink, "bar": s.bar, "panel": s.panel, "sel": s.sel, "selDim": s.selDim, "modal": s.modal}
+}
+
 func (t Theme) surfaces() surfaces {
 	if t.Light {
-		// On white, a little of Faint already reads as a layer.
+		// On white, a little of Line already reads as a layer.
 		return surfaces{
-			bar:    blend(t.Ink, t.Faint, 0.40),
-			panel:  blend(t.Ink, t.Faint, 0.12),
+			bar:    blend(t.Ink, t.Line, 0.40),
+			panel:  blend(t.Ink, t.Line, 0.12),
 			sel:    blend(t.Ink, t.Accent, 0.16),
-			selDim: blend(t.Ink, t.Faint, 0.28),
-			modal:  blend(t.Ink, t.Faint, 0.24),
+			selDim: blend(t.Ink, t.Line, 0.28),
+			modal:  blend(t.Ink, t.Line, 0.24),
 		}
 	}
 	return surfaces{
-		bar:    blend(t.Ink, t.Faint, 0.85),
-		panel:  blend(t.Ink, t.Faint, 0.30),
+		bar:    blend(t.Ink, t.Line, 0.85),
+		panel:  blend(t.Ink, t.Line, 0.30),
 		sel:    blend(t.Ink, t.Accent, 0.38),
-		selDim: blend(t.Ink, t.Faint, 0.70),
-		modal:  blend(t.Ink, t.Faint, 0.55),
+		selDim: blend(t.Ink, t.Line, 0.70),
+		modal:  blend(t.Ink, t.Line, 0.55),
 	}
 }
 
@@ -67,7 +80,20 @@ type seg struct {
 	bold bool
 }
 
-func sg(s string, fg lipgloss.Color) seg  { return seg{s: s, fg: fg} }
+func sg(s string, fg lipgloss.Color) seg { return seg{s: s, fg: fg} }
+
+// lift is segs as drawn on a highlighted row (sel, selDim): Faint text
+// would not stand out from the highlight, so it is drawn as Muted.
+func lift(t Theme, segs []seg) []seg {
+	out := make([]seg, len(segs))
+	for i, s := range segs {
+		if s.fg == t.Faint {
+			s.fg = t.Muted
+		}
+		out[i] = s
+	}
+	return out
+}
 func sgb(s string, fg lipgloss.Color) seg { return seg{s: s, fg: fg, bold: true} }
 
 func segWidth(segs []seg) (n int) {

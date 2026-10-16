@@ -27,7 +27,13 @@ func init() {
 // capabilities and disables colour when stdout is not a terminal or
 // NO_COLOR is set.
 type palette struct {
+	// Text, Muted and Faint are text in decreasing importance, each at
+	// least 4.5:1 on Ink and on the dashboard's surfaces (Faint only where
+	// it is drawn; TestPaletteContrast checks).
 	Accent, Cyan, Muted, Faint, OK, Warn, Err, Text lipgloss.Color
+	// Line is for what is not text: borders, dividers, the surfaces'
+	// tint and the unfocused button.
+	Line lipgloss.Color
 	// Ink is the background end of the scheme: text on accent buttons,
 	// and the base the dashboard derives its surfaces from.
 	Ink   lipgloss.Color
@@ -35,11 +41,10 @@ type palette struct {
 }
 
 var (
-	darkPalette = palette{Accent: "#A78BFA", Cyan: "#67E8F9", Muted: "#8B8FA3", Faint: "#3F4257",
+	darkPalette = palette{Accent: "#A78BFA", Cyan: "#67E8F9", Muted: "#B4B8CA", Faint: "#9599AE", Line: "#3F4257",
 		OK: "#4ADE80", Warn: "#FBBF24", Err: "#F87171", Text: "#E5E7EB", Ink: "#1A1B26"}
-	// Same hues, dark enough to read on white (each at least 4.5:1 except
-	// Faint, which is for what may be skipped).
-	lightPalette = palette{Accent: "#6D28D9", Cyan: "#0E7490", Muted: "#5B6072", Faint: "#A3A7B8",
+	// Same hues, dark enough to read on white.
+	lightPalette = palette{Accent: "#6D28D9", Cyan: "#0E7490", Muted: "#4A4F62", Faint: "#62677B", Line: "#A3A7B8",
 		OK: "#15803D", Warn: "#B45309", Err: "#B91C1C", Text: "#1E2030", Ink: "#FFFFFF", Light: true}
 )
 
@@ -64,7 +69,7 @@ func usePalette(p palette) {
 	sErr = lipgloss.NewStyle().Foreground(cErr)
 	sHead = lipgloss.NewStyle().Foreground(cMuted).Bold(true)
 	sBrand = lipgloss.NewStyle().Bold(true).Foreground(cAccent)
-	sCard = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cFaint).Padding(0, 2)
+	sCard = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(p.Line).Padding(0, 2)
 	lipgloss.DefaultRenderer().SetHasDarkBackground(!p.Light)
 }
 
@@ -135,7 +140,7 @@ func theme() *huh.Theme {
 	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(cText)
 	t.Focused.Option = t.Focused.Option.Foreground(cText)
 	t.Focused.FocusedButton = t.Focused.FocusedButton.Background(cAccent).Foreground(pal.Ink).Bold(true)
-	t.Focused.BlurredButton = t.Focused.BlurredButton.Background(cFaint).Foreground(cText)
+	t.Focused.BlurredButton = t.Focused.BlurredButton.Background(pal.Line).Foreground(cText)
 	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(cAccent)
 	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(cAccent)
 	t.Focused.TextInput.Placeholder = t.Focused.TextInput.Placeholder.Foreground(cFaint)

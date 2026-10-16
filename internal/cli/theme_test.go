@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"math"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestSetupTheme(t *testing.T) {
@@ -64,5 +68,52 @@ func TestSetupTheme(t *testing.T) {
 	setupTheme("")
 	if asked != 1 {
 		t.Fatalf("asked %d times", asked)
+	}
+}
+
+// contrast is the WCAG contrast ratio of two #RRGGBB colours.
+func contrast(a, b lipgloss.Color) float64 {
+	lum := func(c lipgloss.Color) float64 {
+		var v [3]float64
+		for i := range v {
+			n, _ := strconv.ParseUint(string(c)[1+2*i:3+2*i], 16, 8)
+			x := float64(n) / 255
+			if x <= 0.03928 {
+				v[i] = x / 12.92
+			} else {
+				v[i] = math.Pow((x+0.055)/1.055, 2.4)
+			}
+		}
+		return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2]
+	}
+	la, lb := lum(a), lum(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// Secondary text (Muted) and the least important text (Faint) stay
+// readable — WCAG AA, 4.5:1 — on every background the CLI and the
+// dashboard paint them on, and keep their order: Faint is further from
+// Text than Muted. Faint is never drawn on the bars, and highlighted rows
+// (sel, selDim) draw it as Muted.
+func TestPaletteContrast(t *testing.T) {
+	faintOn := map[string]bool{"ink": true, "panel": true, "modal": true}
+	for name, p := range map[string]palette{"dark": darkPalette, "light": lightPalette} {
+		for bgName, bg := range dashboardTheme(p).Backgrounds() {
+			for fgName, fg := range map[string]lipgloss.Color{"Text": p.Text, "Muted": p.Muted, "Faint": p.Faint} {
+				if fgName == "Faint" && !faintOn[bgName] {
+					continue
+				}
+				if r := contrast(fg, bg); r < 4.5 {
+					t.Errorf("%s: %s %s on %s %s: %.2f:1", name, fgName, fg, bgName, bg, r)
+				}
+			}
+		}
+		if !(contrast(p.Text, p.Ink) > contrast(p.Muted, p.Ink) && contrast(p.Muted, p.Ink) > contrast(p.Faint, p.Ink)) {
+			t.Errorf("%s: Text, Muted, Faint should get quieter: %.2f, %.2f, %.2f on Ink", name,
+				contrast(p.Text, p.Ink), contrast(p.Muted, p.Ink), contrast(p.Faint, p.Ink))
+		}
 	}
 }

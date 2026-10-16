@@ -183,8 +183,11 @@ func dashboardLibrary(simple bool) (string, bool) {
 }
 
 func runDashboard(root string) error {
-	return tui.Run(tui.Options{Root: root, Version: Version, Theme: tui.Theme{
-		Accent: cAccent, Cyan: cCyan, Muted: cMuted, Faint: cFaint, OK: cOK, Warn: cWarn, Err: cErr, Text: cText,
-		Ink: pal.Ink, Light: pal.Light,
-	}, Input: termbg.Unread()})
+	return tui.Run(tui.Options{Root: root, Version: Version, Theme: dashboardTheme(pal), Input: termbg.Unread()})
+}
+
+// dashboardTheme is p as the dashboard's palette.
+func dashboardTheme(p palette) tui.Theme {
+	return tui.Theme{Accent: p.Accent, Cyan: p.Cyan, Muted: p.Muted, Faint: p.Faint, OK: p.OK, Warn: p.Warn, Err: p.Err, Text: p.Text,
+		Line: p.Line, Ink: p.Ink, Light: p.Light}
 }

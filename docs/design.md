@@ -105,7 +105,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 
 **共享流程**：所有写操作在 `internal/app`（targets 编辑与继承、取消选择、add、fork、remove/purge、enable/disable、new、adopt、update、apply、trash、sync 的 git 操作）。`internal/cli` 和 `internal/tui` 只负责收集输入和展示结果，`internal/app` 的测试用同一夹具分别走两条路径并比对清单、锁、文件和链接。
 
-**配色**：两套调色板同一组色相（紫色强调、青色、绿/黄/红状态色）。`auto` 时向终端发 OSC 11 加 DA1（所有终端都回 DA1，所以不支持 OSC 11 的终端也立即结束），300ms 无回应按深色；`--json`、`NO_COLOR`、`TERM=dumb`、stdout 非终端、后台进程组时不询问。询问期间终端处于 cbreak（关回显和行缓冲，保留 ISIG：ctrl+c、ctrl+\ 照常中断，退出前恢复终端模式）；切换后若已有待读输入（用户预先敲的键，含未回车的半行）就不询问、按深色，键留给后续读取者；等待期间读到的非回复字节由仪表盘在启动时按序重放（`termbg.Unread`）。问答菜单和普通命令拿不到这些字节：不回应的终端上，在这 300ms 内敲的键对它们会丢失。Bubble Tea 的包 init 会让 termenv 询问背景并最多等 5 秒，所以 `internal/termbg` 的 init 抢先设定背景值（Go 按导入路径顺序初始化，`github.com/Maybe404/…` 排在 `github.com/charmbracelet/…` 之前）。
+**配色**：两套调色板同一组色相（紫色强调、青色、绿/黄/红状态色）。文字分 Text、Muted、Faint 三级，依次变淡，Muted 和 Faint 在终端底色和仪表盘各层底色上都不低于 4.5:1（`TestPaletteContrast` 检查）；选中行上 Faint 按 Muted 画。边框、分隔线和各层底色的色调用单独的 Line 色，不承载文字。`auto` 时向终端发 OSC 11 加 DA1（所有终端都回 DA1，所以不支持 OSC 11 的终端也立即结束），300ms 无回应按深色；`--json`、`NO_COLOR`、`TERM=dumb`、stdout 非终端、后台进程组时不询问。询问期间终端处于 cbreak（关回显和行缓冲，保留 ISIG：ctrl+c、ctrl+\ 照常中断，退出前恢复终端模式）；切换后若已有待读输入（用户预先敲的键，含未回车的半行）就不询问、按深色，键留给后续读取者；等待期间读到的非回复字节由仪表盘在启动时按序重放（`termbg.Unread`）。问答菜单和普通命令拿不到这些字节：不回应的终端上，在这 300ms 内敲的键对它们会丢失。Bubble Tea 的包 init 会让 termenv 询问背景并最多等 5 秒，所以 `internal/termbg` 的 init 抢先设定背景值（Go 按导入路径顺序初始化，`github.com/Maybe404/…` 排在 `github.com/charmbracelet/…` 之前）。
 
 ## 关键规则
 
