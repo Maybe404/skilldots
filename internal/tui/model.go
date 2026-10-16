@@ -101,6 +101,11 @@ type result struct {
 	browse  *Browse
 	src     string // the add argument, for browse results
 	snap    *Snapshot
+	// scan and trash open their views when the job ends.
+	scan  *ScanResult
+	trash []engine.TrashEntry
+	// focus is the Skill.Key of a row to put the cursor on afterwards.
+	focus string
 }
 
 type doneMsg struct{ res result }
@@ -500,7 +505,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		return m.start(job{label: "reloading", run: func(o Ops) result { return result{msg: "reloaded"} }})
 	}
-	if m.busy != "" && strings.Contains(" aAudesf", k.String()) {
+	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntS", k.String()) {
 		m.busyNote = "wait until it finishes"
 		return m, nil
 	}
@@ -508,8 +513,19 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case " ":
 		return m.toggle()
 	case "a":
-		m.ov = inputOverlay("Add a repository", "owner/repo, a GitHub URL or any git URL · @ref pins a branch or tag", "mattpocock/skills", m.theme, m.surf)
-		return m, textinput.Blink
+		return m.addFlow()
+	case "n":
+		return m.newFlow()
+	case "t":
+		return m.start(job{label: "reading the trash", run: func(o Ops) result {
+			items, err := o.TrashList()
+			return result{trash: items, err: err}
+		}})
+	case "S":
+		return m.start(job{label: "scanning agent directories", run: func(o Ops) result {
+			r, err := o.Scan()
+			return result{scan: r, err: err}
+		}})
 	case "u":
 		if p := m.currentPack(); p != nil {
 			repo := p.Repo
@@ -531,10 +547,10 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ov = confirmOverlay("Back up the library", []string{
 			"Commit everything in " + m.snap.Name + " and push it to its git remote (skd sync).",
 			"private/ is a separate repository and is never pushed.",
-		}, choice{"y", "commit and push", job{label: "backing up", run: func(o Ops) result {
+		}, jobChoice("y", "commit and push", job{label: "backing up", run: func(o Ops) result {
 			msg, err := o.Sync()
 			return result{msg: msg, err: err}
-		}}})
+		}}))
 		return m, nil
 	case "A":
 		return m.start(job{label: "applying", run: func(o Ops) result {
@@ -649,38 +665,13 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 		return m.hint("no agent skill directories found on this machine")
 	}
 	m.ov = pickOverlay(title, "only agents installed here are listed · none = keep in library, link nowhere", items, false,
-		func(values []string, _ bool) *job {
+		func(values []string, _ bool) step {
 			chosen := append([]string{}, values...)
-			return &job{label: "linking", run: func(o Ops) result {
+			return step{job: &job{label: "linking", run: func(o Ops) result {
 				msg, err := run(o, chosen)
 				return result{msg: msg, err: err}
-			}}
+			}}}
 		})
-	return m, nil
-}
-
-func (m Model) fork() (tea.Model, tea.Cmd) {
-	s, _ := m.target()
-	if s == nil {
-		return m.hint("select a skill to fork")
-	}
-	sk := *s
-	switch {
-	case !sk.Installed:
-		return m.hint(sk.Name + " is not installed · space installs it, then fork")
-	case sk.Kind != engine.KindVendor && sk.Kind != engine.KindApp:
-		return m.hint(sk.LinkName + " is already yours · edit it in " + tildify(sk.Dir))
-	}
-	mk := func(private bool) job {
-		return job{label: "forking " + sk.LinkName, run: func(o Ops) result {
-			msg, err := o.Fork(sk, private, "")
-			return result{msg: msg, err: err}
-		}}
-	}
-	m.ov = confirmOverlay("Fork "+sk.LinkName, []string{
-		"Copy it into your library so you can edit it.",
-		"The upstream copy is deselected; updates no longer touch your fork.",
-	}, choice{"y", "into skills/ (published)", mk(false)}, choice{"p", "into private/ (this machine)", mk(true)})
 	return m, nil
 }
 
@@ -693,20 +684,20 @@ func (m Model) trash() (tea.Model, tea.Cmd) {
 		sk := *s
 		m.ov = confirmOverlay("Remove "+sk.LinkName, []string{
 			"Unlink it from every agent and drop it from vendor/.",
-			"The files move to the library trash: skd trash restore brings them back.",
-		}, choice{"y", "remove", job{label: "removing " + sk.LinkName, run: func(o Ops) result {
+			"The files move to the library trash: t restores them.",
+		}, jobChoice("y", "remove", job{label: "removing " + sk.LinkName, run: func(o Ops) result {
 			msg, err := o.Trash(sk)
 			return result{msg: msg, err: err}
-		}}})
+		}}))
 	case s != nil:
 		sk := *s
 		m.ov = confirmOverlay("Unlink "+sk.LinkName, []string{
 			"Unlink it from every agent. Your files stay where they are:",
 			tildify(sk.Dir),
-		}, choice{"y", "unlink", job{label: "unlinking " + sk.LinkName, run: func(o Ops) result {
+		}, jobChoice("y", "unlink", job{label: "unlinking " + sk.LinkName, run: func(o Ops) result {
 			msg, err := o.Trash(sk)
 			return result{msg: msg, err: err}
-		}}})
+		}}))
 	case p != nil:
 		repo := p.Repo
 		links := 0
@@ -715,11 +706,11 @@ func (m Model) trash() (tea.Model, tea.Cmd) {
 		}
 		m.ov = confirmOverlay("Purge "+repo, []string{
 			fmt.Sprintf("Unsubscribe and remove %d link(s) from agent directories.", links),
-			"vendor/" + repo + " moves to the library trash (skd trash restore).",
-		}, choice{"y", "purge pack", job{label: "purging " + repo, run: func(o Ops) result {
+			"vendor/" + repo + " moves to the library trash (t restores it).",
+		}, jobChoice("y", "purge pack", job{label: "purging " + repo, run: func(o Ops) result {
 			msg, err := o.Purge(repo)
 			return result{msg: msg, err: err}
-		}}})
+		}}))
 	default:
 		return m.hint("select a skill or a pack first")
 	}
@@ -798,7 +789,7 @@ func (m Model) start(j job) (tea.Model, tea.Cmd) {
 		}
 		defer jobs.end()
 		res := j.run(ops)
-		if res.browse == nil {
+		if res.browse == nil && res.scan == nil && res.trash == nil {
 			snap, err := ops.Load()
 			if err != nil && res.err == nil {
 				res.err = err
@@ -819,10 +810,16 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	}
-	if r.browse != nil && r.err == nil {
+	switch {
+	case r.err != nil:
+	case r.browse != nil:
 		m.ov = m.browseOverlay(r.src, r.browse)
 		m.status, m.statusLvl = fmt.Sprintf("%s · %d skills · pick and press enter", r.browse.Repo, len(r.browse.Skills)), lvInfo
 		return m, nil
+	case r.scan != nil:
+		return m.scanView(r.scan)
+	case r.trash != nil || label == "reading the trash":
+		return m.trashView(r.trash)
 	}
 	return m.setResult(label, r), nil
 }
@@ -834,6 +831,9 @@ func (m Model) setResult(label string, r result) Model {
 	}
 	if r.snap != nil {
 		m = m.replaceSnapshot(r.snap)
+	}
+	if r.focus != "" && r.err == nil {
+		m = m.focusKey(r.focus)
 	}
 	var w warning
 	switch {
@@ -888,41 +888,26 @@ func (m Model) replaceSnapshot(s *Snapshot) Model {
 func (m Model) updateOverlay(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	ov, j, cmd := m.ov.update(k)
 	m.ov = ov
+	if ov != nil && ov.err != "" {
+		// Input the overlay refused: say why on the status line too.
+		m.status, m.statusLvl = ov.err, lvErr
+	}
 	if j != nil {
 		return m.start(*j)
 	}
 	return m, cmd
 }
 
-// browseOverlay offers the skills of a fetched repository.
-func (m Model) browseOverlay(src string, b *Browse) *overlay {
-	var items []pickItem
-	for _, s := range b.Skills {
-		label := s.Name
-		detail := s.Category
-		if s.Description != "" {
-			if detail != "" {
-				detail += " · "
-			}
-			detail += s.Description
+// focusKey puts the cursor on the left row of the skill with key, if any.
+func (m Model) focusKey(key string) Model {
+	m.filter[focusLeft] = ""
+	for i, r := range m.leftRows() {
+		if r.kind == rowSkill && r.skill.Key() == key {
+			m.left.cur, m.focus = i, focusLeft
+			m.right = list{}
+			m.clampAll()
+			break
 		}
-		items = append(items, pickItem{label: label, detail: detail, value: s.Name, on: b.Have[s.Name], locked: b.Have[s.Name]})
 	}
-	title := fmt.Sprintf("%s @ %s — %d skills", b.Repo, short(b.Commit), len(b.Skills))
-	return pickOverlay(title, "space toggle · * follow everything (incl. future skills) · enter install", items, true,
-		func(values []string, all bool) *job {
-			var names []string
-			for _, v := range values {
-				if !b.Have[v] {
-					names = append(names, v)
-				}
-			}
-			if !all && len(names) == 0 {
-				return nil
-			}
-			return &job{label: "adding " + b.Repo, run: func(o Ops) result {
-				msg, err := o.Add(src, AddRequest{Names: names, All: all})
-				return result{msg: msg, err: err}
-			}}
-		})
+	return m
 }

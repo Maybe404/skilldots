@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
@@ -270,5 +271,71 @@ func TestOpsSync(t *testing.T) {
 	run(t, root, "remote", "set-url", "origin", filepath.Join(home, "nowhere.git"))
 	if _, err = o.Sync(); err == nil || errors.As(err, &w) {
 		t.Fatalf("failed push: %v", err)
+	}
+}
+
+func TestOpsTrashRestoreEmpty(t *testing.T) {
+	o, root, _, _ := acmeLibrary(t)
+	s, _ := o.Load()
+	if _, err := o.Trash(*findSkill(findPack(s, "acme/skills"), "review")); err != nil {
+		t.Fatal(err)
+	}
+	items, err := o.TrashList()
+	if err != nil || len(items) != 1 || items[0].Name != "review" {
+		t.Fatalf("trash: %+v %v", items, err)
+	}
+	msg, err := o.Restore(items[0].ID)
+	if err != nil || !strings.Contains(msg, "restored") {
+		t.Fatalf("restore: %q %v", msg, err)
+	}
+	if !dirExists(items[0].Origin) {
+		t.Fatal("not back where it came from")
+	}
+	if _, err := o.Restore(items[0].ID); err == nil {
+		t.Fatal("restoring twice must fail")
+	}
+	// Park something again, then empty.
+	s, _ = o.Load()
+	if _, err := o.Trash(*findSkill(findPack(s, "acme/skills"), "tdd")); err != nil {
+		t.Fatal(err)
+	}
+	if msg, err := o.EmptyTrash(); err != nil || !strings.Contains(msg, "deleted") {
+		t.Fatalf("empty: %q %v", msg, err)
+	}
+	if items, _ := o.TrashList(); len(items) != 0 || dirExists(filepath.Join(root, ".trash")) {
+		t.Fatalf("trash not empty: %+v", items)
+	}
+}
+
+func TestOpsScanAdopt(t *testing.T) {
+	o, root, home, _ := acmeLibrary(t)
+	// A copy installed by another tool in ~/.claude/skills.
+	write(t, filepath.Join(home, ".claude", "skills", "stray", "SKILL.md"), skillMD("stray", "Stray."))
+	r, err := o.Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var props []app.Proposal
+	for _, p := range r.Proposals {
+		if p.Item.Name == "stray" {
+			props = append(props, p)
+		}
+	}
+	if len(props) != 1 || props[0].Kind != "own" {
+		t.Fatalf("proposals: %+v", r.Proposals)
+	}
+	if _, err := o.Adopt(props); err != nil {
+		t.Fatal(err)
+	}
+	if !dirExists(filepath.Join(root, "skills", "stray")) || !isLink(filepath.Join(home, ".claude", "skills", "stray")) {
+		t.Fatal("stray not adopted into skills/ and linked")
+	}
+	s, _ := o.Load()
+	found := false
+	for _, sk := range s.Mine {
+		found = found || sk.Name == "stray"
+	}
+	if !found {
+		t.Fatal("adopted skill missing from the left column")
 	}
 }

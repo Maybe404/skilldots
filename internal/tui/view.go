@@ -507,6 +507,9 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 	if sk.Kind == engine.KindApp {
 		hints += " · f fork"
 	}
+	if sk.Kind != engine.KindApp {
+		hints += " · edit in " + tildify(sk.Dir)
+	}
 	out = append(out, row(sg(hints, t.Faint)))
 	return out
 }
@@ -551,14 +554,14 @@ func (m Model) viewStatus() string {
 
 func (m Model) viewKeys() string {
 	t := m.theme
-	keys := [][2]string{{"a", "add"}, {"u", "update"}, {"space", "toggle"}, {"e", "agents"}, {"f", "fork"}, {"d", "trash"},
-		{"s", "sync"}, {"/", "filter"}, {"?", "help"}, {"q", "quit"}}
+	keys := [][2]string{{"a", "add"}, {"u", "update"}, {"space", "toggle"}, {"e", "agents"}, {"f", "fork"}, {"d", "remove"},
+		{"n", "new"}, {"S", "scan"}, {"t", "trash"}, {"s", "sync"}, {"/", "filter"}, {"?", "help"}, {"q", "quit"}}
 	if m.filtering {
 		keys = [][2]string{{"enter", "keep filter"}, {"esc", "clear"}, {"↑↓", "move"}}
 	}
 	// Drop the least important keys until the bar fits; help and quit
 	// always stay.
-	drop := []string{"/", "s", "f", "e", "u", "d"}
+	drop := []string{"/", "S", "t", "n", "s", "f", "e", "u", "d"}
 	for {
 		segs := []seg{sg(" ", "")}
 		for _, k := range keys {

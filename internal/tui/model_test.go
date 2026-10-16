@@ -59,11 +59,12 @@ func sampleSnapshot() *Snapshot {
 
 // fakeOps records calls and returns canned answers.
 type fakeOps struct {
-	mu    sync.Mutex
-	calls []string
-	snap  *Snapshot
-	scan  *ScanResult
-	trash []engine.TrashEntry
+	mu     sync.Mutex
+	calls  []string
+	snap   *Snapshot
+	scan   *ScanResult
+	trash  []engine.TrashEntry
+	browse *Browse
 }
 
 func (f *fakeOps) rec(s string) {
@@ -71,7 +72,11 @@ func (f *fakeOps) rec(s string) {
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, s)
 }
-func (f *fakeOps) Load() (*Snapshot, error) { return f.snap, nil }
+func (f *fakeOps) Load() (*Snapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.snap, nil
+}
 func (f *fakeOps) SetTargets(s *Skill, repo string, a []string) (string, error) {
 	name := repo
 	if s != nil {
@@ -82,6 +87,9 @@ func (f *fakeOps) SetTargets(s *Skill, repo string, a []string) (string, error) 
 }
 func (f *fakeOps) Browse(src string) (*Browse, error) {
 	f.rec("browse " + src)
+	if f.browse != nil {
+		return f.browse, nil
+	}
 	return &Browse{Repo: src, Commit: "abcdef0", Have: map[string]bool{}}, nil
 }
 func (f *fakeOps) Enable(s Skill) (string, error) {
@@ -93,7 +101,11 @@ func (f *fakeOps) Disable(s Skill) (string, error) {
 	return "ok", nil
 }
 func (f *fakeOps) Add(src string, r AddRequest) (string, error) {
-	f.rec(fmt.Sprintf("add %s %s %v", src, strings.Join(r.Names, ","), r.All))
+	extra := ""
+	if r.Alias != "" || len(r.Agents) > 0 {
+		extra = fmt.Sprintf(" alias=%s agents=%s", r.Alias, strings.Join(r.Agents, ","))
+	}
+	f.rec(fmt.Sprintf("add %s %s %v%s", src, strings.Join(r.Names, ","), r.All, extra))
 	return "ok", nil
 }
 func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
@@ -102,7 +114,10 @@ func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
 		Changed: []string{"tdd"}, UpstreamNew: []string{"fresh"}}}, "updated", nil
 }
 func (f *fakeOps) Fork(s Skill, p bool, as string) (string, error) {
-	f.rec(fmt.Sprintf("fork %s %v", s.LinkName, p))
+	if as != "" {
+		as = " as " + as
+	}
+	f.rec(fmt.Sprintf("fork %s %v%s", s.LinkName, p, as))
 	return "ok", nil
 }
 func (f *fakeOps) Trash(s Skill) (string, error)  { f.rec("trash " + s.LinkName); return "ok", nil }
@@ -111,6 +126,20 @@ func (f *fakeOps) Apply() (string, error)         { f.rec("apply"); return "ok",
 func (f *fakeOps) Sync() (string, error)          { f.rec("sync"); return "ok", nil }
 func (f *fakeOps) New(n string, p bool) (string, error) {
 	f.rec(fmt.Sprintf("new %s %v", n, p))
+	kind := engine.KindSkill
+	if p {
+		kind = engine.KindPrivate
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cp := *f.snap
+	sk := Skill{Name: n, LinkName: n, Kind: kind, Installed: true, Agents: cp.Defaults}
+	if p {
+		cp.Private = append(append([]Skill{}, cp.Private...), sk)
+	} else {
+		cp.Mine = append(append([]Skill{}, cp.Mine...), sk)
+	}
+	f.snap = &cp
 	return "ok", nil
 }
 func (f *fakeOps) Scan() (*ScanResult, error) { f.rec("scan"); return f.scan, nil }
@@ -154,6 +183,8 @@ func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
 			msg = tea.KeyMsg{Type: tea.KeyEnter}
 		case "esc":
 			msg = tea.KeyMsg{Type: tea.KeyEsc}
+		case "backspace":
+			msg = tea.KeyMsg{Type: tea.KeyBackspace}
 		case "space":
 			msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
 		default:
@@ -449,8 +480,8 @@ func TestActions(t *testing.T) {
 	m, _ = press(t, m, "d")
 	m, cmd = press(t, m, "y")
 	m = drain(t, m, cmd)
-	// f with p forks privately.
-	m, _ = press(t, m, "f")
+	// f, enter keeps the name, p forks privately.
+	m, _ = press(t, m, "f", "enter")
 	m, cmd = press(t, m, "p")
 	m = drain(t, m, cmd)
 	// u updates this pack; the report shows in the right column.
@@ -480,7 +511,10 @@ func TestActions(t *testing.T) {
 	if m.ov == nil || m.ov.kind != ovPick {
 		t.Fatal("browse opens the picker")
 	}
-	m, _ = press(t, m, "*")
+	m, _ = press(t, m, "*", "enter", "enter") // all; no alias
+	if m.ov == nil || !strings.HasPrefix(m.ov.title, "Agents for") {
+		t.Fatalf("add asks for agents last: %+v", m.ov)
+	}
 	m, cmd = press(t, m, "enter")
 	m = drain(t, m, cmd)
 
