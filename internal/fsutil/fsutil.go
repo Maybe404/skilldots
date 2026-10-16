@@ -4,6 +4,7 @@ package fsutil
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -57,10 +58,12 @@ func HashTree(dir string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil))[:16], nil
 }
 
-// CopyTree replaces dst with a copy of src (regular files and dirs only).
+// CopyTree copies src to dst (regular files and dirs only, Skip entries
+// left out). dst must not exist: CopyTree never removes anything, callers
+// decide what happens to whatever was there.
 func CopyTree(src, dst string) error {
-	if err := os.RemoveAll(dst); err != nil {
-		return err
+	if Lexists(dst) {
+		return fmt.Errorf("copy %s: %s already exists", src, dst)
 	}
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -82,6 +85,56 @@ func CopyTree(src, dst string) error {
 		}
 		return copyFile(p, target)
 	})
+}
+
+// CopyFile copies one regular file to dst, replacing a regular file there.
+func CopyFile(src, dst string) error {
+	if st, err := os.Lstat(dst); err == nil && !st.Mode().IsRegular() {
+		return fmt.Errorf("copy %s: %s exists and is not a regular file", src, dst)
+	}
+	return copyFile(src, dst)
+}
+
+// Within reports whether p is strictly inside dir, lexically.
+func Within(dir, p string) bool {
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(p))
+	if err != nil || rel == "." || filepath.IsAbs(rel) {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// Pristine reports whether dir holds exactly what a CopyTree with the
+// given HashTree hash produced: same files, and nothing HashTree ignores
+// (.git, node_modules, symlinks, special files). Only a pristine copy may
+// be discarded; anything else could hold someone's work.
+func Pristine(dir, hash string) bool {
+	st, err := os.Lstat(dir)
+	if err != nil || !st.IsDir() || hash == "" {
+		return false
+	}
+	extra := false
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == dir {
+			return nil
+		}
+		if d.Name() == ".DS_Store" {
+			return nil
+		}
+		if Skip[d.Name()] || !(d.IsDir() || d.Type().IsRegular()) {
+			extra = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil || extra {
+		return false
+	}
+	h, err := HashTree(dir)
+	return err == nil && h == hash
 }
 
 func copyFile(src, dst string) error {

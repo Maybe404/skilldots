@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/skillmd"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
@@ -94,10 +95,19 @@ func collect(lib *library.Library) ([]Entry, []string) {
 	m := lib.Manifest
 	var out []Entry
 	var warnings []string
+	for _, l := range m.Locals {
+		if err := manifest.CheckName(l.Name); err != nil {
+			warnings = append(warnings, fmt.Sprintf("[[local]] %v; ignored", err))
+		}
+	}
 
 	for _, p := range m.Packs {
 		packTargets := inherit(m.Targets.Default, p.Targets)
-		dir := lib.PackDir(p.Repo)
+		dir, err := PackDir(lib, p.Repo)
+		if err != nil {
+			warnings = append(warnings, err.Error()+"; skipped")
+			continue
+		}
 		lp := lib.Lock.Packs[p.Repo]
 		if lp == nil {
 			warnings = append(warnings, fmt.Sprintf("pack %s is in skills.toml but has not been fetched; run `skd update %s`", p.Repo, p.Repo))
@@ -113,10 +123,19 @@ func collect(lib *library.Library) ([]Entry, []string) {
 			if !p.Selected(name, ls.Category) {
 				continue
 			}
+			sd, err := skillDir(dir, ls.Category, name)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("pack %s: skill %q in skills.lock: %v; skipped", p.Repo, name, err))
+				continue
+			}
 			e := Entry{Name: name, LinkName: name, Kind: KindVendor, Origin: p.Repo, Category: ls.Category,
-				Dir: filepath.Join(dir, filepath.FromSlash(ls.Category), name), TargetNames: packTargets}
+				Dir: sd, TargetNames: packTargets}
 			if o := p.Override(name, false); o != nil {
 				if o.As != "" {
+					if err := manifest.CheckName(o.As); err != nil {
+						warnings = append(warnings, fmt.Sprintf("pack %s: as for %s: %v; skipped", p.Repo, name, err))
+						continue
+					}
 					e.LinkName = o.As
 				}
 				e.TargetNames = inherit(packTargets, o.Targets)
@@ -126,6 +145,10 @@ func collect(lib *library.Library) ([]Entry, []string) {
 	}
 
 	for _, a := range m.Apps {
+		if err := manifest.CheckName(a.Name); err != nil {
+			warnings = append(warnings, fmt.Sprintf("[[app]] %v; skipped", err))
+			continue
+		}
 		home, _ := os.UserHomeDir()
 		out = append(out, Entry{Name: a.Name, LinkName: a.Name, Kind: KindApp, Origin: a.Name,
 			Dir: targets.Expand(a.Path, home), TargetNames: inherit(m.Targets.Default, a.Targets)})
@@ -145,6 +168,10 @@ func collect(lib *library.Library) ([]Entry, []string) {
 				continue
 			}
 			meta, _ := skillmd.Read(d)
+			if err := manifest.CheckName(meta.Name); err != nil {
+				warnings = append(warnings, fmt.Sprintf("%s: SKILL.md %v; skipped", lib.Rel(d), err))
+				continue
+			}
 			e := Entry{Name: meta.Name, LinkName: meta.Name, Kind: kind.kind, Dir: d, Description: meta.Description,
 				TargetNames: m.Targets.Default}
 			for _, l := range m.Locals {

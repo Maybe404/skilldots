@@ -98,3 +98,8 @@ func TestOrphanLinkOfRemovedTarget(t *testing.T) {
 		t.Errorf("lock still has %v", lib.Lock.LinkKeys())
 	}
 }
+
+type (
+	lockPack  = lock.Pack
+	lockSkill = lock.Skill
+)

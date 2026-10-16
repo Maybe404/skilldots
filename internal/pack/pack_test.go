@@ -29,7 +29,7 @@ func names(skills []Skill) map[string]string {
 func TestScanCategorised(t *testing.T) {
 	root := t.TempDir()
 	mk(t, root, "skills/engineering/tdd", "skills/engineering/pr", "skills/productivity/handoff", "skills/misc/x")
-	got, err := Scan(root)
+	got, _, err := Scan(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestScanCategorised(t *testing.T) {
 func TestScanPluginsLayout(t *testing.T) {
 	root := t.TempDir()
 	mk(t, root, "plugins/differential-review/skills/differential-review", "plugins/modern-python/skills/modern-python")
-	got, err := Scan(root)
+	got, _, err := Scan(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestScanDuplicatesCollapse(t *testing.T) {
 	root := t.TempDir()
 	mk(t, root, ".agents/skills/impeccable", ".claude/skills/impeccable", "plugin/skills/impeccable",
 		"cursor-plugin/skills/impeccable", "tests/oracle/.claude/skills/impeccable")
-	got, err := Scan(root)
+	got, _, err := Scan(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestScanDuplicatesCollapse(t *testing.T) {
 func TestScanRootIsSkill(t *testing.T) {
 	root := t.TempDir()
 	mk(t, root, ".")
-	got, err := Scan(root)
+	got, _, err := Scan(root)
 	if err != nil || len(got) != 1 || got[0].Dir != root {
 		t.Fatalf("got %+v err %v", got, err)
 	}

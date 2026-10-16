@@ -13,6 +13,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
@@ -125,6 +126,15 @@ type Skill struct {
 	AltDirs []string
 }
 
+// Rejected is a SKILL.md that cannot be used, with the reason.
+type Rejected struct {
+	Name   string `json:"name"`
+	Dir    string `json:"dir"`
+	Reason string `json:"reason"`
+}
+
+func (r Rejected) String() string { return r.Dir + ": " + r.Reason }
+
 // testDirs are never scanned: fixtures routinely contain throwaway skills.
 var testDirs = map[string]bool{"test": true, "tests": true, "testdata": true, "fixtures": true, "__fixtures__": true, "__tests__": true}
 
@@ -136,9 +146,12 @@ var structural = map[string]bool{"skills": true, "skill": true, ".agents": true,
 // Repositories often ship the same skill copied into several agent
 // directories; such duplicates are collapsed to one, preferring the
 // canonical skills/ or .agents/skills/ location, with the others in AltDirs.
-func Scan(root string) ([]Skill, error) {
+//
+// Skills whose name could not safely be used as a directory name are
+// returned in rejected and never in skills.
+func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
 	var dirs []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -156,7 +169,7 @@ func Scan(root string) ([]Skill, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if skillmd.IsSkillDir(root) {
 		dirs = append(dirs, root)
@@ -167,11 +180,23 @@ func Scan(root string) ([]Skill, error) {
 	for _, d := range dirs {
 		meta, err := skillmd.Read(d)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		rel, _ := filepath.Rel(root, d)
-		all = append(all, Skill{Name: meta.Name, Description: meta.Description, License: meta.License, Dir: d,
-			Category: rawCategory(filepath.ToSlash(rel), meta.Name)})
+		if meta.EmptyName {
+			rejected = append(rejected, Rejected{Name: "", Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter name is empty"})
+			continue
+		}
+		if err := manifest.CheckName(meta.Name); err != nil {
+			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter " + err.Error()})
+			continue
+		}
+		cat := rawCategory(filepath.ToSlash(rel), meta.Name)
+		if err := manifest.CheckCategory(cat); err != nil {
+			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: " + err.Error()})
+			continue
+		}
+		all = append(all, Skill{Name: meta.Name, Description: meta.Description, License: meta.License, Dir: d, Category: cat})
 	}
 
 	// Collapse duplicates by name.
@@ -209,7 +234,7 @@ func Scan(root string) ([]Skill, error) {
 			}
 		}
 	}
-	return kept, nil
+	return kept, rejected, nil
 }
 
 // rawCategory derives a category from a skill dir's repo-relative path by

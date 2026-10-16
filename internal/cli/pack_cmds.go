@@ -61,10 +61,11 @@ func addCmd() *cobra.Command {
 				}
 				return err
 			}
-			upstream, err := pack.Scan(clone)
+			upstream, rejected, err := pack.Scan(clone)
 			if err != nil {
 				return err
 			}
+			printRejected(c, src.Repo, rejected)
 			if len(upstream) == 0 {
 				if isNew {
 					m.Packs = m.Packs[:len(m.Packs)-1]
@@ -243,6 +244,20 @@ func dedupe(in []string) []string {
 	return out
 }
 
+// printRejected warns about upstream SKILL.md files that were not used.
+func printRejected(c *ctx, repo string, rejected []pack.Rejected) {
+	for _, r := range rejected {
+		fmt.Fprintf(os.Stderr, "%s %s: %s\n", warn("!"), repo, r)
+	}
+}
+
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 func warnLicense(c *ctx, rep *engine.SyncReport) {
 	if rep.NoLicense {
 		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
@@ -342,6 +357,12 @@ func printReport(c *ctx, r *engine.SyncReport) {
 		c.printf("  %s %s%s\n", dim(fmt.Sprintf("%-13s", "upstream new")), strings.Join(shown, ", "), more)
 	}
 	row("upstream gone", warn, r.UpstreamGone)
+	for _, rj := range r.Rejected {
+		c.printf("  %s %s\n", warn(fmt.Sprintf("%-13s", "rejected")), rj)
+	}
+	for _, b := range r.Backups {
+		c.printf("  %s %s\n", dim(fmt.Sprintf("%-13s", "moved aside")), b)
+	}
 	if len(r.Changed) > 0 {
 		c.printf("  %s\n", dim(fmt.Sprintf("see changes: git -C %s diff -- vendor/%s", c.lib.Root, r.Repo)))
 	}
@@ -726,10 +747,11 @@ func showCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			upstream, err := pack.Scan(clone)
+			upstream, rejected, err := pack.Scan(clone)
 			if err != nil {
 				return err
 			}
+			printRejected(c, src.Repo, rejected)
 			p := c.lib.Manifest.FindPack(src.Repo)
 			type row struct {
 				Name, Category, Description string
@@ -739,7 +761,7 @@ func showCmd() *cobra.Command {
 			for _, s := range upstream {
 				rows = append(rows, row{s.Name, s.Category, s.Description, p != nil && p.Selected(s.Name, s.Category)})
 			}
-			if c.jsonOut(map[string]any{"repo": src.Repo, "commit": commit, "subscribed": p != nil, "skills": rows}) {
+			if c.jsonOut(map[string]any{"repo": src.Repo, "commit": commit, "subscribed": p != nil, "skills": rows, "rejected": nonNil(rejected)}) {
 				return nil
 			}
 			c.printf("%s %s  %s\n", bold(src.Repo), dim("@ "+short(commit)), dim(plural(len(rows), "skill")))

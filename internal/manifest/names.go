@@ -1,0 +1,40 @@
+package manifest
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+var nameRE = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
+
+// CheckName validates a skill name used as a directory or link name: a
+// skill's frontmatter name, `as`, [[local]].name and [[app]].name. Names
+// come from untrusted upstream repositories and end up joined onto paths,
+// so anything that could escape a directory is rejected.
+func CheckName(name string) error {
+	switch {
+	case name == "":
+		return fmt.Errorf("empty name")
+	case len(name) > 128:
+		return fmt.Errorf("name %q is longer than 128 characters", name)
+	case strings.Contains(name, ".."):
+		return fmt.Errorf("invalid name %q: must not contain \"..\"", name)
+	case !nameRE.MatchString(name):
+		return fmt.Errorf("invalid name %q: use letters, digits, '.', '_' and '-' only, not starting with '.'", name)
+	}
+	return nil
+}
+
+// CheckCategory validates a category path ("a/b"); "" is valid.
+func CheckCategory(cat string) error {
+	if cat == "" {
+		return nil
+	}
+	for _, seg := range strings.Split(cat, "/") {
+		if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, "\\\x00") {
+			return fmt.Errorf("invalid category %q", cat)
+		}
+	}
+	return nil
+}

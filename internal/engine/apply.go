@@ -10,6 +10,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
 
@@ -136,6 +137,11 @@ func MakePlan(lib *library.Library, entries []Entry, force bool) Plan {
 		}
 		prev := lib.Lock.Links[key]
 		tname, name, _ := splitKey(key)
+		if err := manifest.CheckName(name); err != nil {
+			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: tname}, Name: name,
+				Reason: "skills.lock link record: " + err.Error()})
+			continue
+		}
 		t, err := regTarget(lib, tname)
 		if err != nil {
 			if prev.Path == "" || filepath.Base(prev.Path) != name {

@@ -13,6 +13,9 @@ type Meta struct {
 	Name        string
 	Description string
 	License     string
+	// EmptyName is set when the frontmatter has a name key with no value;
+	// Name then holds the directory name fallback.
+	EmptyName bool
 }
 
 // Read parses the frontmatter of dir/SKILL.md. Name falls back to the
@@ -51,6 +54,7 @@ func Read(dir string) (Meta, error) {
 		switch strings.TrimSpace(key) {
 		case "name":
 			m.Name = val
+			m.EmptyName = val == ""
 		case "description":
 			m.Description = val
 		case "license":
