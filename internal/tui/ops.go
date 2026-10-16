@@ -132,7 +132,7 @@ func (o *libOps) SetTargets(s *Skill, repo string, agents []string) (string, err
 		if err != nil {
 			return "", err
 		}
-		e := engine.Find(entries, s.LinkName)
+		e := entryFor(entries, *s)
 		if e == nil {
 			return "", fmt.Errorf("no skill %q", s.LinkName)
 		}
@@ -148,6 +148,20 @@ func (o *libOps) SetTargets(s *Skill, repo string, agents []string) (string, err
 		msg += " · " + sum
 	}
 	return msg, nil
+}
+
+// entryFor returns the entry a dashboard row stands for. Rows are matched
+// by kind, origin and upstream name (Skill.Key), never by link name alone:
+// a vendored tdd and your own skills/tdd may both exist when their targets
+// do not overlap, and an operation on one must not land on the other.
+func entryFor(entries []engine.Entry, s Skill) *engine.Entry {
+	for i := range entries {
+		e := &entries[i]
+		if e.Kind == s.Kind && e.Origin == s.Origin && e.Name == s.Name {
+			return e
+		}
+	}
+	return nil
 }
 
 // setEntryTargets records next as the target list of e, at the same
@@ -413,7 +427,7 @@ func (o *libOps) Fork(s Skill, private bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	e := engine.Find(entries, s.LinkName)
+	e := entryFor(entries, s)
 	if e == nil {
 		return "", fmt.Errorf("no skill %q", s.LinkName)
 	}
@@ -489,7 +503,7 @@ func (o *libOps) Trash(s Skill) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	e := engine.Find(entries, s.LinkName)
+	e := entryFor(entries, s)
 	if e == nil {
 		return "", fmt.Errorf("no skill %q", s.LinkName)
 	}
