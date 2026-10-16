@@ -316,7 +316,19 @@ func runApply(c *ctx, dry, force bool) error {
 		return err
 	}
 	plan := engine.MakePlan(c.lib, entries, force)
-	if c.jsonOut(plan.Ops) {
+	if flags.json {
+		if !dry && plan.Changes() {
+			res, err := engine.Apply(c.lib, plan)
+			if saveErr := c.lib.Save(); saveErr != nil && err == nil {
+				err = saveErr
+			}
+			if err != nil {
+				return err
+			}
+			c.jsonOut(map[string]any{"applied": true, "changes": plan.ChangeList(), "kept": plan.Counts()["keep"], "backups": res.Backups})
+			return nil
+		}
+		c.jsonOut(map[string]any{"applied": false, "dryRun": dry, "changes": plan.ChangeList(), "kept": plan.Counts()["keep"]})
 		return nil
 	}
 	for _, op := range plan.Ops {

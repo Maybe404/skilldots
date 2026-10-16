@@ -35,7 +35,15 @@ type ctx struct {
 
 func (c *ctx) resolve() ([]engine.Entry, error) { return engine.Resolve(c.lib, c.reg) }
 
-func (c *ctx) printf(format string, a ...any) { fmt.Fprintf(c.out, format, a...) }
+// printf writes human-readable progress. Under --json it goes to stderr so
+// stdout stays parseable.
+func (c *ctx) printf(format string, a ...any) {
+	if flags.json {
+		fmt.Fprintf(os.Stderr, format, a...)
+		return
+	}
+	fmt.Fprintf(c.out, format, a...)
+}
 
 // jsonOut prints v as JSON when --json is set and reports whether it did.
 func (c *ctx) jsonOut(v any) bool {

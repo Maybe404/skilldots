@@ -154,7 +154,7 @@ func addCmd() *cobra.Command {
 				}
 				c.jsonOut(map[string]any{"repo": p.Repo, "commit": rep.NewCommit, "skills": linked,
 					"added": rep.Added, "changed": rep.Changed, "unchanged": rep.Unchanged,
-					"noLicense": rep.NoLicenseList, "ops": plan.Ops})
+					"noLicense": rep.NoLicenseList, "changes": plan.ChangeList(), "kept": plan.Counts()["keep"]})
 				return nil
 			}
 			warnLicense(c, rep)

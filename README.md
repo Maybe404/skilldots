@@ -23,6 +23,15 @@ skilldots treats it like dotfiles:
 - **Your own skills live alongside.** `skills/` is for ones you publish with the library; `private/` is a separate local git repo that is never pushed.
 - **Every link is recorded.** `skd` only ever touches files it placed itself, and tells you when something else is in the way.
 
+## Built for agents
+
+Most of the time it is not a person running `skd` but the agent on their machine — Claude Code, Codex, Cursor and friends. skilldots is designed around that:
+
+- `skd init` installs the [`skilldots` skill](skills/skilldots/SKILL.md) into the library, so every agent on the machine knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
+- Every command works without a terminal: `--json` for structured results, `--yes` for prompts, `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
+- Destructive steps (`apply --force`, `purge`) are the only ones that need a human; the skill tells agents to preview and ask.
+- People get the interactive menu (`skd` with no arguments) for looking around and vetoing.
+
 ## Install
 
 ```sh
@@ -47,6 +56,7 @@ Prebuilt binaries will follow.
 | | |
 |---|---|
 | `skd init [dir]` | create a library; the default target is `agents` (`~/.agents/skills`), which nearly every agent reads |
+| `skd show <owner/repo \| url>` | list what a repository offers, without installing |
 | `skd add <owner/repo \| url>[@ref]` | fetch a repo and choose skills interactively, or with `--skill`, `--category`, `--all` |
 | `skd list [pack] [--all] [--flat] [--agent x]` | overview; expand a pack; flat list; what one agent receives |
 | `skd apply [-n] [--force]` | link/unlink to match the manifest; `-n` previews |
@@ -61,6 +71,7 @@ Prebuilt binaries will follow.
 | `skd targets` | known agent directories and which exist on this machine |
 | `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
 | `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
+| `skd use <dir>` | point skd at an existing library from any directory |
 | `skd` | with no arguments: an interactive menu for all of the above |
 
 All commands take `--json` for scripts and agents, and `--yes` to skip prompts.

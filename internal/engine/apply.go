@@ -32,6 +32,27 @@ type Plan struct {
 	Ops []Op
 }
 
+// Change is the compact, machine-readable form of an Op.
+type Change struct {
+	Action string `json:"action"`
+	Target string `json:"target"`
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// Changes lists the ops that do something (everything except "keep").
+func (p Plan) ChangeList() []Change {
+	out := []Change{}
+	for _, o := range p.Ops {
+		if o.Action == "keep" {
+			continue
+		}
+		out = append(out, Change{o.Action, o.Target.Name, o.Name, o.Dest, o.Reason})
+	}
+	return out
+}
+
 // Counts summarises the plan by action.
 func (p Plan) Counts() map[string]int {
 	c := map[string]int{}
