@@ -1,13 +1,17 @@
 package cli
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+
+	"github.com/Maybe404/skilldots/internal/fsutil"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -49,7 +53,7 @@ func addCmd() *cobra.Command {
 				p.Targets = &t
 			}
 
-			c.printf("fetching %s …\n", src.Repo)
+			c.printf("%s %s\n", dim("fetching"), src.Repo)
 			clone, _, err := pack.Fetch(pack.Source{Repo: src.Repo, URL: src.URL, Ref: p.Ref})
 			if err != nil {
 				if isNew {
@@ -105,7 +109,7 @@ func addCmd() *cobra.Command {
 				if isNew {
 					m.Packs = m.Packs[:len(m.Packs)-1]
 				}
-				c.printf("nothing selected\n")
+				c.printf("%s\n", dim("nothing selected"))
 				return nil
 			}
 
@@ -118,7 +122,7 @@ func addCmd() *cobra.Command {
 				if prev := engine.Find(entries, s.Name); prev != nil && !(prev.Kind == engine.KindVendor && prev.Origin == p.Repo) {
 					if o := p.Override(s.Name, true); o.As == "" {
 						o.As = engine.FreeName(entries, s.Name, p.Prefix())
-						c.printf("⚠ %q already exists (%s); linking as %q\n", s.Name, engine.Describe(*prev), o.As)
+						c.printf("%s %q already exists (%s); linking as %q\n", warn("!"), s.Name, engine.Describe(*prev), o.As)
 					}
 				}
 			}
@@ -131,7 +135,7 @@ func addCmd() *cobra.Command {
 			if err := c.lib.Save(); err != nil {
 				return err
 			}
-			c.printf("vendored %d skill(s) from %s @ %s\n", len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), p.Repo, rep.NewCommit[:7])
+			c.printf("%s vendored %s from %s %s\n", ok("✓"), plural(len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), "skill"), p.Repo, dim("@ "+rep.NewCommit[:7]))
 			return runApply(c, false, false)
 		},
 	}
@@ -143,77 +147,64 @@ func addCmd() *cobra.Command {
 	return cmd
 }
 
-// pickSkills prints the upstream skills grouped by category and reads a
-// selection. It returns ["*"] for everything.
+// pickSkills shows an interactive multi-select grouped by category.
+// It returns ["*"] when the user chose to follow everything.
 func pickSkills(c *ctx, repo string, upstream []pack.Skill, p *manifest.Pack) ([]string, error) {
 	if !isTerminal() {
 		return nil, fmt.Errorf("no terminal: pass --skill, --category or --all")
 	}
-	c.printf("\n%s — %d skills\n", repo, len(upstream))
-	idx := map[int]string{}
-	n := 0
+	var opts []huh.Option[string]
+	var preselected []string
 	for _, cat := range pack.Categories(upstream) {
-		title := cat
-		if title == "" {
-			title = "(root)"
-		}
-		c.printf("\n  %s\n", title)
 		for _, s := range upstream {
 			if s.Category != cat {
 				continue
 			}
-			n++
-			idx[n] = s.Name
-			mark := " "
+			label := s.Name
+			if cat != "" {
+				label = dim(cat+"/") + s.Name
+			}
+			if s.Description != "" {
+				label += "  " + dim(truncate(s.Description, 60))
+			}
+			opts = append(opts, huh.NewOption(label, s.Name))
 			if p.Selected(s.Name, s.Category) {
-				mark = "✓"
+				preselected = append(preselected, s.Name)
 			}
-			desc := s.Description
-			if len(desc) > 70 {
-				desc = desc[:67] + "…"
-			}
-			c.printf("  %s %3d  %-28s %s\n", mark, n, s.Name, desc)
 		}
 	}
-	c.printf("\nSelect: numbers (1,3,5-8), names, a category name, 'all', or empty to cancel\n> ")
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return nil, nil
+	mode := "pick"
+	chosen := preselected
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(fmt.Sprintf("%s — %d skills", repo, len(upstream))).
+				Options(
+					huh.NewOption("Pick skills", "pick"),
+					huh.NewOption("Follow everything (new upstream skills are added automatically)", "all"),
+				).
+				Value(&mode),
+		),
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select skills").
+				Description("space to toggle · type to filter · enter to confirm").
+				Options(opts...).
+				Filterable(true).
+				Height(18).
+				Value(&chosen),
+		).WithHideFunc(func() bool { return mode == "all" }),
+	)
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	if line == "all" || line == "*" {
+	if mode == "all" {
 		return []string{"*"}, nil
 	}
-	var out []string
-	for _, tok := range strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ' ' }) {
-		if a, b, ok := strings.Cut(tok, "-"); ok {
-			var lo, hi int
-			if _, err := fmt.Sscanf(a+" "+b, "%d %d", &lo, &hi); err == nil {
-				for i := lo; i <= hi; i++ {
-					if name, ok := idx[i]; ok {
-						out = append(out, name)
-					}
-				}
-				continue
-			}
-		}
-		var i int
-		if _, err := fmt.Sscanf(tok, "%d", &i); err == nil && idx[i] != "" {
-			out = append(out, idx[i])
-			continue
-		}
-		matched := false
-		for _, s := range upstream {
-			if s.Name == tok || s.Category == tok || strings.HasPrefix(s.Category, tok+"/") {
-				out = append(out, s.Name)
-				matched = true
-			}
-		}
-		if !matched {
-			return nil, fmt.Errorf("unknown selection %q", tok)
-		}
-	}
-	return dedupe(out), nil
+	return dedupe(chosen), nil
 }
 
 func dedupe(in []string) []string {
@@ -230,7 +221,7 @@ func dedupe(in []string) []string {
 
 func warnLicense(c *ctx, rep *engine.SyncReport) {
 	if rep.NoLicense {
-		c.printf("⚠ %s: no license found for %s — check before redistributing\n", rep.Repo, strings.Join(rep.NoLicenseList, ", "))
+		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
 	}
 }
 
@@ -276,7 +267,7 @@ func updateCmd() *cobra.Command {
 				changed = changed || len(r.Changed)+len(r.Added)+len(r.Dropped) > 0
 			}
 			for _, f := range failed {
-				c.printf("✗ %s\n", f)
+				c.printf("%s %s\n", bad("✗"), f)
 			}
 			if err := c.lib.Save(); err != nil {
 				return err
@@ -300,34 +291,35 @@ func updateCmd() *cobra.Command {
 }
 
 func printReport(c *ctx, r *engine.SyncReport) {
-	head := r.Repo
-	if r.OldCommit == "" {
-		head += fmt.Sprintf("  (new @ %s)", short(r.NewCommit))
-	} else if r.OldCommit == r.NewCommit {
-		head += fmt.Sprintf("  %s  up to date", short(r.NewCommit))
-	} else {
-		head += fmt.Sprintf("  %s → %s", short(r.OldCommit), short(r.NewCommit))
+	head := bold(r.Repo)
+	switch {
+	case r.OldCommit == "":
+		head += dim(fmt.Sprintf("  new @ %s", short(r.NewCommit)))
+	case r.OldCommit == r.NewCommit:
+		head += dim(fmt.Sprintf("  %s  up to date", short(r.NewCommit)))
+	default:
+		head += fmt.Sprintf("  %s → %s", dim(short(r.OldCommit)), accent(short(r.NewCommit)))
 	}
 	c.printf("%s\n", head)
-	row := func(label string, names []string) {
+	row := func(label string, style func(string) string, names []string) {
 		if len(names) > 0 {
-			c.printf("  %-14s %s\n", label, strings.Join(names, ", "))
+			c.printf("  %s %s\n", style(fmt.Sprintf("%-13s", label)), strings.Join(names, ", "))
 		}
 	}
-	row("changed", r.Changed)
-	row("added", r.Added)
-	row("dropped", r.Dropped)
+	row("changed", accent, r.Changed)
+	row("added", ok, r.Added)
+	row("dropped", bad, r.Dropped)
 	if n := len(r.UpstreamNew); n > 0 {
 		shown := r.UpstreamNew
 		more := ""
 		if n > 5 {
-			shown, more = shown[:5], fmt.Sprintf(" … %d more (skd add %s to browse)", n-5, r.Repo)
+			shown, more = shown[:5], dim(fmt.Sprintf(" … %d more (skd add %s to browse)", n-5, r.Repo))
 		}
-		c.printf("  %-14s %s%s\n", "upstream new", strings.Join(shown, ", "), more)
+		c.printf("  %s %s%s\n", dim(fmt.Sprintf("%-13s", "upstream new")), strings.Join(shown, ", "), more)
 	}
-	row("upstream gone", r.UpstreamGone)
+	row("upstream gone", warn, r.UpstreamGone)
 	if len(r.Changed) > 0 {
-		c.printf("  (see changes: git -C %s diff -- vendor/%s)\n", c.lib.Root, r.Repo)
+		c.printf("  %s\n", dim(fmt.Sprintf("see changes: git -C %s diff -- vendor/%s", c.lib.Root, r.Repo)))
 	}
 }
 
@@ -354,7 +346,7 @@ func gitCommit(c *ctx, msg string) error {
 			return err
 		}
 	}
-	c.printf("committed in %s\n", root)
+	c.printf("%s committed in %s\n", ok("✓"), root)
 	return nil
 }
 
@@ -505,7 +497,7 @@ func removeCmd() *cobra.Command {
 			}
 			delete(p.Skill, e.Name)
 			if len(p.Use) == 0 && !p.UsesAll() {
-				c.printf("%s has no skills left; purging the pack\n", p.Repo)
+				c.printf("%s\n", dim(p.Repo+" has no skills left; purging the pack"))
 				return purgePack(c, p)
 			}
 			if _, err := engine.Sync(c.lib, p); err != nil {
@@ -551,9 +543,9 @@ func purgePack(c *ctx, p *manifest.Pack) error {
 		}
 	}
 	sort.Strings(links)
-	c.printf("purge %s: remove vendor/%s and %d link(s)\n", p.Repo, p.Repo, len(links))
+	c.printf("%s %s: remove vendor/%s and %s\n", bad("purge"), bold(p.Repo), p.Repo, plural(len(links), "link"))
 	for _, l := range links {
-		c.printf("  - %s\n", l)
+		c.printf("  %s %s\n", bad("−"), l)
 	}
 	if !confirm("proceed?") {
 		return fmt.Errorf("cancelled")
@@ -575,4 +567,110 @@ func purgePack(c *ctx, p *manifest.Pack) error {
 		return err
 	}
 	return c.lib.Save()
+}
+
+func pathCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "path <skill>",
+		Short: "Print where a skill's files live in the library",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			entries, err := c.resolve()
+			if err != nil {
+				return err
+			}
+			e := engine.Find(entries, args[0])
+			if e == nil {
+				return fmt.Errorf("no skill %q", args[0])
+			}
+			fmt.Println(e.Dir)
+			return nil
+		},
+	}
+}
+
+func forkCmd() *cobra.Command {
+	var private bool
+	var as string
+	cmd := &cobra.Command{
+		Use:   "fork <skill>",
+		Short: "Copy a vendored skill into skills/ so you can edit it; upstream no longer touches it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			entries, err := c.resolve()
+			if err != nil {
+				return err
+			}
+			e := engine.Find(entries, args[0])
+			if e == nil {
+				return fmt.Errorf("no skill %q", args[0])
+			}
+			if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
+				return fmt.Errorf("%q is already yours (%s)", args[0], e.Dir)
+			}
+			name := e.LinkName
+			if as != "" {
+				name = as
+			}
+			base := c.lib.SkillsDir()
+			if private {
+				base = c.lib.PrivateDir()
+			}
+			dest := filepath.Join(base, name)
+			if fsutil.Lexists(dest) {
+				return fmt.Errorf("%s already exists", dest)
+			}
+			if err := fsutil.CopyTree(e.Dir, dest); err != nil {
+				return err
+			}
+			note := fmt.Sprintf("\n<!-- forked by skilldots from %s -->\n", engine.Describe(*e))
+			f, err := os.OpenFile(filepath.Join(dest, "SKILL.md"), os.O_APPEND|os.O_WRONLY, 0o644)
+			if err == nil {
+				f.WriteString(note)
+				f.Close()
+			}
+			// Deselect the vendored original so the names do not collide.
+			if e.Kind == engine.KindVendor {
+				p := c.lib.Manifest.FindPack(e.Origin)
+				if p.UsesAll() {
+					p.Skip = dedupe(append(p.Skip, e.Name))
+				} else {
+					var use []string
+					for _, u := range p.Use {
+						if u != e.Name && u != e.Category+"/"+e.Name {
+							use = append(use, u)
+						}
+					}
+					p.Use = use
+				}
+				delete(p.Skill, e.Name)
+				if _, err := engine.Sync(c.lib, p); err != nil {
+					return err
+				}
+			} else {
+				for i, a := range c.lib.Manifest.Apps {
+					if a.Name == e.Name {
+						c.lib.Manifest.Apps = append(c.lib.Manifest.Apps[:i], c.lib.Manifest.Apps[i+1:]...)
+						break
+					}
+				}
+			}
+			if err := c.lib.Save(); err != nil {
+				return err
+			}
+			c.printf("%s forked %s → %s\n", ok("✓"), args[0], dest)
+			return runApply(c, false, false)
+		},
+	}
+	cmd.Flags().BoolVar(&private, "private", false, "copy into private/ instead of skills/")
+	cmd.Flags().StringVar(&as, "as", "", "name for the fork (default: same name)")
+	return cmd
 }

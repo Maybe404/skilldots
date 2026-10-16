@@ -14,7 +14,6 @@ import (
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
-	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 const gitignore = `.DS_Store
@@ -69,7 +68,7 @@ func initCmd() *cobra.Command {
 			if err := library.EnsureGit(priv); err != nil {
 				return err
 			}
-			fmt.Printf("initialised library at %s\n  default targets: %s\n", root, strings.Join(defaults, ", "))
+			fmt.Printf("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
 			if root != library.DefaultRoot() {
 				fmt.Printf("  export %s=%s   # or run skd from inside it\n", library.EnvLibrary, root)
 			}
@@ -77,24 +76,13 @@ func initCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&from, "from", "", "turn an existing directory into the library")
-	cmd.Flags().StringSliceVar(&defaults, "targets", nil, "default targets (auto-detected when omitted)")
+	cmd.Flags().StringSliceVar(&defaults, "targets", nil, "default targets (default: agents)")
 	return cmd
 }
 
-// detectDefaults picks "agents" plus whichever well-known agents are installed.
-func detectDefaults() []string {
-	reg, err := targets.NewRegistry(nil)
-	if err != nil {
-		return []string{"agents"}
-	}
-	out := []string{"agents"}
-	for _, t := range reg.Present() {
-		if t.Name != "agents" && (t.Name == "claude" || t.Name == "codex" || t.Name == "gemini" || t.Name == "cursor" || t.Name == "opencode") {
-			out = append(out, t.Name)
-		}
-	}
-	return out
-}
+// detectDefaults returns the cross-agent directory only; nearly every agent
+// reads ~/.agents/skills, and users opt specific agents in with --agent.
+func detectDefaults() []string { return []string{"agents"} }
 
 func listCmd() *cobra.Command {
 	var all, flat bool
@@ -127,19 +115,10 @@ func listCmd() *cobra.Command {
 				return nil
 			}
 			if flat {
-				for _, e := range entries {
-					printEntry(c, e)
-				}
+				printEntries(c, entries)
 				return nil
 			}
-			m := c.lib.Manifest
-			c.printf("library %s\n", c.lib.Root)
-			for _, p := range m.Packs {
-				printPack(c, p, entries, all)
-			}
-			printGroup(c, entries, engine.KindSkill, "skills/ (yours)")
-			printGroup(c, entries, engine.KindPrivate, "private/ (this machine)")
-			printGroup(c, entries, engine.KindApp, "apps")
+			printOverview(c, entries, all)
 			return nil
 		},
 	}
@@ -149,80 +128,116 @@ func listCmd() *cobra.Command {
 	return cmd
 }
 
-func printPack(c *ctx, p *manifest.Pack, entries []engine.Entry, expand bool) {
-	lp := c.lib.Lock.Packs[p.Repo]
-	total, enabled := 0, 0
-	var mine []engine.Entry
-	if lp != nil {
-		total = len(lp.Skills)
-	}
+func printOverview(c *ctx, entries []engine.Entry, expand bool) {
+	m := c.lib.Manifest
+	linked := 0
 	for _, e := range entries {
-		if e.Kind == engine.KindVendor && e.Origin == p.Repo {
-			mine = append(mine, e)
-			if len(e.Targets) > 0 {
-				enabled++
+		if len(e.Targets) > 0 {
+			linked++
+		}
+	}
+	c.printf("%s %s\n", bold("library"), c.lib.Root)
+	c.printf("%s\n\n", dim(fmt.Sprintf("%s · %s · %d linked · default targets: %s",
+		plural(len(m.Packs), "pack"), plural(len(entries), "skill"), linked, strings.Join(m.Targets.Default, ", "))))
+
+	if len(m.Packs) > 0 {
+		t := newTable("PACK", "SKILLS", "COMMIT", "TARGETS")
+		for _, p := range m.Packs {
+			lp := c.lib.Lock.Packs[p.Repo]
+			total, mine := 0, packEntries(entries, p.Repo)
+			if lp != nil {
+				total = len(lp.Skills)
+			}
+			commit := dim("—")
+			if lp != nil && lp.Commit != "" {
+				commit = dim(lp.Commit[:7])
+			}
+			label := p.Repo
+			if p.Alias != "" {
+				label += dim(" (" + p.Alias + ")")
+			}
+			sel := fmt.Sprintf("%d of %d", len(mine), total)
+			if p.UsesAll() {
+				sel = fmt.Sprintf("all %d", total)
+			}
+			t.Row(label, sel, commit, packTargets(c, p))
+		}
+		c.printf("%s\n", t.Render())
+		if expand {
+			for _, p := range m.Packs {
+				c.printf("\n%s\n", accent(p.DisplayName()))
+				printEntries(c, packEntries(entries, p.Repo))
 			}
 		}
 	}
+	printGroup(c, entries, engine.KindSkill, "skills/", "yours, published with the library")
+	printGroup(c, entries, engine.KindPrivate, "private/", "this machine only")
+	printGroup(c, entries, engine.KindApp, "apps", "shipped with installed applications")
+}
+
+func packEntries(entries []engine.Entry, repo string) []engine.Entry {
+	var out []engine.Entry
+	for _, e := range entries {
+		if e.Kind == engine.KindVendor && e.Origin == repo {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func packTargets(c *ctx, p *manifest.Pack) string {
+	if p.Targets == nil {
+		return dim("default")
+	}
+	return joinOr(*p.Targets, "off")
+}
+
+func printPack(c *ctx, p *manifest.Pack, entries []engine.Entry, expand bool) {
+	lp := c.lib.Lock.Packs[p.Repo]
 	commit := "—"
 	if lp != nil && lp.Commit != "" {
 		commit = lp.Commit[:7]
 	}
-	label := p.Repo
-	if p.Alias != "" {
-		label += " (" + p.Alias + ")"
-	}
-	sel := fmt.Sprintf("%d/%d", len(mine), total)
-	if p.UsesAll() {
-		sel = fmt.Sprintf("all %d", total)
-	}
-	c.printf("%-40s %-10s %s\n", label, sel, commit)
-	if expand {
-		for _, e := range mine {
-			printEntry(c, e)
-		}
-	}
+	c.printf("%s %s\n", bold(p.Repo), dim("@ "+commit))
+	printEntries(c, packEntries(entries, p.Repo))
 }
 
-func printGroup(c *ctx, entries []engine.Entry, kind engine.Kind, title string) {
-	var names []string
+func printEntries(c *ctx, entries []engine.Entry) {
+	t := newTable("SKILL", "CATEGORY", "TARGETS", "DESCRIPTION")
+	for _, e := range entries {
+		name := e.LinkName
+		if e.LinkName != e.Name {
+			name += dim(" ← " + e.Name)
+		}
+		if e.Missing {
+			name += " " + warn("missing")
+		}
+		cat := e.Category
+		if cat == "" {
+			cat = dim("·")
+		}
+		t.Row(name, cat, targetList(e), dim(truncate(e.Description, 48)))
+	}
+	c.printf("%s\n", t.Render())
+}
+
+func printGroup(c *ctx, entries []engine.Entry, kind engine.Kind, title, note string) {
+	var mine []engine.Entry
 	for _, e := range entries {
 		if e.Kind == kind {
-			names = append(names, e.LinkName+targetSuffix(e))
+			mine = append(mine, e)
 		}
 	}
-	if len(names) == 0 {
+	if len(mine) == 0 {
 		return
 	}
-	c.printf("%-40s %s\n", title, strings.Join(names, ", "))
-}
-
-func printEntry(c *ctx, e engine.Entry) {
-	name := e.LinkName
-	if e.LinkName != e.Name {
-		name += " (" + e.Name + ")"
-	}
-	cat := e.Category
-	if cat == "" {
-		cat = "·"
-	}
-	status := ""
-	if e.Missing {
-		status = "  ⚠ missing"
-	}
-	c.printf("  %-30s %-14s → %s%s\n", name, cat, targetList(e), status)
-}
-
-func targetSuffix(e engine.Entry) string {
-	if len(e.Targets) == 0 {
-		return " (off)"
-	}
-	return ""
+	c.printf("\n%s %s\n", accent(title), dim(note))
+	printEntries(c, mine)
 }
 
 func targetList(e engine.Entry) string {
 	if len(e.Targets) == 0 {
-		return "(off)"
+		return dim("off")
 	}
 	names := make([]string, len(e.Targets))
 	for i, t := range e.Targets {
@@ -236,18 +251,16 @@ func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
 	if err != nil {
 		return err
 	}
-	c.printf("%s  %s\n", t.Name, t.Path)
+	c.printf("%s %s\n", bold(t.Name), dim(t.Path))
+	tb := newTable("SKILL", "FROM")
 	for _, e := range entries {
 		for _, et := range e.Targets {
 			if et.Name == t.Name {
-				origin := string(e.Kind)
-				if e.Origin != "" {
-					origin = e.Origin
-				}
-				c.printf("  %-30s %s\n", e.LinkName, origin)
+				tb.Row(e.LinkName, dim(engine.Describe(e)))
 			}
 		}
 	}
+	c.printf("%s\n", tb.Render())
 	return nil
 }
 
@@ -282,20 +295,20 @@ func runApply(c *ctx, dry, force bool) error {
 		if op.Action == "keep" {
 			continue
 		}
-		mark := map[string]string{"create": "+", "replace": "↻", "remove": "-", "skip": "!"}[op.Action]
-		line := fmt.Sprintf("%s %-10s %s", mark, op.Target.Name, op.Name)
+		mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!")}[op.Action]
+		line := fmt.Sprintf("  %s %-10s %s", mark, dim(op.Target.Name), op.Name)
 		if op.Reason != "" {
-			line += "   (" + op.Reason + ")"
+			line += "  " + dim(op.Reason)
 		}
 		c.printf("%s\n", line)
 	}
 	counts := plan.Counts()
 	if !plan.Changes() {
-		c.printf("up to date (%d linked)\n", counts["keep"])
+		c.printf("%s %s\n", ok("✓"), dim(fmt.Sprintf("up to date, %d linked", counts["keep"])))
 		return nil
 	}
 	if dry {
-		c.printf("dry run: +%d ↻%d -%d, %d kept, %d skipped\n", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])
+		c.printf("%s\n", dim(fmt.Sprintf("dry run · +%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])))
 		return nil
 	}
 	if err := engine.Apply(c.lib, plan); err != nil {
@@ -304,7 +317,7 @@ func runApply(c *ctx, dry, force bool) error {
 	if err := c.lib.Save(); err != nil {
 		return err
 	}
-	c.printf("applied: +%d ↻%d -%d, %d kept, %d skipped\n", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])
+	c.printf("%s %s\n", ok("✓"), dim(fmt.Sprintf("applied · +%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])))
 	return nil
 }
 
@@ -339,17 +352,18 @@ func targetsCmd() *cobra.Command {
 				}
 				return rows[i].Name < rows[j].Name
 			})
+			t := newTable("", "TARGET", "", "PATH")
 			for _, r := range rows {
-				flag := " "
+				flag, d := dim("·"), ""
 				if r.Present {
-					flag = "●"
+					flag = ok("●")
 				}
-				d := ""
 				if r.Default {
-					d = "default"
+					d = accent("default")
 				}
-				c.printf("%s %-12s %-8s %s\n", flag, r.Name, d, r.Path)
+				t.Row(flag, r.Name, d, dim(r.Path))
 			}
+			c.printf("%s\n", t.Render())
 			return nil
 		},
 	}
@@ -381,7 +395,7 @@ func newCmd() *cobra.Command {
 			if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
 				return err
 			}
-			c.printf("created %s\n", dir)
+			c.printf("%s created %s\n", ok("✓"), dir)
 			return runApply(c, false, false)
 		},
 	}
