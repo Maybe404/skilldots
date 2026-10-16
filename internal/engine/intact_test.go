@@ -148,3 +148,35 @@ func TestRestoreRefusesATargetReplacedByALink(t *testing.T) {
 		t.Fatal("restored into ~/.ssh")
 	}
 }
+
+// The target is checked again after its directory is made: should the
+// directory be replaced by a link meanwhile (here by the stand-in for
+// os.MkdirAll; in a real run, by anything racing it), nothing is
+// written through it.
+func TestTargetCheckedAgainAfterMakingItsDirectory(t *testing.T) {
+	lib, reg, home := restoreLib(t)
+	writeSkill(t, filepath.Join(lib.Root, "skills", "id_rsa"), "id_rsa")
+	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
+	os.WriteFile(filepath.Join(home, ".ssh", "id_rsa"), []byte("SECRET"), 0o600)
+	claude, _ := reg.Get("claude")
+	prev := mkdirAll
+	defer func() { mkdirAll = prev }()
+	mkdirAll = func(p string, perm os.FileMode) error {
+		if err := os.MkdirAll(filepath.Dir(p), perm); err != nil {
+			return err
+		}
+		if p == claude.Path && !fsutil.Lexists(p) {
+			return os.Symlink(filepath.Join(home, ".ssh"), p)
+		}
+		return os.MkdirAll(p, perm)
+	}
+	entries := []Entry{{Name: "id_rsa", LinkName: "id_rsa", Kind: KindSkill, Dir: filepath.Join(lib.Root, "skills", "id_rsa"), Targets: []targets.Target{claude}}}
+	res, err := Apply(lib, MakePlan(lib, entries, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshUntouched(t, lib.Root, home, "made then replaced")
+	if len(res.Refused) != 1 || lib.Lock.Links["claude/id_rsa"] != nil {
+		t.Errorf("refused %q, lock %v", res.Refused, lib.Lock.LinkKeys())
+	}
+}

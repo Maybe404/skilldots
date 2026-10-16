@@ -143,3 +143,86 @@ func TestAdoptDropKeepsAnEntryOfAReplacedTargetDirectory(t *testing.T) {
 		t.Errorf("no warning; got %q", *logs)
 	}
 }
+
+// An entry adopted under another name (its SKILL.md names it otherwise)
+// is moved aside once the link of its new name is in place, but only an
+// entry of the target itself, while the target leads where it did: a
+// proposal whose path is elsewhere, or a target directory replaced by a
+// link since the library was opened, moves nothing.
+func TestAdoptMovesAsideOnlyEntriesOfAnIntactTarget(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	up := upstream(t)
+	for _, tc := range []string{"moved aside", "elsewhere", "replaced target"} {
+		t.Run(tc, func(t *testing.T) {
+			home, root := side(t, up)
+			agents := filepath.Join(home, ".agents", "skills")
+			// The library has newname, linked for agents; the agent
+			// directory also holds the same skill as oldname.
+			write(t, filepath.Join(root, "skills", "newname", "SKILL.md"), skillMD("newname"))
+			s, err := app.Open(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Apply(app.ApplyOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			old := filepath.Join(agents, "oldname")
+			write(t, filepath.Join(old, "SKILL.md"), skillMD("newname"))
+			s, err = app.Open(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var logs []string
+			s.Log = func(l app.Level, msg string) { logs = append(logs, msg) }
+			rep, err := s.Scan()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var props []app.Proposal
+			for _, p := range s.Proposals(rep) {
+				if p.Item.Name == "oldname" {
+					props = append(props, p)
+				}
+			}
+			if len(props) != 1 || props[0].Kind != "own" {
+				t.Fatalf("proposals %+v", props)
+			}
+			victim := old
+			switch tc {
+			case "elsewhere":
+				// The proposal names a directory outside the target.
+				victim = filepath.Join(home, "Documents", "oldname")
+				write(t, filepath.Join(victim, "SKILL.md"), skillMD("newname"))
+				props[0].Item.Path = victim
+			case "replaced target":
+				// The target directory becomes a link to a copy of it.
+				moved := filepath.Join(home, "agents-copy")
+				if err := os.Rename(agents, moved); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(moved, agents); err != nil {
+					t.Fatal(err)
+				}
+				victim = filepath.Join(moved, "oldname")
+			}
+			if _, err := s.Adopt(props); err != nil {
+				t.Fatal(err)
+			}
+			_, err = os.Stat(filepath.Join(victim, "SKILL.md"))
+			if tc == "moved aside" {
+				if err == nil {
+					t.Fatal("oldname not moved aside")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("moved %s: %v", victim, err)
+			}
+			if !strings.Contains(strings.Join(logs, "\n"), "not moved aside") {
+				t.Errorf("no warning: %q", logs)
+			}
+		})
+	}
+}

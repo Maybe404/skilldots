@@ -260,6 +260,9 @@ type Result struct {
 	Refused []string
 }
 
+// mkdirAll is os.MkdirAll, replaceable in tests.
+var mkdirAll = os.MkdirAll
+
 // Apply executes the plan and updates the lock. The caller saves the library.
 // Only what skd can tell it made is removed outright: a link into the
 // library (ownLink) or what the placed file records (confirms). Anything
@@ -323,7 +326,7 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 				res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: its source goes through %s, a symbolic link inside the library", op.Dest, lib.Rel(l)))
 				continue
 			}
-			if err := os.MkdirAll(op.Target.Path, 0o755); err != nil {
+			if err := mkdirAll(op.Target.Path, 0o755); err != nil {
 				return res, err
 			}
 			if !intact(op) {
