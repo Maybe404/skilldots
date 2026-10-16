@@ -84,7 +84,14 @@ func FindEditor() (Editor, error) {
 		if err != nil {
 			return Editor{}, fmt.Errorf("%s %q: %w", c.from, c.value, err)
 		}
-		return Editor{Argv: argv, Terminal: !windowed[strings.ToLower(filepath.Base(argv[0]))], From: c.from}, nil
+		terminal := !windowed[strings.ToLower(filepath.Base(argv[0]))]
+		switch strings.ToLower(strings.TrimSpace(config.Get(config.EditorKind))) {
+		case "window":
+			terminal = false
+		case "terminal":
+			terminal = true
+		}
+		return Editor{Argv: argv, Terminal: terminal, From: c.from}, nil
 	}
 	for _, d := range detected {
 		if p, err := lookPath(d.cmd); err == nil {
@@ -108,6 +115,18 @@ func FindEditor() (Editor, error) {
 		return Editor{}, errors.New("no editor found: set one with `skd config set editor <command>`, or $EDITOR")
 	}
 	return Editor{Argv: opener, From: "system default"}, nil
+}
+
+// NoTerminalError is why ed cannot open dir: it is taken for a terminal
+// editor and there is no terminal to hand it. It says how to tell skd the
+// editor opens a window instead, when that is what it is.
+func NoTerminalError(ed Editor, dir string) error {
+	why := ed.Name() + " runs in a terminal"
+	if config.Get(config.EditorKind) != "terminal" {
+		why = ed.Name() + " is not an editor skd knows to open a window, so it runs it in the terminal"
+	}
+	return fmt.Errorf("%s, and there is none. If it opens a window: skd config set editor-kind window. "+
+		"Or choose another editor (skd config set editor <command>), or open %s yourself", why, dir)
 }
 
 // OverwrittenError is returned by Edit for a skill whose files skd or an
@@ -181,7 +200,7 @@ func (s *Session) Edit(r Ref, opts EditOptions) (*EditOutcome, error) {
 		return nil, fmt.Errorf("editor %q (%s) not found; set one with skd config set editor <command>", ed.Argv[0], ed.From)
 	}
 	if ed.Terminal && opts.NoTerminal {
-		return nil, fmt.Errorf("%s runs in a terminal and there is none; set a windowed editor with skd config set editor <command>, or open %s yourself", ed.Name(), e.Dir)
+		return nil, NoTerminalError(ed, e.Dir)
 	}
 	out := &EditOutcome{Entry: *e, Dir: e.Dir, Editor: ed}
 	over := OverwriteNote(*e) != ""

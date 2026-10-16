@@ -57,6 +57,16 @@ func TestFindEditorOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	check([]string{"/opt/my editor/vim"}, true, "editor setting")
+	// editor-kind overrides the guess from the command's name.
+	config.Set(config.EditorKind, "window")
+	check([]string{"/opt/my editor/vim"}, false, "editor setting")
+	config.Set(config.EditorKind, "terminal")
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	config.Set(config.Editor, "code")
+	check([]string{"code"}, true, "editor setting")
+	config.Set(config.EditorKind, "")
+	config.Set(config.Editor, "'/opt/my editor/vim'")
 	config.Set(config.Editor, `"unterminated`)
 	if _, err := FindEditor(); err == nil || errors.Is(err, exec.ErrNotFound) {
 		t.Fatalf("bad setting: %v", err)

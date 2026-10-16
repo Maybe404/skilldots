@@ -416,9 +416,9 @@ func TestSettingsFlow(t *testing.T) {
 	if m.ov == nil || m.ov.title != "Settings" {
 		t.Fatalf("no settings page: %+v", m.ov)
 	}
-	// The second row is the theme; a value it does not accept is refused
-	// in the dialog, a good one is saved.
-	m, _ = press(t, m, "down", "enter")
+	// The third row is the theme (after editor and editor-kind); a value
+	// it does not accept is refused in the dialog, a good one is saved.
+	m, _ = press(t, m, "down", "down", "enter")
 	if m.ov == nil || m.ov.title != "Set theme" {
 		t.Fatalf("enter on theme: %+v", m.ov)
 	}

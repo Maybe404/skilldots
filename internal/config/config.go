@@ -18,10 +18,11 @@ import (
 
 // Setting names.
 const (
-	Library = "library"
-	Editor  = "editor"
-	Theme   = "theme"
-	Lang    = "lang"
+	Library    = "library"
+	Editor     = "editor"
+	EditorKind = "editor-kind"
+	Theme      = "theme"
+	Lang       = "lang"
 )
 
 // Key describes one setting.
@@ -43,6 +44,9 @@ type Key struct {
 var Keys = []Key{
 	{Name: Editor, Help: "command that opens a skill directory (skd edit, o in the dashboard)",
 		Default: "$VISUAL, $EDITOR, then VS Code, Cursor, Zed or Sublime Text if installed, else the system's default"},
+	{Name: EditorKind, Help: "whether the editor command (setting, $VISUAL or $EDITOR) opens a window or runs in the terminal",
+		Values:  []string{"auto", "window", "terminal"},
+		Default: "auto: known window editors (code, cursor, zed, subl, …) open a window, any other command runs in the terminal"},
 	{Name: Theme, Help: "colours: light, dark or auto (ask the terminal)", Values: []string{"auto", "light", "dark"},
 		Default: "auto; --theme and $SKILLDOTS_THEME take precedence"},
 	{Name: Lang, Help: "language of skd's own text (reserved: only English exists so far)", Values: []string{"auto", "en", "zh"},

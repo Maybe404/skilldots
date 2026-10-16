@@ -92,7 +92,7 @@ Then edit the directory `skd path <skill>` prints. You edit files yourself; `skd
 
 ## Settings
 
-`skd config list --json`; `skd config set editor "<command>"` (or `theme light|dark|auto`) when the user asks. `lang` is reserved.
+`skd config list --json`; `skd config set editor "<command>"` (or `theme light|dark|auto`) when the user asks. If `skd edit` says the editor "runs it in the terminal" but the user's editor opens a window, `skd config set editor-kind window` fixes it. `lang` is reserved.
 
 ## Create a new skill for the user
 

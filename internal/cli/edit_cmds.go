@@ -68,7 +68,7 @@ func editCmd() *cobra.Command {
 				ed.Stdin, ed.Stdout, ed.Stderr = os.Stdin, os.Stdout, os.Stderr
 				runErr = ed.Run()
 			} else if out.Editor.Terminal {
-				return fmt.Errorf("%s runs in a terminal and there is none; set a windowed editor with skd config set editor <command>, or open %s yourself", out.Editor.Name(), out.Dir)
+				return app.NoTerminalError(out.Editor, out.Dir)
 			} else {
 				runErr = out.Editor.Start(out.Dir)
 			}

@@ -3,6 +3,7 @@ package cli_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -74,8 +75,53 @@ func TestEdit(t *testing.T) {
 	os.Chmod(e.p("bin/vim"), 0o755)
 	e.ok("", "config", "set", "editor", e.p("bin/vim"))
 	_, errOut, code = e.skd("", "edit", "notes")
-	if code == 0 || !strings.Contains(errOut, "runs in a terminal") {
+	if code == 0 || !strings.Contains(errOut, "in the terminal") || !strings.Contains(errOut, "skd config set editor-kind window") {
 		t.Fatalf("vim without a terminal: exit %d\n%s", code, errOut)
+	}
+}
+
+// An editor command skd does not know is taken for a terminal editor.
+// When it opens a window, editor-kind says so, and it then opens skills
+// without a terminal, --force and --fork included; what the refusal
+// suggested works.
+func TestEditCustomWindowEditor(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	e.skill("up/skills/eng/tdd", "tdd")
+	up := e.repo("up")
+	e.ok("", "add", up, "--skill", "tdd")
+	e.ok("", "new", "notes")
+	got := e.p("opened")
+	e.write("bin/myeditor", "#!/bin/sh\nprintf '%s\\n' \"$1\" >> '"+got+"'\n")
+	os.Chmod(e.p("bin/myeditor"), 0o755)
+	e.ok("", "config", "set", "editor", e.p("bin/myeditor"))
+	_, errOut, code := e.skd("", "edit", "tdd", "--force")
+	if code == 0 || !strings.Contains(errOut, "skd config set editor-kind window") {
+		t.Fatalf("unknown editor without a terminal: exit %d\n%s", code, errOut)
+	}
+	e.ok("", "config", "set", "editor-kind", "window")
+	e.ok("", "edit", "tdd", "--force")
+	e.ok("", "edit", "notes")
+	opened := func() []string {
+		for i := 0; i < 100; i++ {
+			if b, _ := os.ReadFile(got); len(strings.Fields(string(b))) == 2 {
+				return strings.Fields(string(b))
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		return nil
+	}()
+	if len(opened) != 2 || !slices.Contains(opened, filepath.Join(lib, "skills", "notes")) {
+		t.Fatalf("opened %v", opened)
+	}
+	// And the other way: a known window editor run in a terminal.
+	e.write("bin/code", "#!/bin/sh\nexit 0\n")
+	os.Chmod(e.p("bin/code"), 0o755)
+	e.ok("", "config", "set", "editor", e.p("bin/code"))
+	e.ok("", "config", "set", "editor-kind", "terminal")
+	if _, errOut, code := e.skd("", "edit", "notes"); code == 0 || !strings.Contains(errOut, "runs in a terminal") {
+		t.Fatalf("editor-kind terminal: exit %d\n%s", code, errOut)
 	}
 }
 

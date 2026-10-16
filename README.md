@@ -73,8 +73,8 @@ Prebuilt binaries will follow.
 | `skd purge <pack>` | delete a pack from manifest, lock, `vendor/` and every agent directory |
 | `skd fork <skill> [--private] [--as name]` | copy a vendored skill into `skills/` to edit it; upstream no longer touches it |
 | `skd path <skill>` | print where a skill's files live, for editing |
-| `skd edit <skill> [--fork [--private] [--as name] \| --force]` | open a skill's directory in your editor: the `editor` setting, `$VISUAL`, `$EDITOR`, then VS Code, Cursor, Zed or Sublime Text (command or macOS app), then the system opener. A vendored or app skill is replaced on update, so at a terminal skd offers to fork it first; without a terminal it refuses unless `--fork` (fork, open the copy) or `--force` (open the files anyway) is given. A terminal editor (vim, nano) needs a terminal; when the editor cannot run (not installed, or a terminal editor without a terminal) `--fork` fails before forking anything |
-| `skd config list \| get <key> \| set <key> [value]` | settings, per user and machine: `editor` (command), `theme` (`light`, `dark`, `auto`), `lang` (reserved; only English so far); `library` is shown and set by `skd use`. No value unsets |
+| `skd edit <skill> [--fork [--private] [--as name] \| --force]` | open a skill's directory in your editor: the `editor` setting, `$VISUAL`, `$EDITOR`, then VS Code, Cursor, Zed or Sublime Text (command or macOS app), then the system opener. A vendored or app skill is replaced on update, so at a terminal skd offers to fork it first; without a terminal it refuses unless `--fork` (fork, open the copy) or `--force` (open the files anyway) is given. A terminal editor (vim, nano) needs a terminal. A command skd does not know as a window editor (code, cursor, zed, subl and the like) is taken for a terminal editor; if yours opens a window, `skd config set editor-kind window` says so (and `terminal` the other way). When the editor cannot run (not installed, or a terminal editor without a terminal) `--fork` fails before forking anything |
+| `skd config list \| get <key> \| set <key> [value]` | settings, per user and machine: `editor` (command), `editor-kind` (`auto`, `window`, `terminal`: whether that command opens a window or needs the terminal), `theme` (`light`, `dark`, `auto`), `lang` (reserved; only English so far); `library` is shown and set by `skd use`. No value unsets |
 | `skd new <name> [--private]` | scaffold a skill of your own and link it; the name follows the skill name rule below |
 | `skd scan` | inventory every agent skill directory: managed, copies, links, broken |
 | `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own, enable per agent |
@@ -112,7 +112,7 @@ Nothing skd prints for a person carries control characters (escape sequences, BE
 | `t` | trash: restore an entry, or empty it (asks twice; the second answer is `D`) | `trash restore`, `trash empty` |
 | `s` | back up: commit and push | `sync` |
 | `A` / `r` | apply pending link changes / reload | `apply` |
-| `,` | settings: editor, theme (applies next start) | `config` |
+| `,` | settings: editor, editor kind, theme (applies next start) | `config` |
 | `?` | every key | |
 | `q` `esc` | quit; `ctrl+c` while something runs quits when it ends, twice stops it | |
 
