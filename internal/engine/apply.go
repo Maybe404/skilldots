@@ -177,7 +177,8 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				// Outside every known target directory (a removed custom
 				// target, or a tampered lock) only our own link may go,
 				// and --force never applies.
-				if !(prev.Mode == "link" && sourceInLibrary(prev.Source, lib) && current(p, prev, lib)) {
+				ours := sourceInLibrary(prev.Source, lib) || appSource(prev.Source, name, lib)
+				if !(prev.Mode == "link" && ours && current(p, prev, lib)) {
 					forget(fmt.Sprintf("%s is not a link of ours inside a known target directory", p))
 					continue
 				}
@@ -375,6 +376,21 @@ func sourceInLibrary(src string, lib *library.Library) bool {
 		return false
 	}
 	return fsutil.Within(lib.Root, lib.Abs(src))
+}
+
+// appSource reports whether src is the expanded path of the [[app]] named
+// name: the one source outside the library skilldots itself links to.
+func appSource(src, name string, lib *library.Library) bool {
+	if src == "" || !filepath.IsAbs(src) || filepath.Clean(src) != src {
+		return false
+	}
+	home, _ := os.UserHomeDir()
+	for _, a := range lib.Manifest.Apps {
+		if a.Name == name && filepath.Clean(targets.Expand(a.Path, home)) == src {
+			return true
+		}
+	}
+	return false
 }
 
 // knownTargetDir reports whether dir is the directory of a registered target.

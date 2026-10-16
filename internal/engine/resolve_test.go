@@ -242,3 +242,69 @@ func TestOrphanSourceOutsideLibrary(t *testing.T) {
 		t.Error("our own orphan link was not removed")
 	}
 }
+
+// An app link we made into a custom target that has since been removed
+// is cleaned up like a vendored one: its source is the [[app]] path,
+// outside the library. A record whose source points anywhere else
+// outside the library is still only forgotten.
+func TestOrphanAppLinkOfRemovedTarget(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	app := filepath.Join(home, "Applications", "Surge.app", "skills", "surge")
+	writeSkill(t, app, "surge")
+	lib.Manifest.Apps = append(lib.Manifest.Apps, &manifest.App{Name: "surge", Path: "~/Applications/Surge.app/skills/surge"})
+	none := []string{}
+	lib.Manifest.Apps[0].Targets = &none
+	writeSkill(t, filepath.Join(lib.Root, "vendor", "o", "r", "tdd"), "tdd")
+	gone := filepath.Join(home, "custom")
+	os.MkdirAll(gone, 0o755)
+	os.Symlink(app, filepath.Join(gone, "surge"))
+	os.Symlink(filepath.Join(lib.Root, "vendor", "o", "r", "tdd"), filepath.Join(gone, "tdd"))
+	lib.Lock.Links["mine/surge"] = &lock.Link{Mode: "link", Source: lib.Rel(app), Path: filepath.Join(gone, "surge")}
+	lib.Lock.Links["mine/tdd"] = &lock.Link{Mode: "link", Source: "vendor/o/r/tdd", Path: filepath.Join(gone, "tdd")}
+
+	// Tampered: a source outside the library that is not an [[app]], and
+	// an [[app]] source recorded under another link name.
+	elsewhere := filepath.Join(home, "elsewhere", "real")
+	writeSkill(t, elsewhere, "real")
+	os.Symlink(elsewhere, filepath.Join(gone, "real"))
+	lib.Lock.Links["mine/real"] = &lock.Link{Mode: "link", Source: elsewhere, Path: filepath.Join(gone, "real")}
+	os.Symlink(app, filepath.Join(gone, "alias"))
+	lib.Lock.Links["mine/alias"] = &lock.Link{Mode: "link", Source: app, Path: filepath.Join(gone, "alias")}
+	lib.Manifest.Targets.Default = []string{}
+
+	entries, _, err := Resolve(lib, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, force := range []bool{false, true} {
+		got := map[string]string{}
+		for _, op := range MakePlan(lib, entries, force).Ops {
+			got[op.Target.Name+"/"+op.Name] = op.Action
+		}
+		want := map[string]string{"mine/surge": "remove", "mine/tdd": "remove", "mine/real": "forget", "mine/alias": "forget"}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("force=%v %s: %q, want %q (plan %v)", force, k, got[k], v, got)
+			}
+		}
+	}
+	if _, err := Apply(lib, MakePlan(lib, entries, true)); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"surge", "tdd"} {
+		if _, err := os.Lstat(filepath.Join(gone, n)); !os.IsNotExist(err) {
+			t.Errorf("our %s link in the removed target was not cleaned up", n)
+		}
+	}
+	for _, n := range []string{"real", "alias"} {
+		if _, err := os.Lstat(filepath.Join(gone, n)); err != nil {
+			t.Errorf("the user's %s link was deleted", n)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(app, "SKILL.md")); err != nil {
+		t.Error("the app's own files were touched")
+	}
+	if len(lib.Lock.Links) != 0 {
+		t.Errorf("lock still has %v", lib.Lock.LinkKeys())
+	}
+}
