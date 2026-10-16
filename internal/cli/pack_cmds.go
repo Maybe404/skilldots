@@ -270,22 +270,34 @@ func updateCmd() *cobra.Command {
 			if out != nil && out.Apply != nil {
 				printApply(c, out.Apply)
 			}
-			if err != nil {
+			committed := false
+			// Past this point the update may have happened: under --json a
+			// failure still reports it, with the error.
+			report := func(err error) error {
+				if out != nil {
+					res := map[string]any{"packs": out.Reports, "failed": out.Failed, "apply": out.Apply, "committed": committed, "history": out.History}
+					if err != nil {
+						res["error"] = txt(err.Error())
+					}
+					c.jsonOut(res)
+				}
 				return err
 			}
-			committed := false
+			if err != nil {
+				return report(err)
+			}
 			if commit && out.Changed {
 				if committed, err = c.Commit("chore(skills): update vendored skills", true); committed {
 					c.printf("%s committed in %s\n", ok("✓"), c.lib.Root)
 				}
 				if err != nil {
-					return err
+					return report(err)
 				}
 			}
 			if len(out.History) > 0 {
 				c.printf("%s\n", dim(fmt.Sprintf("recorded in %s · skd history shows what changed and why", app.HistoryFile)))
 			}
-			c.jsonOut(map[string]any{"packs": out.Reports, "failed": out.Failed, "apply": out.Apply, "committed": committed, "history": out.History})
+			report(nil)
 			if len(out.Failed) > 0 {
 				return fmt.Errorf("%d pack(s) failed: %s", len(out.Failed), out.Failed[0].Repo)
 			}

@@ -150,3 +150,44 @@ func TestJSONContract(t *testing.T) {
 	e.git(e.home, "clone", "-q", "--bare", lib, e.p("backup.git"))
 	e.js("", "clone", e.p("backup.git"), e.p("lib2"))
 }
+
+// update --json when linking fails after the update was saved: stdout
+// still has the one document, with the error and the history record that
+// says linking failed; a later skd apply that links everything clears it.
+func TestUpdateJSONWhenApplyFails(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	e.skill("up/skills/eng/tdd", "tdd")
+	up := e.repo("up")
+	e.ok("", "add", up, "--all")
+	e.skill("up/skills/eng/fresh", "fresh")
+	e.git(up, "add", "-A")
+	e.git(up, "commit", "-qm", "fresh")
+	dir := e.p(".agents/skills")
+	os.Chmod(dir, 0o555)
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	out, errOut, code := e.skd("", "update", "--json")
+	if code == 0 {
+		t.Skip("linking did not fail (running as root?)")
+	}
+	r := oneJSON(t, []string{"update"}, out)
+	if !strings.Contains(errOut, "error:") {
+		t.Errorf("no error on stderr: %s", errOut)
+	}
+	for _, k := range []string{"packs", "failed", "apply", "committed", "history", "error"} {
+		if _, ok := r[k]; !ok {
+			t.Errorf("no %q in %v", k, r)
+		}
+	}
+	h, _ := r["history"].([]any)
+	if len(h) != 1 || h[0].(map[string]any)["applyError"] == nil {
+		t.Fatalf("history: %v", r["history"])
+	}
+	os.Chmod(dir, 0o755)
+	e.ok("", "apply")
+	recs := e.js("", "history")["records"].([]any)
+	if len(recs) != 1 || recs[0].(map[string]any)["applyError"] != nil {
+		t.Fatalf("after apply: %v", recs)
+	}
+}

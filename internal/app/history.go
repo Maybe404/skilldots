@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/safetext"
@@ -71,7 +73,8 @@ type UpdateRecord struct {
 	CommitsUnknown bool `json:"commitsUnknown,omitempty"`
 	// ApplyError is set when the update was saved (vendor/ and the lock
 	// moved to To) but linking it into the agents failed: skd apply
-	// finishes it.
+	// finishes it, and once an apply succeeds it is taken out of the
+	// record (settleApplyErrors).
 	ApplyError string `json:"applyError,omitempty"`
 }
 
@@ -252,6 +255,49 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 		return err
 	}
 	return f.Close()
+}
+
+// settleApplyErrors takes applyError out of the history once an apply
+// has linked everything: the updates it was about are finished, and the
+// history should stop telling the person to run skd apply. Only those
+// lines change (their other fields, unknown ones included, are kept);
+// every other line stays byte for byte. A failure is only warned about.
+func (s *Session) settleApplyErrors() {
+	p := s.HistoryPath()
+	b, err := os.ReadFile(p)
+	key := []byte(`"applyError"`)
+	if err != nil || !bytes.Contains(b, key) {
+		return
+	}
+	lines := bytes.SplitAfter(b, []byte("\n"))
+	changed := false
+	for i, l := range lines {
+		if !bytes.Contains(l, key) || len(l) > maxLine {
+			continue
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(l, &m) != nil {
+			continue
+		}
+		if _, ok := m["applyError"]; !ok {
+			continue
+		}
+		delete(m, "applyError")
+		nl, err := json.Marshal(m)
+		if err != nil {
+			continue
+		}
+		if bytes.HasSuffix(l, []byte("\n")) {
+			nl = append(nl, '\n')
+		}
+		lines[i], changed = nl, true
+	}
+	if !changed {
+		return
+	}
+	if err := fsutil.WriteAtomic(p, bytes.Join(lines, nil)); err != nil {
+		s.logf(Warn, "could not mark the update history linked (%s): %v", HistoryFile, err)
+	}
 }
 
 // History returns the recorded updates, newest first: of one pack (repo

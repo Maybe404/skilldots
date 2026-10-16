@@ -180,6 +180,27 @@ func TestHistoryNotRecordedWhenLockSaveFails(t *testing.T) {
 	}
 }
 
+// A record that says linking failed while everything is linked (merged
+// in from another machine, or linked by hand): an apply with nothing to
+// do settles it too.
+func TestApplyWithNothingToDoSettlesApplyErrors(t *testing.T) {
+	up := upstream(t)
+	_, root := side(t, up)
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd")
+	p := filepath.Join(root, app.HistoryFile)
+	other := `{"time":"2026-01-01T00:00:00Z","repo":"acme/skills","from":"a","to":"b","applyError":"permission denied"}`
+	write(t, p, other+"\nnot json \"applyError\"\n")
+	s, _ := app.Open(root)
+	out, err := s.Apply(app.ApplyOptions{})
+	if err != nil || out.Applied {
+		t.Fatalf("apply had something to do: %v %+v", err, out)
+	}
+	b, _ := os.ReadFile(p)
+	if got := string(b); strings.Contains(strings.SplitN(got, "\n", 2)[0], "applyError") || !strings.HasSuffix(got, "not json \"applyError\"\n") {
+		t.Fatalf("history after apply:\n%s", got)
+	}
+}
+
 // Linking can fail after the update is saved (vendor/ and the lock are at
 // the new commit): the update happened, so it is recorded, marked.
 func TestHistoryRecordsApplyFailure(t *testing.T) {
@@ -205,5 +226,20 @@ func TestHistoryRecordsApplyFailure(t *testing.T) {
 	recs, _, _ := s.History("", 0)
 	if len(recs) != 1 || recs[0].ApplyError == "" || recs[0].To != s.Lib.Lock.Packs["acme/skills"].Commit {
 		t.Fatalf("recorded: %+v", recs)
+	}
+	// Once an apply links everything the record stops saying it failed;
+	// the rest of the line (an unknown field too) is kept.
+	p := filepath.Join(root, app.HistoryFile)
+	b, _ := os.ReadFile(p)
+	os.WriteFile(p, []byte(strings.Replace(string(b), `{"time"`, `{"future":1,"time"`, 1)), 0o644)
+	os.Chmod(dir, 0o755)
+	if _, err := s.Apply(app.ApplyOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = app.Open(root)
+	recs, _, _ = s.History("", 0)
+	b, _ = os.ReadFile(p)
+	if len(recs) != 1 || recs[0].ApplyError != "" || strings.Contains(string(b), "applyError") || !strings.Contains(string(b), `"future":1`) || recs[0].Changed == nil {
+		t.Fatalf("after apply: %+v\n%s", recs, b)
 	}
 }

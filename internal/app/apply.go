@@ -54,7 +54,11 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 	}
 	plan := engine.MakePlanForce(s.Lib, entries, func(key string) bool { return o.Force || o.ForceKeys[key] })
 	out := &ApplyOutcome{DryRun: o.DryRun, Changes: plan.ChangeList(), Kept: plan.Counts()["keep"], Plan: plan}
-	if !plan.Changes() || o.DryRun {
+	if o.DryRun {
+		return out, nil
+	}
+	if !plan.Changes() {
+		s.settleApplyErrors()
 		return out, nil
 	}
 	res, err := engine.Apply(s.Lib, plan)
@@ -68,6 +72,7 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 		return out, err
 	}
 	out.Applied = true
+	s.settleApplyErrors()
 	return out, nil
 }
 
