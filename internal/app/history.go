@@ -37,9 +37,14 @@ const (
 	MaxName    = 200
 )
 
-// maxLine is the longest history line read; a longer one (nothing skd
-// writes comes close) is skipped like an unreadable one.
-const maxLine = 1 << 20
+// maxLine is the longest history line read; a longer one is skipped
+// like an unreadable one. maxRecord is the longest line skd writes, well
+// below it: a record that would be longer has its skill lists cut
+// (Omitted counts what was left out), so every line written reads back.
+const (
+	maxLine   = 1 << 20
+	maxRecord = maxLine / 4
+)
 
 // historyDepth is how many commits an update fetches beyond the shallow
 // cache clone to find the subjects since the previous commit.
@@ -76,6 +81,9 @@ type UpdateRecord struct {
 	// finishes it, and once an apply succeeds it is taken out of the
 	// record (settleApplyErrors).
 	ApplyError string `json:"applyError,omitempty"`
+	// Omitted is how many skill names were left out of the lists above to
+	// keep the record within maxRecord (an update of thousands of skills).
+	Omitted int `json:"omitted,omitempty"`
 }
 
 // UpstreamCommit is one upstream commit.
@@ -234,7 +242,7 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 	}
 	var b []byte
 	for _, r := range recs {
-		line, err := json.Marshal(r)
+		line, err := r.marshalFit()
 		if err != nil {
 			return err
 		}
@@ -297,6 +305,34 @@ func (s *Session) settleApplyErrors() {
 	}
 	if err := fsutil.WriteAtomic(p, bytes.Join(lines, nil)); err != nil {
 		s.logf(Warn, "could not mark the update history linked (%s): %v", HistoryFile, err)
+	}
+}
+
+// marshalFit is r as one history line of at most maxRecord bytes: while it
+// is longer, the longest skill list loses its second half (counted in
+// Omitted), and the commit subjects go last.
+func (r *UpdateRecord) marshalFit() ([]byte, error) {
+	for {
+		line, err := json.Marshal(r)
+		if err != nil || len(line) <= maxRecord {
+			return line, err
+		}
+		var longest *[]string
+		for _, l := range []*[]string{&r.Changed, &r.Added, &r.Moved, &r.Gone, &r.Dropped, &r.New} {
+			if longest == nil || len(*l) > len(*longest) {
+				longest = l
+			}
+		}
+		switch {
+		case len(*longest) > 0:
+			keep := len(*longest) / 2
+			r.Omitted += len(*longest) - keep
+			*longest = (*longest)[:keep]
+		case len(r.Commits) > 0:
+			r.Commits, r.MoreCommits = r.Commits[:len(r.Commits)/2], true
+		default:
+			return line, nil // nothing left to cut; the fields are bounded
+		}
 	}
 }
 
@@ -383,6 +419,9 @@ func RecordRows(r UpdateRecord) [][2]string {
 		if len(row.names) > 0 {
 			out = append(out, [2]string{row.label, strings.Join(row.names, ", ")})
 		}
+	}
+	if r.Omitted > 0 {
+		out = append(out, [2]string{"not recorded", fmt.Sprintf("%d more skill names (the record would have been too long)", r.Omitted)})
 	}
 	return out
 }

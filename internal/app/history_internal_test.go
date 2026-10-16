@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 )
 
@@ -63,5 +66,42 @@ func TestFillCommitsRefIsNeverAnOption(t *testing.T) {
 	fillCommits(context.Background(), r, "", nil)
 	if r.CommitsUnknown || len(r.Commits) != 2 {
 		t.Errorf("ordinary ref: %+v", r)
+	}
+}
+
+// A record of a huge update (thousands of long skill names) is cut to fit
+// one line the reader takes: it reads back, saying how much was left out.
+func TestHugeRecordReadsBack(t *testing.T) {
+	root := t.TempDir()
+	s := &Session{Lib: &library.Library{Root: root, Manifest: manifest.New(nil)}}
+	name := strings.Repeat("n", MaxName)
+	r := &UpdateRecord{Repo: "acme/skills", From: "a", To: "b", Commits: []UpstreamCommit{{Hash: "c", Subject: "s"}}}
+	for i := 0; i < 8000; i++ {
+		r.Changed = append(r.Changed, fmt.Sprintf("%s%d", name, i))
+	}
+	r.New = append([]string{}, r.Changed[:3000]...)
+	r.sanitize()
+	if err := s.appendHistory([]*UpdateRecord{r}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(s.HistoryPath())
+	if len(b) > maxRecord+1 {
+		t.Errorf("wrote a %d-byte line", len(b))
+	}
+	recs, skipped, err := s.History("", 0)
+	if err != nil || skipped != 0 || len(recs) != 1 {
+		t.Fatalf("History: %v skipped %d, %d records", err, skipped, len(recs))
+	}
+	got := recs[0]
+	if got.Omitted == 0 || len(got.Changed)+len(got.New)+got.Omitted != 11000 || len(got.Commits) != 1 {
+		t.Errorf("kept %d changed, %d new, omitted %d, %d commits", len(got.Changed), len(got.New), got.Omitted, len(got.Commits))
+	}
+	if rows := RecordRows(got); !strings.Contains(rows[len(rows)-1][1], fmt.Sprint(got.Omitted)) {
+		t.Errorf("rows do not say what was left out: %v", rows[len(rows)-1])
+	}
+	// A record of ordinary size is written whole.
+	small := &UpdateRecord{Repo: "x/y", From: "a", To: "b", Changed: []string{"tdd"}}
+	if line, _ := small.marshalFit(); small.Omitted != 0 || !strings.Contains(string(line), "tdd") {
+		t.Errorf("small record cut: %s", line)
 	}
 }
