@@ -219,9 +219,11 @@ func TestViewEdgeCases(t *testing.T) {
 		"pack without vendored skills": {func() *Snapshot {
 			return &Snapshot{Root: "/tmp/lib", Name: "lib", Packs: []Pack{{Repo: "a/b", NoLicense: true}}}
 		}, []string{"a/b", "0 of 0", "not fetched", "no license", "no skills vendored yet"}},
-		"resolve problem": {func() *Snapshot {
-			return &Snapshot{Root: "/tmp/lib", Name: "lib", Problem: "skill name conflicts (set `as`):\n  \"x\" is provided by both"}
-		}, []string{"skill name conflicts", "provided by both"}},
+		"name conflict": {func() *Snapshot {
+			msg := `"x" is provided by vendor:a/b and skills/`
+			return &Snapshot{Root: "/tmp/lib", Name: "lib", Warnings: []string{msg + "; neither is linked", "unknown target"},
+				Mine: []Skill{{Name: "x", LinkName: "x", Kind: engine.KindSkill, Installed: true, Conflict: msg, Agents: []string{"agents"}}}}
+		}, []string{"2 problems", "provided by", "conflict", "not linked"}},
 	}
 	for name, c := range cases {
 		for _, size := range [][2]int{{120, 36}, {90, 24}, {60, 12}} {

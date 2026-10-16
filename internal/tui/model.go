@@ -142,8 +142,8 @@ func New(ops Ops, snap *Snapshot, theme Theme, version string) Model {
 		finput: fi, spin: sp, reports: map[string]*engine.SyncReport{}}
 	m.spin.Style = m.spin.Style.Foreground(theme.Accent)
 	m.left.cur = m.firstSelectable(m.leftRows())
-	if snap.Problem != "" {
-		m.status, m.statusLvl = firstLine(snap.Problem), lvErr
+	if len(snap.Warnings) > 0 {
+		m.status, m.statusLvl = firstLine(snap.Warnings[0]), lvWarn
 	} else {
 		m.status = "↑↓ move · tab switch column · ? all keys"
 	}

@@ -242,7 +242,10 @@ func (m Model) viewLeft(w, h int) []string {
 				name.bold = true
 			}
 			var right []seg
-			if r.skill.Missing {
+			switch {
+			case r.skill.Conflict != "":
+				dot, right = sg("! ", t.Warn), []seg{sg("conflict ", t.Warn)}
+			case r.skill.Missing:
 				right = []seg{sg("missing ", t.Warn)}
 			}
 			out = append(out, spread(w, bg, []seg{mark, dot, name}, right))
@@ -322,15 +325,21 @@ func (m Model) packHeader(p Pack, w int) []string {
 	return lines
 }
 
-// problem is a banner for a manifest the engine cannot resolve. Until it
-// is fixed the lists are incomplete, so it stays on screen.
+// problem is a banner for what the engine skipped or could not link
+// (name clashes, unknown targets, packs never fetched). It stays on screen
+// until the library is fixed.
 func (m Model) problem(w int) []string {
-	if m.snap.Problem == "" {
+	ws := m.snap.Warnings
+	if len(ws) == 0 {
 		return nil
 	}
 	t, bg := m.theme, m.surf.panel
+	text := ws[0]
+	if len(ws) > 1 {
+		text = fmt.Sprintf("%d problems (skd apply -n lists them) · %s", len(ws), ws[0])
+	}
 	var out []string
-	for i, l := range wrap("skills.toml needs fixing: "+m.snap.Problem+" · fix it, then r reloads", w-4, 3) {
+	for i, l := range wrap(text+" · r reloads after a fix", w-4, 3) {
 		mark := "   "
 		if i == 0 {
 			mark = " ! "
@@ -411,6 +420,8 @@ func (m Model) packView(p Pack, w, h int) []string {
 		switch {
 		case !sk.Installed:
 			agents = sg("not installed", t.Faint)
+		case sk.Conflict != "":
+			icon, nameFg, agents = sg("! ", t.Warn), t.Text, sg("name conflict · not linked", t.Warn)
 		case sk.Missing:
 			icon, nameFg, agents = sg("◉ ", t.Warn), t.Text, sg("missing from vendor/ · u re-fetches", t.Warn)
 		case sk.Enabled():
@@ -473,6 +484,11 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 	out := []string{row(), row(sgb(sk.LinkName, t.Text)), row(sg(kind, t.Muted)), row(sg(tildify(sk.Dir), t.Faint)), row(agents...)}
 	if sk.Missing {
 		out = append(out, row(sg("source directory is missing", t.Warn)))
+	}
+	if sk.Conflict != "" {
+		for _, l := range wrap("not linked: "+sk.Conflict, w-2, 3) {
+			out = append(out, row(sg(l, t.Warn)))
+		}
 	}
 	out = append(out, row())
 	for _, l := range wrap(sk.Description, w-2, 8) {

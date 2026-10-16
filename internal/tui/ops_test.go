@@ -240,8 +240,9 @@ func TestOpsEndToEnd(t *testing.T) {
 	}
 
 	// Follow everything.
-	if _, err := o.Add("acme/skills", nil, true); err != nil {
-		t.Fatal(err)
+	// private/tdd (the fork) already uses the name: engine renames.
+	if msg, err := o.Add("acme/skills", nil, true); err != nil || !strings.Contains(msg, "name taken, linked tdd as") {
+		t.Fatalf("follow all: %q %v", msg, err)
 	}
 	s, _ = o.Load()
 	if p := findPack(s, "acme/skills"); p == nil || !p.UsesAll || p.Selected != 4 {

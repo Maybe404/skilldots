@@ -14,6 +14,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
+	"github.com/Maybe404/skilldots/internal/skillmd"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
 
@@ -62,7 +63,7 @@ func (o *libOps) Load() (*Snapshot, error) { return LoadSnapshot(o.root) }
 // apply re-links the library to match the manifest and saves it, like
 // `skd apply` without --force.
 func apply(lib *library.Library, reg *targets.Registry) (string, error) {
-	entries, err := engine.Resolve(lib, reg)
+	entries, _, err := engine.Resolve(lib, reg)
 	if err != nil {
 		return "", err
 	}
@@ -85,11 +86,11 @@ func apply(lib *library.Library, reg *targets.Registry) (string, error) {
 	if n["skip"] > 0 {
 		var why []string
 		for _, op := range plan.Ops {
-			if op.Action == "skip" {
-				why = append(why, op.Target.Name+"/"+op.Name)
+			if op.Action == "skip" && len(why) < 2 {
+				why = append(why, op.Target.Name+"/"+op.Name+": "+op.Reason)
 			}
 		}
-		parts = append(parts, fmt.Sprintf("%d skipped (%s; skd apply --force moves it to the trash)", n["skip"], strings.Join(why, ", ")))
+		parts = append(parts, fmt.Sprintf("%d skipped (%s; skd apply -n shows all)", n["skip"], strings.Join(why, "; ")))
 	}
 	if res != nil && len(res.Backups) > 0 {
 		parts = append(parts, fmt.Sprintf("%d moved to trash", len(res.Backups)))
@@ -127,7 +128,7 @@ func (o *libOps) SetTargets(s *Skill, repo string, agents []string) (string, err
 		}
 		p.Targets = &next
 	} else {
-		entries, err := engine.Resolve(lib, reg)
+		entries, _, err := engine.Resolve(lib, reg)
 		if err != nil {
 			return "", err
 		}
@@ -192,11 +193,14 @@ func (o *libOps) Browse(arg string) (*Browse, error) {
 	if err != nil {
 		return nil, err
 	}
-	up, err := pack.Scan(clone)
+	up, rejected, err := pack.Scan(clone)
 	if err != nil {
 		return nil, err
 	}
 	if len(up) == 0 {
+		if len(rejected) > 0 {
+			return nil, fmt.Errorf("%s: no usable SKILL.md (%s)", src.Repo, rejected[0])
+		}
 		return nil, fmt.Errorf("%s contains no SKILL.md", src.Repo)
 	}
 	b := &Browse{Repo: src.Repo, Commit: commit, Skills: up, Have: map[string]bool{}}
@@ -231,7 +235,7 @@ func (o *libOps) Add(arg string, names []string, all bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	up, err := pack.Scan(clone)
+	up, _, err := pack.Scan(clone)
 	if err != nil {
 		return "", err
 	}
@@ -266,20 +270,7 @@ func (o *libOps) Add(arg string, names []string, all bool) (string, error) {
 			return "", fmt.Errorf("%s is excluded by a skip pattern in skills.toml", n)
 		}
 	}
-	// Give new skills a free link name, as `skd add` does.
-	entries, _ := engine.Resolve(lib, reg)
-	var renamed []string
-	for _, s := range up {
-		if !p.Selected(s.Name, s.Category) {
-			continue
-		}
-		if prev := engine.Find(entries, s.Name); prev != nil && !(prev.Kind == engine.KindVendor && prev.Origin == p.Repo) {
-			if ov := p.Override(s.Name, true); ov.As == "" {
-				ov.As = engine.FreeName(entries, s.Name, p.Prefix())
-				renamed = append(renamed, s.Name+" as "+ov.As)
-			}
-		}
-	}
+	// engine.Sync gives newly vendored clashing skills a free link name.
 	rep, err := engine.Sync(lib, p)
 	if err != nil {
 		return "", err
@@ -292,8 +283,13 @@ func (o *libOps) Add(arg string, names []string, all bool) (string, error) {
 		return "", err
 	}
 	msg := fmt.Sprintf("vendored %d from %s @ %s", len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), p.Repo, short(rep.NewCommit))
-	if len(renamed) > 0 {
-		msg += " · linked " + strings.Join(renamed, ", ")
+	if len(rep.Renamed) > 0 {
+		var renamed []string
+		for n, as := range rep.Renamed {
+			renamed = append(renamed, n+" as "+as)
+		}
+		sort.Strings(renamed)
+		msg += " · name taken, linked " + strings.Join(renamed, ", ")
 	}
 	if rep.NoLicense {
 		msg += " · no license found: check before redistributing"
@@ -380,7 +376,7 @@ func knownUpstream(repo string) map[string]bool {
 	if !fsutil.Exists(filepath.Join(dir, ".git")) {
 		return nil
 	}
-	up, err := pack.Scan(dir)
+	up, _, err := pack.Scan(dir)
 	if err != nil {
 		return nil
 	}
@@ -413,7 +409,7 @@ func (o *libOps) Fork(s Skill, private bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	entries, err := engine.Resolve(lib, reg)
+	entries, _, err := engine.Resolve(lib, reg)
 	if err != nil {
 		return "", err
 	}
@@ -434,6 +430,13 @@ func (o *libOps) Fork(s Skill, private bool) (string, error) {
 	}
 	if err := fsutil.CopyTree(e.Dir, dest); err != nil {
 		return "", err
+	}
+	// The fork is known by its directory name; an aliased fork must say
+	// so in its frontmatter or it would clash with the upstream name.
+	if meta, err := skillmd.Read(dest); err == nil && meta.Name != e.LinkName {
+		if err := skillmd.SetName(dest, e.LinkName); err != nil {
+			return "", err
+		}
 	}
 	note := fmt.Sprintf("\n<!-- forked by skilldots from %s -->\n", engine.Describe(*e))
 	if f, err := os.OpenFile(filepath.Join(dest, "SKILL.md"), os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
@@ -482,7 +485,7 @@ func (o *libOps) Trash(s Skill) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	entries, err := engine.Resolve(lib, reg)
+	entries, _, err := engine.Resolve(lib, reg)
 	if err != nil {
 		return "", err
 	}

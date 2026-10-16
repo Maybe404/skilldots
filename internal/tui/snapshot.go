@@ -37,9 +37,10 @@ type Snapshot struct {
 	Private []Skill
 	Apps    []Skill
 
-	// Problem is set when the manifest cannot be resolved (for example a
-	// name conflict); the dashboard still opens and shows it.
-	Problem string
+	// Warnings are the engine's per-entry problems (name clashes, unknown
+	// targets, packs never fetched…). Affected entries are skipped or
+	// marked; the dashboard keeps them on screen until they are fixed.
+	Warnings []string
 }
 
 // Pack is one subscribed repository.
@@ -67,6 +68,7 @@ type Skill struct {
 	Dir            string
 	Installed      bool
 	Missing        bool
+	Conflict       string   // set when another entry wants the same link name
 	Agents         []string // targets it is linked into (resolved)
 }
 
@@ -107,9 +109,10 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 	s := &Snapshot{Root: root, Name: filepath.Base(root), Defaults: append([]string(nil), m.Targets.Default...),
 		Agents: reg.Present()}
 
-	entries, err := engine.Resolve(lib, reg)
+	entries, warnings, err := engine.Resolve(lib, reg)
+	s.Warnings = warnings
 	if err != nil {
-		s.Problem = err.Error()
+		s.Warnings = append(s.Warnings, err.Error())
 	} else {
 		s.Pending = pendingChanges(engine.MakePlan(lib, entries, false))
 	}
@@ -143,7 +146,7 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 		var rest []Skill
 		cache := pack.CachePath(p.Repo)
 		if fsutil.Exists(filepath.Join(cache, ".git")) {
-			if up, err := pack.Scan(cache); err == nil {
+			if up, _, err := pack.Scan(cache); err == nil {
 				pk.Upstream = true
 				for _, u := range up {
 					if installed[u.Name] {
@@ -173,7 +176,7 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 
 func toSkill(e engine.Entry) Skill {
 	s := Skill{Name: e.Name, LinkName: e.LinkName, Kind: e.Kind, Origin: e.Origin, Category: e.Category,
-		Description: e.Description, Dir: e.Dir, Installed: true, Missing: e.Missing}
+		Description: e.Description, Dir: e.Dir, Installed: true, Missing: e.Missing, Conflict: e.Conflict}
 	for _, t := range e.Targets {
 		s.Agents = append(s.Agents, t.Name)
 	}
