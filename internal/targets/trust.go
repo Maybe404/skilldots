@@ -30,13 +30,10 @@ import (
 // credentials, and directories whose contents run or load by themselves
 // (at login, from PATH, or in a shell, an editor or git). skd's own
 // settings directory and the library are too (SensitiveDirs, checkPath).
-var Sensitive = []string{
-	// Keys and credentials.
-	".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".password-store",
-	".config/gcloud", ".config/gh", ".config/git",
+var Sensitive = append(append([]string{}, Secret...),
 	// Started at login or by a service manager.
 	".config/autostart", ".config/systemd", ".config/environment.d", ".local/share/systemd",
-	"Library/LaunchAgents", "Library/LaunchDaemons", "Library/Keychains",
+	"Library/LaunchAgents", "Library/LaunchDaemons",
 	"AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
 	// Programs: on PATH, found by name, or opened as applications.
 	".local/bin", "bin", "go/bin", ".cargo", "node_modules", "Applications", ".local/share/applications",
@@ -48,6 +45,26 @@ var Sensitive = []string{
 	"Library/Services", "Library/Scripts", "Library/Workflows", "Library/PreferencePanes",
 	"Library/QuickLook", "Library/Input Methods",
 	"Documents/PowerShell", "Documents/WindowsPowerShell",
+)
+
+// Secret are places under the home directory, given relative to it,
+// that hold keys and credentials: skd never writes there (they are in
+// Sensitive) and never links or copies an app's skill from there or
+// from a directory that holds one (SecretDirs).
+var Secret = []string{
+	".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".password-store",
+	".config/gcloud", ".config/gh", ".config/git", "Library/Keychains",
+}
+
+// SecretDirs are the absolute places an app's skill directory may not
+// be, be inside, or contain: Secret under home, and skd's settings
+// directory (the approvals of custom targets).
+func SecretDirs(home string) []string {
+	out := make([]string, 0, len(Secret)+1)
+	for _, s := range Secret {
+		out = append(out, filepath.Join(home, filepath.FromSlash(s)))
+	}
+	return append(out, filepath.Dir(config.Path()))
 }
 
 // SensitiveDirs are the absolute places a custom target may not be, be

@@ -126,6 +126,11 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				plan.Ops = append(plan.Ops, op)
 				continue
 			}
+			if e.Refused != "" {
+				op.Action, op.Reason = "skip", e.Refused
+				plan.Ops = append(plan.Ops, op)
+				continue
+			}
 			prev := lib.Lock.Links[key]
 			switch {
 			case !fsutil.Lexists(dest):
@@ -329,6 +334,14 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 			if l := sourceLink(lib, op.Source); l != "" {
 				res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: its source goes through %s, a symbolic link inside the library", op.Dest, lib.Rel(l)))
 				continue
+			}
+			if !fsutil.Within(lib.Root, op.Source) {
+				// An app's skill: checked again, as it may have changed
+				// since the plan.
+				if err := CheckAppDir(op.Source); err != nil {
+					res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: %v", op.Dest, err))
+					continue
+				}
 			}
 			if err := mkdirAll(op.Target.Path, 0o755); err != nil {
 				return res, err

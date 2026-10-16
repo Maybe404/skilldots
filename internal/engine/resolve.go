@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/skillmd"
@@ -51,6 +52,9 @@ type Entry struct {
 	// if any: skd neither links nor copies such a skill (its files are
 	// wherever the link points, outside the library).
 	LinkedVia string `json:",omitempty"`
+	// Refused says why skd neither links nor copies an app's skill
+	// (CheckAppDir), "" when it does.
+	Refused string `json:",omitempty"`
 	// Conflict is set when another entry wants the same LinkName. Neither
 	// is linked until the clash is resolved; existing links stay as they are.
 	Conflict string `json:",omitempty"`
@@ -78,6 +82,9 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 		}
 		if _, err := os.Stat(e.Dir); err != nil {
 			e.Missing = true
+		} else if e.Kind == KindApp && CheckAppDir(e.Dir) != nil {
+			e.Refused = CheckAppDir(e.Dir).Error()
+			warnings = append(warnings, fmt.Sprintf("[[app]] %s: %s; skipped", e.Name, e.Refused))
 		} else if e.Description == "" {
 			if meta, err := skillmd.Read(e.Dir); err == nil {
 				e.Description = meta.Description
@@ -390,4 +397,36 @@ func Lookup(entries []Entry, key string) (*Entry, error) {
 		}
 	}
 	return nil, nil
+}
+
+// CheckAppDir reports why skd does not link or copy the app skill at
+// dir. skills.toml names an app's directory and may come from someone
+// else (skd clone): an [[app]] path = "~/.ssh" would have skd link the
+// keys into every agent's directory, or copy them, 0600 files and all,
+// into a copy target. So the directory must hold SKILL.md as a regular
+// file (not a link: one could lead anywhere), as every skill does, and
+// must not be, be inside or hold a place of keys and credentials
+// (targets.SecretDirs). Links on the way are resolved first.
+func CheckAppDir(dir string) error {
+	st, err := os.Lstat(filepath.Join(dir, "SKILL.md"))
+	switch {
+	case os.IsNotExist(err):
+		return fmt.Errorf("%s has no SKILL.md, so it is not a skill", dir)
+	case err != nil:
+		return err
+	case !st.Mode().IsRegular():
+		return fmt.Errorf("%s/SKILL.md is not a regular file", dir)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	real := fsutil.Resolve(dir)
+	for _, s := range targets.SecretDirs(home) {
+		s = fsutil.Resolve(s)
+		if fsutil.Inside(s, real, true) || fsutil.Inside(real, s, true) {
+			return fmt.Errorf("%s is, is inside or holds %s, a place of keys and credentials", dir, s)
+		}
+	}
+	return nil
 }

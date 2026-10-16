@@ -131,3 +131,22 @@ func TestAdoptRefusesALinkedSkillsDir(t *testing.T) {
 		t.Fatal("the agent's skill moved")
 	}
 }
+
+// An [[app]] that is not a skill (no SKILL.md, say ~/.ssh) is not forked
+// into the library either.
+func TestForkRefusesAnAppThatIsNotASkill(t *testing.T) {
+	home, root := side(t, t.TempDir())
+	keys := filepath.Join(home, ".ssh")
+	write(t, filepath.Join(keys, "id_ed25519"), "KEY")
+	s, err := app.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Lib.Manifest.Apps = append(s.Lib.Manifest.Apps, &manifest.App{Name: "keys", Path: keys})
+	if _, err := s.Fork(app.Ref{Key: "keys"}, false, ""); err == nil {
+		t.Fatal("forked")
+	}
+	if _, err := os.Lstat(filepath.Join(root, "skills", "keys")); err == nil {
+		t.Fatal("copied")
+	}
+}

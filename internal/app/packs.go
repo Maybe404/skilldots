@@ -528,6 +528,9 @@ func (s *Session) Fork(r Ref, private bool, name string) (*ForkOutcome, error) {
 	if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
 		return nil, fmt.Errorf("%q is already yours (%s)", e.LinkName, e.Dir)
 	}
+	if e.Refused != "" {
+		return nil, fmt.Errorf("%q: %s; skd does not copy it", e.LinkName, e.Refused)
+	}
 	if e.LinkedVia != "" {
 		return nil, fmt.Errorf("%q: its directory goes through %s, a symbolic link inside the library; skd does not copy it", e.LinkName, s.Lib.Rel(e.LinkedVia))
 	}
