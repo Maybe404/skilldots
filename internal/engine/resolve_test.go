@@ -206,3 +206,39 @@ func TestOrphanPathTraversalVariants(t *testing.T) {
 		t.Errorf("trash: %v", m)
 	}
 }
+
+// An orphan record outside the targets whose source was rewritten to
+// point outside the library cannot be used to delete someone's symlink.
+func TestOrphanSourceOutsideLibrary(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	elsewhere := filepath.Join(home, "elsewhere")
+	writeSkill(t, filepath.Join(elsewhere, "real"), "real")
+	dir := filepath.Join(home, "tools")
+	os.MkdirAll(dir, 0o755)
+	userLink := filepath.Join(dir, "x")
+	os.Symlink(filepath.Join(elsewhere, "real"), userLink)
+	rel, _ := filepath.Rel(lib.Root, filepath.Join(elsewhere, "real"))
+	lib.Manifest.Targets.Default = []string{}
+	for _, src := range []string{filepath.Join(elsewhere, "real"), filepath.ToSlash(rel)} {
+		for _, force := range []bool{false, true} {
+			lib.Lock.Links["gone/x"] = &lock.Link{Mode: "link", Source: src, Path: userLink}
+			plan := MakePlan(lib, nil, force)
+			if len(plan.Ops) != 1 || plan.Ops[0].Action != "forget" {
+				t.Errorf("source %s force=%v: %+v", src, force, plan.Ops)
+			}
+			Apply(lib, plan)
+			if _, err := os.Lstat(userLink); err != nil {
+				t.Fatalf("source %s force=%v: the user's symlink was deleted", src, force)
+			}
+		}
+	}
+	// Our own link (source inside the library) is still cleaned up.
+	writeSkill(t, filepath.Join(lib.Root, "skills", "y"), "y")
+	ours := filepath.Join(dir, "y")
+	os.Symlink(filepath.Join(lib.Root, "skills", "y"), ours)
+	lib.Lock.Links["gone/y"] = &lock.Link{Mode: "link", Source: "skills/y", Path: ours}
+	Apply(lib, MakePlan(lib, nil, false))
+	if _, err := os.Lstat(ours); !os.IsNotExist(err) {
+		t.Error("our own orphan link was not removed")
+	}
+}

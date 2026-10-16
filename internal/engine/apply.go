@@ -177,7 +177,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				// Outside every known target directory (a removed custom
 				// target, or a tampered lock) only our own link may go,
 				// and --force never applies.
-				if !(prev.Mode == "link" && current(p, prev, lib)) {
+				if !(prev.Mode == "link" && sourceInLibrary(prev.Source, lib) && current(p, prev, lib)) {
 					forget(fmt.Sprintf("%s is not a link of ours inside a known target directory", p))
 					continue
 				}
@@ -367,6 +367,15 @@ var registry *targets.Registry
 
 // SetRegistry installs the registry used for lock-only lookups.
 func SetRegistry(r *targets.Registry) { registry = r }
+
+// sourceInLibrary reports whether a recorded link source is a clean
+// library-relative path that stays inside the library.
+func sourceInLibrary(src string, lib *library.Library) bool {
+	if src == "" || filepath.IsAbs(src) || filepath.Clean(filepath.FromSlash(src)) != filepath.FromSlash(src) {
+		return false
+	}
+	return fsutil.Within(lib.Root, lib.Abs(src))
+}
 
 // knownTargetDir reports whether dir is the directory of a registered target.
 func knownTargetDir(dir string) bool {
