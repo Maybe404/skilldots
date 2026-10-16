@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -276,6 +277,19 @@ func TestCachePathStaysInTheCache(t *testing.T) {
 		p := CachePath(repo)
 		if filepath.Dir(p) != filepath.Clean(os.Getenv("SKILLDOTS_CACHE")) || filepath.Base(p) == ".." {
 			t.Errorf("CachePath(%q) = %s", repo, p)
+		}
+	}
+}
+
+// The entry's name holds no separator of any system: on Windows "\" is
+// one, so a repo key with `\..\` would otherwise lead out of the cache
+// there (this test runs on every system, where filepath.Join alone
+// would not show it).
+func TestCacheNameHasNoSeparator(t *testing.T) {
+	for _, repo := range []string{"a/b", `a\b`, `a/..\..\..\Documents`, `..\..\x/y`, "../../x", "a/../../b", "..", ".", "", `\`} {
+		n := cacheName(repo)
+		if strings.ContainsAny(n, `/\`) || n == "" || n == "." || n == ".." {
+			t.Errorf("cacheName(%q) = %q", repo, n)
 		}
 	}
 }

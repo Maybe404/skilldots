@@ -96,11 +96,19 @@ func ParseSource(s string) (Source, error) {
 // separators become "__", so the clone is always one entry of the cache
 // directory (a failed clone is removed, and must never be anything else).
 func CachePath(repo string) string {
+	return filepath.Join(library.CacheDir(), cacheName(repo))
+}
+
+// cacheName is the name of repo's entry in the cache directory: no
+// separator of any system ("/", and "\" which only Windows takes for
+// one, so a test on another system checks the name, not the path), and
+// never "" or a dot entry.
+func cacheName(repo string) string {
 	name := strings.NewReplacer("/", "__", `\`, "__").Replace(repo)
 	if name == "" || name == "." || name == ".." {
 		name = "_" + name
 	}
-	return filepath.Join(library.CacheDir(), name)
+	return name
 }
 
 var (
@@ -200,6 +208,10 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			return "", "", err
 		}
 		if _, err := library.GitContext(ctx, "", cloneArgs(src, dir)...); err != nil {
+			// CachePath already keeps dir one entry of the cache; this is
+			// a second guard (no test can reach it while CachePath holds)
+			// so a future change there cannot turn a failed clone into
+			// removing anything else.
 			if fsutil.Within(library.CacheDir(), dir) {
 				os.RemoveAll(dir) // a clone git left half done, in skd's cache
 			}
