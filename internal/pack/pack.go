@@ -92,8 +92,15 @@ func ParseSource(s string) (Source, error) {
 }
 
 // CachePath is the clone location for a repo key.
+// The repo key comes from skills.toml and may be anything: both
+// separators become "__", so the clone is always one entry of the cache
+// directory (a failed clone is removed, and must never be anything else).
 func CachePath(repo string) string {
-	return filepath.Join(library.CacheDir(), strings.ReplaceAll(repo, "/", "__"))
+	name := strings.NewReplacer("/", "__", `\`, "__").Replace(repo)
+	if name == "" || name == "." || name == ".." {
+		name = "_" + name
+	}
+	return filepath.Join(library.CacheDir(), name)
 }
 
 var (
@@ -193,7 +200,9 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			return "", "", err
 		}
 		if _, err := library.GitContext(ctx, "", cloneArgs(src, dir)...); err != nil {
-			os.RemoveAll(dir)
+			if fsutil.Within(library.CacheDir(), dir) {
+				os.RemoveAll(dir) // a clone git left half done, in skd's cache
+			}
 			return "", "", err
 		}
 	} else {

@@ -266,3 +266,16 @@ func TestFetchNeverTakesOptions(t *testing.T) {
 		t.Errorf("git %v: the ref is not after --", a)
 	}
 }
+
+// Whatever the repo key (it comes from skills.toml), its clone is one
+// entry of the cache directory: a failed clone is removed, and that must
+// never reach anything else.
+func TestCachePathStaysInTheCache(t *testing.T) {
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(t.TempDir(), "cache"))
+	for _, repo := range []string{"a/b", `a/..\..\..\Documents`, `..\..\x/y`, "../../x", "a/../../b", ".."} {
+		p := CachePath(repo)
+		if filepath.Dir(p) != filepath.Clean(os.Getenv("SKILLDOTS_CACHE")) || filepath.Base(p) == ".." {
+			t.Errorf("CachePath(%q) = %s", repo, p)
+		}
+	}
+}
