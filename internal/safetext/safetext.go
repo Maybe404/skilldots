@@ -77,23 +77,42 @@ func Lines(s string) string {
 }
 
 // Screen is text on its way to a terminal, cleaned as a last line of
-// defence: line breaks stay, colour codes (SGR, ESC [ … m) stay when sgr
-// is set, and everything else is as Clean leaves it: no other escape
-// sequence can start, so nothing can move the cursor, clear the screen,
-// set the window title or write the clipboard. Text from outside skd is
-// cleaned where it is read or printed; this only catches what was missed.
-func Screen(s string, sgr bool) string {
+// defence: line breaks stay, colour codes stay when sgr is set (only
+// those that cannot hide text, see Screener), and everything else is as
+// Clean leaves it: no other escape sequence can start, so nothing can
+// move the cursor, clear the screen, set the window title or write the
+// clipboard. Text from outside skd is cleaned where it is read or
+// printed; this only catches what was missed.
+func Screen(s string, sgr bool) string { return new(Screener).Screen(s, sgr) }
+
+// Screener is Screen for a stream: it remembers the colours set so far,
+// so a foreground and a background set in two writes are compared too.
+// Its zero value is ready; it is not safe for concurrent use.
+type Screener struct{ fg, bg string }
+
+// Screen cleans s like the function Screen, keeping an SGR sequence only
+// when every parameter in it is one skd draws with: reset, bold, faint,
+// italic, underline (any style), reverse (a text input's cursor) and
+// their ends, and foreground or background colours (16, 256 or RGB) and
+// their defaults; and only when it does not leave the foreground and the
+// background the same colour. Conceal, blink and the rest are dropped
+// whole: with them a foreign sequence that got this far could hide the
+// text that follows.
+func (sc *Screener) Screen(s string, sgr bool) string {
 	if !strings.ContainsFunc(s, func(r rune) bool { return r != '\n' && (Unsafe(r) || space(r)) }) && utf8.ValidString(s) {
 		return s
 	}
 	var b strings.Builder
-	s = strings.ToValidUTF8(s, "�")
+	s = strings.ToValidUTF8(s, "\uFFFD")
 	for i := 0; i < len(s); {
 		r, n := utf8.DecodeRuneInString(s[i:])
 		switch {
 		case r == '\x1b' && sgr:
 			if m := sgrLen(s[i:]); m > 0 {
-				b.WriteString(s[i : i+m])
+				if fg, bg, ok := sgrApply(s[i+2:i+m-1], sc.fg, sc.bg); ok {
+					sc.fg, sc.bg = fg, bg
+					b.WriteString(s[i : i+m])
+				}
 				i += m
 				continue
 			}
@@ -107,6 +126,105 @@ func Screen(s string, sgr bool) string {
 		i += n
 	}
 	return b.String()
+}
+
+// sgrApply applies the parameters of one SGR sequence to the colours fg
+// and bg ("" for the terminal's default) and reports whether the
+// sequence may be shown (see Screener.Screen).
+func sgrApply(params, fg, bg string) (string, string, bool) {
+	ps := strings.Split(params, ";")
+	for i := 0; i < len(ps); i++ {
+		sub := strings.Split(ps[i], ":")
+		n, err := strconv.Atoi(sub[0])
+		if sub[0] == "" {
+			n, err = 0, nil
+		}
+		if err != nil {
+			return fg, bg, false
+		}
+		switch {
+		case n == 0:
+			fg, bg = "", ""
+		case n == 1 || n == 2 || n == 3 || n == 4 || n == 7 || n >= 21 && n <= 24 || n == 27:
+		case n == 39:
+			fg = ""
+		case n == 49:
+			bg = ""
+		case n >= 30 && n <= 37:
+			fg = "c" + strconv.Itoa(n-30)
+		case n >= 90 && n <= 97:
+			fg = "c" + strconv.Itoa(n-90+8)
+		case n >= 40 && n <= 47:
+			bg = "c" + strconv.Itoa(n-40)
+		case n >= 100 && n <= 107:
+			bg = "c" + strconv.Itoa(n-100+8)
+		case n == 38 || n == 48:
+			var c string
+			var ok bool
+			if len(sub) > 1 {
+				c, ok = sgrColor(sub[1:])
+			} else {
+				var used int
+				c, used, ok = sgrColorArgs(ps[i+1:])
+				i += used
+			}
+			if !ok {
+				return fg, bg, false
+			}
+			if n == 38 {
+				fg = c
+			} else {
+				bg = c
+			}
+		default:
+			return fg, bg, false
+		}
+		if len(sub) > 1 && n != 4 && n != 38 && n != 48 {
+			return fg, bg, false // only underline styles and colours have parts
+		}
+	}
+	if fg != "" && fg == bg {
+		return fg, bg, false
+	}
+	return fg, bg, true
+}
+
+// sgrColorArgs reads the colour after a 38 or 48 given with semicolons
+// ("5;n" or "2;r;g;b") and how many parameters it took.
+func sgrColorArgs(ps []string) (string, int, bool) {
+	if len(ps) >= 2 && ps[0] == "5" {
+		c, ok := sgrColor(ps[:2])
+		return c, 2, ok
+	}
+	if len(ps) >= 4 && ps[0] == "2" {
+		c, ok := sgrColor(ps[:4])
+		return c, 4, ok
+	}
+	return "", 0, false
+}
+
+// sgrColor names the colour of "5", n or "2", [colour space,] r, g, b
+// so that the same colour has one name whichever way it was given.
+func sgrColor(p []string) (string, bool) {
+	num := func(s string) (int, bool) {
+		n, err := strconv.Atoi(s)
+		return n, err == nil && n >= 0 && n <= 255
+	}
+	switch {
+	case len(p) == 2 && p[0] == "5":
+		n, ok := num(p[1])
+		if ok && n < 16 {
+			return "c" + strconv.Itoa(n), true
+		}
+		return "i" + strconv.Itoa(n), ok
+	case (len(p) == 4 || len(p) == 5) && p[0] == "2":
+		rgb := p[len(p)-3:]
+		r, ok1 := num(rgb[0])
+		g, ok2 := num(rgb[1])
+		b, ok3 := num(rgb[2])
+		return fmt.Sprintf("#%02x%02x%02x", r, g, b), ok1 && ok2 && ok3
+	}
+	return "", false
 }
 
 // sgrLen is the length of the SGR sequence s starts with, 0 when it does

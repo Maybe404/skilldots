@@ -3,11 +3,14 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"github.com/Maybe404/skilldots/internal/config"
@@ -182,5 +185,53 @@ func TestViewGuard(t *testing.T) {
 	v := m.View()
 	if strings.ContainsRune(v, '\u202e') || !strings.Contains(v, "\x1b[") || !strings.Contains(v, "tddevil") {
 		t.Errorf("View: %q", v)
+	}
+}
+
+// The last line of defence keeps everything the dashboard draws with:
+// each view comes through View unchanged (the text inputs' cursor is
+// drawn reversed, the surfaces with backgrounds). The one exception is
+// a span whose colours the terminal's palette makes the same for text
+// and background (the light theme on a 256- or 16-colour terminal): it
+// would be invisible, so it is drawn in the terminal's own colours.
+func TestViewGuardKeepsTheDashboardsColours(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	defer lipgloss.SetColorProfile(prev)
+	light := Theme{Accent: "#6D28D9", Cyan: "#0E7490", Muted: "#4A4F62", Faint: "#62677B", Line: "#A3A7B8",
+		OK: "#15803D", Warn: "#B45309", Err: "#B91C1C", Text: "#1E2030", Ink: "#FFFFFF", Light: true}
+	same := regexp.MustCompile(`\x1b\[(?:1;)?(?:38;5;(\d+);48;5;(\d+)|(9\d);(10\d)|(3\d);(4\d))m`)
+	invisible := func(seq []string) bool {
+		for i := 1; i+1 < len(seq); i += 2 {
+			if seq[i] == "" {
+				continue
+			}
+			a, _ := strconv.Atoi(seq[i])
+			b, _ := strconv.Atoi(seq[i+1])
+			return a == b || i > 1 && b-a == 10
+		}
+		return false
+	}
+	for _, p := range []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.ANSI} {
+		lipgloss.SetColorProfile(p)
+		for _, th := range []Theme{testTheme, light} {
+			m, _ := newModel(t, sampleSnapshot(), 120, 36)
+			m.theme = th
+			for _, keys := range [][]string{nil, {"j"}, {"tab"}, {"j"}, {"?"}, {"esc"}, {"/"}, {"t"}, {"d"}, {"esc", "esc"}, {","}, {"enter"}} {
+				m, _ = press(t, m, keys...)
+				v, w := m.View(), m.view()
+				if v == w {
+					continue
+				}
+				// Only the invisible spans may differ.
+				for _, seq := range same.FindAllStringSubmatch(w, -1) {
+					if invisible(seq) {
+						w = strings.ReplaceAll(w, seq[0], "")
+					}
+				}
+				if v != w || ansi.Strip(v) != ansi.Strip(m.view()) {
+					t.Fatalf("profile %v, light %v, after %v: View dropped what the dashboard drew:\nview %q\nView %q", p, th.Light, keys, w, v)
+				}
+			}
+		}
 	}
 }

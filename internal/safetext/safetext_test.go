@@ -135,3 +135,39 @@ func TestDocSchema(t *testing.T) {
 		}
 	}
 }
+
+// Only colour codes that cannot hide text pass: conceal, blink and the
+// rest go, and so does a colour that makes the text its background's.
+func TestScreenSGR(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		// What lipgloss and bubbles draw with.
+		{"\x1b[1;38;2;167;139;250mx\x1b[0m", "\x1b[1;38;2;167;139;250mx\x1b[0m"},
+		{"\x1b[38;5;141;48;5;236mx\x1b[m", "\x1b[38;5;141;48;5;236mx\x1b[m"},
+		{"\x1b[91;100mx\x1b[39;49m", "\x1b[91;100mx\x1b[39;49m"},
+		{"\x1b[7mc\x1b[27m\x1b[2;3;4mx\x1b[22;23;24m", "\x1b[7mc\x1b[27m\x1b[2;3;4mx\x1b[22;23;24m"},
+		{"\x1b[4:3mx\x1b[38:2::1:2:3mx\x1b[38:5:9mx", "\x1b[4:3mx\x1b[38:2::1:2:3mx\x1b[38:5:9mx"},
+		// What hides text.
+		{"a\x1b[8mhidden\x1b[28m", "ahidden"},
+		{"a\x1b[5mb\x1b[6mc\x1b[25m", "abc"},
+		{"a\x1b[1;8mb", "ab"},
+		{"a\x1b[30;40mb", "ab"},
+		{"a\x1b[38;2;9;9;9;48;2;9;9;9mb", "ab"},
+		{"a\x1b[38;5;1;41mb", "ab"},                        // index 1 is red 1
+		{"a\x1b[31m\x1b[41mb\x1b[0m", "a\x1b[31mb\x1b[0m"}, // across sequences
+		{"a\x1b[38;2;1;2mb", "ab"},                         // incomplete
+		{"a\x1b[38;5;300mb", "ab"},
+		{"a\x1b[1:2mb\x1b[12mc\x1b[53md", "abcd"},
+		// Foreground and background apart again: fine.
+		{"\x1b[31;41;32mx", "\x1b[31;41;32mx"},
+		{"\x1b[31;41;0mx", "\x1b[31;41;0mx"},
+	} {
+		if got := Screen(c.in, true); got != c.want {
+			t.Errorf("Screen(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	// A Screener remembers the colours between writes.
+	var sc Screener
+	if got := sc.Screen("\x1b[38;2;1;2;3ma", true) + sc.Screen("\x1b[48;2;1;2;3mb", true) + sc.Screen("\x1b[0m\x1b[48;2;1;2;3mc", true); got != "\x1b[38;2;1;2;3mab\x1b[0m\x1b[48;2;1;2;3mc" {
+		t.Errorf("Screener: %q", got)
+	}
+}

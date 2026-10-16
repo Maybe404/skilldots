@@ -63,3 +63,19 @@ func TestPrintApplyCleans(t *testing.T) {
 		}
 	}
 }
+
+// A colour sequence that hides text is dropped, also when the text and
+// the background colours come in two writes.
+func TestScreenWriterDropsHidingColours(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	defer lipgloss.SetColorProfile(prev)
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	var b bytes.Buffer
+	w := &screenWriter{w: &b}
+	for _, s := range []string{"\x1b[8ma", "\x1b[31mb", "\x1b[41mc", "\x1b[0md\n"} {
+		w.Write([]byte(s))
+	}
+	if b.String() != "a\x1b[31mbc\x1b[0md\n" {
+		t.Errorf("%q", b.String())
+	}
+}

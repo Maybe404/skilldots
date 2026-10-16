@@ -32,6 +32,9 @@ type screenWriter struct {
 	mu    sync.Mutex
 	w     io.Writer
 	carry []byte
+	// sc remembers the colours set, so a sequence that makes the text
+	// the colour of its background is dropped even across writes.
+	sc safetext.Screener
 }
 
 func (s *screenWriter) Write(p []byte) (int, error) {
@@ -51,7 +54,7 @@ func (s *screenWriter) Write(p []byte) (int, error) {
 	}
 	// skd's colour codes stay unless colour is off (NO_COLOR, not a
 	// terminal): then no escape sequence at all is skd's.
-	out := safetext.Screen(string(b), lipgloss.ColorProfile() != termenv.Ascii)
+	out := s.sc.Screen(string(b), lipgloss.ColorProfile() != termenv.Ascii)
 	if _, err := io.WriteString(s.w, out); err != nil {
 		return 0, err
 	}
