@@ -70,15 +70,29 @@ func Trash(lib *library.Library, src string) (string, error) {
 		src = abs
 	}
 	name := filepath.Base(src)
+	// Neither the entry nor its record may be there already, in any
+	// form: a batch directory of a cloned library's trash is someone
+	// else's to fill, and a "<name>.origin" there that is a link to a
+	// file of the user's would have the record written over that file.
 	dest := filepath.Join(dir, name)
-	for i := 2; fsutil.Lexists(dest); i++ {
+	for i := 2; fsutil.Lexists(dest) || fsutil.Lexists(dest+".origin"); i++ {
 		dest = filepath.Join(dir, fmt.Sprintf("%s-%d", name, i))
 	}
 	if err := move(src, dest); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest+".origin", []byte(src+"\n"), 0o644); err != nil {
-		return "", err
+	// The record is created only as a new file: O_EXCL does not follow a
+	// link, so one put there since the check above is an error, never a
+	// write through it.
+	f, err := os.OpenFile(dest+".origin", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err == nil {
+		_, err = f.WriteString(src + "\n")
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("%s was moved to %s, but where it came from could not be recorded: %w", src, dest, err)
 	}
 	return dest, nil
 }

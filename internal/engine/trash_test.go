@@ -189,3 +189,67 @@ func TestTrashRefusesALinkedTrash(t *testing.T) {
 		}
 	}
 }
+
+// A batch directory of a cloned library's trash (force-added, one per
+// second it may be used) can hold a "<name>.origin" that is a link to
+// a file of the user's. Trash writes its record as a new file beside an
+// entry name nothing uses yet, so that file is never written.
+func TestTrashNeverWritesThroughAPlantedRecord(t *testing.T) {
+	for _, planted := range []string{"link", "dangling", "file"} {
+		lib, _, home := newTestLib(t)
+		victim := filepath.Join(home, "victim.txt")
+		os.WriteFile(victim, []byte("mine\n"), 0o644)
+		bd := filepath.Join(lib.Root, TrashDir, batch())
+		os.MkdirAll(bd, 0o755)
+		switch planted {
+		case "link":
+			os.Symlink(victim, filepath.Join(bd, "mine.origin"))
+		case "dangling":
+			os.Symlink(filepath.Join(home, "new.txt"), filepath.Join(bd, "mine.origin"))
+		case "file":
+			os.WriteFile(filepath.Join(bd, "mine.origin"), []byte("/x\n"), 0o644)
+		}
+		src := filepath.Join(home, "agent", "mine")
+		writeSkill(t, src, "mine")
+		to, err := Trash(lib, src)
+		if err != nil {
+			t.Fatalf("%s: %v", planted, err)
+		}
+		if b, _ := os.ReadFile(victim); string(b) != "mine\n" {
+			t.Fatalf("%s: victim written: %q", planted, b)
+		}
+		if fileExists(filepath.Join(home, "new.txt")) {
+			t.Fatalf("%s: a file was created through the dangling link", planted)
+		}
+		if filepath.Base(to) != "mine-2" || !fileExists(filepath.Join(to, "SKILL.md")) {
+			t.Fatalf("%s: moved to %s", planted, to)
+		}
+		if st, err := os.Lstat(to + ".origin"); err != nil || !st.Mode().IsRegular() {
+			t.Fatalf("%s: record %v %v", planted, st, err)
+		}
+		if got, _ := readOrigin(to); got != src {
+			t.Fatalf("%s: origin %q", planted, got)
+		}
+	}
+}
+
+// A record that appears between the check and the write (a link put
+// there meanwhile) is an error, never a write through it.
+func TestTrashRecordIsCreatedNew(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	victim := filepath.Join(home, "victim.txt")
+	os.WriteFile(victim, []byte("mine\n"), 0o644)
+	src := filepath.Join(home, "agent", "mine")
+	writeSkill(t, src, "mine")
+	rename = func(a, b string) error {
+		os.Symlink(victim, b+".origin")
+		return os.Rename(a, b)
+	}
+	defer func() { rename = os.Rename }()
+	if _, err := Trash(lib, src); err == nil {
+		t.Fatal("no error")
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "mine\n" {
+		t.Fatalf("victim written: %q", b)
+	}
+}
