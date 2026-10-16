@@ -245,7 +245,7 @@ func TestOutdatedConcurrentProcesses(t *testing.T) {
 }
 
 // A git killed half-way leaves shallow.lock in the cache clone; with the
-// clone locked, skd knows it is stale and clears it.
+// clone locked and the lock file old, skd knows it is stale and clears it.
 func TestStaleCacheLockCleared(t *testing.T) {
 	e := newEnv(t)
 	e.ok("", "init", "--no-skill", e.p("lib"))
@@ -259,7 +259,11 @@ func TestStaleCacheLockCleared(t *testing.T) {
 	e.write("up/skills/a/more.md", "more\n")
 	e.git(up, "add", "-A")
 	e.git(up, "commit", "-qm", "2")
-	os.WriteFile(filepath.Join(clones[0], "shallow.lock"), nil, 0o644)
+	// Old: a lock file git is writing right now is waited for instead.
+	stale := filepath.Join(clones[0], "shallow.lock")
+	os.WriteFile(stale, nil, 0o644)
+	then := time.Now().Add(-time.Hour)
+	os.Chtimes(stale, then, then)
 	if out, errOut, code := e.skd("", "outdated"); code != 0 || !strings.Contains(out, "changed") {
 		t.Fatalf("outdated with a stale lock: exit %d\n%s%s", code, out, errOut)
 	}

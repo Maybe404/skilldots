@@ -87,6 +87,10 @@ func CachePath(repo string) string {
 var (
 	holdMu sync.Mutex
 	holds  = map[string]chan struct{}{}
+	// owned are the repos whose file lock this process holds right now:
+	// only then can a git lock file in the clone be a dead git's leftover
+	// rather than another skd's.
+	owned = map[string]bool{}
 )
 
 // holdPoll is how often HoldContext retries a lock another process has.
@@ -103,8 +107,9 @@ func Hold(repo string) (unlock func()) {
 }
 
 // HoldContext is Hold that gives up when ctx is done. When the lock file
-// cannot be created (no cache directory yet, read-only cache) only the
-// in-process lock is taken: git reports any clash itself.
+// cannot be created or locked (no cache directory yet, read-only cache, a
+// file system without locks) only the in-process lock is taken: git
+// reports any clash itself, and Fetch leaves git's lock files alone.
 func HoldContext(ctx context.Context, repo string) (unlock func(), err error) {
 	holdMu.Lock()
 	sem := holds[repo]
@@ -132,7 +137,8 @@ func HoldContext(ctx context.Context, repo string) (unlock func(), err error) {
 			return release, nil
 		}
 		if ok {
-			return func() { unlockFile(f); f.Close(); release() }, nil
+			setOwned(repo, true)
+			return func() { setOwned(repo, false); unlockFile(f); f.Close(); release() }, nil
 		}
 		select {
 		case <-time.After(holdPoll):
@@ -142,6 +148,23 @@ func HoldContext(ctx context.Context, repo string) (unlock func(), err error) {
 			return func() {}, ctx.Err()
 		}
 	}
+}
+
+func setOwned(repo string, v bool) {
+	holdMu.Lock()
+	defer holdMu.Unlock()
+	if v {
+		owned[repo] = true
+	} else {
+		delete(owned, repo)
+	}
+}
+
+// ownsClone reports whether this process holds repo's file lock.
+func ownsClone(repo string) bool {
+	holdMu.Lock()
+	defer holdMu.Unlock()
+	return owned[repo]
 }
 
 // Fetch clones or updates the cache clone and returns its path and HEAD
@@ -179,10 +202,12 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			return err
 		}
 		if err := update(); err != nil {
-			// Under Hold nobody else uses the clone: a git lock file left
-			// in it is stale (a git killed half-way, or an skd from before
-			// the clone was locked). Clear it and try once more.
-			if ctx.Err() != nil || !staleLocks(dir) {
+			// git stopped on a lock file. With the clone's file lock held
+			// no other skd is using it, but a git run by hand still can:
+			// a lock file is only taken as left by a git killed half-way
+			// once it is old. A younger one is waited for, then git runs
+			// once more.
+			if ctx.Err() != nil || !lockClash(err) || !ownsClone(src.Repo) || !clearLocks(ctx, dir) {
 				return "", "", err
 			}
 			if err := update(); err != nil {
@@ -194,17 +219,56 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 	return dir, commit, err
 }
 
-// staleLocks removes the lock files git leaves when it is stopped half-way
-// through a fetch or reset, and reports whether there were any.
-func staleLocks(dir string) bool {
-	found := false
-	for _, f := range []string{"shallow.lock", "index.lock", "HEAD.lock", "FETCH_HEAD.lock"} {
-		p := filepath.Join(dir, ".git", f)
-		if fsutil.Lexists(p) && os.Remove(p) == nil {
-			found = true
+// gitLocks are the lock files git takes in a clone during fetch and reset.
+var gitLocks = []string{"shallow.lock", "index.lock", "HEAD.lock", "FETCH_HEAD.lock"}
+
+// staleAge is how old a git lock file must be to count as left behind: git
+// holds one only while it writes, and a git killed on cancel (SIGTERM)
+// removes its own.
+const staleAge = 30 * time.Second
+
+// lockPoll is how often clearLocks looks again at a lock file in use.
+const lockPoll = 200 * time.Millisecond
+
+// lockClash reports whether git failed on one of gitLocks ("Unable to
+// create '….git/index.lock': File exists").
+func lockClash(err error) bool {
+	for _, f := range gitLocks {
+		if strings.Contains(err.Error(), f) {
+			return true
 		}
 	}
-	return found
+	return false
+}
+
+// clearLocks waits until each git lock file in dir is gone (the git that
+// held it finished) or older than staleAge (nothing is writing it), then
+// removes the old ones. It reports false when ctx is done first.
+func clearLocks(ctx context.Context, dir string) bool {
+	for {
+		young := false
+		for _, f := range gitLocks {
+			fi, err := os.Lstat(filepath.Join(dir, ".git", f))
+			if err == nil && time.Since(fi.ModTime()) < staleAge {
+				young = true
+			}
+		}
+		if !young {
+			break
+		}
+		select {
+		case <-time.After(lockPoll):
+		case <-ctx.Done():
+			return false
+		}
+	}
+	for _, f := range gitLocks {
+		p := filepath.Join(dir, ".git", f)
+		if fi, err := os.Lstat(p); err == nil && time.Since(fi.ModTime()) >= staleAge {
+			os.Remove(p)
+		}
+	}
+	return true
 }
 
 // Skill is one skill discovered in a repository.
