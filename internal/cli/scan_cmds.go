@@ -16,6 +16,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/scan"
+	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
 func scanCmd() *cobra.Command {
@@ -264,6 +265,14 @@ func pickProposals(props []proposal) ([]proposal, error) {
 func applyProposals(c *ctx, props []proposal) error {
 	m := c.lib.Manifest
 	packs := map[string]*manifest.Pack{}
+	// renamed maps an agent entry name to the skill name it was adopted as.
+	renamed := map[string]string{}
+	adoptedAs := func(it scan.Item) string {
+		if n := renamed[it.Name]; n != "" {
+			return n
+		}
+		return it.Name
+	}
 	for _, p := range props {
 		switch p.Kind {
 		case "pack":
@@ -290,11 +299,18 @@ func applyProposals(c *ctx, props []proposal) error {
 				m.Apps = append(m.Apps, &manifest.App{Name: p.Item.Name, Path: p.Item.LinkTo})
 			}
 		case "own":
-			dest := filepath.Join(c.lib.SkillsDir(), p.Item.Name)
 			src := p.Item.Path
 			if p.Item.LinkTo != "" {
 				src = p.Item.LinkTo
 			}
+			// The library knows a skill by its frontmatter name, which may
+			// differ from the directory name it had in the agent dir.
+			name := p.Item.Name
+			if meta, err := skillmd.Read(src); err == nil && meta.Name != name && manifest.CheckName(meta.Name) == nil {
+				name = meta.Name
+				renamed[p.Item.Name] = name
+			}
+			dest := filepath.Join(c.lib.SkillsDir(), name)
 			if !fsutil.Lexists(dest) {
 				if err := fsutil.CopyTree(src, dest); err != nil {
 					return err
@@ -362,7 +378,7 @@ func applyProposals(c *ctx, props []proposal) error {
 		if p.Kind == "skip" || p.Kind == "drop" {
 			continue
 		}
-		want[p.Item.Name] = append(want[p.Item.Name], p.Item.Target)
+		want[adoptedAs(p.Item)] = append(want[adoptedAs(p.Item)], p.Item.Target)
 	}
 	for name, extra := range want {
 		e := engine.Find(entries, name)
@@ -388,6 +404,28 @@ func applyProposals(c *ctx, props []proposal) error {
 	out, err := doApply(c, false, false, force)
 	if err != nil {
 		return err
+	}
+	// An entry adopted under another name now has a link of that name next
+	// to it; move the original aside so the agent does not see the skill twice.
+	for _, p := range props {
+		n := adoptedAs(p.Item)
+		if p.Kind == "skip" || p.Kind == "drop" || n == p.Item.Name {
+			continue
+		}
+		t, err := c.reg.Get(p.Item.Target)
+		if err != nil || c.lib.Lock.Links[t.Name+"/"+n] == nil || !fsutil.Lexists(filepath.Join(t.Path, n)) || !fsutil.Lexists(p.Item.Path) {
+			continue
+		}
+		to, err := engine.Trash(c.lib, p.Item.Path)
+		if err != nil {
+			return err
+		}
+		if to == "" {
+			c.printf("  %s %s (adopted as %s)\n", dim("removed link"), p.Item.Path, n)
+			continue
+		}
+		out.Backups = append(out.Backups, p.Item.Path+" → "+c.lib.Rel(to))
+		c.printf("  %s %s → %s (adopted as %s)\n", dim("moved aside"), p.Item.Path, c.lib.Rel(to), n)
 	}
 	c.jsonOut(map[string]any{"proposals": props, "applied": true, "apply": out, "failed": failed})
 	if failed > 0 {

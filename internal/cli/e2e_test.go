@@ -229,3 +229,26 @@ func TestAdoptForcesOnlyItsOwnEntries(t *testing.T) {
 		t.Fatal("linked skill was not copied from its link target")
 	}
 }
+
+// A copy whose directory name differs from its frontmatter name is adopted
+// under the frontmatter name; the agent dir ends up with one link only.
+func TestAdoptDirNameDiffersFromSkillName(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.skill(".agents/skills/dirx", "namey")
+	e.write(".agents/skills/dirx/notes.txt", "mine\n")
+	e.ok("", "adopt", "--yes")
+	entries, _ := os.ReadDir(e.p(".agents/skills"))
+	if len(entries) != 1 || entries[0].Name() != "namey" {
+		var names []string
+		for _, x := range entries {
+			names = append(names, x.Name())
+		}
+		t.Fatalf("agent dir has %v, want only namey", names)
+	}
+	isLink(t, e.p(".agents/skills/namey"), lib)
+	if m, _ := filepath.Glob(filepath.Join(lib, ".trash", "*", "dirx", "notes.txt")); len(m) != 1 {
+		t.Fatal("original directory not in the trash")
+	}
+}
