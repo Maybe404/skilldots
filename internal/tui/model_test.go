@@ -471,3 +471,33 @@ func TestActions(t *testing.T) {
 	}
 	_ = m
 }
+
+// TestViewShortTerminals renders every height from the minimum to where
+// the description lines appear, with the cursor on a skill that has a
+// description, plus the narrowest supported widths.
+func TestViewShortTerminals(t *testing.T) {
+	lipgloss.SetColorProfile(0)
+	sizes := [][2]int{{90, 12}, {60, 12}}
+	for h := minHeight; h <= 19; h++ {
+		sizes = append(sizes, [2]int{120, h})
+	}
+	for _, size := range sizes {
+		w, h := size[0], size[1]
+		for _, keys := range [][]string{nil, {"tab"}, {"tab", "down"}, {"j", "j"}, {"tab", "?"}, {"tab", "e"}, {"tab", "d"}, {"tab", "a"}} {
+			m, _ := newModel(t, sampleSnapshot(), w, h)
+			m, _ = press(t, m, keys...)
+			if s, _ := m.target(); len(keys) > 0 && keys[0] == "tab" && (s == nil || s.Description == "") {
+				t.Fatalf("%dx%d %v: cursor not on a described skill: %+v", w, h, keys, s)
+			}
+			lines := plain(m)
+			if len(lines) != h {
+				t.Fatalf("%dx%d %v: %d lines", w, h, keys, len(lines))
+			}
+			for i, l := range lines {
+				if got := ansi.StringWidth(l); got != w {
+					t.Errorf("%dx%d %v: line %d is %d wide: %q", w, h, keys, i, got, l)
+				}
+			}
+		}
+	}
+}

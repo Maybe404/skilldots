@@ -514,7 +514,7 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 // wrap word-wraps plain text to w cells, at most n lines.
 func wrap(s string, w, n int) []string {
 	s = strings.Join(strings.Fields(s), " ")
-	if s == "" || w < 4 {
+	if s == "" || w < 4 || n < 1 {
 		return nil
 	}
 	var out []string
