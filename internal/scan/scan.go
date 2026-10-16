@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/skillmd"
@@ -26,6 +27,10 @@ const (
 	Copy      State = "copy"       // real directory with a SKILL.md
 	Broken    State = "broken"     // dangling link
 	NotASkill State = "other"      // directory without SKILL.md, or a file
+	// Left is a link into the library that skills.lock records for a
+	// target no longer in use (removed from skills.toml, not approved,
+	// or refused): skd made it and does not manage it any more.
+	Left State = "left"
 )
 
 // Item is one directory entry in one target.
@@ -126,6 +131,21 @@ func Run(lib *library.Library, reg *targets.Registry) (Report, error) {
 			}
 			rep.Items = append(rep.Items, it)
 		}
+	}
+	// Links left in the directories of targets no longer in use. The
+	// lock may be forged, so only a record whose path is a link into the
+	// library, as skd makes them, is listed.
+	for _, key := range lib.Lock.LinkKeys() {
+		tname, name, _ := strings.Cut(key, "/")
+		if _, err := reg.Get(tname); err == nil {
+			continue
+		}
+		prev := lib.Lock.Links[key]
+		if !engine.LeftLink(prev, lib) {
+			continue
+		}
+		dest, _ := os.Readlink(prev.Path)
+		rep.Items = append(rep.Items, Item{Target: tname, Name: name, Path: prev.Path, State: Left, LinkTo: dest})
 	}
 	// Same name, different content in two places: flag both.
 	for _, idx := range byName {

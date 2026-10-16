@@ -79,9 +79,11 @@ func TestResolveIsolatesProblems(t *testing.T) {
 	}
 }
 
-// A record of a target that is gone is forgotten, and the link stays on
-// disk: the lock comes with the library and may be forged, so a target
-// not in use never has anything removed. The plan says where it is.
+// A target that is gone never has anything removed: the lock comes with
+// the library and may be forged. A record whose path is a link into the
+// library, as skd makes them, is kept and the plan says where the link
+// is, every time, until the link is gone; then the record is forgotten.
+// Any other record is forgotten at once.
 func TestOrphanLinkOfRemovedTarget(t *testing.T) {
 	lib, _, home := newTestLib(t)
 	gone := filepath.Join(home, "custom")
@@ -95,7 +97,8 @@ func TestOrphanLinkOfRemovedTarget(t *testing.T) {
 	for _, force := range []bool{false, true} {
 		plan := MakePlan(lib, nil, force)
 		for _, op := range plan.Ops {
-			if op.Action != "forget" {
+			want := map[string]string{"x": "skip", "y": "forget"}[op.Name]
+			if op.Action != want {
 				t.Errorf("force=%v: %+v", force, op)
 			}
 			if op.Name == "x" && !strings.Contains(op.Reason, filepath.Join(gone, "x")) {
@@ -103,11 +106,21 @@ func TestOrphanLinkOfRemovedTarget(t *testing.T) {
 			}
 		}
 	}
+	for i := 0; i < 2; i++ {
+		if _, err := Apply(lib, MakePlan(lib, nil, true)); err != nil {
+			t.Fatal(err)
+		}
+		if !isLinkTo(filepath.Join(gone, "x"), filepath.Join(lib.Root, "skills", "x")) {
+			t.Error("the link of a removed target was removed")
+		}
+		if strings.Join(lib.Lock.LinkKeys(), ",") != "mine/x" {
+			t.Errorf("lock has %v", lib.Lock.LinkKeys())
+		}
+	}
+	// The user removes it; the record goes.
+	os.Remove(filepath.Join(gone, "x"))
 	if _, err := Apply(lib, MakePlan(lib, nil, true)); err != nil {
 		t.Fatal(err)
-	}
-	if !isLinkTo(filepath.Join(gone, "x"), filepath.Join(lib.Root, "skills", "x")) {
-		t.Error("the link of a removed target was removed")
 	}
 	if len(lib.Lock.Links) != 0 {
 		t.Errorf("lock still has %v", lib.Lock.LinkKeys())
@@ -247,21 +260,23 @@ func TestOrphanSourceOutsideLibrary(t *testing.T) {
 			}
 		}
 	}
-	// Our own link (source inside the library) is only forgotten too.
+	// Our own link (source inside the library) stays too; its record is
+	// kept, so skd keeps saying it is there.
 	writeSkill(t, filepath.Join(lib.Root, "skills", "y"), "y")
 	ours := filepath.Join(dir, "y")
 	os.Symlink(filepath.Join(lib.Root, "skills", "y"), ours)
 	lib.Lock.Links["gone/y"] = &lock.Link{Mode: "link", Source: "skills/y", Path: ours}
 	Apply(lib, MakePlan(lib, nil, true))
-	if _, err := os.Lstat(ours); err != nil || lib.Lock.Links["gone/y"] != nil {
+	if _, err := os.Lstat(ours); err != nil || lib.Lock.Links["gone/y"] == nil {
 		t.Errorf("our own orphan link: %v, record %v", err, lib.Lock.Links["gone/y"])
 	}
 }
 
 // Links into a custom target that has since been removed, an app link
 // (its source is the [[app]] path, outside the library), a vendored one,
-// and tampered ones, are all only forgotten: nothing in a target not in
-// use is removed, with --force too.
+// and tampered ones: nothing in a target not in use is removed, with
+// --force too. The record of the link into the library is kept (skd says
+// it is there); the others are forgotten.
 func TestOrphanAppLinkOfRemovedTarget(t *testing.T) {
 	lib, _, home := newTestLib(t)
 	app := filepath.Join(home, "Applications", "Surge.app", "skills", "surge")
@@ -296,7 +311,7 @@ func TestOrphanAppLinkOfRemovedTarget(t *testing.T) {
 		for _, op := range MakePlan(lib, entries, force).Ops {
 			got[op.Target.Name+"/"+op.Name] = op.Action
 		}
-		want := map[string]string{"mine/surge": "forget", "mine/tdd": "forget", "mine/real": "forget", "mine/alias": "forget"}
+		want := map[string]string{"mine/surge": "forget", "mine/tdd": "skip", "mine/real": "forget", "mine/alias": "forget"}
 		for k, v := range want {
 			if got[k] != v {
 				t.Errorf("force=%v %s: %q, want %q (plan %v)", force, k, got[k], v, got)
@@ -314,7 +329,7 @@ func TestOrphanAppLinkOfRemovedTarget(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(app, "SKILL.md")); err != nil {
 		t.Error("the app's own files were touched")
 	}
-	if len(lib.Lock.Links) != 0 {
-		t.Errorf("lock still has %v", lib.Lock.LinkKeys())
+	if strings.Join(lib.Lock.LinkKeys(), ",") != "mine/tdd" {
+		t.Errorf("lock has %v", lib.Lock.LinkKeys())
 	}
 }

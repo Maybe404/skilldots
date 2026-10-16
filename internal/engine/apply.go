@@ -204,6 +204,16 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 					state = "is not used (see skd targets)"
 				}
 			}
+			if LeftLink(prev, lib) {
+				// What the record names is a link into the library, as skd
+				// makes them: most likely left there when the target went
+				// out of use. The record is kept, so every apply and `skd
+				// scan` say so until the link is gone; it is still not
+				// touched.
+				plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: tname}, Name: name, Dest: prev.Path,
+					Reason: fmt.Sprintf("target %q %s; %s is a link into the library it had; skd no longer manages it: remove it yourself if it is no longer wanted", tname, state, prev.Path)})
+				continue
+			}
 			where := "nothing on disk is touched"
 			if p := prev.Path; p != "" {
 				where = fmt.Sprintf("nothing on disk is touched; remove %s yourself if it is no longer wanted", p)
@@ -437,6 +447,15 @@ func ownLink(dest string, prev *lock.Link, lib *library.Library) bool {
 	}
 	src := libSource(prev.Source, lib)
 	return src != "" && isLinkTo(dest, src)
+}
+
+// LeftLink reports whether the place a lock record names (its Path) is
+// a link into the library as skd makes them: a symbolic link to the
+// record's source, inside the library (ownLink). For a record of a
+// target no longer in use, that is a link it left behind; skd reads
+// that path, never writes it.
+func LeftLink(prev *lock.Link, lib *library.Library) bool {
+	return prev != nil && filepath.IsAbs(prev.Path) && ownLink(prev.Path, prev, lib)
 }
 
 // sourceLink returns the first symbolic link on the way from the library

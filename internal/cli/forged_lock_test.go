@@ -206,3 +206,56 @@ func TestOwnLinksBehaveAsBefore(t *testing.T) {
 	e.ok(e.p("lib2"), "disable", "b")
 	trash("disable after the move")
 }
+
+// Links skd made in a custom target that is then removed from skills.toml
+// stay where they are (skd no longer manages that directory), and skd
+// keeps saying so: every apply names them and `skd scan` lists them as
+// left, until they are removed. A forged record naming something that
+// is not such a link is not listed.
+func TestLinksOfARemovedTargetAreListedUntilGone(t *testing.T) {
+	e := newEnv(t)
+	lib := customLib(e, "[targets.custom.box]\npath = \"~/box/skills\"\n")
+	os.MkdirAll(e.p("box/skills"), 0o755)
+	rel, _ := filepath.Rel(e.home, e.approvals())
+	e.write(filepath.ToSlash(rel), "[[target]]\nname = 'box'\npath = '"+e.p("box/skills")+"'\nmode = 'link'\napproved = 2026-01-01T00:00:00Z\n")
+	e.write("lib/skills.toml", "[targets]\ndefault = [\"agents\", \"box\"]\n\n[targets.custom.box]\npath = \"~/box/skills\"\n")
+	e.ok(lib, "apply")
+	left := e.p("box/skills/tdd")
+	if _, err := os.Readlink(left); err != nil {
+		t.Fatalf("not linked into box: %v", err)
+	}
+	if js := e.ok(lib, "scan", "--json"); strings.Contains(js, `"left"`) {
+		t.Fatalf("links of targets in use listed as left:\n%s", js)
+	}
+	// The target goes; a forged record names the user's own directory.
+	e.write("lib/skills.toml", "[targets]\ndefault = [\"agents\"]\n")
+	e.write("Documents/x/notes.txt", "mine")
+	lockb, _ := os.ReadFile(filepath.Join(lib, "skills.lock"))
+	os.WriteFile(filepath.Join(lib, "skills.lock"), append(lockb, []byte("\n[links.'gone/x']\nmode = 'link'\nsource = 'skills/tdd'\npath = '"+e.p("Documents/x")+"'\n")...), 0o644)
+	for i := 0; i < 2; i++ {
+		out := e.ok(lib, "apply")
+		if !strings.Contains(out, left) || !strings.Contains(out, "no longer manages it") {
+			t.Fatalf("apply %d does not name the left link:\n%s", i, out)
+		}
+		if _, err := os.Readlink(left); err != nil {
+			t.Fatalf("the left link was removed: %v", err)
+		}
+	}
+	scan := e.ok(lib, "scan")
+	if !strings.Contains(scan, "left") || !strings.Contains(scan, "tdd") || strings.Contains(scan, "Documents") {
+		t.Fatalf("scan:\n%s", scan)
+	}
+	js := e.ok(lib, "scan", "--json")
+	if !strings.Contains(js, `"state": "left"`) || !strings.Contains(js, left) {
+		t.Fatalf("scan --json:\n%s", js)
+	}
+	if b, err := os.ReadFile(e.p("Documents/x/notes.txt")); err != nil || string(b) != "mine" {
+		t.Fatalf("~/Documents/x touched: %v", err)
+	}
+	// Removed by the user: no longer said.
+	os.Remove(left)
+	e.ok(lib, "apply")
+	if scan := e.ok(lib, "scan", "--json"); strings.Contains(scan, `"left"`) {
+		t.Fatalf("still listed:\n%s", scan)
+	}
+}

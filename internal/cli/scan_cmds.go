@@ -58,8 +58,11 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 		if it.Target != cur {
 			flush()
 			cur = it.Target
-			tgt, _ := c.reg.Get(cur)
-			c.printf("%s %s\n", accent(cur), dim(tgt.Path))
+			where := "(not in use)"
+			if tgt, err := c.reg.Get(cur); err == nil {
+				where = tgt.Path
+			}
+			c.printf("%s %s\n", accent(txt(cur)), dim(where))
 			t = newTable("", "SKILL", "STATE", "DETAIL")
 		}
 		mark, state, detail := scanRow(c, it)
@@ -68,6 +71,9 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 	flush()
 	if counts[scan.Copy]+counts[scan.ExtLink]+counts[scan.AppLink]+counts[scan.Broken] > 0 {
 		c.printf("%s\n", dim("take these over with: skd adopt"))
+	}
+	if counts[scan.Left] > 0 {
+		c.printf("%s\n", dim("links skd made for targets no longer in use stay until you remove them"))
 	}
 }
 
@@ -94,6 +100,8 @@ func scanRow(c *ctx, it scan.Item) (mark, state, detail string) {
 		return warn("○"), "copy", d
 	case scan.Broken:
 		return bad("✗"), "broken", dim(short(it.LinkTo))
+	case scan.Left:
+		return warn("○"), "left", dim(short(it.Path) + " → " + short(it.LinkTo) + "; target not in use, skd no longer manages it")
 	}
 	return dim("·"), string(it.State), ""
 }

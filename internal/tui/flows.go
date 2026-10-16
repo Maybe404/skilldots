@@ -198,6 +198,7 @@ func (m Model) fork() (tea.Model, tea.Cmd) {
 // scanStates describes scan states the way `skd scan` does.
 var scanStates = map[scan.State]string{
 	scan.Unlinked: "→ library", scan.AppLink: "app link", scan.ExtLink: "link", scan.Copy: "copy", scan.Broken: "broken",
+	scan.Left: "left by a target not in use",
 }
 
 // scanView shows `skd scan` by agent with what `skd adopt` proposes for
