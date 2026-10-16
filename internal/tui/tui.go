@@ -5,6 +5,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,19 +42,43 @@ func Run(o Options) error {
 	if err != nil {
 		return err
 	}
-	// From here on SIGINT and SIGTERM never kill skd outright: bubbletea
-	// turns the first one into a quit, and below skd waits for the running
-	// job so no git or `skd sync` is left behind on its own.
+	// From here on SIGINT, SIGTERM and SIGHUP never kill skd outright:
+	// bubbletea turns the first SIGINT or SIGTERM into a quit, and below
+	// skd waits for the running job so no git or `skd sync` is left behind
+	// on its own.
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sigs)
+	// A hangup (the terminal window closed, `tmux kill-session`) leaves
+	// nobody to answer: the dashboard is closed and everything skd started
+	// is stopped below rather than skd dying and leaving its git (in a
+	// session of its own, out of the hangup's reach) to run on.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
 
 	m := New(ops, snap, o.Theme, o.Version)
 	m.replay = replayKeys(o.Input)
 	p := tea.NewProgram(m, tea.WithAltScreen())
+	ran := make(chan struct{})
+	hungUp := make(chan bool, 1)
+	go func() {
+		select {
+		case <-hup:
+			hungUp <- true
+			p.Kill()
+		case <-ran:
+			hungUp <- false
+		}
+	}()
 	final, err := p.Run()
+	close(ran)
 	label := "the running operation"
 	force := false
+	if <-hungUp {
+		err = errors.New("the terminal hung up")
+		force = true
+	}
 	if fm, ok := final.(Model); ok {
 		if fm.quitAfter && fm.status != "" {
 			// ctrl+c during a job: say how it ended.
@@ -62,7 +87,7 @@ func Run(o Options) error {
 		if fm.busy != "" {
 			label = fm.busy
 		}
-		force = fm.forceQuit
+		force = force || fm.forceQuit
 	}
 	// A background upstream check is only a check: stop it rather than
 	// wait for a slow network, and wait just long enough for its git to

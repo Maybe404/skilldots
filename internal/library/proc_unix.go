@@ -7,13 +7,18 @@ import (
 	"syscall"
 )
 
-// cancelTree runs cmd in a process group of its own, so cancelling it
-// reaches git's children too: they are sent SIGTERM as a group.
+// cancelTree runs cmd in a session of its own, so cancelling it reaches
+// git's children too: they are sent SIGTERM as a group. The new session
+// has no controlling terminal, so whatever git starts that wants to ask
+// the user something on /dev/tty (an ssh passphrase through a custom
+// core.sshCommand) fails at once instead of being stopped as a background
+// reader; and a terminal hangup, which skd handles itself, is not
+// delivered to them.
 func cancelTree(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Cancel = func() error {
-		// The group is git's: its pid is the group id, and git has not
-		// been waited for yet, so the id cannot belong to anyone else.
+		// git leads its session and the group of the same id, and has
+		// not been waited for yet, so the id cannot belong to anyone else.
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 }

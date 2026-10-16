@@ -92,7 +92,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `space` | 启用/停用；上游未装的直接安装 | `enable` / `disable` / `add --skill` |
 | `a` | 加仓库：勾选 skill 或整个分类（`*` 跟随全部），再选 alias、目标 agent，均可留空 | `add` |
 | `u` / `U` | 更新当前包 / 所有检查出有更新的包（检查未成功前为全部） | `update` |
-| `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆加锁，与 update/add 及其他 skd 进程串行；退出时取消检查：git 及其子进程收到 SIGTERM（独立进程组，git 借此清理锁文件），1 秒后仍在的被杀，退出最多等 2 秒，不留 git 进程）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream` / `moved upstream (path only)`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
+| `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆加锁，与 update/add 及其他 skd 进程串行；退出时取消检查：git 及其子进程收到 SIGTERM（独立 session、独立进程组，git 借此清理锁文件），1 秒后仍在的被杀，退出最多等 2 秒，不留 git 进程；独立 session 没有控制终端，要从 /dev/tty 读口令的 core.sshCommand 直接失败、显示为 check failed，而不是被挂起；终端挂断（SIGHUP，如关窗口、`tmux kill-session`）时仪表盘关闭，按退出流程取消检查并立即停掉在跑的操作，skd 以非 0 退出）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream` / `moved upstream (path only)`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
 | `e` | 选目标 agent | `enable/disable --agent` |
 | `f` | fork，可改名，选 skills/ 或 private/ | `fork [--as] [--private]` |
 | `d` | 删 vendor skill（进 trash）/ 取消链接自己的 / purge 包 | `remove` / `disable` / `purge` |
