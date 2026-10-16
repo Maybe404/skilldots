@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/config"
+	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
@@ -108,12 +109,58 @@ func Open(root string) (*Library, error) {
 	return &Library{Root: root, Manifest: m, Lock: l}, nil
 }
 
+// Writable reports why Save would refuse to write the manifest or the
+// lock (CheckFile), before anything else is changed.
+func (l *Library) Writable() error {
+	for _, f := range []string{manifest.FileName, lock.FileName} {
+		if err := CheckFile(l.Root, filepath.Join(l.Root, f)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Save writes manifest and lock back.
 func (l *Library) Save() error {
+	if err := l.Writable(); err != nil {
+		return err
+	}
 	if err := l.Manifest.Save(filepath.Join(l.Root, manifest.FileName)); err != nil {
 		return err
 	}
 	return l.Lock.Save(filepath.Join(l.Root, lock.FileName))
+}
+
+// CheckFile reports why skd must not write p, one of the library's own
+// files at root (skills.toml, skills.lock, the update history,
+// .gitignore): it is a symbolic link that leads outside the library, or
+// nowhere. A library may come from someone else (skd clone), and such a
+// link would have skd overwrite or append to any file it names, say
+// skills.lock -> ../.codex/config.toml. Reading through it is harmless;
+// a link to a file inside the library is fine.
+func CheckFile(root, p string) error {
+	st, err := os.Lstat(p)
+	if err != nil || st.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return fmt.Errorf("%s is a symbolic link that leads nowhere; skd does not write through it (replace it with the file itself)", p)
+	}
+	if a, err := filepath.Abs(real); err == nil {
+		real = a
+	}
+	r, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	if rr, err := filepath.EvalSymlinks(r); err == nil {
+		r = rr
+	}
+	if !fsutil.Within(r, real) {
+		return fmt.Errorf("%s is a symbolic link to %s, outside the library; skd does not write through it (replace it with the file itself)", p, real)
+	}
+	return nil
 }
 
 // Git runs git inside the library root.

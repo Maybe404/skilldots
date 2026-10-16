@@ -66,6 +66,11 @@ func initCmd() *cobra.Command {
 			if len(defaults) == 0 {
 				defaults = detectDefaults()
 			}
+			for _, f := range []string{manifest.FileName, lock.FileName, ".gitignore"} {
+				if err := library.CheckFile(root, filepath.Join(root, f)); err != nil {
+					return err
+				}
+			}
 			m := manifest.New(defaults)
 			if err := m.Save(filepath.Join(root, manifest.FileName)); err != nil {
 				return err

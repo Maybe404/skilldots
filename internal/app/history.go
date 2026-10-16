@@ -251,6 +251,9 @@ func (s *Session) appendHistory(recs []*UpdateRecord) error {
 		b = append(append(b, line...), '\n')
 	}
 	defer s.holdHistory()()
+	if err := library.CheckFile(s.Lib.Root, s.HistoryPath()); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(s.HistoryPath(), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return err
@@ -336,6 +339,10 @@ func (s *Session) settleApplyErrors(unlinked map[string]bool) {
 	}
 	if settleHook != nil {
 		settleHook()
+	}
+	if err := library.CheckFile(s.Lib.Root, p); err != nil {
+		s.logf(Warn, "could not mark the update history linked: %v", err)
+		return
 	}
 	if err := fsutil.WriteAtomic(p, bytes.Join(lines, nil)); err != nil {
 		s.logf(Warn, "could not mark the update history linked (%s): %v", HistoryFile, err)

@@ -259,3 +259,54 @@ func TestLinksOfARemovedTargetAreListedUntilGone(t *testing.T) {
 		t.Fatalf("still listed:\n%s", scan)
 	}
 }
+
+// A cloned library's own files may be links to the user's files: skd
+// reads through them but never writes, so nothing there is overwritten
+// (skills.lock -> ../.codex/config.toml would otherwise be replaced by
+// the lock), and nothing is linked before it says so.
+func TestLibraryFilesLinkedOutsideAreNotWritten(t *testing.T) {
+	for _, f := range []string{"skills.lock", "skills.toml"} {
+		t.Run(f, func(t *testing.T) {
+			e := newEnv(t)
+			e.write(".codex/config.toml", "model = \"o3\"\n\n[targets]\ndefault = [\"agents\"]\n")
+			e.write("lib/skills.toml", "[targets]\ndefault = [\"agents\"]\n")
+			e.skill("lib/skills/a", "a")
+			os.Remove(e.p("lib/" + f))
+			if err := os.Symlink("../.codex/config.toml", e.p("lib/"+f)); err != nil {
+				t.Fatal(err)
+			}
+			out, errOut, code := e.skd(e.p("lib"), "apply")
+			if code == 0 || !strings.Contains(errOut, "outside the library") {
+				t.Fatalf("apply: exit %d\n%s%s", code, out, errOut)
+			}
+			if b, _ := os.ReadFile(e.p(".codex/config.toml")); string(b) != "model = \"o3\"\n\n[targets]\ndefault = [\"agents\"]\n" {
+				t.Fatalf("overwritten:\n%s", b)
+			}
+			if fsutil.Lexists(e.p(".agents/skills/a")) {
+				t.Fatal("linked before refusing")
+			}
+		})
+	}
+}
+
+// `skd init --from` a repository whose skills.lock or .gitignore is a
+// link to one of the user's files refuses before writing anything.
+func TestInitDoesNotWriteThroughLinks(t *testing.T) {
+	for _, f := range []string{"skills.lock", ".gitignore"} {
+		t.Run(f, func(t *testing.T) {
+			e := newEnv(t)
+			e.write(".codex/config.toml", "model = \"o3\"\n")
+			e.write("repo/README.md", "hi")
+			if err := os.Symlink("../.codex/config.toml", e.p("repo/"+f)); err != nil {
+				t.Fatal(err)
+			}
+			_, errOut, code := e.skd("", "init", "--from", e.p("repo"))
+			if code == 0 || !strings.Contains(errOut, "outside the library") {
+				t.Fatalf("init: exit %d\n%s", code, errOut)
+			}
+			if b, _ := os.ReadFile(e.p(".codex/config.toml")); string(b) != "model = \"o3\"\n" {
+				t.Fatalf("overwritten:\n%s", b)
+			}
+		})
+	}
+}

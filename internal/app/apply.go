@@ -61,6 +61,9 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 	if o.DryRun {
 		return out, nil
 	}
+	if err := s.Lib.Writable(); err != nil {
+		return out, err
+	}
 	if !plan.Changes() {
 		engine.Remember(s.Lib, plan)
 		s.settleApplyErrors(plan.Unlinked())
