@@ -143,6 +143,9 @@ type EditOptions struct {
 	As      string
 	// Force opens the files anyway.
 	Force bool
+	// NoTerminal says the caller has no terminal to hand a terminal
+	// editor (vim, nano): Edit then refuses one before changing anything.
+	NoTerminal bool
 }
 
 // EditOutcome is what Edit decided to open.
@@ -158,7 +161,9 @@ type EditOutcome struct {
 // Edit finds the skill r names and the editor to open it with; front
 // ends then open Dir (Editor.Start, or in the foreground for a terminal
 // editor). A vendored or app skill is refused with *OverwrittenError
-// unless opts fork it (then the fork is opened) or force it.
+// unless opts fork it (then the fork is opened) or force it. Nothing is
+// forked when the editor could not be started anyway: one that is not
+// installed, or a terminal editor with opts.NoTerminal.
 func (s *Session) Edit(r Ref, opts EditOptions) (*EditOutcome, error) {
 	entries, err := s.Resolve()
 	if err != nil {
@@ -171,6 +176,12 @@ func (s *Session) Edit(r Ref, opts EditOptions) (*EditOutcome, error) {
 	ed, err := FindEditor()
 	if err != nil {
 		return nil, err
+	}
+	if _, err := lookPath(ed.Argv[0]); err != nil {
+		return nil, fmt.Errorf("editor %q (%s) not found; set one with skd config set editor <command>", ed.Argv[0], ed.From)
+	}
+	if ed.Terminal && opts.NoTerminal {
+		return nil, fmt.Errorf("%s runs in a terminal and there is none; set a windowed editor with skd config set editor <command>, or open %s yourself", ed.Name(), e.Dir)
 	}
 	out := &EditOutcome{Entry: *e, Dir: e.Dir, Editor: ed}
 	over := OverwriteNote(*e) != ""

@@ -33,6 +33,10 @@ func editCmd() *cobra.Command {
 			if opts.Fork && opts.Force {
 				return fmt.Errorf("--fork and --force: pick one")
 			}
+			// A terminal editor runs here only at a terminal and without
+			// --json; Edit refuses it otherwise, before forking anything.
+			foreground := isTerminal() && !flags.json
+			opts.NoTerminal = !foreground
 			out, err := c.Edit(app.KeyRef(args[0]), opts)
 			var over *app.OverwrittenError
 			if errors.As(err, &over) && isTerminal() && !flags.json && !flags.yes {
@@ -47,7 +51,7 @@ func editCmd() *cobra.Command {
 					).Value(&how)); err != nil || how == "" {
 					return nil
 				}
-				opts = app.EditOptions{Fork: how != "force", Private: how == "private", Force: how == "force"}
+				opts = app.EditOptions{Fork: how != "force", Private: how == "private", Force: how == "force", NoTerminal: !foreground}
 				out, err = c.Edit(app.KeyRef(args[0]), opts)
 			}
 			if err != nil {
@@ -59,7 +63,7 @@ func editCmd() *cobra.Command {
 			}
 			c.printf("%s %s %s\n", dim("opening"), out.Dir, dim("with "+out.Editor.Name()+" ("+out.Editor.From+")"))
 			var runErr error
-			if out.Editor.Terminal && isTerminal() && !flags.json {
+			if out.Editor.Terminal && foreground {
 				ed := out.Editor.Command(out.Dir)
 				ed.Stdin, ed.Stdout, ed.Stderr = os.Stdin, os.Stdout, os.Stderr
 				runErr = ed.Run()
