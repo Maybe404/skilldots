@@ -203,7 +203,21 @@ func markConflicts(entries []Entry) []string {
 	}
 	var warnings []string
 	for _, name := range sortedKeys(byName) {
-		idx := byName[name]
+		all := byName[name]
+		if len(all) < 2 {
+			continue
+		}
+		// Same name is only a clash where both would land in the same
+		// target directory; entries linked to disjoint agents coexist.
+		var idx []int
+		for _, i := range all {
+			for _, j := range all {
+				if i != j && sharesTarget(entries[i], entries[j]) {
+					idx = append(idx, i)
+					break
+				}
+			}
+		}
 		if len(idx) < 2 {
 			continue
 		}
@@ -218,6 +232,18 @@ func markConflicts(entries []Entry) []string {
 		warnings = append(warnings, msg+"; neither is linked until one is renamed (set `as` under [pack.skill.<name>] in skills.toml, or rename your own skill)")
 	}
 	return warnings
+}
+
+// sharesTarget reports whether two entries link into a common directory.
+func sharesTarget(a, b Entry) bool {
+	for _, x := range a.Targets {
+		for _, y := range b.Targets {
+			if x.Name == y.Name || evalClean(x.Path) == evalClean(y.Path) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func sortedKeys[V any](m map[string]V) []string {

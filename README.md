@@ -114,11 +114,11 @@ Every directory containing a `SKILL.md` is a skill. Test directories are skipped
 
 The category is the skill's parent path with structural segments (`skills`, `skill`, `plugins`, `plugin`, hidden directories) removed: `skills/engineering/tdd` is `engineering`, `plugins/code-improver/skills/pr-improver` is `code-improver`. It depends only on that skill's own location, so new directories upstream never recategorise existing skills; when a skill does move, its vendored directory is renamed.
 
-A skill's name (frontmatter `name`, else its directory) must be letters, digits, `.`, `_` and `-`, not starting with `.`. Skills with any other name are skipped with a warning, because the name becomes a directory and link name. The same rule applies to `as`, `[[app]].name` and `[[local]].name`.
+A skill's name (frontmatter `name`, else its directory) must be letters, digits, `.`, `_` and `-`, not starting with `.`. Skills with any other name are skipped with a warning, because the name becomes a directory and link name. The same rule applies to `as`, `[[app]].name` and `[[local]].name`. Within one repository, a skill whose name differs only in case from another, or whose category would put it inside another skill's directory, is skipped with a warning. A `LICENSE` that is a symlink is never copied.
 
 ## Name clashes
 
-The first skill to use a name keeps it. When `skd add` or `skd update` vendors a skill whose name is already taken, it is linked as `<repo>-<name>` and the `as` is written to `skills.toml`. If a clash remains (for example you create `skills/foo` while a pack provides `foo`), both are skipped with a warning naming both directories, existing links stay as they are, and everything else is linked as usual. `skd fork` renames the frontmatter to the fork's name, so a fork never clashes with its upstream.
+The first skill to use a name keeps it. When `skd add` or `skd update` vendors a skill whose name is already taken, it is linked as `<repo>-<name>` and the `as` is written to `skills.toml`. Names are compared case-insensitively. Two skills may share a name if they go to different agents; if they would land in the same agent directory (for example you create `skills/foo` while a pack provides `foo` to the same agents), both are skipped with a warning naming both directories, existing links stay as they are, and everything else is linked as usual. `skd fork` renames the frontmatter to the fork's name, so a fork never clashes with its upstream.
 
 ## Editing, rolling back, removing
 

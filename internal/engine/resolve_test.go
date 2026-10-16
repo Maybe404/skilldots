@@ -130,3 +130,35 @@ func TestOrphanPathOutsideTargetsIsForgotten(t *testing.T) {
 		t.Fatal("record not forgotten")
 	}
 }
+
+// The same name for two skills is fine when they go to different agents.
+func TestSameNameDisjointTargets(t *testing.T) {
+	lib, reg, home := newTestLib(t)
+	writeSkill(t, filepath.Join(lib.VendorDir(), "o", "r", "good"), "good")
+	lib.Lock.Packs["o/r"] = &lock.Pack{Commit: "c", Skills: map[string]*lock.Skill{"good": {Hash: "h"}}}
+	agentsOnly, claudeOnly := []string{"agents"}, []string{"claude"}
+	lib.Manifest.Packs = []*manifest.Pack{{Repo: "o/r", Use: []string{"*"}, Targets: &agentsOnly}}
+	writeSkill(t, filepath.Join(lib.Root, "skills", "good"), "good")
+	lib.Manifest.Locals = []*manifest.Local{{Name: "good", Targets: &claudeOnly}}
+
+	entries, warnings, _ := Resolve(lib, reg)
+	if len(warnings) != 0 {
+		t.Fatalf("warnings: %v", warnings)
+	}
+	if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
+		t.Fatal(err)
+	}
+	if !isLinkTo(filepath.Join(home, ".agents", "skills", "good"), filepath.Join(lib.VendorDir(), "o", "r", "good")) {
+		t.Error("vendor good not linked into agents")
+	}
+	if !isLinkTo(filepath.Join(home, ".claude", "skills", "good"), filepath.Join(lib.Root, "skills", "good")) {
+		t.Error("local good not linked into claude")
+	}
+
+	// Overlapping targets still clash.
+	both := []string{"agents", "claude"}
+	lib.Manifest.Locals[0].Targets = &both
+	if _, warnings, _ := Resolve(lib, reg); len(warnings) != 1 {
+		t.Fatalf("overlap: warnings %v", warnings)
+	}
+}
