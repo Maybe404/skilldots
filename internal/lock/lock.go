@@ -4,10 +4,11 @@ package lock
 
 import (
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/Maybe404/skilldots/internal/fsutil"
 )
 
 const FileName = "skills.lock"
@@ -70,47 +71,7 @@ func (l *Lock) Save(path string) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(path, append([]byte("# Written by skilldots. Do not edit.\n"), b...))
-}
-
-// writeAtomic replaces path with data through a temporary file and a
-// rename, so an interrupted save never leaves a torn lock. A symlinked
-// lock is written through and an existing file keeps its permissions.
-// (Same as manifest's; the two packages do not depend on each other.)
-func writeAtomic(path string, data []byte) error {
-	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		real, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return os.WriteFile(path, data, 0o644)
-		}
-		path = real
-	}
-	perm := os.FileMode(0o644)
-	if st, err := os.Stat(path); err == nil {
-		perm = st.Mode().Perm()
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	_, err = f.Write(data)
-	if err == nil {
-		err = f.Sync()
-	}
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(tmp, perm)
-	}
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		os.Remove(tmp) // our own temporary file, never the user's
-	}
-	return err
+	return fsutil.WriteAtomic(path, append([]byte("# Written by skilldots. Do not edit.\n"), b...))
 }
 
 // LinkKeys returns link keys sorted, for deterministic output.

@@ -1,6 +1,8 @@
 package manifest
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -89,5 +91,41 @@ func TestSaveFailureKeepsOldFile(t *testing.T) {
 	got, err := Load(path)
 	if err != nil || got.Targets.Default[0] != "agents" {
 		t.Fatalf("old manifest damaged: %+v %v", got, err)
+	}
+}
+
+// A read-only skills.toml in a writable directory stays as it is: a
+// rename would otherwise replace it regardless of its own mode, also
+// through a symlink.
+func TestSaveRefusesReadOnlyFile(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("needs file permissions")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, FileName)
+	if err := New([]string{"agents"}).Save(path); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.toml")
+	os.Symlink(path, link)
+	before, _ := os.ReadFile(path)
+	os.Chmod(path, 0o444)
+	for _, p := range []string{path, link} {
+		err := New([]string{"claude"}).Save(p)
+		if err == nil || !errors.Is(err, fs.ErrPermission) {
+			t.Errorf("save to read-only %s: %v", p, err)
+		}
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Error("read-only skills.toml was replaced")
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o444 {
+		t.Errorf("mode changed: %v", st.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temporary file left behind: %s", e.Name())
+		}
 	}
 }

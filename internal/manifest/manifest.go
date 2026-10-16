@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/Maybe404/skilldots/internal/fsutil"
 )
 
 const FileName = "skills.toml"
@@ -104,47 +105,7 @@ func (m *Manifest) Save(path string) error {
 		return err
 	}
 	header := "# skilldots manifest — edit by hand or with `skd`.\n# Docs: https://github.com/Maybe404/skilldots\n\n"
-	return writeAtomic(path, []byte(header+string(b)))
-}
-
-// writeAtomic replaces path with data so a crash or kill mid-write leaves
-// either the old file or the new one, never a torn one: write a temporary
-// file next to it, then rename over it. A symlinked skills.toml is written
-// through (the link stays), and an existing file keeps its permissions.
-func writeAtomic(path string, data []byte) error {
-	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		real, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return os.WriteFile(path, data, 0o644)
-		}
-		path = real
-	}
-	perm := os.FileMode(0o644)
-	if st, err := os.Stat(path); err == nil {
-		perm = st.Mode().Perm()
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	_, err = f.Write(data)
-	if err == nil {
-		err = f.Sync()
-	}
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(tmp, perm)
-	}
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		os.Remove(tmp) // our own temporary file, never the user's
-	}
-	return err
+	return fsutil.WriteAtomic(path, []byte(header+string(b)))
 }
 
 // FindPack returns the pack matching repo or alias.

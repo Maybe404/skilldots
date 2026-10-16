@@ -252,3 +252,50 @@ func LicenseLinks(dir string) []string {
 	}
 	return out
 }
+
+// WriteAtomic replaces path with data so a crash or kill mid-write leaves
+// either the old file or the new one, never a torn one: write a temporary
+// file next to it, then rename over it. A symlinked file is written
+// through (the link stays), and an existing file keeps its permissions.
+//
+// A rename replaces a file whatever its own mode, so a file the user made
+// read-only (no owner write bit) is refused here, as an in-place write
+// would be.
+func WriteAtomic(path string, data []byte) error {
+	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		real, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return os.WriteFile(path, data, 0o644)
+		}
+		path = real
+	}
+	perm := os.FileMode(0o644)
+	if st, err := os.Stat(path); err == nil {
+		perm = st.Mode().Perm()
+		if perm&0o200 == 0 {
+			return &fs.PathError{Op: "write", Path: path, Err: fs.ErrPermission}
+		}
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, perm)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		os.Remove(tmp) // our own temporary file, never the user's
+	}
+	return err
+}
