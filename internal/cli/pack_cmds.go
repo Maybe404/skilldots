@@ -218,6 +218,7 @@ func pickSkills(c *ctx, repo string, upstream []pack.Skill, p *manifest.Pack) ([
 				Value(&chosen),
 		).WithHideFunc(func() bool { return mode == "all" }),
 	)
+	form = form.WithTheme(theme())
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return nil, nil

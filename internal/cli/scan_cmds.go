@@ -249,9 +249,9 @@ func pickProposals(props []proposal) ([]proposal, error) {
 		pre = append(pre, i)
 	}
 	chosen := pre
-	if err := huh.NewMultiSelect[int]().Title("Adopt").
-		Description("space to toggle · enter to confirm · displaced directories are moved aside, not deleted").
-		Options(opts...).Height(18).Value(&chosen).Run(); err != nil {
+	if err := ask(huh.NewMultiSelect[int]().Title("Adopt").
+		Description("space to toggle · enter to confirm · displaced directories go to the trash, not deleted").
+		Options(opts...).Height(18).Value(&chosen)); err != nil {
 		return nil, nil
 	}
 	var out []proposal

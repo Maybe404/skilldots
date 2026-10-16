@@ -173,9 +173,9 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 			linked++
 		}
 	}
-	c.printf("%s %s\n", bold("library"), c.lib.Root)
-	c.printf("%s\n\n", dim(fmt.Sprintf("%s · %s · %d linked · default targets: %s",
-		plural(len(m.Packs), "pack"), plural(len(entries), "skill"), linked, strings.Join(m.Targets.Default, ", "))))
+	home, _ := os.UserHomeDir()
+	c.printf("%s  %s\n", brand(), dim(strings.Replace(c.lib.Root, home, "~", 1)))
+	c.printf("%s\n\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(fmt.Sprintf("%d linked", linked))+dim(" · agents: "+strings.Join(m.Targets.Default, ", ")))
 
 	if len(m.Packs) > 0 {
 		t := newTable("PACK", "SKILLS", "COMMIT", "TARGETS")
@@ -541,7 +541,7 @@ func trashCmd() *cobra.Command {
 			}
 			c.printf("%s %s\n", bad("permanently delete"), plural(len(items), "parked directory"))
 			var sure bool
-			if err := huh.NewConfirm().Title(fmt.Sprintf("Delete %d item(s) forever?", len(items))).Affirmative("Delete").Negative("Keep").Value(&sure).Run(); err != nil || !sure {
+			if err := ask(huh.NewConfirm().Title(fmt.Sprintf("Delete %d item(s) forever?", len(items))).Affirmative("Delete").Negative("Keep").Value(&sure)); err != nil || !sure {
 				return nil
 			}
 			n, err := engine.EmptyTrash(c.lib)

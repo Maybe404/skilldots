@@ -2,13 +2,12 @@
 package cli
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -86,10 +85,11 @@ func confirm(prompt string) bool {
 		fmt.Fprintln(os.Stderr, "refusing to proceed without a terminal; pass --yes")
 		return false
 	}
-	fmt.Fprintf(os.Stderr, "%s [y/N] ", prompt)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	line = strings.ToLower(strings.TrimSpace(line))
-	return line == "y" || line == "yes"
+	var yes bool
+	if err := ask(huh.NewConfirm().Title(prompt).Affirmative("Yes").Negative("No").Value(&yes)); err != nil {
+		return false
+	}
+	return yes
 }
 
 func isTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
