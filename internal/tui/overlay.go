@@ -78,6 +78,9 @@ func inputOverlay(title, desc, placeholder, value string, t Theme, s surfaces, o
 	in.Placeholder = placeholder
 	in.Prompt = "❯ "
 	in.CharLimit = 200
+	// With no width bubbles shows only the placeholder's first rune; the
+	// dialog truncates to the screen anyway.
+	in.Width = 72
 	bg := lipgloss.NewStyle().Background(s.modal)
 	in.PromptStyle = bg.Foreground(t.Accent)
 	in.TextStyle = bg.Foreground(t.Text)
@@ -319,13 +322,25 @@ func (o *overlay) render(w, h int, t Theme, s surfaces) []string {
 	if w < 8 || h < 1 {
 		return nil
 	}
+	lines := o.renderDesc(w, h, t, s, o.desc)
+	if len(lines) > h && o.desc != "" {
+		// Short terminal: the key hints matter more than the description.
+		lines = o.renderDesc(w, h, t, s, "")
+	}
+	if len(lines) > h {
+		lines = append(lines[:max(0, h-1)], lines[len(lines)-1])
+	}
+	return lines
+}
+
+func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []string {
 	bg := s.modal
 	row := func(segs ...seg) string {
 		return paint(w, bg, append([]seg{sg("  ", "")}, segs...)...)
 	}
 	inner := w - 4
 	lines := []string{row(), row(sgb(o.title, t.Text))}
-	for _, d := range wrap(o.desc, inner, 3) {
+	for _, d := range wrap(desc, inner, 3) {
 		lines = append(lines, row(sg(d, t.Muted)))
 	}
 	lines = append(lines, row())
@@ -448,9 +463,6 @@ func (o *overlay) render(w, h int, t Theme, s surfaces) []string {
 		foot = append(foot, key("esc", "cancel")...)
 	}
 	lines = append(lines, row(), row(foot...), row())
-	if len(lines) > h {
-		lines = append(lines[:max(0, h-1)], lines[len(lines)-1])
-	}
 	return lines
 }
 

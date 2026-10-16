@@ -368,3 +368,17 @@ func TestOverlaysOnSmallTerminals(t *testing.T) {
 		}
 	}
 }
+
+func TestInputShowsPlaceholderAndHintsOnShortScreens(t *testing.T) {
+	lipgloss.SetColorProfile(0)
+	m, _ := newModel(t, sampleSnapshot(), 120, 36)
+	m, _ = press(t, m, "n")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "my-skill") {
+		t.Error("placeholder cut to its first letter")
+	}
+	m, _ = newModel(t, sampleSnapshot(), 60, 12)
+	m, _ = press(t, m, "n")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "esc cancel") {
+		t.Errorf("key hints dropped on a short screen:\n%s", v)
+	}
+}
