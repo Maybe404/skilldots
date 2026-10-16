@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
@@ -480,5 +481,66 @@ func TestDSStoreDirectoryIsNotDiscarded(t *testing.T) {
 	h, _ := fsutil.HashTree(filepath.Join(pd, "foo"))
 	if !fsutil.Pristine(filepath.Join(pd, "foo"), h) {
 		t.Fatal("a .DS_Store file made the copy non-pristine")
+	}
+}
+
+// A failing case-only rename leaves no .skd-rename directory behind and
+// keeps lock, manifest and links as they were; an existing tmp is never
+// overwritten.
+func TestSyncCaseRenameFailureRollsBack(t *testing.T) {
+	for _, tc := range []string{"second step fails", "tmp exists"} {
+		t.Run(tc, func(t *testing.T) {
+			world := t.TempDir()
+			t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+			lib, _, _ := newTestLib(t)
+			up := filepath.Join(world, "up")
+			writeSkillMD(t, filepath.Join(up, "skills", "Foo"), "Foo")
+			gitRepo(t, up)
+			p := &manifest.Pack{Repo: up, Use: []string{"Foo"}}
+			if _, err := Sync(lib, p); err != nil {
+				t.Fatal(err)
+			}
+			gitIn(t, up, "mv", "skills/Foo", "skills/tmp")
+			gitIn(t, up, "mv", "skills/tmp", "skills/foo")
+			writeSkillMD(t, filepath.Join(up, "skills", "foo"), "foo")
+			gitIn(t, up, "commit", "-qam", "rename")
+			pd, _ := PackDir(lib, up)
+			tmp := filepath.Join(pd, "Foo.skd-rename")
+			if tc == "tmp exists" {
+				os.MkdirAll(tmp, 0o755)
+				os.WriteFile(filepath.Join(tmp, "keep.txt"), []byte("k"), 0o644)
+			} else {
+				n := 0
+				rename = func(a, b string) error {
+					if n++; n == 2 {
+						return &os.LinkError{Op: "rename", Old: a, New: b, Err: syscall.EEXIST}
+					}
+					return os.Rename(a, b)
+				}
+				defer func() { rename = os.Rename }()
+			}
+			_, err := Sync(lib, p)
+			if err == nil || !strings.Contains(err.Error(), "nothing was changed") {
+				t.Fatalf("err = %v", err)
+			}
+			if tc == "tmp exists" {
+				if b, _ := os.ReadFile(filepath.Join(tmp, "keep.txt")); string(b) != "k" {
+					t.Fatal("existing tmp overwritten")
+				}
+			} else if fsutil.Lexists(tmp) {
+				t.Fatal(".skd-rename left behind")
+			}
+			names, _ := os.ReadDir(pd)
+			found := false
+			for _, d := range names {
+				found = found || d.Name() == "Foo"
+			}
+			if !found {
+				t.Fatalf("vendor dir not restored: %v", names)
+			}
+			if lib.Lock.Packs[up].Skills["Foo"] == nil || lib.Lock.Packs[up].Skills["foo"] != nil || p.Use[0] != "Foo" {
+				t.Fatalf("lock/manifest changed: %v %v", lib.Lock.Packs[up].Skills, p.Use)
+			}
+		})
 	}
 }

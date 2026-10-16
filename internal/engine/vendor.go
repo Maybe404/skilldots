@@ -310,14 +310,30 @@ func renameCase(lib *library.Library, p *manifest.Pack, lp *lock.Pack, packDir, 
 		return err
 	}
 	if fsutil.Lexists(oldDir) {
-		// Two steps, so a case-only rename also works where the file
-		// system folds case.
-		tmp := oldDir + ".skd-rename"
-		if err := os.Rename(oldDir, tmp); err != nil {
-			return err
+		fail := func(err error) error {
+			return fmt.Errorf("upstream renamed %s to %s, but renaming %s failed: %w; nothing was changed", old, new, lib.Rel(oldDir), err)
 		}
-		if err := os.Rename(tmp, newDir); err != nil {
-			return err
+		// Two steps, so a case-only rename also works where the file
+		// system folds case. Nothing is overwritten, and a failed second
+		// step is rolled back before the lock or manifest are touched.
+		tmp := oldDir + ".skd-rename"
+		if fsutil.Lexists(tmp) {
+			return fail(fmt.Errorf("%s already exists", lib.Rel(tmp)))
+		}
+		if a, err := os.Lstat(oldDir); err == nil {
+			if b, err := os.Lstat(newDir); err == nil && !os.SameFile(a, b) {
+				return fail(fmt.Errorf("%s already exists", lib.Rel(newDir)))
+			}
+		}
+		if err := rename(oldDir, tmp); err != nil {
+			return fail(err)
+		}
+		if err := rename(tmp, newDir); err != nil {
+			if rerr := rename(tmp, oldDir); rerr != nil {
+				return fmt.Errorf("upstream renamed %s to %s; renaming failed (%v) and restoring %s failed too (%v): move %s back by hand",
+					old, new, err, lib.Rel(oldDir), rerr, lib.Rel(tmp))
+			}
+			return fail(err)
 		}
 	}
 	lp.Skills[new] = ls
