@@ -11,12 +11,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Maybe404/skilldots/internal/fsutil"
-
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
-	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
-	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
 func addCmd() *cobra.Command {
@@ -32,130 +29,51 @@ func addCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if engine.ReservedQualifier(alias) {
-				return fmt.Errorf("--alias %q is reserved (it names your own skills in skills:<name>); pick another", alias)
-			}
-			m := c.lib.Manifest
-			arg := args[0]
-			if existing := m.FindPack(arg); existing != nil {
-				arg = existing.Repo
-			}
-			src, err := pack.ParseSource(arg)
+			src, err := c.ParseAdd(args[0], alias)
 			if err != nil {
 				return err
 			}
-			if err := m.CheckAlias(alias, src.Repo); err != nil {
-				return err
-			}
-			p := m.FindPack(src.Repo)
-			isNew := p == nil
-			if isNew {
-				p = &manifest.Pack{Repo: src.Repo, Ref: src.Ref, Alias: alias}
-				m.Packs = append(m.Packs, p)
-			} else if alias != "" {
-				p.Alias = alias
-			}
-			if len(targetNames) > 0 {
-				t := targetNames
-				p.Targets = &t
-			}
-
 			c.printf("%s %s\n", dim("fetching"), src.Repo)
-			clone, _, err := pack.Fetch(pack.Source{Repo: src.Repo, URL: src.URL, Ref: p.Ref})
-			if err != nil {
-				if isNew {
-					m.Packs = m.Packs[:len(m.Packs)-1]
-				}
-				return err
-			}
-			upstream, rejected, err := pack.Scan(clone)
+			f, err := c.Fetch(src)
 			if err != nil {
 				return err
 			}
-			printRejected(c, src.Repo, rejected)
-			if len(upstream) == 0 {
-				if isNew {
-					m.Packs = m.Packs[:len(m.Packs)-1]
-				}
+			printRejected(c, src.Repo, f.Rejected)
+			if len(f.Skills) == 0 {
 				return fmt.Errorf("%s contains no SKILL.md", src.Repo)
 			}
-
-			var chosen []string
-			switch {
-			case all:
-				p.Use = []string{"*"}
-			case len(skills) > 0 || len(categories) > 0:
-				for _, s := range skills {
-					if pack.Find(upstream, s) == nil {
-						return fmt.Errorf("no skill %q in %s (try `skd add %s` without --skill to browse)", s, src.Repo, src.Repo)
-					}
-					chosen = append(chosen, s)
-				}
-				for _, cat := range categories {
-					n := 0
-					for _, s := range upstream {
-						if s.Category == cat || strings.HasPrefix(s.Category, cat+"/") {
-							chosen = append(chosen, s.Name)
-							n++
-						}
-					}
-					if n == 0 {
-						if isNew {
-							m.Packs = m.Packs[:len(m.Packs)-1]
-						}
-						return fmt.Errorf("no category %q in %s (categories: %s)", cat, src.Repo, strings.Join(nonEmpty(pack.Categories(upstream)), ", "))
-					}
-				}
-			default:
-				if c.jsonOut(upstream) {
+			sel := app.Selection{Skills: skills, Categories: categories, All: all, Alias: alias, Agents: targetNames}
+			if !all && len(skills) == 0 && len(categories) == 0 {
+				if c.jsonOut(f.Skills) {
 					return nil
 				}
-				chosen, err = pickSkills(c, src.Repo, upstream, p)
+				chosen, err := pickSkills(c, src.Repo, f)
 				if err != nil {
 					return err
 				}
 				if len(chosen) == 1 && chosen[0] == "*" {
-					p.Use, chosen = []string{"*"}, nil
+					sel.All = true
+				} else {
+					sel.Skills = chosen
 				}
 			}
-			if !p.UsesAll() {
-				p.Use = dedupe(append(p.Use, chosen...))
+			out, err := c.Add(f, sel)
+			if err != nil {
+				return err
 			}
-			if len(p.Use) == 0 {
-				if isNew {
-					m.Packs = m.Packs[:len(m.Packs)-1]
-				}
+			if out.Nothing {
 				c.printf("%s\n", dim("nothing selected"))
 				return nil
 			}
-
-			rep, err := engine.Sync(c.lib, p)
-			if err != nil {
-				return err
-			}
+			rep := out.Report
 			printRenamed(c, rep)
-			if err := c.lib.Save(); err != nil {
-				return err
-			}
 			warnLicense(c, rep)
-			c.printf("%s vendored %s from %s %s\n", ok("✓"), plural(len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), "skill"), p.Repo, dim("@ "+short(rep.NewCommit)))
-			out, err := doApply(c, false, false, nil)
-			if err != nil {
-				return err
-			}
-			if flags.json {
-				entries, _ := c.resolve()
-				linked := []string{}
-				for _, e := range entries {
-					if e.Kind == engine.KindVendor && e.Origin == p.Repo {
-						linked = append(linked, e.LinkName)
-					}
-				}
-				c.jsonOut(map[string]any{"repo": p.Repo, "commit": rep.NewCommit, "skills": linked,
-					"added": nonNil(rep.Added), "changed": nonNil(rep.Changed), "unchanged": nonNil(rep.Unchanged),
-					"noLicense": nonNil(rep.NoLicenseList), "renamed": rep.Renamed, "rejected": nonNil(rep.Rejected),
-					"changes": out.Changes, "kept": out.Kept, "backups": out.Backups})
-			}
+			c.printf("%s vendored %s from %s %s\n", ok("✓"), plural(len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), "skill"), out.Repo, dim("@ "+short(rep.NewCommit)))
+			printApply(c, out.Apply)
+			c.jsonOut(map[string]any{"repo": out.Repo, "commit": rep.NewCommit, "skills": out.Linked,
+				"added": nonNil(rep.Added), "changed": nonNil(rep.Changed), "unchanged": nonNil(rep.Unchanged),
+				"noLicense": nonNil(rep.NoLicenseList), "renamed": rep.Renamed, "rejected": nonNil(rep.Rejected),
+				"changes": out.Apply.Changes, "kept": out.Apply.Kept, "backups": out.Apply.Backups})
 			return nil
 		},
 	}
@@ -169,7 +87,8 @@ func addCmd() *cobra.Command {
 
 // pickSkills shows an interactive multi-select grouped by category.
 // It returns ["*"] when the user chose to follow everything.
-func pickSkills(c *ctx, repo string, upstream []pack.Skill, p *manifest.Pack) ([]string, error) {
+func pickSkills(c *ctx, repo string, f *app.Fetched) ([]string, error) {
+	upstream := f.Skills
 	if !isTerminal() {
 		return nil, fmt.Errorf("no terminal: pass --skill, --category or --all")
 	}
@@ -188,7 +107,7 @@ func pickSkills(c *ctx, repo string, upstream []pack.Skill, p *manifest.Pack) ([
 				label += "  " + dim(truncate(s.Description, 60))
 			}
 			opts = append(opts, huh.NewOption(label, s.Name))
-			if p.Selected(s.Name, s.Category) {
+			if f.Have[s.Name] {
 				preselected = append(preselected, s.Name)
 			}
 		}
@@ -226,16 +145,6 @@ func pickSkills(c *ctx, repo string, upstream []pack.Skill, p *manifest.Pack) ([
 		return []string{"*"}, nil
 	}
 	return dedupe(chosen), nil
-}
-
-func nonEmpty(in []string) []string {
-	var out []string
-	for _, s := range in {
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func dedupe(in []string) []string {
@@ -300,55 +209,34 @@ func updateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			m := c.lib.Manifest
-			var packs []*manifest.Pack
-			if len(args) == 0 {
-				packs = m.Packs
-			}
-			for _, a := range args {
-				p := m.FindPack(a)
-				if p == nil {
-					return fmt.Errorf("no pack %q", a)
-				}
-				packs = append(packs, p)
-			}
-			type failure struct {
-				Repo  string `json:"repo"`
-				Error string `json:"error"`
-			}
-			reports := []*engine.SyncReport{}
-			failed := []failure{}
-			changed := false
-			for _, p := range packs {
-				rep, err := engine.Sync(c.lib, p)
+			// Whatever succeeded is saved and linked even if another pack failed.
+			out, err := c.Update(args, func(repo string, rep *engine.SyncReport, err error) {
 				if err != nil {
-					failed = append(failed, failure{p.Repo, err.Error()})
-					c.printf("%s %s: %v\n", bad("✗"), p.Repo, err)
-					continue
+					c.printf("%s %s: %v\n", bad("✗"), repo, err)
+					return
 				}
-				reports = append(reports, rep)
 				printReport(c, rep)
 				printRenamed(c, rep)
 				warnLicense(c, rep)
-				changed = changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped) > 0 || len(rep.Renamed) > 0
+			})
+			if out != nil && out.Apply != nil {
+				printApply(c, out.Apply)
 			}
-			// Whatever succeeded is saved and linked even if another pack failed.
-			if err := c.lib.Save(); err != nil {
-				return err
-			}
-			out, err := doApply(c, false, false, nil)
 			if err != nil {
 				return err
 			}
 			committed := false
-			if commit && changed {
-				if committed, err = gitCommit(c, "chore(skills): update vendored skills", true); err != nil {
+			if commit && out.Changed {
+				if committed, err = c.Commit("chore(skills): update vendored skills", true); committed {
+					c.printf("%s committed in %s\n", ok("✓"), c.lib.Root)
+				}
+				if err != nil {
 					return err
 				}
 			}
-			c.jsonOut(map[string]any{"packs": reports, "failed": failed, "apply": out, "committed": committed})
-			if len(failed) > 0 {
-				return fmt.Errorf("%d pack(s) failed: %s", len(failed), failed[0].Repo)
+			c.jsonOut(map[string]any{"packs": out.Reports, "failed": out.Failed, "apply": out.Apply, "committed": committed})
+			if len(out.Failed) > 0 {
+				return fmt.Errorf("%d pack(s) failed: %s", len(out.Failed), out.Failed[0].Repo)
 			}
 			return nil
 		},
@@ -404,93 +292,6 @@ func short(s string) string {
 	return s
 }
 
-// commitPaths is what a library commit takes: everything under the root
-// except the temporary files of an interrupted save, which a .gitignore
-// written before they were ignored would let through.
-var commitPaths = []string{".", ":(exclude,glob).skills.toml.tmp-*", ":(exclude,glob).skills.lock.tmp-*"}
-
-// gitCommit commits the library's own files and, with push, pushes when
-// the branch has an upstream. It reports whether a commit was made.
-func gitCommit(c *ctx, msg string, push bool) (bool, error) {
-	root := c.lib.Root
-	if _, err := c.lib.Git(append([]string{"add", "-A", "--"}, commitPaths...)...); err != nil {
-		return false, err
-	}
-	if _, err := c.lib.Git(append([]string{"diff", "--cached", "--quiet", "--"}, commitPaths...)...); err == nil {
-		return false, nil
-	}
-	if _, err := c.lib.Git(append([]string{"commit", "-q", "-m", msg, "--"}, commitPaths...)...); err != nil {
-		return false, err
-	}
-	if _, err := c.lib.Git("rev-parse", "--abbrev-ref", "@{u}"); push && err == nil {
-		if _, err := c.lib.Git("push", "-q"); err != nil {
-			return true, err
-		}
-	}
-	c.printf("%s committed in %s\n", ok("✓"), root)
-	return true, nil
-}
-
-// setTargets edits the targets of one skill and re-applies.
-func setTargets(c *ctx, key string, edit func(cur []string) []string) error {
-	entries, err := c.resolve()
-	if err != nil {
-		return err
-	}
-	e, err := lookup(c, entries, key)
-	if err != nil {
-		return err
-	}
-	if e == nil {
-		if p := c.lib.Manifest.FindPack(key); p != nil {
-			cur := e2names(c.lib.Manifest.Targets.Default)
-			if p.Targets != nil {
-				cur = *p.Targets
-			}
-			next := edit(cur)
-			p.Targets = &next
-			if err := c.lib.Save(); err != nil {
-				return err
-			}
-			return runApply(c, false, false)
-		}
-		return fmt.Errorf("no skill or pack %q", key)
-	}
-	editTargets(c, e, edit(e.TargetNames))
-	if err := c.lib.Save(); err != nil {
-		return err
-	}
-	return runApply(c, false, false)
-}
-
-// editTargets records next as the target list of e in the manifest.
-func editTargets(c *ctx, e *engine.Entry, next []string) {
-	m := c.lib.Manifest
-	switch e.Kind {
-	case engine.KindVendor:
-		p := m.FindPack(e.Origin)
-		p.Override(e.Name, true).Targets = &next
-	case engine.KindApp:
-		for _, a := range m.Apps {
-			if a.Name == e.Name {
-				a.Targets = &next
-			}
-		}
-	default:
-		found := false
-		for _, l := range m.Locals {
-			if l.Name == e.Name {
-				l.Targets, found = &next, true
-			}
-		}
-		if !found {
-			m.Locals = append(m.Locals, &manifest.Local{Name: e.Name, Targets: &next})
-		}
-	}
-}
-
-func e2names(s []string) []string { return append([]string(nil), s...) }
-
 func enableCmd() *cobra.Command {
 	var agents []string
 	cmd := &cobra.Command{
@@ -502,12 +303,7 @@ func enableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return setTargets(c, args[0], func(cur []string) []string {
-				if len(agents) == 0 {
-					return dedupe(append(cur, c.lib.Manifest.Targets.Default...))
-				}
-				return dedupe(append(cur, agents...))
-			})
+			return targetsDone(c)(c.Enable(app.KeyRef(args[0]), agents))
 		},
 	}
 	cmd.Flags().StringSliceVar(&agents, "agent", nil, "targets to add (default: manifest default)")
@@ -525,29 +321,23 @@ func disableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return setTargets(c, args[0], func(cur []string) []string {
-				if len(agents) == 0 {
-					return []string{}
-				}
-				drop := map[string]bool{}
-				for _, a := range agents {
-					drop[a] = true
-				}
-				var out []string
-				for _, t := range cur {
-					if !drop[t] {
-						out = append(out, t)
-					}
-				}
-				if out == nil {
-					out = []string{}
-				}
-				return out
-			})
+			return targetsDone(c)(c.Disable(app.KeyRef(args[0]), agents))
 		},
 	}
 	cmd.Flags().StringSliceVar(&agents, "agent", nil, "targets to remove (default: all)")
 	return cmd
+}
+
+// targetsDone reports a targets edit like `skd apply`.
+func targetsDone(c *ctx) func(*app.TargetsOutcome, error) error {
+	return func(out *app.TargetsOutcome, err error) error {
+		if err != nil {
+			return err
+		}
+		printApply(c, out.Apply)
+		c.jsonOut(out.Apply)
+		return nil
+	}
 }
 
 func removeCmd() *cobra.Command {
@@ -560,55 +350,18 @@ func removeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			entries, err := c.resolve()
+			out, err := c.Remove(app.KeyRef(args[0]))
 			if err != nil {
 				return err
 			}
-			e, err := lookup(c, entries, args[0])
-			if err != nil {
-				return err
-			}
-			if e == nil {
-				return fmt.Errorf("no skill %q", args[0])
-			}
-			if e.Kind != engine.KindVendor {
-				return fmt.Errorf("%q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it", args[0], e.Kind)
-			}
-			p := c.lib.Manifest.FindPack(e.Origin)
-			if p.UsesAll() {
-				p.Skip = dedupe(append(p.Skip, e.Name))
-			} else {
-				var use []string
-				for _, u := range p.Use {
-					if !manifest.UseNames(u, e.Name) {
-						use = append(use, u)
-					}
-				}
-				p.Use = use
-			}
-			delete(p.Skill, e.Name)
-			if len(p.Use) == 0 && !p.UsesAll() {
-				// Removing the last skill of a pack is the whole pack: the
-				// user named exactly what goes, so no further confirmation.
-				c.printf("%s\n", dim(p.Repo+" has no skills left; dropping the pack"))
-				out, err := purgePack(c, p, false)
-				if err != nil {
-					return err
-				}
-				c.jsonOut(map[string]any{"removed": e.LinkName, "purged": out})
+			if out.Purged != nil {
+				printPurge(c, out.Purged.Repo, out.Purged.Unlinked)
+				printApply(c, out.Purged.Apply)
+				c.jsonOut(map[string]any{"removed": out.Entry.LinkName, "purged": out.Purged})
 				return nil
 			}
-			if _, err := engine.Sync(c.lib, p); err != nil {
-				return err
-			}
-			if err := c.lib.Save(); err != nil {
-				return err
-			}
-			out, err := doApply(c, false, false, nil)
-			if err != nil {
-				return err
-			}
-			c.jsonOut(map[string]any{"removed": e.LinkName, "apply": out})
+			printApply(c, out.Apply)
+			c.jsonOut(map[string]any{"removed": out.Entry.LinkName, "apply": out.Apply})
 			return nil
 		},
 	}
@@ -629,10 +382,15 @@ func purgeCmd() *cobra.Command {
 			if p == nil {
 				return fmt.Errorf("no pack %q", args[0])
 			}
-			out, err := purgePack(c, p, true)
+			printPurge(c, p.Repo, c.PurgeLinks(p.Repo))
+			if !confirm("proceed?") {
+				return fmt.Errorf("cancelled")
+			}
+			out, err := c.Purge(p.Repo)
 			if err != nil {
 				return err
 			}
+			printApply(c, out.Apply)
 			c.jsonOut(out)
 			return nil
 		},
@@ -640,53 +398,12 @@ func purgeCmd() *cobra.Command {
 	return cmd
 }
 
-type purgeOutcome struct {
-	Repo     string        `json:"repo"`
-	Unlinked []string      `json:"unlinked"`
-	Apply    *applyOutcome `json:"apply"`
-}
-
-// purgePack drops a pack from manifest, lock, vendor/ (to the trash) and
-// every agent directory. ask asks for confirmation first.
-func purgePack(c *ctx, p *manifest.Pack, ask bool) (*purgeOutcome, error) {
-	entries, _ := c.resolve()
-	links := []string{}
-	for _, e := range entries {
-		if e.Kind == engine.KindVendor && e.Origin == p.Repo {
-			for _, t := range e.Targets {
-				links = append(links, t.Name+"/"+e.LinkName)
-			}
-		}
-	}
-	sort.Strings(links)
-	c.printf("%s %s: unlink %s and move vendor/%s to the trash\n", warn("purge"), bold(p.Repo), plural(len(links), "link"), p.Repo)
+// printPurge lists what purging repo removes.
+func printPurge(c *ctx, repo string, links []string) {
+	c.printf("%s %s: unlink %s and move vendor/%s to the trash\n", warn("purge"), bold(repo), plural(len(links), "link"), repo)
 	for _, l := range links {
 		c.printf("  %s %s\n", bad("−"), l)
 	}
-	if ask && !confirm("proceed?") {
-		return nil, fmt.Errorf("cancelled")
-	}
-	m := c.lib.Manifest
-	for i, q := range m.Packs {
-		if q == p {
-			m.Packs = append(m.Packs[:i], m.Packs[i+1:]...)
-			break
-		}
-	}
-	if err := c.lib.Save(); err != nil {
-		return nil, err
-	}
-	out, err := doApply(c, false, false, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := engine.RemovePack(c.lib, p.Repo); err != nil {
-		return nil, err
-	}
-	if err := c.lib.Save(); err != nil {
-		return nil, err
-	}
-	return &purgeOutcome{Repo: p.Repo, Unlinked: links, Apply: out}, nil
 }
 
 func pathCmd() *cobra.Command {
@@ -730,86 +447,13 @@ func forkCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			entries, err := c.resolve()
+			out, err := c.Fork(app.KeyRef(args[0]), private, as)
 			if err != nil {
 				return err
 			}
-			e, err := lookup(c, entries, args[0])
-			if err != nil {
-				return err
-			}
-			if e == nil {
-				return fmt.Errorf("no skill %q", args[0])
-			}
-			if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
-				return fmt.Errorf("%q is already yours (%s)", args[0], e.Dir)
-			}
-			name := e.LinkName
-			if as != "" {
-				if err := manifest.CheckName(as); err != nil {
-					return fmt.Errorf("--as: %w", err)
-				}
-				name = as
-			}
-			base := c.lib.SkillsDir()
-			if private {
-				base = c.lib.PrivateDir()
-			}
-			dest := filepath.Join(base, name)
-			if fsutil.Lexists(dest) {
-				return fmt.Errorf("%s already exists", dest)
-			}
-			if err := fsutil.CopyTree(e.Dir, dest); err != nil {
-				return err
-			}
-			// The fork is known by its directory name; make the frontmatter
-			// agree, or an aliased fork would clash with the upstream name.
-			if meta, err := skillmd.Read(dest); err == nil && meta.Name != name {
-				if err := skillmd.SetName(dest, name); err != nil {
-					return err
-				}
-			}
-			note := fmt.Sprintf("\n<!-- forked by skilldots from %s -->\n", engine.Describe(*e))
-			f, err := os.OpenFile(filepath.Join(dest, "SKILL.md"), os.O_APPEND|os.O_WRONLY, 0o644)
-			if err == nil {
-				f.WriteString(note)
-				f.Close()
-			}
-			// Deselect the vendored original so the names do not collide.
-			if e.Kind == engine.KindVendor {
-				p := c.lib.Manifest.FindPack(e.Origin)
-				if p.UsesAll() {
-					p.Skip = dedupe(append(p.Skip, e.Name))
-				} else {
-					var use []string
-					for _, u := range p.Use {
-						if !manifest.UseNames(u, e.Name) {
-							use = append(use, u)
-						}
-					}
-					p.Use = use
-				}
-				delete(p.Skill, e.Name)
-				if _, err := engine.Sync(c.lib, p); err != nil {
-					return err
-				}
-			} else {
-				for i, a := range c.lib.Manifest.Apps {
-					if a.Name == e.Name {
-						c.lib.Manifest.Apps = append(c.lib.Manifest.Apps[:i], c.lib.Manifest.Apps[i+1:]...)
-						break
-					}
-				}
-			}
-			if err := c.lib.Save(); err != nil {
-				return err
-			}
-			c.printf("%s forked %s → %s\n", ok("✓"), args[0], dest)
-			out, err := doApply(c, false, false, nil)
-			if err != nil {
-				return err
-			}
-			c.jsonOut(map[string]any{"forked": args[0], "name": name, "path": dest, "apply": out})
+			c.printf("%s forked %s → %s\n", ok("✓"), args[0], out.Path)
+			printApply(c, out.Apply)
+			c.jsonOut(map[string]any{"forked": args[0], "name": out.Name, "path": out.Path, "apply": out.Apply})
 			return nil
 		},
 	}
@@ -896,14 +540,7 @@ func showCmd() *cobra.Command {
 	}
 }
 
-// lookup resolves a user-supplied skill key (see engine.Lookup); a pack
-// alias is accepted in place of owner/repo before the colon, except the
-// reserved "skills", "private", "app" and "vendor".
+// lookup resolves a user-supplied skill key; see app.Session.Lookup.
 func lookup(c *ctx, entries []engine.Entry, key string) (*engine.Entry, error) {
-	if i := strings.LastIndex(key, ":"); i > 0 && !engine.ReservedQualifier(key[:i]) {
-		if p := c.lib.Manifest.FindPack(key[:i]); p != nil {
-			key = p.Repo + key[i:]
-		}
-	}
-	return engine.Lookup(entries, key)
+	return c.Lookup(entries, key)
 }

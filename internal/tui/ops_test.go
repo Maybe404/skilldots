@@ -124,7 +124,7 @@ func TestOpsEndToEnd(t *testing.T) {
 	if len(b.Skills) != 3 || len(b.Have) != 0 {
 		t.Fatalf("browse: %+v", b)
 	}
-	if _, err := o.Add("acme/skills", []string{"tdd"}, false); err != nil {
+	if _, err := o.Add("acme/skills", AddRequest{Names: []string{"tdd"}}); err != nil {
 		t.Fatal(err)
 	}
 	if !isLink(filepath.Join(agents, "tdd")) {
@@ -175,7 +175,7 @@ func TestOpsEndToEnd(t *testing.T) {
 	if _, err := o.SetTargets(&tdd, "", []string{"agents"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := o.Add("acme/skills", []string{"review"}, false); err != nil {
+	if _, err := o.Add("acme/skills", AddRequest{Names: []string{"review"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -219,7 +219,7 @@ func TestOpsEndToEnd(t *testing.T) {
 	// fork tdd into private/.
 	s, _ = o.Load()
 	tdd = *findSkill(findPack(s, "acme/skills"), "tdd")
-	if _, err := o.Fork(tdd, true); err != nil {
+	if _, err := o.Fork(tdd, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if !dirExists(filepath.Join(root, "private", "tdd")) {
@@ -241,7 +241,7 @@ func TestOpsEndToEnd(t *testing.T) {
 
 	// Follow everything.
 	// private/tdd (the fork) already uses the name: engine renames.
-	if msg, err := o.Add("acme/skills", nil, true); err != nil || !strings.Contains(msg, "name taken, linked tdd as") {
+	if msg, err := o.Add("acme/skills", AddRequest{All: true}); err != nil || !strings.Contains(msg, "name taken, linked tdd as") {
 		t.Fatalf("follow all: %q %v", msg, err)
 	}
 	s, _ = o.Load()
@@ -275,11 +275,7 @@ func dirExists(p string) bool {
 
 func trashed(t *testing.T, root, name string) bool {
 	t.Helper()
-	lib, _, err := openLibrary(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	items, err := engine.ListTrash(lib)
+	items, err := (&libOps{root: root}).TrashList()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -78,45 +79,29 @@ func (s Skill) Key() string { return string(s.Kind) + ":" + s.Origin + ":" + s.N
 // Enabled reports whether the skill is linked anywhere.
 func (s Skill) Enabled() bool { return len(s.Agents) > 0 }
 
-// openLibrary loads the library and the target registry the same way the
-// CLI does.
-func openLibrary(root string) (*library.Library, *targets.Registry, error) {
-	lib, err := library.Open(root)
-	if err != nil {
-		return nil, nil, err
-	}
-	custom := map[string]struct{ Path, Mode string }{}
-	for n, c := range lib.Manifest.Targets.Custom {
-		custom[n] = struct{ Path, Mode string }{c.Path, c.Mode}
-	}
-	reg, err := targets.NewRegistry(custom)
-	if err != nil {
-		return nil, nil, err
-	}
-	engine.SetRegistry(reg)
-	return lib, reg, nil
-}
-
 // LoadSnapshot reads the library at root. It never writes and never
 // touches the network: upstream skill lists come from the cache clones
 // left by earlier fetches.
 func LoadSnapshot(root string) (*Snapshot, error) {
-	lib, reg, err := openLibrary(root)
+	ses, err := app.Open(root)
 	if err != nil {
 		return nil, err
 	}
+	lib, reg := ses.Lib, ses.Reg
 	m := lib.Manifest
 	s := &Snapshot{Root: root, Name: filepath.Base(root), Defaults: append([]string(nil), m.Targets.Default...),
 		Agents: reg.Present()}
 
-	entries, warnings, err := engine.Resolve(lib, reg)
-	for _, w := range warnings {
-		s.Warnings = append(s.Warnings, clean(w))
+	ses.Log = func(l app.Level, w string) {
+		if l == app.Problem {
+			s.Warnings = append(s.Warnings, clean(w))
+		}
 	}
+	entries, err := ses.Resolve()
 	if err != nil {
 		s.Warnings = append(s.Warnings, clean(err.Error()))
 	} else {
-		s.Pending = pendingChanges(engine.MakePlan(lib, entries, false))
+		s.Pending = ses.Pending(entries)
 	}
 	gitStatus(lib, s)
 
@@ -185,16 +170,6 @@ func toSkill(e engine.Entry) Skill {
 		s.Agents = append(s.Agents, t.Name)
 	}
 	return s
-}
-
-func pendingChanges(p engine.Plan) int {
-	n := 0
-	for _, c := range p.ChangeList() {
-		if c.Action != "skip" {
-			n++
-		}
-	}
-	return n
 }
 
 // gitStatus fills branch, dirty and push state. Every git failure (no

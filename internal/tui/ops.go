@@ -1,44 +1,65 @@
 package tui
 
 import (
-	"bytes"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
-	"github.com/Maybe404/skilldots/internal/library"
-	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
-	"github.com/Maybe404/skilldots/internal/skillmd"
-	"github.com/Maybe404/skilldots/internal/targets"
+	"github.com/Maybe404/skilldots/internal/scan"
 )
 
 // Ops is everything the dashboard can do to a library. Each method opens
-// the library afresh, makes one change, saves, re-links and returns a one
-// line summary. Nothing here deletes: removed files go to the library
-// trash, exactly like the CLI.
+// the library afresh, runs one shared flow from internal/app (the same
+// code the CLI commands run) and returns a one line summary. Nothing here
+// deletes, except EmptyTrash, which the dashboard offers only after two
+// confirmations.
 type Ops interface {
 	Load() (*Snapshot, error)
 	// SetTargets sets the agents for a skill (s non-nil) or a pack.
 	SetTargets(s *Skill, repo string, agents []string) (string, error)
+	// Enable links a skill into the default agents (skd enable).
+	Enable(s Skill) (string, error)
+	// Disable unlinks a skill from every agent (skd disable).
+	Disable(s Skill) (string, error)
 	// Browse fetches a repository and lists its skills without installing.
 	Browse(src string) (*Browse, error)
-	// Add subscribes to src (if needed) and vendors the named skills, or
-	// follows everything when all is set.
-	Add(src string, names []string, all bool) (string, error)
+	// Add subscribes to src (if needed) and vendors what req selects.
+	Add(src string, req AddRequest) (string, error)
 	Update(repos []string) ([]*engine.SyncReport, string, error)
-	Fork(s Skill, private bool) (string, error)
+	// Fork copies a skill into skills/ or private/ as name ("" keeps its name).
+	Fork(s Skill, private bool, name string) (string, error)
 	// Trash takes a skill out of use: a vendored skill is deselected and
 	// its files go to the trash; anything else is unlinked and kept.
 	Trash(s Skill) (string, error)
 	Purge(repo string) (string, error)
 	Apply() (string, error)
 	Sync() (string, error)
+	// New scaffolds a skill of your own and links it.
+	New(name string, private bool) (string, error)
+	// Scan inventories the agent directories and proposes adoptions.
+	Scan() (*ScanResult, error)
+	// Adopt carries out the accepted proposals.
+	Adopt(props []app.Proposal) (string, error)
+	// TrashList lists the library trash, newest first.
+	TrashList() ([]engine.TrashEntry, error)
+	// Restore puts a trash entry back where it came from.
+	Restore(id string) (string, error)
+	// EmptyTrash permanently deletes the trash.
+	EmptyTrash() (string, error)
+}
+
+// AddRequest is what the add dialog collected: skills by name (a whole
+// category is its skills), or everything; an optional alias and agents.
+type AddRequest struct {
+	Names  []string
+	All    bool
+	Alias  string
+	Agents []string
 }
 
 // Browse is a fetched repository's skill list.
@@ -48,255 +69,176 @@ type Browse struct {
 	Skills []pack.Skill
 	// Have marks skills already selected in the library.
 	Have map[string]bool
+	// Subscribed is set when the library follows the repository already;
+	// Alias and Targets are then the pack's (Targets nil: the default).
+	Subscribed bool
+	Alias      string
+	Targets    []string
+}
+
+// ScanResult is an inventory plus what adopting it would do.
+type ScanResult struct {
+	Report    scan.Report
+	Proposals []app.Proposal
 }
 
 // libOps implements Ops on a library directory.
 type libOps struct {
 	root string
-	// self is the skd binary, used for `sync` so the backup path is the
-	// exact one the CLI uses.
-	self string
 }
+
+// NewOps returns the Ops the dashboard uses for the library at root.
+func NewOps(root string) Ops { return &libOps{root: root} }
 
 func (o *libOps) Load() (*Snapshot, error) { return LoadSnapshot(o.root) }
 
-// apply re-links the library to match the manifest and saves it, like
-// `skd apply` without --force.
-func apply(lib *library.Library, reg *targets.Registry) (string, error) {
-	entries, _, err := engine.Resolve(lib, reg)
-	if err != nil {
-		return "", err
+func (o *libOps) open() (*app.Session, error) { return app.Open(o.root) }
+
+func ref(s Skill) app.Ref { return app.EntryRef(s.Kind, s.Origin, s.Name) }
+
+// applySummary is a one-line account of an apply for the status line.
+func applySummary(out *app.ApplyOutcome) string {
+	if out == nil {
+		return ""
 	}
-	plan := engine.MakePlan(lib, entries, false)
-	var res *engine.Result
-	if plan.Changes() {
-		res, err = engine.Apply(lib, plan)
-	}
-	if saveErr := lib.Save(); saveErr != nil && err == nil {
-		err = saveErr
-	}
-	if err != nil {
-		return "", err
-	}
-	n := plan.Counts()
+	n := out.Counts()
 	var parts []string
 	if n["create"]+n["replace"]+n["remove"] > 0 {
 		parts = append(parts, fmt.Sprintf("+%d ↻%d −%d", n["create"], n["replace"], n["remove"]))
 	}
 	if n["skip"] > 0 {
 		var why []string
-		for _, op := range plan.Ops {
+		for _, op := range out.Plan.Ops {
 			if op.Action == "skip" && len(why) < 2 {
 				why = append(why, op.Target.Name+"/"+op.Name+": "+op.Reason)
 			}
 		}
 		parts = append(parts, fmt.Sprintf("%d skipped (%s; skd apply -n shows all)", n["skip"], strings.Join(why, "; ")))
 	}
-	if res != nil && len(res.Backups) > 0 {
-		parts = append(parts, fmt.Sprintf("%d moved to trash", len(res.Backups)))
+	if len(out.Backups) > 0 {
+		parts = append(parts, fmt.Sprintf("%d moved to trash", len(out.Backups)))
 	}
-	return strings.Join(parts, " · "), nil
+	return strings.Join(parts, " · ")
+}
+
+func withSummary(msg string, out *app.ApplyOutcome) string {
+	if sum := applySummary(out); sum != "" {
+		return msg + " · " + sum
+	}
+	return msg
 }
 
 func (o *libOps) Apply() (string, error) {
-	lib, reg, err := openLibrary(o.root)
+	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	sum, err := apply(lib, reg)
+	out, err := s.Apply(app.ApplyOptions{})
 	if err != nil {
 		return "", err
 	}
-	if sum == "" {
-		return "already up to date", nil
+	if sum := applySummary(out); sum != "" {
+		return "applied " + sum, nil
 	}
-	return "applied " + sum, nil
+	return "already up to date", nil
 }
 
-func (o *libOps) SetTargets(s *Skill, repo string, agents []string) (string, error) {
-	lib, reg, err := openLibrary(o.root)
+func targetsMsg(out *app.TargetsOutcome) string {
+	return withSummary(out.Label+" → "+joinOr(out.Targets, "no agents (kept in library)"), out.Apply)
+}
+
+func (o *libOps) SetTargets(sk *Skill, repo string, agents []string) (string, error) {
+	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	m := lib.Manifest
-	next := append([]string{}, agents...)
-	label := repo
-	if s == nil {
-		p := m.FindPack(repo)
-		if p == nil {
-			return "", fmt.Errorf("no pack %q", repo)
-		}
-		p.Targets = &next
-	} else {
-		entries, _, err := engine.Resolve(lib, reg)
-		if err != nil {
-			return "", err
-		}
-		e := entryFor(entries, *s)
-		if e == nil {
-			return "", fmt.Errorf("no skill %q", s.LinkName)
-		}
-		label = e.LinkName
-		setEntryTargets(m, e, next)
+	r := app.PackRef(repo)
+	if sk != nil {
+		r = ref(*sk)
 	}
-	sum, err := apply(lib, reg)
+	out, err := s.SetTargets(r, agents)
 	if err != nil {
 		return "", err
 	}
-	msg := label + " → " + joinOr(next, "no agents (kept in library)")
-	if sum != "" {
-		msg += " · " + sum
-	}
-	return msg, nil
+	return targetsMsg(out), nil
 }
 
-// entryFor returns the entry a dashboard row stands for. Rows are matched
-// by kind, origin and upstream name (Skill.Key), never by link name alone:
-// a vendored tdd and your own skills/tdd may both exist when their targets
-// do not overlap, and an operation on one must not land on the other.
-func entryFor(entries []engine.Entry, s Skill) *engine.Entry {
-	for i := range entries {
-		e := &entries[i]
-		if e.Kind == s.Kind && e.Origin == s.Origin && e.Name == s.Name {
-			return e
-		}
+func (o *libOps) Enable(sk Skill) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
 	}
-	return nil
+	out, err := s.Enable(ref(sk), nil)
+	if err != nil {
+		return "", err
+	}
+	return targetsMsg(out), nil
 }
 
-// setEntryTargets records next as the target list of e, at the same
-// place in skills.toml `skd enable/disable` writes it.
-func setEntryTargets(m *manifest.Manifest, e *engine.Entry, next []string) {
-	switch e.Kind {
-	case engine.KindVendor:
-		m.FindPack(e.Origin).Override(e.Name, true).Targets = &next
-	case engine.KindApp:
-		for _, a := range m.Apps {
-			if a.Name == e.Name {
-				a.Targets = &next
-			}
-		}
-	default:
-		for _, l := range m.Locals {
-			if l.Name == e.Name {
-				l.Targets = &next
-				return
-			}
-		}
-		m.Locals = append(m.Locals, &manifest.Local{Name: e.Name, Targets: &next})
+func (o *libOps) Disable(sk Skill) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
 	}
+	out, err := s.Disable(ref(sk), nil)
+	if err != nil {
+		return "", err
+	}
+	return targetsMsg(out), nil
 }
 
 func (o *libOps) Browse(arg string) (*Browse, error) {
-	lib, _, err := openLibrary(o.root)
+	s, err := o.open()
 	if err != nil {
 		return nil, err
 	}
-	if existing := lib.Manifest.FindPack(arg); existing != nil {
-		arg = existing.Repo
-	}
-	src, err := pack.ParseSource(arg)
+	src, err := s.ParseAdd(arg, "")
 	if err != nil {
 		return nil, err
 	}
-	p := lib.Manifest.FindPack(src.Repo)
-	if p != nil && src.Ref == "" {
-		src.Ref = p.Ref
-	}
-	clone, commit, err := pack.Fetch(src)
+	f, err := s.Fetch(src)
 	if err != nil {
 		return nil, err
 	}
-	up, rejected, err := pack.Scan(clone)
-	if err != nil {
-		return nil, err
-	}
-	if len(up) == 0 {
-		if len(rejected) > 0 {
-			return nil, fmt.Errorf("%s: no usable SKILL.md (%s)", src.Repo, rejected[0])
+	if len(f.Skills) == 0 {
+		if len(f.Rejected) > 0 {
+			return nil, fmt.Errorf("%s: no usable SKILL.md (%s)", src.Repo, f.Rejected[0])
 		}
 		return nil, fmt.Errorf("%s contains no SKILL.md", src.Repo)
 	}
-	b := &Browse{Repo: src.Repo, Commit: commit, Skills: up, Have: map[string]bool{}}
-	for _, s := range up {
-		if p != nil && p.Selected(s.Name, s.Category) {
-			b.Have[s.Name] = true
+	b := &Browse{Repo: src.Repo, Commit: f.Commit, Skills: f.Skills, Have: f.Have, Subscribed: f.Subscribed}
+	if p := s.Lib.Manifest.FindPack(src.Repo); p != nil {
+		b.Alias = p.Alias
+		if p.Targets != nil {
+			b.Targets = append([]string{}, *p.Targets...)
 		}
 	}
 	return b, nil
 }
 
-// Add mirrors `skd add <src> --skill a,b` (or --all).
-func (o *libOps) Add(arg string, names []string, all bool) (string, error) {
-	lib, reg, err := openLibrary(o.root)
+// Add mirrors `skd add <src> --skill a,b [--all] [--alias x] [--agent y]`.
+func (o *libOps) Add(arg string, req AddRequest) (string, error) {
+	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	m := lib.Manifest
-	if existing := m.FindPack(arg); existing != nil {
-		arg = existing.Repo
-	}
-	src, err := pack.ParseSource(arg)
+	src, err := s.ParseAdd(arg, req.Alias)
 	if err != nil {
 		return "", err
 	}
-	p := m.FindPack(src.Repo)
-	if p == nil {
-		p = &manifest.Pack{Repo: src.Repo, Ref: src.Ref}
-		m.Packs = append(m.Packs, p)
-	}
-	clone, _, err := pack.Fetch(pack.Source{Repo: src.Repo, URL: src.URL, Ref: p.Ref})
+	f, err := s.Fetch(src)
 	if err != nil {
 		return "", err
 	}
-	up, _, err := pack.Scan(clone)
+	out, err := s.Add(f, app.Selection{Skills: req.Names, All: req.All, Alias: req.Alias, Agents: req.Agents})
 	if err != nil {
 		return "", err
 	}
-	switch {
-	case all:
-		p.Use = []string{"*"}
-	case p.UsesAll():
-		// Following everything already: un-skip the chosen ones.
-		var skip []string
-		for _, sk := range p.Skip {
-			drop := false
-			for _, n := range names {
-				if s := pack.Find(up, n); s != nil && (sk == s.Name || sk == s.Category+"/"+s.Name) {
-					drop = true
-				}
-			}
-			if !drop {
-				skip = append(skip, sk)
-			}
-		}
-		p.Skip = skip
-	default:
-		for _, n := range names {
-			if pack.Find(up, n) == nil {
-				return "", fmt.Errorf("no skill %q in %s", n, src.Repo)
-			}
-		}
-		p.Use = dedupe(append(p.Use, names...))
+	if out.Nothing {
+		return "nothing selected", nil
 	}
-	for _, n := range names {
-		if s := pack.Find(up, n); s != nil && !p.Selected(s.Name, s.Category) {
-			return "", fmt.Errorf("%s is excluded by a skip pattern in skills.toml", n)
-		}
-	}
-	// engine.Sync gives newly vendored clashing skills a free link name.
-	rep, err := engine.Sync(lib, p)
-	if err != nil {
-		return "", err
-	}
-	if err := lib.Save(); err != nil {
-		return "", err
-	}
-	sum, err := apply(lib, reg)
-	if err != nil {
-		return "", err
-	}
-	msg := fmt.Sprintf("vendored %d from %s @ %s", len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), p.Repo, short(rep.NewCommit))
+	rep := out.Report
+	msg := fmt.Sprintf("vendored %d from %s @ %s", len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), out.Repo, short(rep.NewCommit))
 	if len(rep.Renamed) > 0 {
 		var renamed []string
 		for n, as := range rep.Renamed {
@@ -308,62 +250,44 @@ func (o *libOps) Add(arg string, names []string, all bool) (string, error) {
 	if rep.NoLicense {
 		msg += " · no license found: check before redistributing"
 	}
-	if sum != "" {
-		msg += " · " + sum
-	}
-	return msg, nil
+	return withSummary(msg, out.Apply), nil
 }
 
 // Update mirrors `skd update [pack…]`.
 func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
-	lib, reg, err := openLibrary(o.root)
+	s, err := o.open()
 	if err != nil {
 		return nil, "", err
 	}
-	var packs []*manifest.Pack
-	if len(repos) == 0 {
-		packs = lib.Manifest.Packs
-	}
-	for _, r := range repos {
-		p := lib.Manifest.FindPack(r)
-		if p == nil {
-			return nil, "", fmt.Errorf("no pack %q", r)
-		}
-		packs = append(packs, p)
-	}
-	if len(packs) == 0 {
+	if len(repos) == 0 && len(s.Lib.Manifest.Packs) == 0 {
 		return nil, "no packs to update", nil
 	}
-	var reports []*engine.SyncReport
-	var failed []string
-	for _, p := range packs {
-		before := knownUpstream(p.Repo)
-		rep, err := engine.Sync(lib, p)
-		if err != nil {
-			failed = append(failed, fmt.Sprintf("%s: %v", p.Repo, err))
-			continue
-		}
-		// engine reports every unselected skill missing from the lock as
-		// "upstream new", i.e. all of them on every update. Against the
-		// cache clone as it was before this fetch, only the skills that
-		// really appeared are new.
-		if before != nil {
+	// engine reports every unselected skill missing from the lock as
+	// "upstream new", i.e. all of them on every update. Against the cache
+	// clones as they were before this fetch, only the skills that really
+	// appeared are new.
+	before := map[string]map[string]bool{}
+	for _, p := range s.Lib.Manifest.Packs {
+		before[p.Repo] = knownUpstream(p.Repo)
+	}
+	out, err := s.Update(repos, nil)
+	if out == nil {
+		return nil, "", err
+	}
+	reports := out.Reports
+	for i, rep := range reports {
+		if known := before[rep.Repo]; known != nil {
 			var fresh []string
 			for _, n := range rep.UpstreamNew {
-				if !before[n] {
+				if !known[n] {
 					fresh = append(fresh, n)
 				}
 			}
 			cp := *rep
 			cp.UpstreamNew = fresh
-			rep = &cp
+			reports[i] = &cp
 		}
-		reports = append(reports, rep)
 	}
-	if err := lib.Save(); err != nil {
-		return reports, "", err
-	}
-	sum, err := apply(lib, reg)
 	if err != nil {
 		return reports, "", err
 	}
@@ -373,11 +297,12 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 		added += len(r.Added)
 		fresh += len(r.UpstreamNew)
 	}
-	msg := fmt.Sprintf("updated %d pack(s): %d changed · %d added · %d new upstream", len(reports), changed, added, fresh)
-	if sum != "" {
-		msg += " · " + sum
-	}
-	if len(failed) > 0 {
+	msg := withSummary(fmt.Sprintf("updated %d pack(s): %d changed · %d added · %d new upstream", len(reports), changed, added, fresh), out.Apply)
+	if len(out.Failed) > 0 {
+		var failed []string
+		for _, f := range out.Failed {
+			failed = append(failed, f.Repo+": "+f.Error)
+		}
 		return reports, msg, fmt.Errorf("%s", strings.Join(failed, "; "))
 	}
 	return reports, msg, nil
@@ -401,223 +326,176 @@ func knownUpstream(repo string) map[string]bool {
 	return known
 }
 
-// deselect drops a vendored skill from its pack's selection.
-func deselect(p *manifest.Pack, e *engine.Entry) {
-	if p.UsesAll() {
-		p.Skip = dedupe(append(p.Skip, e.Name))
-	} else {
-		var use []string
-		for _, u := range p.Use {
-			if !manifest.UseNames(u, e.Name) {
-				use = append(use, u)
-			}
-		}
-		p.Use = use
-	}
-	delete(p.Skill, e.Name)
-}
-
-// Fork mirrors `skd fork <skill> [--private]`.
-func (o *libOps) Fork(s Skill, private bool) (string, error) {
-	lib, reg, err := openLibrary(o.root)
+// Fork mirrors `skd fork <skill> [--private] [--as name]`.
+func (o *libOps) Fork(sk Skill, private bool, name string) (string, error) {
+	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	entries, _, err := engine.Resolve(lib, reg)
+	out, err := s.Fork(ref(sk), private, name)
 	if err != nil {
 		return "", err
 	}
-	e := entryFor(entries, s)
-	if e == nil {
-		return "", fmt.Errorf("no skill %q", s.LinkName)
-	}
-	if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
-		return "", fmt.Errorf("%s is already yours (%s)", e.LinkName, e.Dir)
-	}
-	base := lib.SkillsDir()
-	if private {
-		base = lib.PrivateDir()
-	}
-	dest := filepath.Join(base, e.LinkName)
-	if fsutil.Lexists(dest) {
-		return "", fmt.Errorf("%s already exists", dest)
-	}
-	if err := fsutil.CopyTree(e.Dir, dest); err != nil {
-		return "", err
-	}
-	// The fork is known by its directory name; an aliased fork must say
-	// so in its frontmatter or it would clash with the upstream name.
-	if meta, err := skillmd.Read(dest); err == nil && meta.Name != e.LinkName {
-		if err := skillmd.SetName(dest, e.LinkName); err != nil {
-			return "", err
-		}
-	}
-	note := fmt.Sprintf("\n<!-- forked by skilldots from %s -->\n", engine.Describe(*e))
-	if f, err := os.OpenFile(filepath.Join(dest, "SKILL.md"), os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-		f.WriteString(note)
-		f.Close()
-	}
-	if e.Kind == engine.KindVendor {
-		p := lib.Manifest.FindPack(e.Origin)
-		deselect(p, e)
-		if _, err := engine.Sync(lib, p); err != nil {
-			return "", err
-		}
-	} else {
-		apps := lib.Manifest.Apps
-		for i, a := range apps {
-			if a.Name == e.Name {
-				lib.Manifest.Apps = append(apps[:i], apps[i+1:]...)
-				break
-			}
-		}
-	}
-	if err := lib.Save(); err != nil {
-		return "", err
-	}
-	sum, err := apply(lib, reg)
-	if err != nil {
-		return "", err
-	}
-	msg := "forked " + e.LinkName + " → " + lib.Rel(dest)
-	if sum != "" {
-		msg += " · " + sum
-	}
-	return msg, nil
+	return withSummary("forked "+out.From.LinkName+" → "+s.Lib.Rel(out.Path), out.Apply), nil
 }
 
 // Trash mirrors `skd remove` for vendored skills and `skd disable` for
 // everything else (the CLI never deletes your own or an app's files).
-func (o *libOps) Trash(s Skill) (string, error) {
-	if s.Kind != engine.KindVendor {
-		if _, err := o.SetTargets(&s, "", []string{}); err != nil {
+func (o *libOps) Trash(sk Skill) (string, error) {
+	if sk.Kind != engine.KindVendor {
+		if _, err := o.Disable(sk); err != nil {
 			return "", err
 		}
-		return "unlinked " + s.LinkName + " from every agent; its files stay in " + tildify(s.Dir), nil
+		return "unlinked " + sk.LinkName + " from every agent; its files stay in " + tildify(sk.Dir), nil
 	}
-	lib, reg, err := openLibrary(o.root)
+	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	entries, _, err := engine.Resolve(lib, reg)
+	out, err := s.Remove(ref(sk))
 	if err != nil {
 		return "", err
 	}
-	e := entryFor(entries, s)
-	if e == nil {
-		return "", fmt.Errorf("no skill %q", s.LinkName)
+	if out.Purged != nil {
+		return out.Purged.Repo + " had no skills left · " + purgeMsg(out.Purged), nil
 	}
-	p := lib.Manifest.FindPack(e.Origin)
-	deselect(p, e)
-	if len(p.Use) == 0 && !p.UsesAll() {
-		msg, err := purge(lib, reg, p)
-		if err != nil {
-			return "", err
-		}
-		return p.Repo + " had no skills left · " + msg, nil
-	}
-	if _, err := engine.Sync(lib, p); err != nil {
-		return "", err
-	}
-	if err := lib.Save(); err != nil {
-		return "", err
-	}
-	sum, err := apply(lib, reg)
-	if err != nil {
-		return "", err
-	}
-	msg := "removed " + e.LinkName + "; its files are in the library trash (skd trash)"
-	if sum != "" {
-		msg += " · " + sum
-	}
-	return msg, nil
+	return withSummary("removed "+out.Entry.LinkName+"; its files are in the library trash (t)", out.Apply), nil
+}
+
+func purgeMsg(out *app.PurgeOutcome) string {
+	return withSummary("purged "+out.Repo+"; vendor/"+out.Repo+" is in the library trash (t)", out.Apply)
 }
 
 // Purge mirrors `skd purge <pack>` once the user has confirmed.
 func (o *libOps) Purge(repo string) (string, error) {
-	lib, reg, err := openLibrary(o.root)
+	s, err := o.open()
 	if err != nil {
 		return "", err
 	}
-	p := lib.Manifest.FindPack(repo)
-	if p == nil {
-		return "", fmt.Errorf("no pack %q", repo)
-	}
-	return purge(lib, reg, p)
-}
-
-func purge(lib *library.Library, reg *targets.Registry, p *manifest.Pack) (string, error) {
-	m := lib.Manifest
-	for i, q := range m.Packs {
-		if q == p {
-			m.Packs = append(m.Packs[:i], m.Packs[i+1:]...)
-			break
-		}
-	}
-	if err := lib.Save(); err != nil {
-		return "", err
-	}
-	sum, err := apply(lib, reg)
+	out, err := s.Purge(repo)
 	if err != nil {
 		return "", err
 	}
-	if err := engine.RemovePack(lib, p.Repo); err != nil {
-		return "", err
-	}
-	if err := lib.Save(); err != nil {
-		return "", err
-	}
-	msg := "purged " + p.Repo + "; vendor/" + p.Repo + " is in the library trash (skd trash)"
-	if sum != "" {
-		msg += " · " + sum
-	}
-	return msg, nil
+	return purgeMsg(out), nil
 }
 
-// Sync runs `skd sync`, so backups go through exactly one code path.
+// Sync mirrors `skd sync`.
 func (o *libOps) Sync() (string, error) {
-	self := o.self
-	if self == "" {
-		var err error
-		if self, err = os.Executable(); err != nil {
-			return "", err
-		}
-	}
-	cmd := exec.Command(self, "sync", "--library", o.root)
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
-	err := cmd.Run()
-	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	var clean, warns []string
-	for _, l := range lines {
-		l = tildifyAll(strings.TrimSpace(l))
-		// The CLI marks its lines; the status line has its own icon.
-		// Warnings go first so a narrow status line still shows them.
-		if strings.HasPrefix(l, "! ") {
-			warns = append(warns, strings.TrimPrefix(l, "! "))
-			continue
-		}
-		l = strings.TrimPrefix(strings.TrimPrefix(l, "✓ "), "✗ ")
-		if l != "" {
-			clean = append(clean, l)
-		}
-	}
-	warned := len(warns) > 0
-	clean = append(warns, clean...)
+	s, err := o.open()
 	if err != nil {
-		if len(clean) > 0 {
-			return "", fmt.Errorf("%s", strings.TrimPrefix(clean[len(clean)-1], "error: "))
+		return "", err
+	}
+	out, err := s.Backup("", "")
+	if err != nil {
+		return "", err
+	}
+	var parts []string
+	if out.Committed {
+		parts = append(parts, "committed")
+	} else {
+		parts = append(parts, "nothing to commit")
+	}
+	if out.Pushed {
+		parts = append(parts, "pushed to "+tildifyAll(out.Remote))
+	}
+	if out.PrivateUncommitted {
+		parts = append(parts, "private/ has uncommitted changes (a separate repo, never pushed here)")
+	}
+	msg := strings.Join(parts, " · ")
+	if out.Remote == "" {
+		// The status line has room for one problem: say it first.
+		return "", warning("no remote configured; add one with: skd sync --remote <git-url> · " + msg)
+	}
+	return msg, nil
+}
+
+// New mirrors `skd new <name> [--private]`.
+func (o *libOps) New(name string, private bool) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	out, err := s.New(name, private)
+	if err != nil {
+		return "", err
+	}
+	return withSummary("created "+tildify(out.Path), out.Apply), nil
+}
+
+// Scan mirrors `skd scan` and `skd adopt --dry-run`.
+func (o *libOps) Scan() (*ScanResult, error) {
+	s, err := o.open()
+	if err != nil {
+		return nil, err
+	}
+	rep, err := s.Scan()
+	if err != nil {
+		return nil, err
+	}
+	return &ScanResult{Report: rep, Proposals: s.Proposals(rep)}, nil
+}
+
+// Adopt mirrors `skd adopt` with the proposals the user accepted.
+func (o *libOps) Adopt(props []app.Proposal) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	var warns []string
+	s.Log = func(l app.Level, msg string) {
+		if l == app.Warn || l == app.Fail {
+			warns = append(warns, msg)
+		}
+	}
+	out, err := s.Adopt(props)
+	msg := fmt.Sprintf("adopted %d", len(props))
+	if out != nil {
+		msg = withSummary(msg, out.Apply)
+	}
+	if err != nil {
+		if len(warns) > 0 {
+			return "", fmt.Errorf("%v · %s", err, strings.Join(warns, " · "))
 		}
 		return "", err
 	}
-	if len(clean) == 0 {
-		return "backed up", nil
-	}
-	msg := strings.Join(clean, " · ")
-	if warned {
-		return "", warning(msg)
+	if len(warns) > 0 {
+		return "", warning(msg + " · " + strings.Join(warns, " · "))
 	}
 	return msg, nil
+}
+
+func (o *libOps) TrashList() ([]engine.TrashEntry, error) {
+	s, err := o.open()
+	if err != nil {
+		return nil, err
+	}
+	return s.Trash()
+}
+
+func (o *libOps) Restore(id string) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	dest, err := s.Restore(id)
+	if err != nil {
+		return "", err
+	}
+	// Like `skd trash restore`, nothing is re-linked: the header shows
+	// what `A` would apply.
+	return "restored " + tildify(dest), nil
+}
+
+func (o *libOps) EmptyTrash() (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	n, err := s.EmptyTrash()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("deleted %d item(s) from the trash for good", n), nil
 }
 
 // warning is an error that is only worth a yellow status line: the
@@ -625,18 +503,6 @@ func (o *libOps) Sync() (string, error) {
 type warning string
 
 func (w warning) Error() string { return string(w) }
-
-func dedupe(in []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, s := range in {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
-}
 
 func short(s string) string {
 	if len(s) > 7 {

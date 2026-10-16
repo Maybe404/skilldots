@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -28,28 +29,14 @@ var flags struct {
 
 // ctx is everything a command needs once the library is open.
 type ctx struct {
+	*app.Session
 	lib *library.Library
 	reg *targets.Registry
-	// warned remembers warnings already shown, so a command that resolves
-	// several times prints each one once.
-	warned map[string]bool
 }
 
 // resolve computes the library's entries. Per-entry problems are printed
-// as warnings on stderr (never stdout, which may carry JSON).
-func (c *ctx) resolve() ([]engine.Entry, error) {
-	entries, warnings, err := engine.Resolve(c.lib, c.reg)
-	for _, w := range warnings {
-		if c.warned == nil {
-			c.warned = map[string]bool{}
-		}
-		if !c.warned[w] {
-			c.warned[w] = true
-			fmt.Fprintf(os.Stderr, "%s %s\n", warn("warning:"), w)
-		}
-	}
-	return entries, err
-}
+// once each as warnings on stderr (never stdout, which may carry JSON).
+func (c *ctx) resolve() ([]engine.Entry, error) { return c.Resolve() }
 
 // printf writes human-readable progress. Under --json it goes to stderr so
 // stdout stays parseable.
@@ -62,6 +49,24 @@ func say(format string, a ...any) {
 		return
 	}
 	fmt.Fprintf(os.Stdout, format, a...)
+}
+
+// logLine prints the progress messages of the shared app flows.
+func logLine(l app.Level, msg string) {
+	switch l {
+	case app.Problem:
+		fmt.Fprintf(os.Stderr, "%s %s\n", warn("warning:"), msg)
+	case app.Done:
+		say("%s %s\n", ok("✓"), msg)
+	case app.Warn:
+		say("%s %s\n", warn("!"), msg)
+	case app.Fail:
+		say("%s %s\n", bad("✗"), msg)
+	case app.Detail:
+		say("  %s\n", dim(msg))
+	default:
+		say("%s\n", dim(msg))
+	}
 }
 
 // jsonOut prints v as JSON when --json is set and reports whether it did.
@@ -83,20 +88,12 @@ func open() (*ctx, error) {
 	if err != nil {
 		return nil, err
 	}
-	lib, err := library.Open(root)
+	s, err := app.Open(root)
 	if err != nil {
 		return nil, err
 	}
-	custom := map[string]struct{ Path, Mode string }{}
-	for n, c := range lib.Manifest.Targets.Custom {
-		custom[n] = struct{ Path, Mode string }{c.Path, c.Mode}
-	}
-	reg, err := targets.NewRegistry(custom)
-	if err != nil {
-		return nil, err
-	}
-	engine.SetRegistry(reg)
-	return &ctx{lib: lib, reg: reg}, nil
+	s.Log = logLine
+	return &ctx{Session: s, lib: s.Lib, reg: s.Reg}, nil
 }
 
 // confirm asks a yes/no question unless --yes was given.
@@ -181,8 +178,7 @@ func dashboardLibrary(simple bool) (string, bool) {
 }
 
 func runDashboard(root string) error {
-	self, _ := os.Executable()
-	return tui.Run(tui.Options{Root: root, Version: Version, Self: self, Theme: tui.Theme{
+	return tui.Run(tui.Options{Root: root, Version: Version, Theme: tui.Theme{
 		Accent: cAccent, Cyan: cCyan, Muted: cMuted, Faint: cFaint, OK: cOK, Warn: cWarn, Err: cErr, Text: cText,
 		Ink: lipgloss.Color("#1A1B26"), // the button ink in theme()
 	}})

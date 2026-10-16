@@ -5,11 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
@@ -43,7 +41,7 @@ func acmeLibrary(t *testing.T) (o *libOps, root, home, appDir string) {
 		t.Fatal(err)
 	}
 	o = &libOps{root: root}
-	if _, err := o.Add("acme/skills", []string{"tdd", "review"}, false); err != nil {
+	if _, err := o.Add("acme/skills", AddRequest{Names: []string{"tdd", "review"}}); err != nil {
 		t.Fatal(err)
 	}
 	return o, root, home, appDir
@@ -118,7 +116,7 @@ func TestOpsForkApp(t *testing.T) {
 	if len(s.Apps) != 1 {
 		t.Fatalf("apps: %+v", s.Apps)
 	}
-	msg, err := o.Fork(s.Apps[0], false)
+	msg, err := o.Fork(s.Apps[0], false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +143,7 @@ func TestOpsForkApp(t *testing.T) {
 		t.Errorf("link should point at the fork: %q %v", target, err)
 	}
 	// Forking again: the fork is yours now.
-	if _, err := o.Fork(s.Mine[0], false); err == nil || !strings.Contains(err.Error(), "already yours") {
+	if _, err := o.Fork(s.Mine[0], false, ""); err == nil || !strings.Contains(err.Error(), "already yours") {
 		t.Errorf("fork of your own skill: %v", err)
 	}
 }
@@ -226,11 +224,7 @@ func TestOpsTrashLastSkillPurgesPack(t *testing.T) {
 // origin (a path ending) and still contains file.
 func trashedFrom(t *testing.T, root, origin, file string) bool {
 	t.Helper()
-	lib, _, err := openLibrary(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	items, err := engine.ListTrash(lib)
+	items, err := (&libOps{root: root}).TrashList()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,67 +239,36 @@ func trashedFrom(t *testing.T, root, origin, file string) bool {
 	return false
 }
 
-// fakeSkd writes a stand-in for the skd binary that records its arguments,
-// prints out and exits with code.
-func fakeSkd(t *testing.T, out string, code int) (bin, argsFile string) {
-	t.Helper()
-	dir := t.TempDir()
-	bin = filepath.Join(dir, "skd")
-	argsFile = filepath.Join(dir, "args")
-	outFile := filepath.Join(dir, "out")
-	write(t, outFile, out)
-	script := "#!/bin/sh\necho \"$@\" > '" + argsFile + "'\ncat '" + outFile + "'\nexit " + itoa(code) + "\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
+func TestOpsSync(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
 	}
-	return bin, argsFile
-}
+	home, _ := sandbox(t)
+	root := newLibrary(t, home)
+	o := &libOps{root: root}
 
-func TestOpsSyncParsesOutput(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a shell script as skd")
+	// No remote: committed, and a warning saying how to add one.
+	msg, err := o.Sync()
+	var w warning
+	if !errors.As(err, &w) || !strings.HasPrefix(err.Error(), "no remote configured") || !strings.Contains(err.Error(), "committed") || msg != "" {
+		t.Fatalf("no remote: msg %q err %v", msg, err)
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	cases := []struct {
-		name    string
-		out     string
-		code    int
-		msg     string
-		err     string
-		warning bool
-	}{
-		{name: "committed and pushed", out: "✓ committed 3 files\n✓ pushed to origin/main\n",
-			msg: "committed 3 files · pushed to origin/main"},
-		{name: "nothing printed", out: "", msg: "backed up"},
-		{name: "warnings first, home as ~", out: "✓ committed in " + home + "/lib\n! no remote configured; add one with: skd sync --remote <git-url>\n",
-			err: "no remote configured; add one with: skd sync --remote <git-url> · committed in ~/lib", warning: true},
-		{name: "failure keeps the last line", out: "✓ committed\n✗ error: push rejected (fetch first)\n", code: 1,
-			err: "push rejected (fetch first)"},
-		{name: "failure with the CLI's error prefix", out: "error: not a git repository\n", code: 1, err: "not a git repository"},
-		{name: "silent failure", out: "", code: 3, err: "exit status 3"},
+	// With a remote: pushed.
+	bare := filepath.Join(home, "backup.git")
+	run(t, home, "init", "-q", "--bare", bare)
+	run(t, root, "remote", "add", "origin", bare)
+	write(t, filepath.Join(root, "skills", "x", "SKILL.md"), skillMD("x", "X."))
+	msg, err = o.Sync()
+	if err != nil || !strings.Contains(msg, "committed") || !strings.Contains(msg, "pushed") {
+		t.Fatalf("with remote: msg %q err %v", msg, err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			bin, args := fakeSkd(t, c.out, c.code)
-			o := &libOps{root: "/the/lib", self: bin}
-			msg, err := o.Sync()
-			if b, _ := os.ReadFile(args); strings.TrimSpace(string(b)) != "sync --library /the/lib" {
-				t.Errorf("arguments: %q", b)
-			}
-			if msg != c.msg {
-				t.Errorf("msg = %q, want %q", msg, c.msg)
-			}
-			switch {
-			case c.err == "" && err != nil:
-				t.Errorf("unexpected error %v", err)
-			case c.err != "" && (err == nil || err.Error() != c.err):
-				t.Errorf("err = %v, want %q", err, c.err)
-			}
-			var w warning
-			if got := errors.As(err, &w); got != c.warning {
-				t.Errorf("warning = %v, want %v", got, c.warning)
-			}
-		})
+	// Nothing new: nothing to commit, still pushed.
+	if msg, err = o.Sync(); err != nil || !strings.Contains(msg, "nothing to commit") {
+		t.Fatalf("again: msg %q err %v", msg, err)
+	}
+	// A push that fails is an error.
+	run(t, root, "remote", "set-url", "origin", filepath.Join(home, "nowhere.git"))
+	if _, err = o.Sync(); err == nil || errors.As(err, &w) {
+		t.Fatalf("failed push: %v", err)
 	}
 }

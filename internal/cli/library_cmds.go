@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -103,23 +104,18 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p := &manifest.Pack{Repo: SelfRepo, Use: []string{SelfSkill}}
-			c.lib.Manifest.Packs = append(c.lib.Manifest.Packs, p)
-			if _, err := engine.Sync(c.lib, p); err != nil {
-				c.lib.Manifest.Packs = c.lib.Manifest.Packs[:len(c.lib.Manifest.Packs)-1]
+			rep, out, err := c.Subscribe(&manifest.Pack{Repo: SelfRepo, Use: []string{SelfSkill}})
+			if rep == nil && err != nil {
 				say("  %s could not fetch the %s skill (%v); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, err, SelfRepo, SelfSkill)
 				result["skillError"] = err.Error()
 				jsonOut(result)
 				return nil
 			}
-			if err := c.lib.Save(); err != nil {
-				return err
-			}
-			say("  %s\n", dim("installed the "+SelfSkill+" skill so agents on this machine know how to use skd"))
-			out, err := doApply(c, false, false, nil)
 			if err != nil {
 				return err
 			}
+			say("  %s\n", dim("installed the "+SelfSkill+" skill so agents on this machine know how to use skd"))
+			printApply(c, out)
 			result["skill"], result["apply"] = true, out
 			jsonOut(result)
 			return nil
@@ -336,19 +332,13 @@ func applyCmd() *cobra.Command {
 	return cmd
 }
 
-// applyOutcome is the machine-readable result of an apply.
-type applyOutcome struct {
-	Applied bool            `json:"applied"`
-	DryRun  bool            `json:"dryRun,omitempty"`
-	Changes []engine.Change `json:"changes"`
-	Kept    int             `json:"kept"`
-	Backups []string        `json:"backups,omitempty"`
-}
-
 // runApply applies and, under --json, prints the outcome as the command's
-// only JSON document. Commands that report more call doApply instead.
+// only JSON document.
 func runApply(c *ctx, dry, force bool) error {
-	out, err := doApply(c, dry, force, nil)
+	out, err := c.Apply(app.ApplyOptions{DryRun: dry, Force: force})
+	if out != nil {
+		printApply(c, out)
+	}
 	if err != nil {
 		return err
 	}
@@ -356,16 +346,10 @@ func runApply(c *ctx, dry, force bool) error {
 	return nil
 }
 
-// doApply plans and applies, printing human-readable progress. force
-// forces every entry; forceKeys ("<target>/<name>") forces only those.
-func doApply(c *ctx, dry, force bool, forceKeys map[string]bool) (*applyOutcome, error) {
-	entries, err := c.resolve()
-	if err != nil {
-		return nil, err
-	}
-	plan := engine.MakePlanForce(c.lib, entries, func(key string) bool { return force || forceKeys[key] })
+// printApply prints what an apply did (or, for a dry run, would do).
+func printApply(c *ctx, out *app.ApplyOutcome) {
+	plan := out.Plan
 	counts := plan.Counts()
-	out := &applyOutcome{DryRun: dry, Changes: plan.ChangeList(), Kept: counts["keep"]}
 	if !flags.json {
 		for _, op := range plan.Ops {
 			if op.Action == "keep" {
@@ -385,26 +369,19 @@ func doApply(c *ctx, dry, force bool, forceKeys map[string]bool) (*applyOutcome,
 			msg += fmt.Sprintf(", %d skipped", counts["skip"])
 		}
 		c.printf("%s %s\n", ok("✓"), dim(msg))
-		return out, nil
+		return
 	}
 	summary := fmt.Sprintf("+%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])
-	if dry {
+	if out.DryRun {
 		c.printf("%s\n", dim("dry run · "+summary))
-		return out, nil
+		return
 	}
-	res, err := engine.Apply(c.lib, plan)
-	if saveErr := c.lib.Save(); saveErr != nil && err == nil {
-		err = saveErr
-	}
-	for _, b := range res.Backups {
+	for _, b := range out.Backups {
 		c.printf("  %s %s\n", dim("moved aside"), b)
 	}
-	if err != nil {
-		return nil, err
+	if out.Applied {
+		c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
 	}
-	out.Applied, out.Backups = true, res.Backups
-	c.printf("%s %s\n", ok("✓"), dim("applied · "+summary))
-	return out, nil
 }
 
 func targetsCmd() *cobra.Command {
@@ -466,27 +443,12 @@ func newCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			base := c.lib.SkillsDir()
-			if private {
-				base = c.lib.PrivateDir()
-			}
-			dir := filepath.Join(base, args[0])
-			if fsutil.Lexists(dir) {
-				return fmt.Errorf("%s already exists", dir)
-			}
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				return err
-			}
-			body := fmt.Sprintf("---\nname: %s\ndescription: What this skill does and when an agent should use it.\n---\n\n# %s\n\nInstructions for the agent go here.\n", args[0], args[0])
-			if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
-				return err
-			}
-			c.printf("%s created %s\n", ok("✓"), dir)
-			out, err := doApply(c, false, false, nil)
+			out, err := c.New(args[0], private)
 			if err != nil {
 				return err
 			}
-			c.jsonOut(map[string]any{"created": args[0], "path": dir, "apply": out})
+			printApply(c, out.Apply)
+			c.jsonOut(map[string]any{"created": out.Name, "path": out.Path, "apply": out.Apply})
 			return nil
 		},
 	}
@@ -526,7 +488,7 @@ func trashCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			items, err := engine.ListTrash(c.lib)
+			items, err := c.Trash()
 			if err != nil {
 				return err
 			}
@@ -555,7 +517,7 @@ func trashCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			dest, err := engine.Restore(c.lib, args[0])
+			dest, err := c.Restore(args[0])
 			if err != nil {
 				return err
 			}
@@ -574,7 +536,7 @@ func trashCmd() *cobra.Command {
 			if !isTerminal() {
 				return fmt.Errorf("skd trash empty is irreversible and only runs interactively; ask the user to run it")
 			}
-			items, _ := engine.ListTrash(c.lib)
+			items, _ := c.Trash()
 			if len(items) == 0 {
 				c.printf("%s\n", dim("trash is empty"))
 				c.jsonOut(map[string]any{"deleted": 0})
@@ -585,7 +547,7 @@ func trashCmd() *cobra.Command {
 			if err := ask(huh.NewConfirm().Title(fmt.Sprintf("Delete %d item(s) forever?", len(items))).Affirmative("Delete").Negative("Keep").Value(&sure)); err != nil || !sure {
 				return fmt.Errorf("cancelled")
 			}
-			n, err := engine.EmptyTrash(c.lib)
+			n, err := c.EmptyTrash()
 			if err != nil {
 				return err
 			}

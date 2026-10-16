@@ -1,8 +1,7 @@
 // Package tui is the full-screen dashboard `skd` opens in a terminal: packs
 // and your own skills on the left, the selected pack's skills on the right,
-// actions applied in place. Reads go through engine, pack and library;
-// writes repeat the CLI commands' steps on the same engine calls, and
-// backups run `skd sync` itself.
+// actions applied in place. Every write goes through internal/app, the
+// same flows the CLI commands run.
 package tui
 
 import (
@@ -27,16 +26,13 @@ type Options struct {
 	Root    string
 	Version string
 	Theme   Theme
-	// Self is the skd executable used for `skd sync`; empty means
-	// os.Executable().
-	Self string
 }
 
 // Run opens the dashboard and blocks until the user quits. The terminal is
 // restored on return.
 func Run(o Options) error {
 	quietGit(o.Root)
-	ops := &libOps{root: o.Root, self: o.Self}
+	ops := &libOps{root: o.Root}
 	snap, err := ops.Load()
 	if err != nil {
 		return err

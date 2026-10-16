@@ -3,20 +3,13 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Maybe404/skilldots/internal/engine"
-	"github.com/Maybe404/skilldots/internal/fsutil"
-	"github.com/Maybe404/skilldots/internal/library"
-	"github.com/Maybe404/skilldots/internal/manifest"
-	"github.com/Maybe404/skilldots/internal/pack"
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/scan"
-	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
 func scanCmd() *cobra.Command {
@@ -105,21 +98,6 @@ func scanRow(c *ctx, it scan.Item) (mark, state, detail string) {
 	return dim("·"), string(it.State), ""
 }
 
-// proposal is one adoption the user can accept.
-type proposal struct {
-	Item   scan.Item
-	Kind   string // pack | app | own | drop
-	Label  string
-	Repo   string
-	Skill  string
-	Reason string
-	// Via is the kind of the proposal an "enable" extends (same skill
-	// found in another agent); Entry is the qualified library entry an
-	// "enable" of something already in the library refers to.
-	Via   string `json:",omitempty"`
-	Entry string `json:",omitempty"`
-}
-
 func adoptCmd() *cobra.Command {
 	var dry bool
 	cmd := &cobra.Command{
@@ -139,9 +117,9 @@ Displaced directories are moved aside, never deleted.`,
 			if err != nil {
 				return err
 			}
-			props := proposals(c, rep)
+			props := c.Proposals(rep)
 			if len(props) == 0 {
-				if !c.jsonOut(map[string]any{"proposals": []proposal{}}) {
+				if !c.jsonOut(map[string]any{"proposals": []app.Proposal{}}) {
 					c.printf("%s %s\n", ok("✓"), dim("nothing to adopt"))
 				}
 				return nil
@@ -149,7 +127,7 @@ Displaced directories are moved aside, never deleted.`,
 			if dry || (flags.json && !flags.yes) {
 				if !c.jsonOut(map[string]any{"proposals": props, "applied": false}) {
 					for _, p := range props {
-						c.printf("  %s %-28s %s\n", accent("→"), p.Item.Name, p.Label)
+						c.printf("  %s %-28s %s\n", accent("→"), p.Item.Name, proposalLabel(p))
 					}
 					c.printf("%s\n", dim("run without --dry-run to apply (interactive) or with --yes"))
 				}
@@ -165,99 +143,26 @@ Displaced directories are moved aside, never deleted.`,
 					return err
 				}
 			}
-			return applyProposals(c, chosen)
+			out, err := c.Adopt(chosen)
+			if out != nil && out.Apply != nil {
+				printApply(c, out.Apply)
+				c.jsonOut(map[string]any{"proposals": chosen, "applied": true, "apply": out.Apply, "failed": out.Failed})
+			}
+			return err
 		},
 	}
 	cmd.Flags().BoolVarP(&dry, "dry-run", "n", false, "show proposals only")
 	return cmd
 }
 
-func proposals(c *ctx, rep scan.Report) []proposal {
-	entries, _ := c.resolve()
-	seen := map[string]bool{}
-	var out []proposal
-	for _, it := range rep.Unmanaged() {
-		if seen[it.Name] {
-			continue
-		}
-		e, err := engine.Lookup(entries, it.Name)
-		if err != nil {
-			seen[it.Name] = true
-			out = append(out, proposal{Item: it, Kind: "skip", Label: warn(err.Error() + "; enable one with skd enable <name> --agent " + it.Target)})
-			continue
-		}
-		if e != nil {
-			// Already in the library: this agent just is not a target yet.
-			enabled := false
-			for _, t := range e.Targets {
-				enabled = enabled || t.Name == it.Target
-			}
-			if enabled {
-				continue
-			}
-			out = append(out, proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target + " (already in library)", Entry: engine.Qualified(*e)})
-			continue
-		}
-		p := proposal{Item: it}
-		switch {
-		case it.State == scan.Broken:
-			p.Kind, p.Label = "drop", bad("broken link; remove")
-		case it.Duplicate:
-			p.Kind, p.Label = "skip", warn("same name with different content in several agents; resolve by hand")
-		case it.State == scan.AppLink:
-			p.Kind, p.Label = "app", "app → "+it.LinkTo
-		case it.Source != "":
-			p.Kind, p.Repo, p.Skill = "pack", it.Source, it.Name
-			p.Label = "subscribe to " + it.Source
-		case it.State == scan.ExtLink:
-			if repo := gitRemote(it.LinkTo); repo != "" {
-				p.Kind, p.Repo, p.Skill, p.Label = "pack", repo, it.Name, "subscribe to "+repo+" (link target is a clone of it)"
-			} else {
-				p.Kind, p.Label = "own", "copy into skills/ as your own"
-			}
-		default:
-			p.Kind, p.Label = "own", "copy into skills/ as your own (no known upstream)"
-		}
-		seen[it.Name] = true
-		out = append(out, p)
-	}
-	// "own"/"pack" copies found in several agents: enable the extra agents too.
-	for _, it := range rep.Unmanaged() {
-		for _, p := range out {
-			if p.Item.Name == it.Name && p.Item.Target != it.Target && (p.Kind == "own" || p.Kind == "pack" || p.Kind == "app") {
-				out = append(out, proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target, Via: p.Kind, Repo: p.Repo, Skill: p.Skill})
-				break
-			}
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Item.Name < out[j].Item.Name })
-	return out
-}
-
-// gitRemote returns owner/repo when dir is inside a GitHub clone.
-func gitRemote(dir string) string {
-	if !fsutil.Exists(dir) {
-		return ""
-	}
-	url, err := library.Git(dir, "remote", "get-url", "origin")
-	if err != nil {
-		return ""
-	}
-	src, err := pack.ParseSource(url)
-	if err != nil || !strings.Contains(src.URL, "github.com") {
-		return ""
-	}
-	return src.Repo
-}
-
-func pickProposals(props []proposal) ([]proposal, error) {
+func pickProposals(props []app.Proposal) ([]app.Proposal, error) {
 	var opts []huh.Option[int]
 	var pre []int
 	for i, p := range props {
 		if p.Kind == "skip" {
 			continue
 		}
-		opts = append(opts, huh.NewOption(fmt.Sprintf("%-28s %s", p.Item.Name, p.Label), i))
+		opts = append(opts, huh.NewOption(fmt.Sprintf("%-28s %s", p.Item.Name, proposalLabel(p)), i))
 		pre = append(pre, i)
 	}
 	chosen := pre
@@ -266,227 +171,20 @@ func pickProposals(props []proposal) ([]proposal, error) {
 		Options(opts...).Height(18).Value(&chosen)); err != nil {
 		return nil, nil
 	}
-	var out []proposal
+	var out []app.Proposal
 	for _, i := range chosen {
 		out = append(out, props[i])
 	}
 	return out, nil
 }
 
-func applyProposals(c *ctx, props []proposal) error {
-	m := c.lib.Manifest
-	packs := map[string]*manifest.Pack{}
-	// renamed maps an agent entry name to the skill name it was adopted as.
-	renamed := map[string]string{}
-	adoptedAs := func(it scan.Item) string {
-		if n := renamed[it.Name]; n != "" {
-			return n
-		}
-		return it.Name
+// proposalLabel colours a proposal's label by what accepting it does.
+func proposalLabel(p app.Proposal) string {
+	switch p.Kind {
+	case "skip":
+		return warn(p.Label)
+	case "drop":
+		return bad(p.Label)
 	}
-	for _, p := range props {
-		switch p.Kind {
-		case "pack":
-			pk := m.FindPack(p.Repo)
-			if pk == nil {
-				pk = &manifest.Pack{Repo: p.Repo}
-				m.Packs = append(m.Packs, pk)
-			}
-			if !pk.UsesAll() {
-				pk.Use = dedupe(append(pk.Use, p.Skill))
-			}
-			packs[p.Repo] = pk
-		case "app":
-			dup := false
-			for _, a := range m.Apps {
-				if a.Name == p.Item.Name {
-					dup = true
-					if a.Path != p.Item.LinkTo {
-						c.printf("%s [[app]] %s already points at %s; not changing it to %s\n", warn("!"), a.Name, a.Path, p.Item.LinkTo)
-					}
-				}
-			}
-			if !dup {
-				m.Apps = append(m.Apps, &manifest.App{Name: p.Item.Name, Path: p.Item.LinkTo})
-			}
-		case "own":
-			src := p.Item.Path
-			if p.Item.LinkTo != "" {
-				src = p.Item.LinkTo
-			}
-			// The library knows a skill by its frontmatter name, which may
-			// differ from the directory name it had in the agent dir.
-			name := p.Item.Name
-			if meta, err := skillmd.Read(src); err == nil && meta.Name != name && manifest.CheckName(meta.Name) == nil {
-				name = meta.Name
-				renamed[p.Item.Name] = name
-			}
-			dest := filepath.Join(c.lib.SkillsDir(), name)
-			if !fsutil.Lexists(dest) {
-				if err := fsutil.CopyTree(src, dest); err != nil {
-					return err
-				}
-				c.printf("%s copied %s → %s\n", ok("✓"), p.Item.Name, c.lib.Rel(dest))
-			}
-		case "drop":
-			if err := os.Remove(p.Item.Path); err != nil {
-				return err
-			}
-			c.printf("%s removed broken link %s\n", ok("✓"), p.Item.Path)
-		}
-	}
-	failed := 0
-	for repo, pk := range packs {
-		rep, err := engine.Sync(c.lib, pk)
-		if err != nil {
-			c.printf("%s %s: %v\n", bad("✗"), repo, err)
-			failed++
-			continue
-		}
-		c.printf("%s %s %s\n", ok("✓"), repo, dim("@ "+short(rep.NewCommit)))
-		// Names the upstream no longer has stay as the user's own copy.
-		for _, n := range pk.Use {
-			if pack.Find(rep.Upstream, n) == nil {
-				c.printf("  %s %s is not in %s any more; keeping your copy under skills/\n", warn("!"), n, repo)
-				for _, p := range props {
-					if p.Kind != "pack" || p.Skill != n {
-						continue
-					}
-					src := p.Item.Path
-					if p.Item.LinkTo != "" {
-						src = p.Item.LinkTo
-					}
-					dest := filepath.Join(c.lib.SkillsDir(), n)
-					if fsutil.Lexists(dest) {
-						c.printf("  %s %s already exists; leaving it as is\n", warn("!"), c.lib.Rel(dest))
-						break
-					}
-					if err := fsutil.CopyTree(src, dest); err != nil {
-						return err
-					}
-					break
-				}
-				var use []string
-				for _, u := range pk.Use {
-					if u != n {
-						use = append(use, u)
-					}
-				}
-				pk.Use = use
-			}
-		}
-	}
-	if err := c.lib.Save(); err != nil {
-		return err
-	}
-	// Targets: every adopted entry is enabled for each agent it was found in.
-	entries, err := c.resolve()
-	if err != nil {
-		return err
-	}
-	// A real directory is only replaced by a link when the library holds
-	// exactly its content; otherwise it may be the user's only copy of
-	// something, so it stays where it is.
-	// entryFor is the one library entry a proposal adopts into.
-	entryFor := func(p proposal) *engine.Entry {
-		kind := p.Kind
-		if kind == "enable" && p.Via != "" {
-			kind = p.Via
-		}
-		if kind == "enable" {
-			e, _ := engine.Lookup(entries, p.Entry)
-			return e
-		}
-		for i := range entries {
-			e := &entries[i]
-			switch {
-			case kind == "own" && e.Kind == engine.KindSkill && e.Dir == filepath.Join(c.lib.SkillsDir(), adoptedAs(p.Item)),
-				kind == "pack" && e.Kind == engine.KindVendor && e.Origin == p.Repo && e.Name == p.Skill,
-				kind == "app" && e.Kind == engine.KindApp && e.Name == p.Item.Name:
-				return e
-			}
-		}
-		return nil
-	}
-	keep := map[string]bool{}
-	for _, p := range props {
-		if p.Kind == "skip" || p.Kind == "drop" || p.Item.LinkTo != "" {
-			continue
-		}
-		e := entryFor(p)
-		if e == nil {
-			continue
-		}
-		h, err := fsutil.HashTree(e.Dir)
-		if err == nil && fsutil.Pristine(p.Item.Path, h) {
-			continue
-		}
-		keep[p.Item.Target+"/"+p.Item.Name] = true
-		c.printf("%s %s differs from the library's %s (%s); left in place — compare them and remove one by hand\n",
-			warn("!"), p.Item.Path, adoptedAs(p.Item), e.Dir)
-	}
-	want := map[*engine.Entry][]string{}
-	var order []*engine.Entry
-	for _, p := range props {
-		if p.Kind == "skip" || p.Kind == "drop" || keep[p.Item.Target+"/"+p.Item.Name] {
-			continue
-		}
-		e := entryFor(p)
-		if e == nil {
-			continue
-		}
-		if _, ok := want[e]; !ok {
-			order = append(order, e)
-		}
-		want[e] = append(want[e], p.Item.Target)
-	}
-	for _, e := range order {
-		extra := want[e]
-		next := dedupe(append(append([]string{}, e.TargetNames...), extra...))
-		if len(next) != len(e.TargetNames) {
-			editTargets(c, e, next)
-		}
-	}
-	if err := c.lib.Save(); err != nil {
-		return err
-	}
-	// Force only the agent entries this adoption takes over; anything else
-	// that is modified or unmanaged keeps being skipped.
-	force := map[string]bool{}
-	for _, p := range props {
-		if p.Kind != "skip" && p.Kind != "drop" && !keep[p.Item.Target+"/"+p.Item.Name] {
-			force[p.Item.Target+"/"+p.Item.Name] = true
-		}
-	}
-	out, err := doApply(c, false, false, force)
-	if err != nil {
-		return err
-	}
-	// An entry adopted under another name now has a link of that name next
-	// to it; move the original aside so the agent does not see the skill twice.
-	for _, p := range props {
-		n := adoptedAs(p.Item)
-		if p.Kind == "skip" || p.Kind == "drop" || n == p.Item.Name || keep[p.Item.Target+"/"+p.Item.Name] {
-			continue
-		}
-		t, err := c.reg.Get(p.Item.Target)
-		if err != nil || c.lib.Lock.Links[t.Name+"/"+n] == nil || !fsutil.Lexists(filepath.Join(t.Path, n)) || !fsutil.Lexists(p.Item.Path) {
-			continue
-		}
-		to, err := engine.Trash(c.lib, p.Item.Path)
-		if err != nil {
-			return err
-		}
-		if to == "" {
-			c.printf("  %s %s (adopted as %s)\n", dim("removed link"), p.Item.Path, n)
-			continue
-		}
-		out.Backups = append(out.Backups, p.Item.Path+" → "+c.lib.Rel(to))
-		c.printf("  %s %s → %s (adopted as %s)\n", dim("moved aside"), p.Item.Path, c.lib.Rel(to), n)
-	}
-	c.jsonOut(map[string]any{"proposals": props, "applied": true, "apply": out, "failed": failed})
-	if failed > 0 {
-		return fmt.Errorf("%d repositories could not be fetched", failed)
-	}
-	return nil
+	return p.Label
 }

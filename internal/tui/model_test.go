@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -61,6 +62,8 @@ type fakeOps struct {
 	mu    sync.Mutex
 	calls []string
 	snap  *Snapshot
+	scan  *ScanResult
+	trash []engine.TrashEntry
 }
 
 func (f *fakeOps) rec(s string) {
@@ -81,8 +84,16 @@ func (f *fakeOps) Browse(src string) (*Browse, error) {
 	f.rec("browse " + src)
 	return &Browse{Repo: src, Commit: "abcdef0", Have: map[string]bool{}}, nil
 }
-func (f *fakeOps) Add(src string, names []string, all bool) (string, error) {
-	f.rec(fmt.Sprintf("add %s %s %v", src, strings.Join(names, ","), all))
+func (f *fakeOps) Enable(s Skill) (string, error) {
+	f.rec("targets " + s.LinkName + " " + strings.Join(f.snap.Defaults, ","))
+	return "ok", nil
+}
+func (f *fakeOps) Disable(s Skill) (string, error) {
+	f.rec("targets " + s.LinkName + " ")
+	return "ok", nil
+}
+func (f *fakeOps) Add(src string, r AddRequest) (string, error) {
+	f.rec(fmt.Sprintf("add %s %s %v", src, strings.Join(r.Names, ","), r.All))
 	return "ok", nil
 }
 func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
@@ -90,7 +101,7 @@ func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
 	return []*engine.SyncReport{{Repo: "mattpocock/skills", OldCommit: "1111111", NewCommit: "2222222",
 		Changed: []string{"tdd"}, UpstreamNew: []string{"fresh"}}}, "updated", nil
 }
-func (f *fakeOps) Fork(s Skill, p bool) (string, error) {
+func (f *fakeOps) Fork(s Skill, p bool, as string) (string, error) {
 	f.rec(fmt.Sprintf("fork %s %v", s.LinkName, p))
 	return "ok", nil
 }
@@ -98,6 +109,22 @@ func (f *fakeOps) Trash(s Skill) (string, error)  { f.rec("trash " + s.LinkName)
 func (f *fakeOps) Purge(r string) (string, error) { f.rec("purge " + r); return "ok", nil }
 func (f *fakeOps) Apply() (string, error)         { f.rec("apply"); return "ok", nil }
 func (f *fakeOps) Sync() (string, error)          { f.rec("sync"); return "ok", nil }
+func (f *fakeOps) New(n string, p bool) (string, error) {
+	f.rec(fmt.Sprintf("new %s %v", n, p))
+	return "ok", nil
+}
+func (f *fakeOps) Scan() (*ScanResult, error) { f.rec("scan"); return f.scan, nil }
+func (f *fakeOps) Adopt(props []app.Proposal) (string, error) {
+	var names []string
+	for _, p := range props {
+		names = append(names, p.Item.Target+"/"+p.Item.Name)
+	}
+	f.rec("adopt " + strings.Join(names, ","))
+	return "ok", nil
+}
+func (f *fakeOps) TrashList() ([]engine.TrashEntry, error) { f.rec("trash-list"); return f.trash, nil }
+func (f *fakeOps) Restore(id string) (string, error)       { f.rec("restore " + id); return "ok", nil }
+func (f *fakeOps) EmptyTrash() (string, error)             { f.rec("empty"); return "ok", nil }
 
 func newModel(t *testing.T, s *Snapshot, w, h int) (Model, *fakeOps) {
 	t.Helper()

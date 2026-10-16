@@ -588,22 +588,21 @@ func (m Model) toggle() (tea.Model, tea.Cmd) {
 	sk := *s
 	if !sk.Installed {
 		return m.start(job{label: "installing " + sk.Name, run: func(o Ops) result {
-			msg, err := o.Add(sk.Origin, []string{sk.Name}, false)
+			msg, err := o.Add(sk.Origin, AddRequest{Names: []string{sk.Name}})
 			return result{msg: msg, err: err}
 		}})
 	}
 	if sk.Enabled() {
 		return m.start(job{label: "disabling " + sk.LinkName, run: func(o Ops) result {
-			msg, err := o.SetTargets(&sk, "", []string{})
+			msg, err := o.Disable(sk)
 			return result{msg: msg, err: err}
 		}})
 	}
 	if len(m.snap.Defaults) == 0 {
 		return m.hint("no default agents in skills.toml · e to pick agents")
 	}
-	defaults := append([]string{}, m.snap.Defaults...)
 	return m.start(job{label: "enabling " + sk.LinkName, run: func(o Ops) result {
-		msg, err := o.SetTargets(&sk, "", defaults)
+		msg, err := o.Enable(sk)
 		return result{msg: msg, err: err}
 	}})
 }
@@ -674,7 +673,7 @@ func (m Model) fork() (tea.Model, tea.Cmd) {
 	}
 	mk := func(private bool) job {
 		return job{label: "forking " + sk.LinkName, run: func(o Ops) result {
-			msg, err := o.Fork(sk, private)
+			msg, err := o.Fork(sk, private, "")
 			return result{msg: msg, err: err}
 		}}
 	}
@@ -922,7 +921,7 @@ func (m Model) browseOverlay(src string, b *Browse) *overlay {
 				return nil
 			}
 			return &job{label: "adding " + b.Repo, run: func(o Ops) result {
-				msg, err := o.Add(src, names, all)
+				msg, err := o.Add(src, AddRequest{Names: names, All: all})
 				return result{msg: msg, err: err}
 			}}
 		})

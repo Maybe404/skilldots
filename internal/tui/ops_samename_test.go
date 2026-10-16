@@ -111,7 +111,7 @@ func TestOpsSameNameTouchesOnlyTheChosenRow(t *testing.T) {
 	t.Run("fork yours is refused", func(t *testing.T) {
 		o, root, home := sameNameLibrary(t)
 		_, mine := sameNameRows(t, o)
-		if _, err := o.Fork(mine, false); err == nil || !strings.Contains(err.Error(), "already yours") {
+		if _, err := o.Fork(mine, false, ""); err == nil || !strings.Contains(err.Error(), "already yours") {
 			t.Errorf("fork of your own tdd: %v", err)
 		}
 		checkSameNameLinks(t, root, home, true, true)
@@ -150,7 +150,7 @@ func TestOpsSameNameTouchesOnlyTheChosenRow(t *testing.T) {
 		o, root, home := sameNameLibrary(t)
 		vendor, _ := sameNameRows(t, o)
 		// skills/tdd is taken by yours: the fork must say so, not touch it.
-		if _, err := o.Fork(vendor, false); err == nil || !strings.Contains(err.Error(), "already exists") {
+		if _, err := o.Fork(vendor, false, ""); err == nil || !strings.Contains(err.Error(), "already exists") {
 			t.Errorf("fork onto your tdd: %v", err)
 		}
 		checkSameNameLinks(t, root, home, true, true)

@@ -1,0 +1,465 @@
+package app
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/pack"
+	"github.com/Maybe404/skilldots/internal/skillmd"
+)
+
+// ParseAdd turns what the user typed for `add` (owner/repo, a URL, an
+// alias of a subscribed pack, optionally @ref) into a source, and checks
+// alias before anything is fetched.
+func (s *Session) ParseAdd(arg, alias string) (pack.Source, error) {
+	m := s.Lib.Manifest
+	if existing := m.FindPack(arg); existing != nil {
+		arg = existing.Repo
+	}
+	src, err := pack.ParseSource(arg)
+	if err != nil {
+		return pack.Source{}, err
+	}
+	if err := s.checkAlias(alias, src.Repo); err != nil {
+		return pack.Source{}, err
+	}
+	return src, nil
+}
+
+func (s *Session) checkAlias(alias, repo string) error {
+	if engine.ReservedQualifier(alias) {
+		return fmt.Errorf("--alias %q is reserved (it names your own skills in skills:<name>); pick another", alias)
+	}
+	return s.Lib.Manifest.CheckAlias(alias, repo)
+}
+
+// Fetched is a repository fetched into the cache and scanned.
+type Fetched struct {
+	Source   pack.Source
+	Commit   string
+	Clone    string
+	Skills   []pack.Skill
+	Rejected []pack.Rejected
+	// Subscribed is set when the library already follows the repository;
+	// Have then marks the skills it selects.
+	Subscribed bool
+	Have       map[string]bool
+}
+
+// Fetch clones or fetches src into the cache and lists its skills. A
+// subscribed pack is fetched at its pinned ref, as `add` will vendor it.
+func (s *Session) Fetch(src pack.Source) (*Fetched, error) {
+	p := s.Lib.Manifest.FindPack(src.Repo)
+	ref := src.Ref
+	if p != nil {
+		ref = p.Ref
+	}
+	clone, commit, err := pack.Fetch(pack.Source{Repo: src.Repo, URL: src.URL, Ref: ref})
+	if err != nil {
+		return nil, err
+	}
+	up, rejected, err := pack.Scan(clone)
+	if err != nil {
+		return nil, err
+	}
+	f := &Fetched{Source: src, Commit: commit, Clone: clone, Skills: up, Rejected: rejected, Have: map[string]bool{}}
+	if p != nil {
+		f.Subscribed = true
+		for _, sk := range up {
+			if p.Selected(sk.Name, sk.Category) {
+				f.Have[sk.Name] = true
+			}
+		}
+	}
+	return f, nil
+}
+
+// Selection is what `add` vendors from a fetched repository.
+type Selection struct {
+	// Skills are upstream names; Categories select every skill in a
+	// category (and its subcategories).
+	Skills     []string
+	Categories []string
+	// All follows every skill, including ones added upstream later.
+	All bool
+	// Alias names the pack (empty keeps the current one).
+	Alias string
+	// Agents are the pack's targets (empty keeps the current ones, or the
+	// manifest default for a new pack).
+	Agents []string
+}
+
+// AddOutcome is the result of Add.
+type AddOutcome struct {
+	Repo   string
+	Report *engine.SyncReport
+	Apply  *ApplyOutcome
+	// Linked are the link names of the pack's entries after the add.
+	Linked []string
+	// Nothing is set when the selection was empty; nothing was changed.
+	Nothing bool
+}
+
+// Add subscribes to f's repository (if needed), adds sel to the pack's
+// selection, vendors it, saves and links. A newly vendored skill whose
+// name is taken is linked as <alias|repo>-<name> (see engine.Sync).
+func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
+	m := s.Lib.Manifest
+	src := f.Source
+	if err := s.checkAlias(sel.Alias, src.Repo); err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, n := range sel.Skills {
+		if pack.Find(f.Skills, n) == nil {
+			return nil, fmt.Errorf("no skill %q in %s (try `skd add %s` without --skill to browse)", n, src.Repo, src.Repo)
+		}
+		names = append(names, n)
+	}
+	for _, cat := range sel.Categories {
+		n := 0
+		for _, sk := range f.Skills {
+			if sk.Category == cat || strings.HasPrefix(sk.Category, cat+"/") {
+				names = append(names, sk.Name)
+				n++
+			}
+		}
+		if n == 0 {
+			return nil, fmt.Errorf("no category %q in %s (categories: %s)", cat, src.Repo, strings.Join(nonEmpty(pack.Categories(f.Skills)), ", "))
+		}
+	}
+	names = dedupe(names)
+
+	p := m.FindPack(src.Repo)
+	isNew := p == nil
+	if isNew {
+		p = &manifest.Pack{Repo: src.Repo, Ref: src.Ref}
+	}
+	switch {
+	case sel.All:
+		p.Use = []string{"*"}
+	case p.UsesAll():
+		// Following everything already: the chosen ones are un-skipped.
+		var skip []string
+		for _, sk := range p.Skip {
+			drop := false
+			for _, n := range names {
+				if u := pack.Find(f.Skills, n); u != nil && (sk == u.Name || sk == u.Category+"/"+u.Name) {
+					drop = true
+				}
+			}
+			if !drop {
+				skip = append(skip, sk)
+			}
+		}
+		p.Skip = skip
+	default:
+		p.Use = dedupe(append(p.Use, names...))
+	}
+	for _, n := range names {
+		if u := pack.Find(f.Skills, n); u != nil && !p.Selected(u.Name, u.Category) {
+			return nil, fmt.Errorf("%s is excluded by a skip pattern in skills.toml", n)
+		}
+	}
+	if len(p.Use) == 0 {
+		return &AddOutcome{Repo: src.Repo, Nothing: true}, nil
+	}
+	if sel.Alias != "" {
+		p.Alias = sel.Alias
+	}
+	if len(sel.Agents) > 0 {
+		t := append([]string{}, sel.Agents...)
+		p.Targets = &t
+	}
+	if isNew {
+		m.Packs = append(m.Packs, p)
+	}
+	rep, err := engine.Sync(s.Lib, p)
+	if err != nil {
+		if isNew {
+			m.Packs = m.Packs[:len(m.Packs)-1]
+		}
+		return nil, err
+	}
+	ap, err := s.saveAndApply()
+	if err != nil {
+		return nil, err
+	}
+	out := &AddOutcome{Repo: p.Repo, Report: rep, Apply: ap, Linked: []string{}}
+	entries, _ := s.Resolve()
+	for _, e := range entries {
+		if e.Kind == engine.KindVendor && e.Origin == p.Repo {
+			out.Linked = append(out.Linked, e.LinkName)
+		}
+	}
+	return out, nil
+}
+
+// Subscribe adds p to the manifest and vendors it, then saves and links.
+// On a failed fetch the manifest is left as it was.
+func (s *Session) Subscribe(p *manifest.Pack) (*engine.SyncReport, *ApplyOutcome, error) {
+	m := s.Lib.Manifest
+	m.Packs = append(m.Packs, p)
+	rep, err := engine.Sync(s.Lib, p)
+	if err != nil {
+		m.Packs = m.Packs[:len(m.Packs)-1]
+		return nil, nil, err
+	}
+	ap, err := s.saveAndApply()
+	return rep, ap, err
+}
+
+// Failure is a pack that could not be updated.
+type Failure struct {
+	Repo  string `json:"repo"`
+	Error string `json:"error"`
+}
+
+// UpdateOutcome is the result of Update.
+type UpdateOutcome struct {
+	Reports []*engine.SyncReport
+	Failed  []Failure
+	Apply   *ApplyOutcome
+	// Changed is set when any pack's vendored content or names changed.
+	Changed bool
+}
+
+// Update fetches the named packs (every pack when none) and re-vendors
+// their selections. A pack that fails is reported and the rest are still
+// saved and linked. each, when set, is told about every pack as it is done.
+func (s *Session) Update(repos []string, each func(repo string, rep *engine.SyncReport, err error)) (*UpdateOutcome, error) {
+	m := s.Lib.Manifest
+	var packs []*manifest.Pack
+	if len(repos) == 0 {
+		packs = m.Packs
+	}
+	for _, r := range repos {
+		p := m.FindPack(r)
+		if p == nil {
+			return nil, fmt.Errorf("no pack %q", r)
+		}
+		packs = append(packs, p)
+	}
+	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}}
+	for _, p := range packs {
+		rep, err := engine.Sync(s.Lib, p)
+		if each != nil {
+			each(p.Repo, rep, err)
+		}
+		if err != nil {
+			out.Failed = append(out.Failed, Failure{p.Repo, err.Error()})
+			continue
+		}
+		out.Reports = append(out.Reports, rep)
+		out.Changed = out.Changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped) > 0 || len(rep.Renamed) > 0
+	}
+	ap, err := s.saveAndApply()
+	out.Apply = ap
+	return out, err
+}
+
+// deselect drops a vendored skill from its pack's selection.
+func deselect(p *manifest.Pack, name string) {
+	if p.UsesAll() {
+		p.Skip = dedupe(append(p.Skip, name))
+	} else {
+		var use []string
+		for _, u := range p.Use {
+			if !manifest.UseNames(u, name) {
+				use = append(use, u)
+			}
+		}
+		p.Use = use
+	}
+	delete(p.Skill, name)
+}
+
+// RemoveOutcome is the result of Remove.
+type RemoveOutcome struct {
+	Entry engine.Entry
+	// Purged is set when the skill was its pack's last one and the whole
+	// pack was dropped.
+	Purged *PurgeOutcome
+	Apply  *ApplyOutcome
+}
+
+// Remove deselects a vendored skill: it is unlinked everywhere and its
+// files go to the trash. Removing a pack's last skill drops the pack.
+func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
+	entries, err := s.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	e, err := s.mustEntry(entries, r)
+	if err != nil {
+		return nil, err
+	}
+	if e.Kind != engine.KindVendor {
+		return nil, fmt.Errorf("%q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it", r.String(), e.Kind)
+	}
+	out := &RemoveOutcome{Entry: *e}
+	p := s.Lib.Manifest.FindPack(e.Origin)
+	deselect(p, e.Name)
+	if len(p.Use) == 0 && !p.UsesAll() {
+		// Removing the last skill of a pack is the whole pack: the user
+		// named exactly what goes, so no further confirmation.
+		s.logf(Info, "%s has no skills left; dropping the pack", p.Repo)
+		out.Purged, err = s.purge(p, s.PurgeLinks(p.Repo))
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if _, err := engine.Sync(s.Lib, p); err != nil {
+		return nil, err
+	}
+	out.Apply, err = s.saveAndApply()
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PurgeOutcome is the result of Purge; its JSON form is what
+// `skd purge --json` prints.
+type PurgeOutcome struct {
+	Repo     string        `json:"repo"`
+	Unlinked []string      `json:"unlinked"`
+	Apply    *ApplyOutcome `json:"apply"`
+}
+
+// PurgeLinks lists the "<target>/<link>" entries purging repo removes.
+func (s *Session) PurgeLinks(repo string) []string {
+	entries, _ := s.Resolve()
+	links := []string{}
+	for _, e := range entries {
+		if e.Kind == engine.KindVendor && e.Origin == repo {
+			for _, t := range e.Targets {
+				links = append(links, t.Name+"/"+e.LinkName)
+			}
+		}
+	}
+	sort.Strings(links)
+	return links
+}
+
+// Purge drops a pack from the manifest, the lock, vendor/ (to the trash)
+// and every agent directory. Callers confirm first.
+func (s *Session) Purge(repo string) (*PurgeOutcome, error) {
+	p := s.Lib.Manifest.FindPack(repo)
+	if p == nil {
+		return nil, fmt.Errorf("no pack %q", repo)
+	}
+	return s.purge(p, s.PurgeLinks(p.Repo))
+}
+
+func (s *Session) purge(p *manifest.Pack, links []string) (*PurgeOutcome, error) {
+	m := s.Lib.Manifest
+	for i, q := range m.Packs {
+		if q == p {
+			m.Packs = append(m.Packs[:i], m.Packs[i+1:]...)
+			break
+		}
+	}
+	ap, err := s.saveAndApply()
+	if err != nil {
+		return nil, err
+	}
+	if err := engine.RemovePack(s.Lib, p.Repo); err != nil {
+		return nil, err
+	}
+	if err := s.Lib.Save(); err != nil {
+		return nil, err
+	}
+	return &PurgeOutcome{Repo: p.Repo, Unlinked: links, Apply: ap}, nil
+}
+
+// ForkOutcome is the result of Fork.
+type ForkOutcome struct {
+	From  engine.Entry
+	Name  string
+	Path  string
+	Apply *ApplyOutcome
+}
+
+// Fork copies a vendored or app skill into skills/ (private/ when private)
+// as name (its link name when empty), so the user can edit it. The
+// original is deselected (vendored) or unregistered (app) so the names do
+// not collide; the fork's frontmatter name is set to its own name.
+func (s *Session) Fork(r Ref, private bool, name string) (*ForkOutcome, error) {
+	entries, err := s.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	e, err := s.mustEntry(entries, r)
+	if err != nil {
+		return nil, err
+	}
+	if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
+		return nil, fmt.Errorf("%q is already yours (%s)", e.LinkName, e.Dir)
+	}
+	if name == "" {
+		name = e.LinkName
+	} else if err := manifest.CheckName(name); err != nil {
+		return nil, fmt.Errorf("--as: %w", err)
+	}
+	base := s.Lib.SkillsDir()
+	if private {
+		base = s.Lib.PrivateDir()
+	}
+	dest := filepath.Join(base, name)
+	if fsutil.Lexists(dest) {
+		return nil, fmt.Errorf("%s already exists", dest)
+	}
+	if err := fsutil.CopyTree(e.Dir, dest); err != nil {
+		return nil, err
+	}
+	// The fork is known by its directory name; make the frontmatter
+	// agree, or an aliased fork would clash with the upstream name.
+	if meta, err := skillmd.Read(dest); err == nil && meta.Name != name {
+		if err := skillmd.SetName(dest, name); err != nil {
+			return nil, err
+		}
+	}
+	note := fmt.Sprintf("\n<!-- forked by skilldots from %s -->\n", engine.Describe(*e))
+	if f, err := os.OpenFile(filepath.Join(dest, "SKILL.md"), os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		f.WriteString(note)
+		f.Close()
+	}
+	if e.Kind == engine.KindVendor {
+		p := s.Lib.Manifest.FindPack(e.Origin)
+		deselect(p, e.Name)
+		if _, err := engine.Sync(s.Lib, p); err != nil {
+			return nil, err
+		}
+	} else {
+		apps := s.Lib.Manifest.Apps
+		for i, a := range apps {
+			if a.Name == e.Name {
+				s.Lib.Manifest.Apps = append(apps[:i], apps[i+1:]...)
+				break
+			}
+		}
+	}
+	ap, err := s.saveAndApply()
+	if err != nil {
+		return nil, err
+	}
+	return &ForkOutcome{From: *e, Name: name, Path: dest, Apply: ap}, nil
+}
+
+func nonEmpty(in []string) []string {
+	var out []string
+	for _, s := range in {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}

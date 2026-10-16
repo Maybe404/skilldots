@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -40,9 +41,8 @@ func runMenu() error {
 		}
 		home, _ := os.UserHomeDir()
 		status := ok("●") + " " + dim("everything linked")
-		if plan := engine.MakePlan(c.lib, entries, false); plan.Changes() {
-			n := plan.Counts()
-			status = warn("○") + " " + dim(fmt.Sprintf("%d changes pending — Apply", n["create"]+n["replace"]+n["remove"]))
+		if n := c.Pending(entries); n > 0 {
+			status = warn("○") + " " + dim(fmt.Sprintf("%d changes pending — Apply", n))
 		}
 		last := ""
 		if out, err := c.lib.Git("log", "-1", "--format=%cr"); err == nil && out != "" {
@@ -178,12 +178,7 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 			Options(opts...).Value(&chosen)); err != nil {
 			return nil
 		}
-		return setTargets(c, name, func([]string) []string {
-			if chosen == nil {
-				return []string{}
-			}
-			return chosen
-		})
+		return targetsDone(c)(c.SetTargets(app.KeyRef(name), chosen))
 	case "sync":
 		return run("sync")
 	case "scan":
@@ -311,7 +306,10 @@ func cloneCmd() *cobra.Command {
 				return err
 			}
 			// Vendored skills come with the clone; only links need creating.
-			out, err := doApply(c, false, false, nil)
+			out, err := c.Apply(app.ApplyOptions{})
+			if out != nil {
+				printApply(c, out)
+			}
 			if err != nil {
 				return err
 			}
@@ -331,48 +329,26 @@ func syncCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if remote != "" {
-				if _, err := c.lib.Git("remote", "get-url", "origin"); err == nil {
-					if _, err := c.lib.Git("remote", "set-url", "origin", remote); err != nil {
-						return err
-					}
-				} else if _, err := c.lib.Git("remote", "add", "origin", remote); err != nil {
-					return err
+			out, err := c.Backup(remote, msg)
+			if out != nil {
+				if out.Committed {
+					c.printf("%s committed in %s\n", ok("✓"), c.lib.Root)
+				} else {
+					say("%s\n", dim("nothing to commit"))
 				}
 			}
-			if msg == "" {
-				msg = "chore: update skills library"
-			}
-			result := map[string]any{"committed": false, "pushed": false}
-			committed, err := gitCommit(c, msg, false)
 			if err != nil {
 				return err
 			}
-			result["committed"] = committed
-			if !committed {
-				say("%s\n", dim("nothing to commit"))
-			}
-			if url, err := c.lib.Git("remote", "get-url", "origin"); err != nil {
+			if out.Remote == "" {
 				say("%s no remote configured; add one with: skd sync --remote <git-url>\n", warn("!"))
 			} else {
-				result["remote"] = url
-				if _, err := c.lib.Git("rev-parse", "--abbrev-ref", "@{u}"); err != nil {
-					if _, err := c.lib.Git("push", "-q", "-u", "origin", "HEAD"); err != nil {
-						return err
-					}
-				} else if _, err := c.lib.Git("push", "-q"); err != nil {
-					return err
-				}
-				result["pushed"] = true
 				say("%s pushed\n", ok("✓"))
 			}
-			if fsutil.Exists(filepath.Join(c.lib.PrivateDir(), ".git")) {
-				if out, _ := library.Git(c.lib.PrivateDir(), "status", "--short"); out != "" {
-					result["privateUncommitted"] = true
-					say("%s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n", dim("note:"))
-				}
+			if out.PrivateUncommitted {
+				say("%s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n", dim("note:"))
 			}
-			jsonOut(result)
+			jsonOut(out)
 			return nil
 		},
 	}
