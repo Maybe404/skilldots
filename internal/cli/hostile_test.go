@@ -273,6 +273,24 @@ func TestHostileLibraryPrintsClean(t *testing.T) {
 	}
 }
 
+// The build people run, last line of defence included, prints the
+// hostile library cleanly too: a smoke test of the guarded binary (the
+// gate above checks the commands without it).
+func TestGuardedBuildPrintsClean(t *testing.T) {
+	e := newEnv(t)
+	lib, up, lures := hostileLibraryLures(t, e)
+	for _, args := range [][]string{
+		{"list", "--all"}, {"show", up}, {"outdated"}, {"apply", "-n"}, {"history"}, {"trash"},
+		{"trash", "restore", lures.IDs[0]}, {"config", "list"}, {"scan"}, {"show", "x/y" + hostile.Evil},
+	} {
+		out, errOut, code := e.run(skdGuarded, lib, args...)
+		gate(t, "(guarded) "+strings.Join(args, " "), out+errOut, code)
+		if strings.Contains(out+errOut, "\x1b") {
+			t.Errorf("skd %s printed an escape sequence:\n%q", strings.Join(args, " "), out+errOut)
+		}
+	}
+}
+
 // A manifest or lock with control characters anywhere, in any value,
 // array element or key, is refused with the place named and quoted, and
 // every command says so cleanly.

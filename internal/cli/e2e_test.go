@@ -12,7 +12,8 @@ import (
 	"testing"
 )
 
-var skdBin string
+// skdBin is built with the rawoutput tag, skdGuarded as people get it.
+var skdBin, skdGuarded string
 
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "skd-e2e")
@@ -25,6 +26,10 @@ func TestMain(m *testing.M) {
 	// (TestHostileLibraryPrintsClean).
 	out, err := exec.Command("go", "build", "-tags", "rawoutput", "-o", skdBin, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput()
 	if err != nil {
+		panic(string(out))
+	}
+	skdGuarded = filepath.Join(dir, "skd-guarded")
+	if out, err := exec.Command("go", "build", "-o", skdGuarded, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
 	code := m.Run()
@@ -61,10 +66,16 @@ func (e *env) p(rel string) string { return filepath.Join(e.home, filepath.FromS
 // skd runs the binary in dir (home when ""), with stdin not a terminal.
 func (e *env) skd(dir string, args ...string) (stdout, stderr string, code int) {
 	e.t.Helper()
+	return e.run(skdBin, dir, args...)
+}
+
+// run runs the skd binary bin like skd does.
+func (e *env) run(bin, dir string, args ...string) (stdout, stderr string, code int) {
+	e.t.Helper()
 	if dir == "" {
 		dir = e.home
 	}
-	cmd := exec.Command(skdBin, args...)
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Env = e.vars
 	var o, er bytes.Buffer
