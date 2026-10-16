@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"syscall"
@@ -10,6 +12,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Maybe404/skilldots/internal/hostile"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // A second ctrl+c while a job runs quits at once and tells Run to stop
@@ -80,5 +85,33 @@ func TestWaitJobs(t *testing.T) {
 	err := waitJobs(tr, "x", make(chan os.Signal), true, func() error { return errors.New("no ps") })
 	if err == nil {
 		t.Error("forced quit reported success")
+	}
+}
+
+// What the dashboard prints on the terminal after it closed is cleaned:
+// a job's label (restoring a trash entry names it) and an error carry
+// text from the library.
+func TestTerminalMessagesAreCleaned(t *testing.T) {
+	for name, c := range map[string]struct {
+		w    io.Writer
+		file *os.File
+	}{"termOut": {termOut, os.Stdout}, "termErr": {termErr, os.Stderr}} {
+		if cw, ok := c.w.(cleanWriter); !ok || cw.w != c.file {
+			t.Errorf("%s is %#v, not a cleanWriter on the terminal", name, c.w)
+		}
+	}
+	var b bytes.Buffer
+	prev := termErr
+	termErr = cleanWriter{&b}
+	defer func() { termErr = prev }()
+	tr := newTracker()
+	tr.begin()
+	waitJobs(tr, "restoring t"+hostile.Evil, make(chan os.Signal), true, func() error {
+		tr.end()
+		return errors.New("ps: " + hostile.Evil)
+	})
+	out := b.String()
+	if strings.ContainsFunc(strings.ReplaceAll(out, "\n", ""), safetext.Unsafe) || !strings.Contains(out, "restoring t]0;pwned") || !strings.Contains(out, "ps: ]0;pwned") {
+		t.Errorf("printed %q", out)
 	}
 }
