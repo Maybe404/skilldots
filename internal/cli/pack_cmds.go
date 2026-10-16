@@ -395,7 +395,15 @@ func setTargets(c *ctx, key string, edit func(cur []string) []string) error {
 		}
 		return fmt.Errorf("no skill or pack %q", key)
 	}
-	next := edit(e.TargetNames)
+	editTargets(c, e, edit(e.TargetNames))
+	if err := c.lib.Save(); err != nil {
+		return err
+	}
+	return runApply(c, false, false)
+}
+
+// editTargets records next as the target list of e in the manifest.
+func editTargets(c *ctx, e *engine.Entry, next []string) {
 	m := c.lib.Manifest
 	switch e.Kind {
 	case engine.KindVendor:
@@ -418,10 +426,6 @@ func setTargets(c *ctx, key string, edit func(cur []string) []string) error {
 			m.Locals = append(m.Locals, &manifest.Local{Name: e.Name, Targets: &next})
 		}
 	}
-	if err := c.lib.Save(); err != nil {
-		return err
-	}
-	return runApply(c, false, false)
 }
 
 func e2names(s []string) []string { return append([]string(nil), s...) }
