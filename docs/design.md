@@ -81,7 +81,31 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd adopt` | 把 scan 到的未受管 skill 收编：能识别来源的（npx `.skill-lock.json`、git remote、App 路径）自动填，否则询问 |
 | `skd doctor` | 体检：Windows 符号链接权限、target 不存在、锁与清单不一致、断链 |
 
-所有命令 `--json`；破坏性命令先列清单再确认。
+所有命令 `--json`；破坏性命令先列清单再确认。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`）选配色，`NO_COLOR` 关闭颜色。
+
+## 仪表盘
+
+`skd` 不带参数、终端不窄于 90 列时打开全屏仪表盘（`--simple`、窄终端、`TERM=dumb` 走问答菜单）。人用仪表盘，agent 用命令；仪表盘必须覆盖命令能做的所有事，结果与对应命令一致。
+
+| 键 | 作用 | 对应命令 |
+|---|---|---|
+| `space` | 启用/停用；上游未装的直接安装 | `enable` / `disable` / `add --skill` |
+| `a` | 加仓库：勾选 skill 或整个分类（`*` 跟随全部），再选 alias、目标 agent，均可留空 | `add` |
+| `u` / `U` | 更新当前包 / 全部 | `update` |
+| `e` | 选目标 agent | `enable/disable --agent` |
+| `f` | fork，可改名，选 skills/ 或 private/ | `fork [--as] [--private]` |
+| `d` | 删 vendor skill（进 trash）/ 取消链接自己的 / purge 包 | `remove` / `disable` / `purge` |
+| `n` | 新建 skill，建好即链接并选中 | `new` |
+| `S` | 按 agent、状态列出扫描结果，勾选后 adopt | `scan` / `adopt` |
+| `t` | 回收站：恢复；清空需两次确认，第二次只认 `D` | `trash restore` / `trash empty` |
+| `s` | 备份 | `sync` |
+| `A` / `r` / `/` / `?` / `q` | 应用 / 重载 / 过滤 / 全部键位 / 退出 | `apply` |
+
+有操作在跑时，会启动新操作的键一律拒绝；错误显示在状态行。
+
+**共享流程**：所有写操作在 `internal/app`（targets 编辑与继承、取消选择、add、fork、remove/purge、enable/disable、new、adopt、update、apply、trash、sync 的 git 操作）。`internal/cli` 和 `internal/tui` 只负责收集输入和展示结果，`internal/app` 的测试用同一夹具分别走两条路径并比对清单、锁、文件和链接。
+
+**配色**：两套调色板同一组色相（紫色强调、青色、绿/黄/红状态色）。`auto` 时向终端发 OSC 11 加 DA1（所有终端都回 DA1，所以不支持 OSC 11 的终端也立即结束），300ms 无回应按深色；`--json`、`NO_COLOR`、`TERM=dumb`、stdout 非终端、后台进程组时不询问。Bubble Tea 的包 init 会让 termenv 询问背景并最多等 5 秒，所以 `internal/termbg` 的 init 抢先设定背景值（Go 按导入路径顺序初始化，`github.com/Maybe404/…` 排在 `github.com/charmbracelet/…` 之前）。
 
 ## 关键规则
 

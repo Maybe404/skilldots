@@ -30,7 +30,7 @@ Most of the time it is not a person running `skd` but the agent on their machine
 - `skd init` installs the [`skilldots` skill](skills/skilldots/SKILL.md) into the library, so every agent on the machine knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
 - Every command works without a terminal: `--json` for structured results, `--yes` for prompts, `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
 - Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. `skd trash empty` is the one irreversible command and it only runs for a person at a terminal, so an agent can do everything short of permanent deletion.
-- People get the interactive menu (`skd` with no arguments) for looking around and vetoing.
+- People get a full-screen dashboard (`skd` with no arguments) that does everything the commands do, for looking around and vetoing.
 
 ## Install
 
@@ -75,9 +75,36 @@ Prebuilt binaries will follow.
 | `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
 | `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
 | `skd use <dir>` | point skd at an existing library from any directory |
-| `skd` | with no arguments: an interactive menu for all of the above |
+| `skd [--simple]` | with no arguments: the full-screen dashboard (below); `--simple`, a narrow terminal or `TERM=dumb` give a question-and-answer menu instead |
 
-All commands take `--json` for scripts and agents, and `--yes` to skip prompts. Under `--json` stdout carries exactly one JSON document (progress and warnings go to stderr); a failing command prints nothing on stdout and exits non-zero, except `skd update`, which reports `{packs, failed, apply, committed}` and exits non-zero when any pack failed. Problems confined to one skill — an unknown target, a name clash, a pack not fetched yet — are warnings, not errors: the rest of the library keeps working.
+All commands take `--json` for scripts and agents, `--yes` to skip prompts, and `--theme light|dark|auto` for colours (default `auto`, also `$SKILLDOTS_THEME`; `NO_COLOR` turns colour off). Under `--json` stdout carries exactly one JSON document (progress and warnings go to stderr); a failing command prints nothing on stdout and exits non-zero, except `skd update`, which reports `{packs, failed, apply, committed}` and exits non-zero when any pack failed. Problems confined to one skill — an unknown target, a name clash, a pack not fetched yet — are warnings, not errors: the rest of the library keeps working.
+
+## Dashboard
+
+`skd` in a terminal at least 90 columns wide opens a dashboard: packs and your own skills on the left, the selected pack's skills on the right. It runs the same code as the commands, so anything you do there leaves the library exactly as the matching command would.
+
+| key | does | command |
+|---|---|---|
+| `↑↓` `j k` `pgup pgdn` `g G` | move | |
+| `tab` `← →` `enter` | switch column, open a pack | |
+| `/` | filter the column (`esc` clears) | |
+| `space` | enable / disable the skill; installs an upstream one | `enable`, `disable`, `add --skill` |
+| `a` | add a repository: tick skills or whole categories (or `*` for everything), then an optional alias and agents | `add [--category] [--alias] [--agent]` |
+| `u` / `U` | update this pack / every pack | `update` |
+| `e` | agents for the skill or pack | `enable/disable --agent` |
+| `f` | fork, under a new name if you type one, into `skills/` or `private/` | `fork [--as] [--private]` |
+| `d` | remove a vendored skill, unlink one of yours, purge a pack | `remove`, `disable`, `purge` |
+| `n` | new skill in `skills/` or `private/`, linked and selected | `new [--private]` |
+| `S` | scan agent directories by agent and state; adopt what you tick | `scan`, `adopt` |
+| `t` | trash: restore an entry, or empty it (asks twice; the second answer is `D`) | `trash restore`, `trash empty` |
+| `s` | back up: commit and push | `sync` |
+| `A` / `r` | apply pending link changes / reload | `apply` |
+| `?` | every key | |
+| `q` `esc` | quit; `ctrl+c` while something runs quits when it ends, twice stops it | |
+
+While an operation runs, keys that would start another are refused; problems show on the status line.
+
+Colours follow the terminal: skd asks it for its background colour (giving up after 300 ms and assuming dark) and uses a light or dark palette for the dashboard, the menu and every table. `--theme light` or `--theme dark` (or `SKILLDOTS_THEME`) skips the question.
 
 ## skills.toml
 
