@@ -91,6 +91,17 @@ func truncateText(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
+// AddArgs joins the arguments of `skd add` into the text ParseAddText
+// reads. An install command pasted without quotes arrives as several
+// arguments and is joined; anything else must be one source, so a stray
+// extra argument is an error before anything is fetched.
+func AddArgs(args []string) (string, error) {
+	if len(args) > 1 && !isCommandWord(args[0]) {
+		return "", fmt.Errorf("add takes one source, got %d arguments (%s); quote a pasted install command", len(args), truncateText(strings.Join(args, " "), 60))
+	}
+	return strings.Join(args, " "), nil
+}
+
 func isCommandWord(w string) bool {
 	switch strings.ToLower(filepath.Base(w)) {
 	case "npx", "bunx", "pnpx", "pnpm", "yarn", "npm", "bun", "skd":

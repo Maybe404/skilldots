@@ -207,7 +207,7 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 		if ref == "" {
 			ref = "HEAD"
 		}
-		library.GitContext(ctx, clone, "fetch", "-q", fmt.Sprintf("--deepen=%d", historyDepth), "origin", ref)
+		library.GitContext(ctx, clone, "fetch", "-q", fmt.Sprintf("--deepen=%d", historyDepth), "--", "origin", ref)
 		if !reachable() {
 			r.CommitsUnknown = true
 			return

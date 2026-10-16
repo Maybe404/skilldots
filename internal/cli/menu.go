@@ -301,7 +301,7 @@ func cloneCmd() *cobra.Command {
 			if fsutil.Lexists(dir) {
 				return fmt.Errorf("%s already exists", dir)
 			}
-			if _, err := library.Git("", "clone", "-q", args[0], dir); err != nil {
+			if _, err := library.Git("", "clone", "-q", "--", args[0], dir); err != nil {
 				return err
 			}
 			if err := library.EnsureGit(filepath.Join(dir, library.DirPrivate)); err != nil {

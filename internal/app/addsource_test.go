@@ -57,7 +57,10 @@ func TestParseAddText(t *testing.T) {
 			t.Errorf("%q: source %q: %v", c.in, h.Source, err)
 		}
 	}
-	for _, bad := range []string{"", "npx skills remove o/r", "npx skills add", "npx skills add o/r -s ../x", "npx skills add 'o/r", "skills.sh/x", "npx cowsay o/r"} {
+	for _, bad := range []string{"", "npx skills remove o/r", "npx skills add", "npx skills add o/r -s ../x", "npx skills add 'o/r", "skills.sh/x", "npx cowsay o/r",
+		// --skill names are skill names: no path, no hidden name, no spaces.
+		"npx skills add o/r --skill=.hidden", "npx skills add o/r -s 'a b'", "npx skills add o/r --skill=..", "npx skills add o/r -s x,.y",
+		"https://skills.sh/o/r/.git-x"} {
 		if h, err := app.ParseAddText(bad); err == nil {
 			t.Errorf("%q accepted: %+v", bad, h)
 		}
@@ -117,5 +120,24 @@ func TestSplitCommandNeverExpands(t *testing.T) {
 	want := []string{"code", "--wait", "$HOME/x", "a b", "c d", "$(rm)"}
 	if !slices.Equal(w, want) {
 		t.Fatalf("got %q", strings.Join(w, "|"))
+	}
+}
+
+func TestAddArgs(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+		ok   bool
+	}{
+		{nil, "", true},
+		{[]string{"o/r"}, "o/r", true},
+		{[]string{"npx", "skills", "add", "o/r"}, "npx skills add o/r", true},
+		{[]string{"o/r", "extra"}, "", false},
+		{[]string{"https://github.com/o/r", "--skill"}, "", false},
+	} {
+		got, err := app.AddArgs(c.args)
+		if (err == nil) != c.ok || (c.ok && got != c.want) {
+			t.Errorf("%q: %q %v", c.args, got, err)
+		}
 	}
 }

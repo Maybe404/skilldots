@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -238,5 +239,30 @@ func TestLockPaths(t *testing.T) {
 				t.Errorf("%q: got %v, want %v", c.msg, got, c.want)
 			}
 		}
+	}
+}
+
+// A URL or ref that looks like an option never reaches git as one: the
+// parser refuses it, and Fetch puts "--" before the URL anyway (a
+// hand-edited skills.toml goes straight to Fetch).
+func TestFetchNeverTakesOptions(t *testing.T) {
+	_, up := fetchEnv(t)
+	marker := filepath.Join(t.TempDir(), "pwned")
+	for _, s := range []string{"--upload-pack=touch " + marker, "-u/x", "o/r@--upload-pack=x"} {
+		if src, err := ParseSource(s); err == nil {
+			t.Errorf("ParseSource(%q) = %+v", s, src)
+		}
+	}
+	if _, _, err := Fetch(Source{Repo: "evil/x", URL: "--upload-pack=touch " + marker + ";" + up}); err == nil {
+		t.Error("fetched an option")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("git ran the option")
+	}
+	if a := cloneArgs(Source{URL: "-x", Ref: "r"}, "d"); !slices.Equal(a[len(a)-3:], []string{"--", "-x", "d"}) {
+		t.Errorf("git %v: the URL is not after --", a)
+	}
+	if a := fetchArgs("-r"); !slices.Equal(a[len(a)-3:], []string{"--", "origin", "-r"}) {
+		t.Errorf("git %v: the ref is not after --", a)
 	}
 }

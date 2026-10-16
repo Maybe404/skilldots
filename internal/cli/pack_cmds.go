@@ -32,11 +32,14 @@ func addCmd() *cobra.Command {
 			"The ref in a GitHub link is ignored: append @ref to pin one. Without a source at a terminal, skd asks for one.",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			text, err := app.AddArgs(args)
+			if err != nil {
+				return err
+			}
 			c, err := open()
 			if err != nil {
 				return err
 			}
-			text := strings.Join(args, " ")
 			if text == "" {
 				if !isTerminal() || flags.json {
 					return fmt.Errorf("give a source: skd add owner/repo (or a URL, or a pasted `npx skills add …`)")
