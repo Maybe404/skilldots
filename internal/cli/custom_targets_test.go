@@ -309,3 +309,33 @@ func TestBuiltinTargetsNeedNoApproval(t *testing.T) {
 		t.Error("approvals written for built-in targets")
 	}
 }
+
+// customLib is a library at ~/lib whose skills.toml has the custom
+// targets given (TOML), with one skill.
+func customLib(e *env, targetsTOML string) string {
+	e.t.Helper()
+	lib := e.p("lib")
+	e.write("lib/skills.toml", "[targets]\ndefault = [\"agents\"]\n\n"+targetsTOML)
+	e.write("lib/skills/tdd/SKILL.md", "---\nname: tdd\ndescription: d\n---\n")
+	return lib
+}
+
+// A forged lock record filed under a target that is not in use never
+// moves the user's own directory out of a built-in target's directory,
+// with apply --force run by an agent.
+func TestForgedLockCannotTakeABuiltinTargetsEntry(t *testing.T) {
+	e := newEnv(t)
+	lib := customLib(e, "[targets.custom.evil]\npath = \"~/evilbox/skills\"\n")
+	e.write("lib/skills/mine/SKILL.md", "---\nname: mine\ndescription: d\n---\n")
+	e.write("lib/skills.lock", "version = 1\n\n[links.'evil/mine']\nmode = 'link'\nsource = 'skills/mine'\npath = '"+e.p(".claude/skills/mine")+"'\n\n[links.'ghost/mine']\nmode = 'copy'\nsource = 'skills/mine'\nhash = 'x'\npath = '"+e.p(".claude/skills/mine")+"'\n")
+	e.write(".claude/skills/mine/notes.md", "mine")
+	for _, args := range [][]string{{"apply", "--force"}, {"apply", "--force", "--yes"}} {
+		o, eo, _ := e.skd(lib, args...)
+		if b, err := os.ReadFile(e.p(".claude/skills/mine/notes.md")); err != nil || string(b) != "mine" {
+			t.Fatalf("%v took ~/.claude/skills/mine: %v\n%s%s", args, err, o, eo)
+		}
+		if m, _ := filepath.Glob(filepath.Join(lib, ".trash", "*")); len(m) != 0 {
+			t.Fatalf("%v: trash %v", args, m)
+		}
+	}
+}

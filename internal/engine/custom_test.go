@@ -141,3 +141,57 @@ func TestForgedLockPathsNeverMoveOutsideTargets(t *testing.T) {
 		})
 	}
 }
+
+// A lock record filed under a target name not in use (never defined,
+// defined but not approved, or refused) is only forgotten, with --force
+// too, even when its path names an entry of a built-in target's
+// directory: the user's own skill directory there stays.
+func TestForgedLockRecordOfAnUnusedTargetIsOnlyForgotten(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		custom map[string]struct{ Path, Mode string }
+	}{
+		{"undefined", nil},
+		{"not approved", map[string]struct{ Path, Mode string }{"evil": {Path: "~/evilbox/skills"}}},
+		{"refused", map[string]struct{ Path, Mode string }{"evil": {Path: "~"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lib, _, home := restoreLib(t)
+			reg, _ := targets.NewRegistry(tc.custom)
+			SetRegistry(reg)
+			for n, c := range tc.custom {
+				lib.Manifest.Targets.Custom[n] = manifest.CustomTarget{Path: c.Path, Mode: c.Mode}
+			}
+			lib.Manifest.Targets.Default = []string{}
+			mine := filepath.Join(home, ".claude", "skills", "mine")
+			writeSkill(t, mine, "mine")
+			os.WriteFile(filepath.Join(mine, "notes.md"), []byte("mine"), 0o644)
+			writeSkill(t, filepath.Join(lib.Root, "skills", "mine"), "mine")
+			for _, mode := range []string{"link", "copy"} {
+				lib.Lock.Links["evil/mine"] = &lock.Link{Mode: mode, Source: "skills/mine", Path: mine, Hash: "h"}
+				entries, _, err := Resolve(lib, reg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				plan := MakePlan(lib, entries, true)
+				for _, op := range plan.Ops {
+					if op.Action != "forget" {
+						t.Errorf("%s: %+v", mode, op)
+					}
+				}
+				if _, err := Apply(lib, plan); err != nil {
+					t.Fatal(err)
+				}
+				if b, err := os.ReadFile(filepath.Join(mine, "notes.md")); err != nil || string(b) != "mine" {
+					t.Fatalf("%s: apply --force took ~/.claude/skills/mine: %v", mode, err)
+				}
+				if items, _ := ListTrash(lib, reg); len(items) != 0 {
+					t.Fatalf("%s: trashed %+v", mode, items)
+				}
+				if lib.Lock.Links["evil/mine"] != nil {
+					t.Errorf("%s: record kept", mode)
+				}
+			}
+		})
+	}
+}
