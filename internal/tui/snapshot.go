@@ -110,9 +110,11 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 		Agents: reg.Present()}
 
 	entries, warnings, err := engine.Resolve(lib, reg)
-	s.Warnings = warnings
+	for _, w := range warnings {
+		s.Warnings = append(s.Warnings, clean(w))
+	}
 	if err != nil {
-		s.Warnings = append(s.Warnings, err.Error())
+		s.Warnings = append(s.Warnings, clean(err.Error()))
 	} else {
 		s.Pending = pendingChanges(engine.MakePlan(lib, entries, false))
 	}
@@ -153,7 +155,7 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 						continue
 					}
 					rest = append(rest, Skill{Name: u.Name, LinkName: u.Name, Kind: engine.KindVendor, Origin: p.Repo,
-						Category: u.Category, Description: u.Description, Dir: u.Dir})
+						Category: clean(u.Category), Description: clean(u.Description), Dir: u.Dir})
 				}
 			}
 		}
@@ -175,8 +177,10 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 }
 
 func toSkill(e engine.Entry) Skill {
-	s := Skill{Name: e.Name, LinkName: e.LinkName, Kind: e.Kind, Origin: e.Origin, Category: e.Category,
-		Description: e.Description, Dir: e.Dir, Installed: true, Missing: e.Missing, Conflict: e.Conflict}
+	// Category and description come from upstream files: cleaned here so
+	// column widths are measured on what is printed.
+	s := Skill{Name: e.Name, LinkName: e.LinkName, Kind: e.Kind, Origin: e.Origin, Category: clean(e.Category),
+		Description: clean(e.Description), Dir: e.Dir, Installed: true, Missing: e.Missing, Conflict: clean(e.Conflict)}
 	for _, t := range e.Targets {
 		s.Agents = append(s.Agents, t.Name)
 	}

@@ -2,15 +2,18 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
 
@@ -499,5 +502,63 @@ func TestViewShortTerminals(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestViewStripsControlCharacters feeds terminal escapes through every
+// text path that comes from outside skd and checks the raw output only
+// carries the dashboard's own colour codes.
+func TestViewStripsControlCharacters(t *testing.T) {
+	lipgloss.SetColorProfile(0)
+	const evil = "\x1b]0;pwned\x07\x1b[2J\x1b[H\x9b6n\x00\x7f\x08\r\n\t"
+	s := sampleSnapshot()
+	p := &s.Packs[0]
+	p.Skills[0].Description = "說明 " + evil + " 🚀 done"
+	p.Skills[0].Category = "cat" + evil
+	p.Skills[0].Name = "grill-me" + evil // the "upstream" name differs from the link name
+	p.Skills[2].Description = evil
+	s.Mine[0].Description = "mine " + evil
+	s.Mine[0].Conflict = "clash " + evil
+	s.Warnings = []string{"warn " + evil + " 日本語"}
+	sgr := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	check := func(name string, m Model) {
+		t.Helper()
+		v := m.View()
+		rest := sgr.ReplaceAllString(v, "")
+		for i := 0; i < len(rest); i++ {
+			if c := rest[i]; (c < 0x20 && c != '\n') || c == 0x7f {
+				t.Fatalf("%s: control byte %#x at %d in %q", name, c, i, rest[max(0, i-20):min(len(rest), i+20)])
+			}
+		}
+		if !utf8.ValidString(rest) || strings.ContainsRune(rest, '\u009b') {
+			t.Fatalf("%s: invalid UTF-8 or C1 control in output", name)
+		}
+		for i, l := range strings.Split(ansi.Strip(v), "\n") {
+			if ansi.StringWidth(l) != m.w {
+				t.Errorf("%s: line %d is %d wide: %q", name, i, ansi.StringWidth(l), l)
+			}
+		}
+	}
+	for _, size := range [][2]int{{120, 36}, {90, 24}, {60, 12}} {
+		m, _ := newModel(t, s, size[0], size[1])
+		check("pack", m)
+		mm, _ := press(t, m, "tab")
+		check("skill in pack", mm)
+		mm, _ = press(t, m, "j", "j", "j")
+		check("own skill", mm)
+		// Errors and warnings from the engine land in the status line.
+		nm, _ := m.Update(doneMsg{result{err: fmt.Errorf("fetch failed %s", evil)}})
+		check("error status", nm.(Model))
+		nm, _ = m.Update(doneMsg{result{err: warning("careful " + evil)}})
+		check("warning status", nm.(Model))
+		nm, _ = m.Update(doneMsg{result{msg: "ok " + evil}})
+		check("ok status", nm.(Model))
+		// A fetched repository in the browse picker.
+		nm, _ = m.Update(doneMsg{result{src: "x/y", browse: &Browse{Repo: "x/y", Commit: "abc", Have: map[string]bool{},
+			Skills: []pack.Skill{{Name: "evil", Category: "c" + evil, Description: evil + "描述"}}}}})
+		check("browse", nm.(Model))
+	}
+	if got := clean("a\x1b[2Jb\tc\u009bd\xffe 中文 👍🏽"); got != "a[2Jb cde 中文 👍🏽" {
+		t.Errorf("clean: %q", got)
 	}
 }

@@ -2,6 +2,8 @@ package tui
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -62,8 +64,44 @@ func segWidth(segs []seg) (n int) {
 	return n
 }
 
+// clean makes text from outside (upstream SKILL.md, file names, git and
+// engine messages) safe to print: whitespace controls become a space,
+// every other control character (ESC, BEL, C1…) and invalid UTF-8 is
+// dropped, so nothing can move the cursor or rewrite the terminal.
+func clean(s string) string {
+	ok := utf8.ValidString(s)
+	if ok {
+		for _, r := range s {
+			if unicode.IsControl(r) {
+				ok = false
+				break
+			}
+		}
+	}
+	if ok {
+		return s
+	}
+	var b strings.Builder
+	for i, r := range s {
+		switch {
+		case r == utf8.RuneError:
+			if _, n := utf8.DecodeRuneInString(s[i:]); n == 1 {
+				continue // an invalid byte, e.g. a lone 8-bit CSI
+			}
+			b.WriteRune(r)
+		case r == '\t' || r == '\n' || r == '\r' || r == '\v' || r == '\f':
+			b.WriteByte(' ')
+		case unicode.IsControl(r):
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // paint renders segs on bg into exactly w cells, truncating with an
 // ellipsis or padding with bg. An empty bg means the terminal background.
+// Segment text is passed through clean.
 func paint(w int, bg lipgloss.Color, segs ...seg) string {
 	if w <= 0 {
 		return ""
@@ -78,7 +116,7 @@ func paint(w int, bg lipgloss.Color, segs ...seg) string {
 		if used >= w {
 			break
 		}
-		text := s.s
+		text := clean(s.s)
 		if sw := ansi.StringWidth(text); used+sw > w {
 			text = ansi.Truncate(text, w-used, "…")
 		}
@@ -127,6 +165,7 @@ func fit(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
+	s = clean(s)
 	w := ansi.StringWidth(s)
 	if w > n {
 		return ansi.Truncate(s, n, "…")
