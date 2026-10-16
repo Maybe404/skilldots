@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -74,22 +75,24 @@ func TestHistoryReadsBadFiles(t *testing.T) {
 			"changed": []string{"tdd\x1b[2J"}, "commits": []map[string]string{{"hash": "c", "subject": subject}}})
 		return string(b)
 	}
+	// Out of order, as two machines' lines merged by git can be.
 	lines := []string{
 		rec("acme/skills", "2024-01-01T00:00:00Z", "old \x1b[31mred"),
 		`{"repo":"` + strings.Repeat("y", 5<<20) + `"}`,
-		rec("acme/skills", "2025-01-01T00:00:00Z", "new"),
+		rec("acme/skills", "2026-01-01T00:00:00Z", "new"),
+		rec("acme/skills", "2025-01-01T00:00:00Z", "middle"),
 		"",
 	}
 	write(t, filepath.Join(root, app.HistoryFile), strings.Join(lines, "\n"))
 	s, _ := app.Open(root)
 	for _, pack := range []string{"", "acme/skills"} {
 		recs, skipped, err := s.History(pack, 0)
-		if err != nil || skipped != 1 || len(recs) != 2 {
+		if err != nil || skipped != 1 || len(recs) != 3 {
 			t.Fatalf("History(%q): %v skipped %d %+v", pack, err, skipped, recs)
 		}
 		// Newest first, whatever the order in the file.
-		if recs[0].Commits[0].Subject != "new" {
-			t.Errorf("not newest first: %+v", recs)
+		if got := []string{recs[0].Commits[0].Subject, recs[1].Commits[0].Subject, recs[2].Commits[0].Subject[:3]}; !slices.Equal(got, []string{"new", "middle", "old"}) {
+			t.Errorf("not newest first: %q", got)
 		}
 		for _, r := range recs {
 			if hasControl(r.Commits[0].Subject) || hasControl(r.Changed[0]) {
