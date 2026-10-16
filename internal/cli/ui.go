@@ -8,6 +8,13 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 )
 
+func init() {
+	// Skip the OSC background-colour query: terminals that do not answer it
+	// (some embedded consoles, `script`, CI) would otherwise block every
+	// styled render. Our palette reads fine on light and dark backgrounds.
+	lipgloss.DefaultRenderer().SetHasDarkBackground(true)
+}
+
 // Styles. lipgloss disables colour on its own when stdout is not a terminal
 // or NO_COLOR is set.
 var (
