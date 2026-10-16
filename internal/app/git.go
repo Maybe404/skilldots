@@ -54,10 +54,11 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 	lib := s.Lib
 	if remote != "" {
 		if _, err := lib.Git("remote", "get-url", "origin"); err == nil {
-			if _, err := lib.Git("remote", "set-url", "origin", remote); err != nil {
+			// "--": a remote starting with "-" is a URL, never an option.
+			if _, err := lib.Git("remote", "set-url", "--", "origin", remote); err != nil {
 				return nil, err
 			}
-		} else if _, err := lib.Git("remote", "add", "origin", remote); err != nil {
+		} else if _, err := lib.Git("remote", "add", "--", "origin", remote); err != nil {
 			return nil, err
 		}
 	}
