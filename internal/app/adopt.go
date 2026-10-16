@@ -193,7 +193,21 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				s.logf(Done, "copied %s → %s", p.Item.Name, lib.Rel(dest))
 			}
 		case "drop":
-			// A dangling link holds no data.
+			// A dangling link holds no data. The path may have changed since
+			// the scan (a dialog can stay open for a while): anything that is
+			// not a dangling link any more is left alone.
+			if fi, err := os.Lstat(p.Item.Path); err != nil {
+				if !os.IsNotExist(err) {
+					s.logf(Warn, "%s: %v; not removing it", p.Item.Path, err)
+				}
+				continue
+			} else if fi.Mode()&os.ModeSymlink == 0 {
+				s.logf(Warn, "%s is no longer a broken link (something was put there since the scan); left in place", p.Item.Path)
+				continue
+			} else if _, err := os.Stat(p.Item.Path); err == nil {
+				s.logf(Warn, "%s is no longer a broken link (it points at something now); left in place", p.Item.Path)
+				continue
+			}
 			if err := os.Remove(p.Item.Path); err != nil {
 				return nil, err
 			}
