@@ -24,8 +24,9 @@ func configCmd() *cobra.Command {
 		Short: "Show or change your settings (editor, theme, lang)",
 		Long: "Settings are per user and per machine, in " + config.Path() + ". " +
 			"An empty value unsets a setting. lang is reserved: only English exists so far. " +
-			"set changes only that setting's line: your comments and other lines stay (a value written over several " +
-			"lines is the exception: then the file is written again, without comments).",
+			"set changes only that setting's line: your comments and other lines stay, and so does a comment at the end of " +
+			"that line (unsetting removes the line with it; a value written over several lines is the exception: then the " +
+			"file is written again, without comments). Lines end like the file's (LF or CRLF).",
 	}
 	list := &cobra.Command{
 		Use:   "list",

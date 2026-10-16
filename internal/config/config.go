@@ -203,15 +203,52 @@ func write(name, value string) error {
 	var b strings.Builder
 	b.WriteString("# skilldots settings: skd config list | get | set\n")
 	b.Write(body)
-	return fsutil.WriteAtomic(p, []byte(b.String()))
+	out := b.String()
+	// A file with Windows line endings keeps them.
+	if old, err := os.ReadFile(p); err == nil && lineEnd(old) == "\r\n" {
+		out = strings.ReplaceAll(out, "\n", "\r\n")
+	}
+	return fsutil.WriteAtomic(p, []byte(out))
+}
+
+// lineEnd is the line ending a file uses: "\r\n" when its first line
+// ends so, else "\n".
+func lineEnd(src []byte) string {
+	if i := strings.IndexByte(string(src), '\n'); i > 0 && src[i-1] == '\r' {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// comment is the comment that ends a key's line (with the space before
+// it), "" when there is none: the text from the first "#" up to which the
+// line reads as that key alone. A "#" inside the value does not count.
+func comment(line, name string) string {
+	body := strings.TrimRight(line, "\r\n")
+	for i := strings.IndexByte(body, '#'); i >= 0; {
+		m := map[string]any{}
+		if toml.Unmarshal([]byte(body[:i]), &m) == nil && len(m) == 1 && m[name] != nil {
+			pre := strings.TrimRight(body[:i], " \t")
+			return body[len(pre):]
+		}
+		j := strings.IndexByte(body[i+1:], '#')
+		if j < 0 {
+			break
+		}
+		i += j + 1
+	}
+	return ""
 }
 
 // editLine sets name to value (removes it when value is "") in the
 // top-level part of a settings file, before any [table], touching only
-// that key's line: comments and the other lines stay as they are. ok is
-// false when the file holds the key in a form this does not handle (a
-// value over several lines, say); write checks the result anyway.
+// that key's line: comments and the other lines stay as they are, so does
+// a comment at the end of that line (unless the key is removed: the line
+// goes with it), and a new or changed line ends like the file's lines.
+// ok is false when the file holds the key in a form this does not handle
+// (a value over several lines, say); write checks the result anyway.
 func editLine(src []byte, name, value string) (out []byte, ok bool) {
+	eol := lineEnd(src)
 	lines := strings.SplitAfter(string(src), "\n")
 	top := len(lines) // index of the first table header
 	at := -1
@@ -238,9 +275,13 @@ func editLine(src []byte, name, value string) (out []byte, ok bool) {
 		if err != nil {
 			return nil, false
 		}
-		line = string(b)
+		line = strings.TrimSuffix(string(b), "\n") + eol
 	}
 	switch {
+	case at >= 0 && line != "":
+		old := lines[at]
+		end := old[len(strings.TrimRight(old, "\r\n")):] // as it ended, or not at all
+		lines[at] = strings.TrimSuffix(line, eol) + comment(old, name) + end
 	case at >= 0:
 		lines[at] = line
 	case value == "":
@@ -258,7 +299,7 @@ func editLine(src []byte, name, value string) (out []byte, ok bool) {
 			ins--
 		}
 		if ins > 0 && !strings.HasSuffix(lines[ins-1], "\n") {
-			lines[ins-1] += "\n"
+			lines[ins-1] += eol
 		}
 		lines = append(lines[:ins], append([]string{line}, lines[ins:]...)...)
 	}

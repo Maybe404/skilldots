@@ -139,3 +139,40 @@ func TestSetKeepsComments(t *testing.T) {
 		t.Fatalf("multi-line: %v\n%s", err, read(t))
 	}
 }
+
+// A comment at the end of the changed line stays (a "#" inside the value
+// is not one), and a file with Windows line endings keeps them, on the
+// changed line, a new one, and when the file is written again.
+func TestSetKeepsLineCommentAndLineEndings(t *testing.T) {
+	sandbox(t)
+	os.MkdirAll(filepath.Dir(Path()), 0o755)
+	os.WriteFile(Path(), []byte("theme = \"dark\"   # was light\neditor = \"vim # not a comment\" # mine\n"), 0o644)
+	if err := Set(Theme, "light"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(Editor, "nano"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := read(t), "theme = 'light'   # was light\neditor = 'nano' # mine\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	os.WriteFile(Path(), []byte("# mine\r\ntheme = \"dark\" # was light\r\nlibrary = \"/x\""), 0o644)
+	if err := Set(Theme, "light"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(Editor, "code"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := read(t), "# mine\r\ntheme = 'light' # was light\r\nlibrary = \"/x\"\r\neditor = 'code'\r\n"; got != want {
+		t.Errorf("CRLF: got %q, want %q", got, want)
+	}
+	// Written again (a value over several lines): still CRLF.
+	os.WriteFile(Path(), []byte("# c\r\neditor = \"\"\"\r\nvim\"\"\"\r\n"), 0o644)
+	if err := Set(Editor, "nano"); err != nil || Get(Editor) != "nano" {
+		t.Fatalf("multi-line: %v", err)
+	}
+	if got := read(t); strings.Count(got, "\n") != strings.Count(got, "\r\n") {
+		t.Errorf("rewritten with LF: %q", got)
+	}
+}
