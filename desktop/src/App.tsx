@@ -1,122 +1,106 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import * as React from "react"
+import { MotionConfig } from "motion/react"
 
-function App() {
-  const [count, setCount] = useState(0)
+import { AppProvider, useApp } from "@/lib/app-state"
+import { CommandPalette } from "@/components/app/command-palette"
+import { AppSidebar, PendingBanner, Toolbar, searchInputId } from "@/components/app/shell"
+import { Dialogs } from "@/components/dialogs/dialogs"
+import { EditorPage } from "@/components/editor/editor-page"
+import { AgentsPage } from "@/components/pages/agents-page"
+import { HistoryPage } from "@/components/pages/history-page"
+import { Onboarding } from "@/components/pages/onboarding"
+import { ScanPage } from "@/components/pages/scan-page"
+import { SettingsPage } from "@/components/pages/settings-page"
+import { SkillsPage } from "@/components/pages/skills-page"
+import { SourcesPage } from "@/components/pages/sources-page"
+import { TrashPage } from "@/components/pages/trash-page"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/sonner"
+import { TooltipProvider } from "@/components/ui/tooltip"
 
+export default function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <AppProvider>
+      <MotionConfig reducedMotion="user">
+        <TooltipProvider delay={400}>
+          <Root />
+          <Toaster position="bottom-right" />
+        </TooltipProvider>
+      </MotionConfig>
+    </AppProvider>
   )
 }
 
-export default App
+function Root() {
+  const { ready, status } = useApp()
+  if (!ready) return null
+  if (!status?.root) return <Onboarding />
+  return <Shell />
+}
+
+function Shell() {
+  const { view, editing, setPaletteOpen, paletteOpen, openDialog, navigate, dialog } = useApp()
+
+  // Global shortcuts: ⌘K palette, ⌘N new skill, ⌘, settings, ⌘F search.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      const k = e.key.toLowerCase()
+      if (k === "k") {
+        e.preventDefault()
+        setPaletteOpen(!paletteOpen)
+      } else if (k === "n" && !dialog) {
+        e.preventDefault()
+        openDialog({ kind: "new" })
+      } else if (k === "," && !dialog) {
+        e.preventDefault()
+        navigate("settings")
+      } else if (k === "f" && view !== "editor" && !dialog) {
+        e.preventDefault()
+        document.getElementById(searchInputId)?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [paletteOpen, setPaletteOpen, openDialog, navigate, view, dialog])
+
+  const page = (() => {
+    switch (view) {
+      case "skills":
+        return <SkillsPage />
+      case "sources":
+        return <SourcesPage />
+      case "agents":
+        return <AgentsPage />
+      case "history":
+        return <HistoryPage />
+      case "scan":
+        return <ScanPage />
+      case "trash":
+        return <TrashPage />
+      case "settings":
+        return <SettingsPage />
+      default:
+        return null
+    }
+  })()
+
+  return (
+    <SidebarProvider className="h-svh">
+      <AppSidebar />
+      <SidebarInset className="h-[calc(100svh-1rem)] min-h-0 overflow-hidden">
+        {view === "editor" && editing ? (
+          <EditorPage skillRef={editing} />
+        ) : (
+          <>
+            <Toolbar />
+            <PendingBanner />
+            <div className="flex min-h-0 flex-1 flex-col">{page}</div>
+          </>
+        )}
+      </SidebarInset>
+      <Dialogs />
+      <CommandPalette />
+    </SidebarProvider>
+  )
+}
