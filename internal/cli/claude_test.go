@@ -12,7 +12,11 @@ func TestListMarksClaudeOff(t *testing.T) {
 	e.ok("", "init", "--no-skill", e.p("lib"))
 	e.ok("", "new", "notes")
 	e.ok("", "new", "other")
-	e.write(".claude/settings.json", `{"skillOverrides": {"notes": "off"}}`)
+	e.ok("", "new", "elsewhere")
+	// Only notes is linked for Claude; elsewhere is turned off there too,
+	// but Claude never sees it.
+	e.ok("", "enable", "notes", "--agent", "claude")
+	e.write(".claude/settings.json", `{"skillOverrides": {"notes": "off", "elsewhere": "off"}}`)
 	out, _, code := e.skd("", "list", "--json")
 	if code != 0 {
 		t.Fatal(out)
@@ -28,7 +32,7 @@ func TestListMarksClaudeOff(t *testing.T) {
 	for _, en := range entries {
 		got[en.Name] = en.ClaudeDisabled
 	}
-	if !got["notes"] || got["other"] {
+	if !got["notes"] || got["other"] || got["elsewhere"] {
 		t.Fatalf("list --json: %s", out)
 	}
 	if out := e.ok("", "list", "--flat"); !strings.Contains(out, "off in Claude Code") || !strings.Contains(out, "--agent claude") {

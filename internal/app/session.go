@@ -78,14 +78,15 @@ func (s *Session) logf(l Level, format string, a ...any) {
 
 // Resolve computes the library's entries. Per-entry problems go to Log as
 // Problem, each once per session. Entries Claude Code turned off are
-// marked (see ClaudeDisabled).
+// marked (see ClaudeDisabled): by the name Claude sees, the link name,
+// and only when the entry is linked for Claude (LinksForClaude).
 func (s *Session) Resolve() ([]engine.Entry, error) {
 	entries, warnings, err := engine.Resolve(s.Lib, s.Reg)
 	if s.claudeOff == nil {
 		s.claudeOff = ClaudeDisabled()
 	}
 	for i := range entries {
-		entries[i].ClaudeDisabled = s.claudeOff[entries[i].LinkName] || s.claudeOff[entries[i].Name]
+		entries[i].ClaudeDisabled = s.claudeOff[entries[i].LinkName] && LinksForClaude(entries[i])
 	}
 	for _, w := range warnings {
 		if s.warned == nil {

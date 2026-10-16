@@ -111,7 +111,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 
 `h` 原为“切到左栏”，现改为更新记录；切栏用 `←`、`tab`。
 
-**Claude Code 里关闭的 skill**：Claude Code 把用户在它里面关掉的 skill 记在 `~/.claude/settings.json`（设置了 `$CLAUDE_CONFIG_DIR` 时为其下的 `settings.json`）的 `skillOverrides`，形如 `{"name": "off"}`（`"disabled"` 或 `false` 也算）。skd 只读、**绝不写**该文件，缺失或格式错误静默忽略；按链接名或 skill 名匹配，在 `skd list`、仪表盘左右栏和详情里标 “off in Claude Code”，`list --json` 每项多 `ClaudeDisabled`。skd 照常链接；要彻底不装到 Claude，用 `e` 去掉 claude 目标（`skd disable <skill> --agent claude`）。
+**Claude Code 里关闭的 skill**：Claude Code 把用户在它里面关掉的 skill 记在 `~/.claude/settings.json`（设置了 `$CLAUDE_CONFIG_DIR` 时为其下的 `settings.json`）的 `skillOverrides`，形如 `{"name": "off"}`（`"disabled"` 或 `false` 也算）。skd 只读、**绝不写**该文件，缺失或格式错误静默忽略；只按链接名（Claude 在目录里看到的名字）匹配，且只标装到 claude 目标（或目录就是 Claude 的 `skills/` 的自定义目标）的条目：另一个包的同名 skill 以别名链接、或者根本不链接给 Claude 的，都不标；在 `skd list`、仪表盘左右栏和详情里标 “off in Claude Code”，`list --json` 每项多 `ClaudeDisabled`。skd 照常链接；要彻底不装到 Claude，用 `e` 去掉 claude 目标（`skd disable <skill> --agent claude`）。
 
 有操作在跑时，会启动新操作的键一律拒绝；错误显示在状态行。
 

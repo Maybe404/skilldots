@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Maybe404/skilldots/internal/engine"
 )
 
 // ClaudeSettingsPath is Claude Code's user settings file:
@@ -15,6 +17,19 @@ func ClaudeSettingsPath() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".claude", "settings.json")
+}
+
+// LinksForClaude reports whether e is linked where Claude Code reads
+// skills: the claude target, or any target whose directory is Claude's
+// (skills/ beside ClaudeSettingsPath).
+func LinksForClaude(e engine.Entry) bool {
+	dir := filepath.Join(filepath.Dir(ClaudeSettingsPath()), "skills")
+	for _, t := range e.Targets {
+		if t.Name == "claude" || filepath.Clean(t.Path) == dir {
+			return true
+		}
+	}
+	return false
 }
 
 // ClaudeDisabled returns the skills turned off inside Claude Code: its

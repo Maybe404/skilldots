@@ -116,7 +116,7 @@ All commands take `--json` for scripts and agents, `--yes` to skip prompts, and 
 
 While an operation runs, keys that would start another are refused; problems show on the status line.
 
-**Skills Claude Code turned off.** Claude Code keeps skills a person turned off inside it in `skillOverrides` of `~/.claude/settings.json` (`$CLAUDE_CONFIG_DIR/settings.json` when set). skd reads that file — never writes it, and ignores it when missing or malformed — and marks those skills `off in Claude Code` in `skd list` (`ClaudeDisabled` in `--json`) and the dashboard. skd still links them; to keep one out of Claude entirely, remove the claude target (`skd disable <skill> --agent claude`, or `e` in the dashboard).
+**Skills Claude Code turned off.** Claude Code keeps skills a person turned off inside it in `skillOverrides` of `~/.claude/settings.json` (`$CLAUDE_CONFIG_DIR/settings.json` when set). skd reads that file — never writes it, and ignores it when missing or malformed — and marks those skills `off in Claude Code` — matched by link name, the name Claude sees, and only for skills linked into Claude's directory — in `skd list` (`ClaudeDisabled` in `--json`) and the dashboard. skd still links them; to keep one out of Claude entirely, remove the claude target (`skd disable <skill> --agent claude`, or `e` in the dashboard).
 
 Colours follow the terminal: skd asks it for its background colour (giving up after 300 ms and assuming dark; it does not ask when you have already typed ahead, and keys typed while it waits are passed on to the dashboard) and uses a light or dark palette for the dashboard, the menu and every table. `--theme light` or `--theme dark` (or `SKILLDOTS_THEME`) skips the question.
 

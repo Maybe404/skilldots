@@ -3,17 +3,19 @@ package app_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/manifest"
 )
 
 func TestClaudeDisabled(t *testing.T) {
 	up := upstream(t)
 	home, root := side(t, up)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
-	runCLI(t, root, "add", "acme/skills", "--skill", "tdd,review")
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd,review", "--agent", "agents,claude")
 	settings := filepath.Join(home, ".claude", "settings.json")
 	marked := func() map[string]bool {
 		t.Helper()
@@ -65,5 +67,42 @@ func TestClaudeDisabled(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"skillOverrides": {"review": "off"}}`), 0o644)
 	if m := marked(); !m["review"] || len(m) != 1 {
 		t.Fatalf("with CLAUDE_CONFIG_DIR: %v", m)
+	}
+}
+
+// Claude Code names a skill by the directory it finds, the link name, and
+// only sees what is linked into its own directory: a vendored skill
+// linked under another name, or one not linked for Claude, is not marked
+// because of a same-named override.
+func TestClaudeDisabledMatchesWhatClaudeSees(t *testing.T) {
+	up := upstream(t)
+	home, root := side(t, up)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	if err := manifest.New([]string{"agents", "claude"}).Save(filepath.Join(root, manifest.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, "skills", "tdd", "SKILL.md"), skillMD("tdd"))
+	runCLI(t, root, "add", "acme/skills", "--skill", "tdd,review,grill")
+	runCLI(t, root, "disable", "review", "--agent", "claude")
+	os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"skillOverrides": {"tdd": "off", "review": "off", "grill": "off"}}`), 0o644)
+	s, _ := app.Open(root)
+	entries, err := s.Resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, e := range entries {
+		got[string(e.Kind)+":"+e.LinkName] = e.ClaudeDisabled
+	}
+	want := map[string]bool{"skills:tdd": true, "vendor:review": false, "vendor:grill": true}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s marked %v, want %v (all: %v)", k, got[k], v, got)
+		}
+	}
+	for k, v := range got {
+		if strings.HasPrefix(k, "vendor:") && k != "vendor:review" && k != "vendor:grill" && v {
+			t.Errorf("%s (the vendored tdd, linked under another name) is marked", k)
+		}
 	}
 }
