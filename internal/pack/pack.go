@@ -3,6 +3,7 @@
 package pack
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
@@ -84,28 +86,72 @@ func CachePath(repo string) string {
 
 var (
 	holdMu sync.Mutex
-	holds  = map[string]*sync.Mutex{}
+	holds  = map[string]chan struct{}{}
 )
 
-// Hold locks repo's cache clone against other users in this process (the
-// dashboard checks upstream in the background while an update may run)
-// and returns the unlock function. Fetch, Scan of a clone and anything
-// copied out of it belong inside one Hold. It is not reentrant.
+// holdPoll is how often HoldContext retries a lock another process has.
+const holdPoll = 50 * time.Millisecond
+
+// Hold locks repo's cache clone for this caller, against other goroutines
+// (the dashboard checks upstream in the background while an update may
+// run) and other skd processes (a file lock beside the clone), and
+// returns the unlock function. Fetch, Scan of a clone and anything copied
+// out of it belong inside one Hold. It is not reentrant.
 func Hold(repo string) (unlock func()) {
+	unlock, _ = HoldContext(context.Background(), repo)
+	return unlock
+}
+
+// HoldContext is Hold that gives up when ctx is done. When the lock file
+// cannot be created (no cache directory yet, read-only cache) only the
+// in-process lock is taken: git reports any clash itself.
+func HoldContext(ctx context.Context, repo string) (unlock func(), err error) {
 	holdMu.Lock()
-	m := holds[repo]
-	if m == nil {
-		m = &sync.Mutex{}
-		holds[repo] = m
+	sem := holds[repo]
+	if sem == nil {
+		sem = make(chan struct{}, 1)
+		holds[repo] = sem
 	}
 	holdMu.Unlock()
-	m.Lock()
-	return m.Unlock
+	select {
+	case sem <- struct{}{}:
+	case <-ctx.Done():
+		return func() {}, ctx.Err()
+	}
+	release := func() { <-sem }
+	path := CachePath(repo) + ".lock"
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return release, nil
+	}
+	for {
+		ok, err := tryLock(f)
+		if err != nil {
+			f.Close()
+			return release, nil
+		}
+		if ok {
+			return func() { unlockFile(f); f.Close(); release() }, nil
+		}
+		select {
+		case <-time.After(holdPoll):
+		case <-ctx.Done():
+			f.Close()
+			release()
+			return func() {}, ctx.Err()
+		}
+	}
 }
 
 // Fetch clones or updates the cache clone and returns its path and HEAD
 // commit. Callers Hold the repository.
 func Fetch(src Source) (dir, commit string, err error) {
+	return FetchContext(context.Background(), src)
+}
+
+// FetchContext is Fetch that stops git when ctx is done.
+func FetchContext(ctx context.Context, src Source) (dir, commit string, err error) {
 	dir = CachePath(src.Repo)
 	if !fsutil.Exists(filepath.Join(dir, ".git")) {
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
@@ -116,7 +162,7 @@ func Fetch(src Source) (dir, commit string, err error) {
 			args = append(args, "--branch", src.Ref)
 		}
 		args = append(args, src.URL, dir)
-		if _, err := library.Git("", args...); err != nil {
+		if _, err := library.GitContext(ctx, "", args...); err != nil {
 			os.RemoveAll(dir)
 			return "", "", err
 		}
@@ -125,15 +171,40 @@ func Fetch(src Source) (dir, commit string, err error) {
 		if ref == "" {
 			ref = "HEAD"
 		}
-		if _, err := library.Git(dir, "fetch", "-q", "--depth", "1", "origin", ref); err != nil {
-			return "", "", err
+		update := func() error {
+			if _, err := library.GitContext(ctx, dir, "fetch", "-q", "--depth", "1", "origin", ref); err != nil {
+				return err
+			}
+			_, err := library.GitContext(ctx, dir, "reset", "-q", "--hard", "FETCH_HEAD")
+			return err
 		}
-		if _, err := library.Git(dir, "reset", "-q", "--hard", "FETCH_HEAD"); err != nil {
-			return "", "", err
+		if err := update(); err != nil {
+			// Under Hold nobody else uses the clone: a git lock file left
+			// in it is stale (a git killed half-way, or an skd from before
+			// the clone was locked). Clear it and try once more.
+			if ctx.Err() != nil || !staleLocks(dir) {
+				return "", "", err
+			}
+			if err := update(); err != nil {
+				return "", "", err
+			}
 		}
 	}
-	commit, err = library.Git(dir, "rev-parse", "HEAD")
+	commit, err = library.GitContext(ctx, dir, "rev-parse", "HEAD")
 	return dir, commit, err
+}
+
+// staleLocks removes the lock files git leaves when it is stopped half-way
+// through a fetch or reset, and reports whether there were any.
+func staleLocks(dir string) bool {
+	found := false
+	for _, f := range []string{"shallow.lock", "index.lock", "HEAD.lock", "FETCH_HEAD.lock"} {
+		p := filepath.Join(dir, ".git", f)
+		if fsutil.Lexists(p) && os.Remove(p) == nil {
+			found = true
+		}
+	}
+	return found
 }
 
 // Skill is one skill discovered in a repository.

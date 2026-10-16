@@ -200,3 +200,70 @@ func TestOutdatedMoved(t *testing.T) {
 		t.Fatalf("list shows an update for a move:\n%s", out)
 	}
 }
+
+// Two skd processes fetching the same pack at once (a cron job and the
+// dashboard, say) share one cache clone; neither may fail on the other's
+// git lock files. A slow upload-pack makes the fetches overlap.
+func TestOutdatedConcurrentProcesses(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script upload-pack")
+	}
+	e := newEnv(t)
+	e.ok("", "init", "--no-skill", e.p("lib"))
+	e.skill("up/skills/a", "a")
+	up := e.repo("up")
+	e.ok("", "add", up, "--skill", "a")
+	e.write("slowup", "#!/bin/sh\nsleep 0.4\nexec git-upload-pack \"$@\"\n")
+	os.Chmod(e.p("slowup"), 0o755)
+	e.write("gitconfig", "[remote \"origin\"]\n\tuploadpack = "+e.p("slowup")+"\n")
+	for i, v := range e.vars {
+		if strings.HasPrefix(v, "GIT_CONFIG_GLOBAL=") {
+			e.vars[i] = "GIT_CONFIG_GLOBAL=" + e.p("gitconfig")
+		}
+	}
+	for round := 0; round < 3; round++ {
+		e.write("up/skills/a/more.md", fmt.Sprintf("round %d\n", round))
+		e.git(up, "add", "-A")
+		e.git(up, "commit", "-qm", fmt.Sprint(round))
+		type res struct {
+			out  string
+			code int
+		}
+		done := make(chan res, 2)
+		for i := 0; i < 2; i++ {
+			go func() {
+				out, errOut, code := e.skd("", "outdated")
+				done <- res{out + errOut, code}
+			}()
+		}
+		for i := 0; i < 2; i++ {
+			if r := <-done; r.code != 0 {
+				t.Fatalf("round %d: concurrent outdated failed (exit %d):\n%s", round, r.code, r.out)
+			}
+		}
+	}
+}
+
+// A git killed half-way leaves shallow.lock in the cache clone; with the
+// clone locked, skd knows it is stale and clears it.
+func TestStaleCacheLockCleared(t *testing.T) {
+	e := newEnv(t)
+	e.ok("", "init", "--no-skill", e.p("lib"))
+	e.skill("up/skills/a", "a")
+	up := e.repo("up")
+	e.ok("", "add", up, "--skill", "a")
+	clones, _ := filepath.Glob(e.p("cache/*/.git"))
+	if len(clones) != 1 {
+		t.Fatalf("cache clones: %v", clones)
+	}
+	e.write("up/skills/a/more.md", "more\n")
+	e.git(up, "add", "-A")
+	e.git(up, "commit", "-qm", "2")
+	os.WriteFile(filepath.Join(clones[0], "shallow.lock"), nil, 0o644)
+	if out, errOut, code := e.skd("", "outdated"); code != 0 || !strings.Contains(out, "changed") {
+		t.Fatalf("outdated with a stale lock: exit %d\n%s%s", code, out, errOut)
+	}
+	if _, err := os.Stat(filepath.Join(clones[0], "shallow.lock")); err == nil {
+		t.Fatal("stale shallow.lock still there")
+	}
+}

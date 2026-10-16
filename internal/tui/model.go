@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -167,6 +169,8 @@ type Model struct {
 	checkErr  string                    // why it failed, for checkFailed
 	outdated  map[string]app.PackStatus // by repo, from the last check
 	checkFail []app.Failure             // packs the last check could not fetch
+	// checks lets Run stop a check still running when the dashboard quits.
+	checks *checkControl
 	// jobs counts operations still running, shared by every copy of the
 	// model so Run can wait for them after the program stops.
 	jobs *tracker
@@ -226,6 +230,46 @@ func (t *tracker) close() <-chan struct{} {
 	return ch
 }
 
+// checkControl is shared by every copy of the model: the cancel function
+// of the running upstream check, and a count of checks still running.
+type checkControl struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+}
+
+// begin returns the context for a new check.
+func (c *checkControl) begin() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	c.mu.Lock()
+	c.cancel = cancel
+	c.mu.Unlock()
+	c.wg.Add(1)
+	return ctx
+}
+
+// stop cancels a running check and waits up to timeout for its git to
+// end, so quitting leaves no git behind and is never held up for long.
+// It reports whether the check ended in time.
+func (c *checkControl) stop(timeout time.Duration) bool {
+	c.mu.Lock()
+	if c.cancel != nil {
+		c.cancel()
+	}
+	c.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 // New builds the dashboard around an initial snapshot.
 func New(ops Ops, snap *Snapshot, theme Theme, version string) Model {
 	fi := textinput.New()
@@ -233,7 +277,7 @@ func New(ops Ops, snap *Snapshot, theme Theme, version string) Model {
 	fi.CharLimit = 64
 	sp := spinner.New(spinner.WithSpinner(spinner.MiniDot))
 	m := Model{ops: ops, theme: theme, surf: theme.surfaces(), version: version, snap: snap,
-		finput: fi, spin: sp, reports: map[string]*engine.SyncReport{}, jobs: newTracker()}
+		finput: fi, spin: sp, reports: map[string]*engine.SyncReport{}, jobs: newTracker(), checks: &checkControl{}}
 	m.spin.Style = m.spin.Style.Foreground(theme.Accent)
 	m.left.cur = m.firstSelectable(m.leftRows())
 	if len(snap.Warnings) > 0 {
@@ -684,9 +728,14 @@ func (m Model) startCheck() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.check = checkRunning
-	ops := m.ops
+	ops, checks := m.ops, m.checks
+	ctx := checks.begin()
 	run := func() tea.Msg {
-		out, err := ops.Check()
+		defer checks.wg.Done()
+		out, err := ops.Check(ctx)
+		if ctx.Err() != nil {
+			return nil // the dashboard quit
+		}
 		var snap *Snapshot
 		if err == nil {
 			snap, _ = ops.Load()

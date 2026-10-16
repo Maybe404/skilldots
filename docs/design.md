@@ -30,7 +30,7 @@ skilldots（命令 `skd`）：声明式管理本机所有 agent 工具的 skills
 └── vendor/<owner>/<repo>/<分类>/<名>/   第三方，工具拉取，不手改；每个 repo 附 LICENSE
 ```
 
-缓存：`~/.cache/skilldots/repos/<owner>__<repo>`，浅克隆，一个仓库一份，只做加速，可随时删。
+缓存：`~/.cache/skilldots/repos/<owner>__<repo>`，浅克隆，一个仓库一份，只做加速，可随时删。每份克隆旁有 `<owner>__<repo>.lock`：fetch、扫描、拷出都在这把锁里（进程内互斥加跨进程 flock，Windows 用 LockFileEx；等锁可取消），两个 skd 同时 fetch 同一仓库时排队而不是撞 git 的 `shallow.lock`；持锁时克隆里残留的 git 锁文件（被杀的 git 留下）视为陈旧，删掉后重试一次。
 
 ## skills.toml
 
@@ -92,7 +92,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `space` | 启用/停用；上游未装的直接安装 | `enable` / `disable` / `add --skill` |
 | `a` | 加仓库：勾选 skill 或整个分类（`*` 跟随全部），再选 alias、目标 agent，均可留空 | `add` |
 | `u` / `U` | 更新当前包 / 所有检查出有更新的包（检查未成功前为全部） | `update` |
-| `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆在进程内加锁，与 update/add 串行）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream` / `moved upstream (path only)`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
+| `c` | 重新检查上游。仪表盘启动后在后台静默跑一次（不算“操作在跑”，不拒绝任何键；同一仓库的缓存克隆加锁，与 update/add 及其他 skd 进程串行；退出时取消检查：git 及其子进程收到 SIGTERM（独立进程组，git 借此清理锁文件），1 秒后仍在的被杀，退出最多等 2 秒，不留 git 进程）：顶栏 `↑ N packs have updates`，左栏 pack 带 `↑`，右栏 `↑ changed` / `new upstream` / `gone upstream` / `moved upstream (path only)`；失败时顶栏 `check failed`，原因在状态行 | `outdated` |
 | `e` | 选目标 agent | `enable/disable --agent` |
 | `f` | fork，可改名，选 skills/ 或 private/ | `fork [--as] [--private]` |
 | `d` | 删 vendor skill（进 trash）/ 取消链接自己的 / purge 包 | `remove` / `disable` / `purge` |

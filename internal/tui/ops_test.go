@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -311,7 +312,7 @@ func TestCheckBesideOperations(t *testing.T) {
 	run(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c2")
 
 	errs := make(chan error, 3)
-	go func() { _, err := o.Check(); errs <- err }()
+	go func() { _, err := o.Check(context.Background()); errs <- err }()
 	go func() { _, _, err := o.Update(nil); errs <- err }()
 	go func() { _, err := o.Load(); errs <- err }()
 	for i := 0; i < 3; i++ {
@@ -319,7 +320,7 @@ func TestCheckBesideOperations(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, err := o.Check()
+	out, err := o.Check(context.Background())
 	if err != nil || len(out.Failed) > 0 || out.Updates() != 0 {
 		t.Fatalf("after the update: %+v, %v", out, err)
 	}

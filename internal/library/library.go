@@ -5,12 +5,14 @@ package library
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -164,11 +166,27 @@ func CacheDir() string {
 
 // Git runs git in dir and returns trimmed stdout.
 func Git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	return GitContext(context.Background(), dir, args...)
+}
+
+// GitContext is Git that stops when ctx is done. Then git and everything
+// it started (a transport helper, ssh, upload-pack) are asked to stop
+// with SIGTERM, on which git removes its lock files; whatever is still
+// running after a second is killed. A ctx that can never be done runs
+// git exactly as Git always has.
+func GitContext(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	if ctx.Done() != nil {
+		cancelTree(cmd)
+		cmd.WaitDelay = time.Second
+	}
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), ctx.Err())
+		}
 		msg := strings.TrimSpace(errb.String())
 		if msg == "" {
 			msg = err.Error()

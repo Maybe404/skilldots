@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -116,7 +117,7 @@ func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
 	return []*engine.SyncReport{{Repo: "mattpocock/skills", OldCommit: "1111111", NewCommit: "2222222",
 		Changed: []string{"tdd"}, UpstreamNew: []string{"fresh"}}}, "updated", nil
 }
-func (f *fakeOps) Check() (*app.Outdated, error) {
+func (f *fakeOps) Check(ctx context.Context) (*app.Outdated, error) {
 	f.rec("check")
 	f.mu.Lock()
 	defer f.mu.Unlock()

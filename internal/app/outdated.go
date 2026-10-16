@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,6 +95,12 @@ func (o *Outdated) Find(repo string) *PackStatus {
 // user's state file (see OutdatedPath) for `list`, the menu and the
 // dashboard. each, when set, is told about every pack as it is done.
 func (s *Session) Outdated(repos []string, each func(repo string, st *PackStatus, err error)) (*Outdated, error) {
+	return s.OutdatedContext(context.Background(), repos, each)
+}
+
+// OutdatedContext is Outdated that stops when ctx is done: git is stopped,
+// nothing is recorded and ctx's error is returned.
+func (s *Session) OutdatedContext(ctx context.Context, repos []string, each func(repo string, st *PackStatus, err error)) (*Outdated, error) {
 	m := s.Lib.Manifest
 	var packs []*manifest.Pack
 	if len(repos) == 0 {
@@ -108,7 +115,10 @@ func (s *Session) Outdated(repos []string, each func(repo string, st *PackStatus
 	}
 	out := &Outdated{Checked: time.Now(), Packs: []PackStatus{}, Failed: []Failure{}}
 	for _, p := range packs {
-		st, err := s.checkPack(p)
+		st, err := s.checkPack(ctx, p)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if each != nil {
 			each(p.Repo, st, err)
 		}
@@ -126,14 +136,18 @@ func (s *Session) Outdated(repos []string, each func(repo string, st *PackStatus
 
 // checkPack fetches one pack's upstream into the cache and compares it
 // with the lock.
-func (s *Session) checkPack(p *manifest.Pack) (*PackStatus, error) {
+func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus, error) {
 	src, err := pack.ParseSource(p.Repo)
 	if err != nil {
 		return nil, err
 	}
 	src.Ref = p.Ref
-	defer pack.Hold(p.Repo)()
-	clone, commit, err := pack.Fetch(src)
+	unlock, err := pack.HoldContext(ctx, p.Repo)
+	defer unlock()
+	if err != nil {
+		return nil, err
+	}
+	clone, commit, err := pack.FetchContext(ctx, src)
 	if err != nil {
 		return nil, err
 	}

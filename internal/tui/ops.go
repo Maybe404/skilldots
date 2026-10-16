@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -31,7 +32,8 @@ type Ops interface {
 	Update(repos []string) ([]*engine.SyncReport, string, error)
 	// Check fetches every pack's upstream into the cache and compares it
 	// with what is vendored, changing nothing (skd outdated).
-	Check() (*app.Outdated, error)
+	// It stops, with ctx's error, when ctx is done.
+	Check(ctx context.Context) (*app.Outdated, error)
 	// Fork copies a skill into skills/ or private/ as name ("" keeps its name).
 	Fork(s Skill, private bool, name string) (string, error)
 	// Trash takes a skill out of use: a vendored skill is deselected and
@@ -298,12 +300,12 @@ func (o *libOps) Update(repos []string) ([]*engine.SyncReport, string, error) {
 }
 
 // Check mirrors `skd outdated`.
-func (o *libOps) Check() (*app.Outdated, error) {
+func (o *libOps) Check(ctx context.Context) (*app.Outdated, error) {
 	s, err := o.open()
 	if err != nil {
 		return nil, err
 	}
-	return s.Outdated(nil, nil)
+	return s.OutdatedContext(ctx, nil, nil)
 }
 
 // Fork mirrors `skd fork <skill> [--private] [--as name]`.

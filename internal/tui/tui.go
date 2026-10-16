@@ -64,6 +64,12 @@ func Run(o Options) error {
 		}
 		force = fm.forceQuit
 	}
+	// A background upstream check is only a check: stop it rather than
+	// wait for a slow network, and wait just long enough for its git to
+	// exit (it removes its lock files on the way out).
+	if !m.checks.stop(checkGrace) {
+		fmt.Fprintln(os.Stderr, "skd: the upstream check did not stop in time; its git may still be running")
+	}
 	stop := func() error { return stopDescendants(os.Getpid(), stopGrace) }
 	if werr := waitJobs(m.jobs, label, sigs, force, stop); werr != nil {
 		return werr
@@ -75,6 +81,9 @@ func Run(o Options) error {
 // (git removes its lock files) before they are killed, and how long Run
 // then waits for the job itself to notice.
 const stopGrace = 2 * time.Second
+
+// checkGrace is how long quitting waits for a cancelled upstream check.
+const checkGrace = 2 * time.Second
 
 // quietGit keeps git from prompting on the terminal the dashboard owns: a
 // credential or passphrase prompt would draw over it and hang. git fails
