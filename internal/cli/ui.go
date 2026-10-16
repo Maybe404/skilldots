@@ -2,45 +2,120 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"golang.org/x/term"
+
+	"github.com/Maybe404/skilldots/internal/termbg"
 )
 
 func init() {
-	// Skip the OSC background-colour query: terminals that do not answer it
-	// (some embedded consoles, `script`, CI) would otherwise block every
-	// styled render. Our palette reads fine on light and dark backgrounds.
-	lipgloss.DefaultRenderer().SetHasDarkBackground(true)
+	// lipgloss never asks the terminal itself (see internal/termbg's init:
+	// termenv would wait up to five seconds); setupTheme asks with a short
+	// timeout and sets the result.
+	usePalette(darkPalette)
 }
 
-// Palette. One accent (violet) for brand and selection, one secondary
-// (cyan) for links and counts, and a muted grey for everything that should
-// not compete for attention. lipgloss degrades these to the terminal's
+// palette is one colour scheme. Both share hues: one accent (violet) for
+// brand and selection, one secondary (cyan) for links and counts, a muted
+// grey for everything that should not compete for attention, and the
+// three status colours. lipgloss degrades these to the terminal's
 // capabilities and disables colour when stdout is not a terminal or
 // NO_COLOR is set.
-var (
-	cAccent = lipgloss.Color("#A78BFA")
-	cCyan   = lipgloss.Color("#67E8F9")
-	cMuted  = lipgloss.Color("#8B8FA3")
-	cFaint  = lipgloss.Color("#3F4257")
-	cOK     = lipgloss.Color("#4ADE80")
-	cWarn   = lipgloss.Color("#FBBF24")
-	cErr    = lipgloss.Color("#F87171")
-	cText   = lipgloss.Color("#E5E7EB")
+type palette struct {
+	Accent, Cyan, Muted, Faint, OK, Warn, Err, Text lipgloss.Color
+	// Ink is the background end of the scheme: text on accent buttons,
+	// and the base the dashboard derives its surfaces from.
+	Ink   lipgloss.Color
+	Light bool
+}
 
-	sTitle  = lipgloss.NewStyle().Bold(true).Foreground(cText)
-	sDim    = lipgloss.NewStyle().Foreground(cMuted)
+var (
+	darkPalette = palette{Accent: "#A78BFA", Cyan: "#67E8F9", Muted: "#8B8FA3", Faint: "#3F4257",
+		OK: "#4ADE80", Warn: "#FBBF24", Err: "#F87171", Text: "#E5E7EB", Ink: "#1A1B26"}
+	// Same hues, dark enough to read on white (each at least 4.5:1 except
+	// Faint, which is for what may be skipped).
+	lightPalette = palette{Accent: "#6D28D9", Cyan: "#0E7490", Muted: "#5B6072", Faint: "#A3A7B8",
+		OK: "#15803D", Warn: "#B45309", Err: "#B91C1C", Text: "#1E2030", Ink: "#FFFFFF", Light: true}
+)
+
+var (
+	pal palette
+
+	cAccent, cCyan, cMuted, cFaint, cOK, cWarn, cErr, cText lipgloss.Color
+
+	sTitle, sDim, sAccent, sCyan, sOK, sWarn, sErr, sHead, sBrand, sCard lipgloss.Style
+)
+
+// usePalette makes p the colours of every prompt, table and the dashboard.
+func usePalette(p palette) {
+	pal = p
+	cAccent, cCyan, cMuted, cFaint, cOK, cWarn, cErr, cText = p.Accent, p.Cyan, p.Muted, p.Faint, p.OK, p.Warn, p.Err, p.Text
+	sTitle = lipgloss.NewStyle().Bold(true).Foreground(cText)
+	sDim = lipgloss.NewStyle().Foreground(cMuted)
 	sAccent = lipgloss.NewStyle().Foreground(cAccent)
-	sCyan   = lipgloss.NewStyle().Foreground(cCyan)
-	sOK     = lipgloss.NewStyle().Foreground(cOK)
-	sWarn   = lipgloss.NewStyle().Foreground(cWarn)
-	sErr    = lipgloss.NewStyle().Foreground(cErr)
-	sHead   = lipgloss.NewStyle().Foreground(cMuted).Bold(true)
-	sBrand  = lipgloss.NewStyle().Bold(true).Foreground(cAccent)
-	sCard   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cFaint).Padding(0, 2)
+	sCyan = lipgloss.NewStyle().Foreground(cCyan)
+	sOK = lipgloss.NewStyle().Foreground(cOK)
+	sWarn = lipgloss.NewStyle().Foreground(cWarn)
+	sErr = lipgloss.NewStyle().Foreground(cErr)
+	sHead = lipgloss.NewStyle().Foreground(cMuted).Bold(true)
+	sBrand = lipgloss.NewStyle().Bold(true).Foreground(cAccent)
+	sCard = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cFaint).Padding(0, 2)
+	lipgloss.DefaultRenderer().SetHasDarkBackground(!p.Light)
+}
+
+// EnvTheme overrides the theme when --theme is not given.
+const EnvTheme = "SKILLDOTS_THEME"
+
+// setupTheme picks the palette: --theme, else $SKILLDOTS_THEME, else auto.
+// auto asks the terminal for its background (termbg.Timeout at most) and
+// assumes dark when it cannot tell. Nothing is asked when no colour would
+// be printed anyway: --json, NO_COLOR, TERM=dumb, or stdout not a terminal.
+func setupTheme(flag string) error {
+	mode := strings.ToLower(strings.TrimSpace(flag))
+	if mode == "" {
+		mode = strings.ToLower(strings.TrimSpace(os.Getenv(EnvTheme)))
+	}
+	// The menu runs commands in-process; ask the terminal once.
+	if mode == themeDone {
+		return nil
+	}
+	switch mode {
+	case "", "auto":
+		p := darkPalette
+		quiet := flags.json || os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" || !stdoutIsTerminal()
+		if !quiet {
+			if light, ok := detectBackground(termbg.Timeout); ok && light {
+				p = lightPalette
+			}
+		}
+		usePalette(p)
+	case "dark":
+		usePalette(darkPalette)
+	case "light":
+		usePalette(lightPalette)
+	default:
+		src := "--theme"
+		if flag == "" {
+			src = "$" + EnvTheme
+		}
+		return fmt.Errorf("%s %q: use light, dark or auto", src, mode)
+	}
+	themeDone = mode
+	return nil
+}
+
+// themeDone is the mode setupTheme last settled.
+var themeDone = "-"
+
+// detectBackground and stdoutIsTerminal are replaceable in tests.
+var (
+	detectBackground = termbg.Detect
+	stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 )
 
 func cyan(s string) string { return sCyan.Render(s) }
@@ -59,7 +134,7 @@ func theme() *huh.Theme {
 	t.Focused.UnselectedPrefix = t.Focused.UnselectedPrefix.Foreground(cFaint).SetString("○ ")
 	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(cText)
 	t.Focused.Option = t.Focused.Option.Foreground(cText)
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Background(cAccent).Foreground(lipgloss.Color("#1A1B26")).Bold(true)
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Background(cAccent).Foreground(pal.Ink).Bold(true)
 	t.Focused.BlurredButton = t.Focused.BlurredButton.Background(cFaint).Foreground(cText)
 	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(cAccent)
 	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(cAccent)

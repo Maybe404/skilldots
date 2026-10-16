@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -25,6 +24,7 @@ var flags struct {
 	library string
 	json    bool
 	yes     bool
+	theme   string
 }
 
 // ctx is everything a command needs once the library is open.
@@ -124,6 +124,9 @@ func Root() *cobra.Command {
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return setupTheme(flags.theme)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !isTerminal() {
 				return errNoTTY
@@ -145,6 +148,7 @@ func Root() *cobra.Command {
 	root.PersistentFlags().StringVar(&flags.library, "library", "", "library directory (default: $"+library.EnvLibrary+", nearest skills.toml, the one set by `skd use`, or ~/.skilldots)")
 	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
 	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
+	root.PersistentFlags().StringVar(&flags.theme, "theme", "", "colours: light, dark or auto (default auto: ask the terminal; also $"+EnvTheme+")")
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), enableCmd(), disableCmd(),
 		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd())
 	return root
@@ -180,6 +184,6 @@ func dashboardLibrary(simple bool) (string, bool) {
 func runDashboard(root string) error {
 	return tui.Run(tui.Options{Root: root, Version: Version, Theme: tui.Theme{
 		Accent: cAccent, Cyan: cCyan, Muted: cMuted, Faint: cFaint, OK: cOK, Warn: cWarn, Err: cErr, Text: cText,
-		Ink: lipgloss.Color("#1A1B26"), // the button ink in theme()
+		Ink: pal.Ink, Light: pal.Light,
 	}})
 }

@@ -15,9 +15,12 @@ import (
 // plain commands look like one product; tui never defines its own palette.
 type Theme struct {
 	Accent, Cyan, Muted, Faint, OK, Warn, Err, Text lipgloss.Color
-	// Ink is the darkest tone (text on accent buttons in the CLI theme). It
-	// anchors the surface shades below.
+	// Ink is the background end of the palette (text on accent buttons in
+	// the CLI theme): the darkest tone of a dark palette, the lightest of a
+	// light one. It anchors the surface shades below.
 	Ink lipgloss.Color
+	// Light is set for a palette meant for a light terminal background.
+	Light bool
 }
 
 // surfaces are derived from the palette: Ink tinted towards Faint or
@@ -36,6 +39,16 @@ func blend(a, b lipgloss.Color, t float64) lipgloss.Color {
 }
 
 func (t Theme) surfaces() surfaces {
+	if t.Light {
+		// On white, a little of Faint already reads as a layer.
+		return surfaces{
+			bar:    blend(t.Ink, t.Faint, 0.40),
+			panel:  blend(t.Ink, t.Faint, 0.12),
+			sel:    blend(t.Ink, t.Accent, 0.16),
+			selDim: blend(t.Ink, t.Faint, 0.28),
+			modal:  blend(t.Ink, t.Faint, 0.24),
+		}
+	}
 	return surfaces{
 		bar:    blend(t.Ink, t.Faint, 0.85),
 		panel:  blend(t.Ink, t.Faint, 0.30),
