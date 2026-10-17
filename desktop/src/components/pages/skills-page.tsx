@@ -9,11 +9,11 @@ import {
   useTable,
   type SortingState,
 } from "@tanstack/react-table"
-import { ArrowDown, ArrowUp, Check, ChevronsUpDown, SearchX } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, ChevronsUpDown, Columns3, SearchX } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { PLACEHOLDER_DESC, useApp, useEnabledAgents, type SkillFilter } from "@/lib/app-state"
-import type { Agent, Skill } from "@/lib/backend"
+import { backend, type Agent, type Skill } from "@/lib/backend"
 import { useSkillActions } from "@/lib/use-actions"
 import { KindBadge, OffRing, UpdateDot } from "@/components/app/bits"
 import { SkillDetail } from "@/components/app/skill-detail"
@@ -22,6 +22,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 const features = tableFeatures({
@@ -51,7 +52,7 @@ export function matchesQuery(s: Skill, q: string) {
 }
 
 export function SkillsPage() {
-  const { t, skills, updatable, overrides, query, setQuery, filter, setFilter, selected, select } = useApp()
+  const { t, skills, agents: allAgents, updatable, overrides, query, setQuery, filter, setFilter, selected, select, run, reload } = useApp()
   const agents = useEnabledAgents(true)
   const { setAgent } = useSkillActions()
   const [sorting, setSorting] = React.useState<SortingState>([])
@@ -141,21 +142,42 @@ export function SkillsPage() {
             <h1 className="text-[1.35rem] leading-tight font-semibold tracking-tight">{t("navSkills")}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{t("skillsCount", { n: skills.length })}</p>
           </div>
-          <ToggleGroup
-            aria-label={t("filterLabel")}
-            value={[filter]}
-            onValueChange={(v) => v[0] && setFilter(v[0] as SkillFilter)}
-            variant="outline"
-            size="sm"
-            spacing={0}
-          >
-            {options.map(([value, label, n]) => (
-              <ToggleGroupItem key={value} value={value} className="gap-1.5 aria-pressed:bg-primary aria-pressed:text-primary-foreground data-[pressed]:bg-primary data-[pressed]:text-primary-foreground">
-                {label}
-                <span className="tabular-nums opacity-70">{n}</span>
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ToggleGroup
+              aria-label={t("filterLabel")}
+              value={[filter]}
+              onValueChange={(v) => v[0] && setFilter(v[0] as SkillFilter)}
+              variant="outline"
+              size="sm"
+              spacing={0}
+            >
+              {options.map(([value, label, n]) => (
+                <ToggleGroupItem key={value} value={value} className="gap-1.5 aria-pressed:bg-primary aria-pressed:text-primary-foreground data-[pressed]:bg-primary data-[pressed]:text-primary-foreground">
+                  {label}
+                  <span className="tabular-nums opacity-70">{n}</span>
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="sm" aria-label={t("agentColumns")} />}>
+                <Columns3 /> {t("agentColumns")}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">{t("agentColumnsHint")}</div>
+                {allAgents.filter((a) => a.enabled).map((a) => (
+                  <DropdownMenuCheckboxItem
+                    key={a.name}
+                    checked={!a.hidden}
+                    onCheckedChange={async (checked) => {
+                      if ((await run(() => backend.setAgentHidden(a.name, !checked))).ok) await reload()
+                    }}
+                  >
+                    {a.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 pb-4">
