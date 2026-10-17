@@ -17,6 +17,7 @@ const STATE: Record<ScanItem["state"], MessageKey> = {
   app: "stateApp",
   unrecorded: "stateUnrecorded",
   managed: "stateUnrecorded",
+  left: "stateUnrecorded",
   other: "stateCopy",
 }
 

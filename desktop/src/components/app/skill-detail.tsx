@@ -155,7 +155,7 @@ export function SkillDetail({ skill, onClose }: { skill: Skill; onClose: () => v
             <Copy /> {t("forkSkill")}
           </Button>
         )}
-        {skill.kind === "vendor" ? (
+        {skill.kind !== "app" ? (
           <Button variant="ghost" className="w-full" onClick={() => openDialog({ kind: "remove", ref: skill.ref })}>
             <Trash2 /> {t("moveToTrash")}
           </Button>

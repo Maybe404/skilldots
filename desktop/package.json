@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:dev": "go run github.com/egoist/mygo/cmd/mygo@v0.5.5 dev",
+    "desktop:build": "go run github.com/egoist/mygo/cmd/mygo@v0.5.5 build"
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-rc.0",
@@ -34,6 +36,7 @@
     "codemirror": "^6.0.2",
     "lucide-react": "^1.58.0",
     "motion": "^14.3.0",
+    "mygo-runtime": "0.5.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

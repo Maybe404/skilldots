@@ -24,8 +24,10 @@ export interface Agent {
   path: string
   /** The directory (or its parent agent) exists on this machine. */
   detected: boolean
-  /** Shown as a column and offered when installing. */
+  /** Whether distribution to this agent is active; independent of column visibility. */
   enabled: boolean
+  /** Display preference only; does not change distribution. */
+  hidden?: boolean
   /** In skills.toml [targets].default: new skills go here. */
   isDefault: boolean
   builtin: boolean
@@ -169,7 +171,7 @@ export interface ScanItem {
   agent: string
   name: string
   path: string
-  state: "managed" | "unrecorded" | "app" | "link" | "copy" | "broken" | "other"
+  state: "managed" | "unrecorded" | "app" | "link" | "copy" | "broken" | "other" | "left"
   linkTo?: string
   source?: string
   /** pack | app | own | enable | drop | skip */
@@ -186,6 +188,8 @@ export interface TrashEntry {
   path: string
   when: string
   example?: boolean
+  restorable?: boolean
+  problem?: string
 }
 
 export interface LibraryStatus {
@@ -250,8 +254,9 @@ export interface Backend {
   claudeOverrides(): Promise<string[]>
 
   // Agents ----------------------------------------------------------------
-  /** Show an agent as a column / offer it when installing. */
+  /** Suspend distribution while keeping skill selections. */
   setAgentEnabled(name: string, enabled: boolean): Promise<void>
+  setAgentHidden(name: string, hidden: boolean): Promise<void>
   /** skills.toml [targets].default */
   setDefaultAgents(names: string[]): Promise<void>
 
@@ -315,10 +320,6 @@ export interface Backend {
   // Trash -----------------------------------------------------------------
   trash(): Promise<TrashEntry[]>
   restore(id: string): Promise<void>
-  /** Permanently delete one entry. */
-  deleteForever(id: string): Promise<void>
-  /** Session.EmptyTrash: the one irreversible operation. */
-  emptyTrash(): Promise<number>
 
   // Sync ------------------------------------------------------------------
   /** Session.Backup (skd sync); private/ is never pushed. */

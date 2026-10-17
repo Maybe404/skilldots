@@ -1,6 +1,6 @@
 import { useApp } from "@/lib/app-state"
 import { AddDialog } from "./add-dialog"
-import { ApplyDialog, EmptyTrashDialog, LibraryDialog, SyncDialog, UpdateDialog } from "./ops-dialogs"
+import { ApplyDialog, LibraryDialog, SyncDialog, UpdateDialog } from "./ops-dialogs"
 import { ConfirmDialog, ForkDialog, NewSkillDialog } from "./skill-dialogs"
 
 /** Renders whichever dialog the app state asks for. */
@@ -28,7 +28,5 @@ export function Dialogs() {
       return <ConfirmDialog kind="unlink" skillRef={d.ref} onClose={closeDialog} />
     case "purge":
       return <ConfirmDialog kind="purge" repo={d.repo} onClose={closeDialog} />
-    case "emptyTrash":
-      return <EmptyTrashDialog onClose={closeDialog} />
   }
 }

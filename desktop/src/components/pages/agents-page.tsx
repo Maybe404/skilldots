@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react"
 
 import { useApp } from "@/lib/app-state"
 import { backend, type Agent } from "@/lib/backend"
-import { Hint, Mono, PageHeader, Section } from "@/components/app/bits"
+import { Mono, PageHeader, Section } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -51,19 +51,15 @@ export function AgentsPage() {
                     <Checkbox id={id} checked={a.isDefault} onCheckedChange={(v) => setDefault(a, !!v)} disabled={a.isDefault && agents.filter((x) => x.isDefault).length === 1} />
                     {t("defaultInstall")}
                   </label>
-                  {n > 0 ? (
-                    <Hint label={t("disableAgentBlocked", { n })}>
-                      <span tabIndex={0} className="rounded-md">
-                        <Button variant="ghost" size="sm" disabled>
-                          {t("disableAgent")}
-                        </Button>
-                      </span>
-                    </Hint>
-                  ) : (
-                    <Button variant="ghost" size="sm" onClick={() => setEnabled(a, false)}>
-                      {t("disableAgent")}
-                    </Button>
-                  )}
+                  <Button variant="ghost" size="sm" onClick={async () => {
+                    if ((await run(() => backend.setAgentHidden(a.name, !a.hidden))).ok) await reload()
+                  }}>
+                    {t(a.hidden ? "showAgentColumn" : "hideAgentColumn")}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEnabled(a, false)}>
+
+                    {t("disableAgent")}
+                  </Button>
                 </div>
               </li>
             )

@@ -14,6 +14,7 @@ import { SkillsPage } from "@/components/pages/skills-page"
 import { SourcesPage } from "@/components/pages/sources-page"
 import { TrashPage } from "@/components/pages/trash-page"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -34,7 +35,8 @@ export default function App() {
 }
 
 function Root() {
-  const { ready, status } = useApp()
+  const { ready, status, loadError, t } = useApp()
+  if (loadError) return <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-8"><h1>{t("loadFailed")}</h1><p role="alert">{loadError}</p><Button onClick={() => window.location.reload()}>{t("retry")}</Button></main>
   if (!ready) return null
   if (!status?.root) return <Onboarding />
   return <Shell />

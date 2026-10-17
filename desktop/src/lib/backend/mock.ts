@@ -201,12 +201,17 @@ export function createMockBackend(): Backend {
       return [...CLAUDE_OVERRIDES]
     },
 
+    async setAgentHidden(name, hidden) {
+      const agent = st.agents.find((a) => a.name === name)
+      if (!agent) throw new Error(`unknown agent ${name}`)
+      agent.hidden = hidden
+    },
     async setAgentEnabled(name, enabled) {
       await wait(150)
       const a = st.agents.find((x) => x.name === name)
       if (!a) throw new Error(`unknown agent ${name}`)
       a.enabled = enabled
-      if (!enabled) a.isDefault = false
+      changed()
     },
     async setDefaultAgents(names) {
       await wait(150)
@@ -285,7 +290,7 @@ export function createMockBackend(): Backend {
     async remove(ref) {
       await wait(300)
       const s = find(ref)
-      if (s.kind !== "vendor") throw new Error(`${s.name} is not vendored; disable it instead`)
+      if (s.kind === "app") throw new Error(`${s.name} belongs to an application; disable it instead`)
       st.skills = st.skills.filter((x) => x !== s)
       toTrash(s.name, s.dir)
       if (!st.skills.some((x) => x.origin === s.origin && x.kind === "vendor")) st.packs = st.packs.filter((p) => p.repo !== s.origin)
@@ -512,17 +517,6 @@ export function createMockBackend(): Backend {
       if (st.skills.some((s) => s.name === e.name && s.dir === e.origin)) throw new Error(`${e.origin} exists again; move it away first`)
       st.trash = st.trash.filter((x) => x !== e)
     },
-    async deleteForever(id) {
-      await wait(300)
-      st.trash = st.trash.filter((x) => x.id !== id)
-    },
-    async emptyTrash() {
-      await wait(500)
-      const n = st.trash.length
-      st.trash = []
-      return n
-    },
-
     async sync({ remote, message }) {
       await wait(1200)
       if (remote) st.remote = remote

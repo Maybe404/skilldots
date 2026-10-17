@@ -6,23 +6,12 @@ import { useApp } from "@/lib/app-state"
 import { backend, type TrashEntry } from "@/lib/backend"
 import { ago } from "@/lib/i18n"
 import { ExampleTag, Mono, PageHeader } from "@/components/app/bits"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 
 export function TrashPage() {
-  const { t, run, reload, trashCount, openDialog } = useApp()
+  const { t, run, reload, trashCount } = useApp()
   const [items, setItems] = React.useState<TrashEntry[]>([])
-  const [deleting, setDeleting] = React.useState<TrashEntry | null>(null)
 
   const load = React.useCallback(async () => {
     const r = await run(() => backend.trash())
@@ -37,23 +26,12 @@ export function TrashPage() {
     toast(t("restored", { name: e.name }))
     await reload()
   }
-  const remove = async (e: TrashEntry) => {
-    if (!(await run(() => backend.deleteForever(e.id))).ok) return
-    toast(t("deletedForever", { name: e.name }))
-    setDeleting(null)
-    await reload()
-  }
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageHeader
         title={t("trashTitle")}
         hint={t("trashHint")}
-        actions={
-          <Button variant="outline" size="sm" disabled={items.length === 0} onClick={() => openDialog({ kind: "emptyTrash" })}>
-            <Trash2 /> {t("emptyTrash")}
-          </Button>
-        }
       />
       <div className="px-8 pb-8">
         {items.length === 0 ? (
@@ -79,30 +57,14 @@ export function TrashPage() {
                     {t("from")} <Mono>{e.origin}</Mono>
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => restore(e)}>
+                <Button variant="outline" size="sm" disabled={e.restorable === false} title={e.problem} onClick={() => restore(e)}>
                   <Undo2 /> {t("restore")}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setDeleting(e)}>
-                  {t("deleteForever")}
                 </Button>
               </li>
             ))}
           </ul>
         )}
       </div>
-
-      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("deleteOneTitle", { name: deleting?.name ?? "" })}</AlertDialogTitle>
-            <AlertDialogDescription>{t("deleteOneBody")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel autoFocus>{t("cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleting && remove(deleting)}>{t("deleteForever")}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

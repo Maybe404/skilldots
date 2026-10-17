@@ -10,16 +10,6 @@ import { Mono, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
@@ -315,7 +305,7 @@ export function LibraryForm({
   const [dir, setDir] = React.useState(mode === "init" ? "~/.skilldots" : mode === "clone" ? "~/.skilldots" : "")
   const [url, setUrl] = React.useState("")
   const [busy, setBusy] = React.useState(false)
-  const expand = (p: string) => p.replace(/^~/, "/Users/maybe")
+  const expand = (p: string) => p.trim()
 
   const go = async () => {
     setBusy(true)
@@ -325,7 +315,7 @@ export function LibraryForm({
     setBusy(false)
     if (!r.ok) return
     await reload()
-    toast(t("libraryReady"), { description: mode === "init" ? t("skilldotsInstalled") : undefined })
+    toast(t("libraryReady"))
     onDone()
   }
 
@@ -392,56 +382,5 @@ export function LibraryDialog({ mode, onClose }: { mode: "use" | "clone" | "init
         />
       </DialogContent>
     </Dialog>
-  )
-}
-
-// Empty trash: asks twice ----------------------------------------------------
-
-export function EmptyTrashDialog({ onClose }: { onClose: () => void }) {
-  const { t, trashCount, run, reload } = useApp()
-  const [step, setStep] = React.useState<1 | 2>(1)
-  const [busy, setBusy] = React.useState(false)
-
-  const go = async () => {
-    setBusy(true)
-    const r = await run(() => backend.emptyTrash())
-    setBusy(false)
-    if (!r.ok) return
-    await reload()
-    toast(t("trashEmptied", { n: r.value }))
-    onClose()
-  }
-
-  return (
-    <>
-      <AlertDialog open={step === 1} onOpenChange={(o) => !o && step === 1 && onClose()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("emptyTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("emptyBody", { n: trashCount })}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel autoFocus>{t("cancel")}</AlertDialogCancel>
-            <Button variant="outline" onClick={() => setStep(2)}>
-              {t("continue")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={step === 2} onOpenChange={(o) => !o && onClose()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("emptyConfirm2Title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("emptyConfirm2Body", { n: trashCount })}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel autoFocus>{t("cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={go} disabled={busy}>
-              {t("emptyConfirm2Action")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
   )
 }

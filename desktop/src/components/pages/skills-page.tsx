@@ -52,7 +52,7 @@ export function matchesQuery(s: Skill, q: string) {
 
 export function SkillsPage() {
   const { t, skills, updatable, overrides, query, setQuery, filter, setFilter, selected, select } = useApp()
-  const agents = useEnabledAgents()
+  const agents = useEnabledAgents(true)
   const { setAgent } = useSkillActions()
   const [sorting, setSorting] = React.useState<SortingState>([])
 

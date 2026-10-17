@@ -32,7 +32,6 @@ export type DialogState =
   | { kind: "remove"; ref: Ref }
   | { kind: "unlink"; ref: Ref }
   | { kind: "purge"; repo: string }
-  | { kind: "emptyTrash" }
   | null
 
 /** A pack counts as updatable like app.PackStatus.HasUpdates (moves alone do not count). */
@@ -46,6 +45,7 @@ interface AppContextValue {
   setConfig: (patch: Partial<Config>) => Promise<void>
   resolvedTheme: "light" | "dark"
 
+  loadError: string | null
   ready: boolean
   status: LibraryStatus | null
   skills: Skill[]
@@ -108,6 +108,7 @@ function useSystemDark() {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfigState] = React.useState<Config>(DEFAULT_CONFIG)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [ready, setReady] = React.useState(false)
   const [status, setStatus] = React.useState<LibraryStatus | null>(null)
   const [skills, setSkills] = React.useState<Skill[]>([])
@@ -202,13 +203,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setReady(true)
       const st = await backend.status()
       if (st.root && c.checkOnLaunch) void check()
-    })()
+    })().catch((error: unknown) => {
+      setLoadError(error instanceof Error ? error.message : String(error))
+    })
   }, [reload, check])
 
   const setConfig = React.useCallback(
     async (patch: Partial<Config>) => {
-      setConfigState((c) => ({ ...c, ...patch }))
-      await run(() => backend.setConfig(patch))
+      const result = await run(() => backend.setConfig(patch))
+      if (result.ok) setConfigState(result.value)
     },
     [run],
   )
@@ -250,6 +253,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     config,
     setConfig,
     resolvedTheme,
+    loadError,
     ready,
     status,
     skills,
@@ -289,9 +293,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** Agents shown as columns, in registry order. */
-export function useEnabledAgents() {
+export function useEnabledAgents(columnsOnly = false) {
   const { agents } = useApp()
-  return React.useMemo(() => agents.filter((a) => a.enabled), [agents])
+  return React.useMemo(() => agents.filter((a) => a.enabled && (!columnsOnly || !a.hidden)), [agents, columnsOnly])
 }
 
 export function kindLabel(t: T, s: Skill): string {

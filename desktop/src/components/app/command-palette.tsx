@@ -18,9 +18,9 @@ import {
   Settings,
   SquarePlus,
   Sun,
-  Trash2,
   Download,
   Replace,
+  Trash2,
 } from "lucide-react"
 
 import { useApp, kindLabel, type View } from "@/lib/app-state"
@@ -30,7 +30,7 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { Command } from "@/components/ui/command"
 
 export function CommandPalette() {
-  const { t, paletteOpen, setPaletteOpen, skills, navigate, select, selected, openDialog, check, updatablePacks, plan, trashCount, setConfig, config, openEditor, updatable } = useApp()
+  const { t, paletteOpen, setPaletteOpen, skills, navigate, select, selected, openDialog, check, updatablePacks, plan, setConfig, config, openEditor, updatable } = useApp()
   const { reveal } = useSkillActions()
   const current = skills.find((s) => s.ref.key === selected)
 
@@ -65,7 +65,7 @@ export function CommandPalette() {
                   <Copy /> {t("forkSkill")}
                 </CommandItem>
               )}
-              {current.kind === "vendor" && (
+              {current.kind !== "app" && (
                 <CommandItem keywords={["trash"]} onSelect={() => run(() => openDialog({ kind: "remove", ref: current.ref }))}>
                   <Trash2 /> {t("moveToTrash")}
                 </CommandItem>
@@ -101,11 +101,6 @@ export function CommandPalette() {
             <CommandItem keywords={["scan adopt"]} onSelect={() => go("scan")}>
               <Inbox /> {t("cmdScan")}
             </CommandItem>
-            {trashCount > 0 && (
-              <CommandItem keywords={["empty trash"]} onSelect={() => run(() => openDialog({ kind: "emptyTrash" }))}>
-                <Trash2 /> {t("cmdEmptyTrash")}
-              </CommandItem>
-            )}
             <CommandItem keywords={["switch library use"]} onSelect={() => run(() => openDialog({ kind: "library", mode: "use" }))}>
               <Replace /> {t("cmdSwitchLibrary")}
             </CommandItem>
