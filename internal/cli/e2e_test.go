@@ -44,6 +44,8 @@ type env struct {
 	t    *testing.T
 	home string
 	vars []string
+	// lang is the language skd runs in: SKILLDOTS_LANG in vars ("en").
+	lang string
 	// before[i], when set, runs before the i-th keys of an interactive
 	// run are typed.
 	before []func()
@@ -55,7 +57,7 @@ func newEnv(t *testing.T) *env {
 	if r, err := filepath.EvalSymlinks(home); err == nil {
 		home = r
 	}
-	e := &env{t: t, home: home}
+	e := &env{t: t, home: home, lang: "en"}
 	e.vars = []string{
 		"HOME=" + home,
 		"PATH=" + os.Getenv("PATH"),
@@ -65,6 +67,38 @@ func newEnv(t *testing.T) *env {
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "NO_COLOR=1", "TERM=dumb", "SKILLDOTS_LANG=en",
 	}
 	return e
+}
+
+// setenv sets one variable of the environment skd runs in; "" removes it.
+func (e *env) setenv(name, value string) {
+	e.t.Helper()
+	var vars []string
+	for _, v := range e.vars {
+		if !strings.HasPrefix(v, name+"=") {
+			vars = append(vars, v)
+		}
+	}
+	if value != "" {
+		vars = append(vars, name+"="+value)
+	}
+	e.vars = vars
+}
+
+// setLang makes skd run in language l ("en" or "zh") through
+// $SKILLDOTS_LANG, the way the tests choose it.
+func (e *env) setLang(l string) {
+	e.t.Helper()
+	e.lang = l
+	e.setenv("SKILLDOTS_LANG", l)
+}
+
+// noLang takes away everything that chooses a language, so the settings
+// and the locale variables decide.
+func (e *env) noLang() {
+	e.t.Helper()
+	for _, k := range []string{"SKILLDOTS_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
+		e.setenv(k, "")
+	}
 }
 
 func (e *env) p(rel string) string { return filepath.Join(e.home, filepath.FromSlash(rel)) }

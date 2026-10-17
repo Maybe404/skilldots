@@ -12,6 +12,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/hostile"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
@@ -22,6 +23,15 @@ import (
 // none of the output is the dashboard's own. It checks view, before the
 // last line of defence in View.
 func TestHostileLibraryDrawsClean(t *testing.T) {
+	for _, lang := range []i18n.Lang{i18n.EN, i18n.ZH} {
+		t.Run(lang.Code(), func(t *testing.T) {
+			useLanguage(t, lang)
+			hostileLibraryDrawsClean(t)
+		})
+	}
+}
+
+func hostileLibraryDrawsClean(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defer lipgloss.SetColorProfile(prev)

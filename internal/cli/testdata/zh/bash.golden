@@ -1,0 +1,34 @@
+为 bash 生成自动补全脚本。
+
+这个脚本依赖 'bash-completion' 包。
+如果还没有安装，可以用你系统的包管理器安装。
+
+在当前 shell 会话中加载补全：
+
+	source <(skd completion bash)
+
+要让每个新会话都加载补全，请执行一次：
+
+#### Linux：
+
+	skd completion bash > /etc/bash_completion.d/skd
+
+#### macOS：
+
+	skd completion bash > $(brew --prefix)/etc/bash_completion.d/skd
+
+需要开启一个新的 shell，这项设置才会生效。
+
+用法：
+  skd completion bash
+
+选项：
+  -h, --help              bash 的帮助
+      --no-descriptions   不显示补全项的描述
+
+全局选项：
+      --json              机器可读的输出
+      --lang string       skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
+      --library skd use   库目录（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的库，或 ~/.skilldots）
+      --theme string      配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
+  -y, --yes               对所有提问回答"是"

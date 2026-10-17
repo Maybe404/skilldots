@@ -181,7 +181,14 @@ func expand(args []string, lib, up string) []string {
 // panics. The binary is built without the screen writer (rawoutput), so
 // this checks the commands' own cleaning, not the last line of defence.
 func TestHostileLibraryPrintsClean(t *testing.T) {
+	for _, lang := range langs {
+		t.Run(lang, func(t *testing.T) { hostileLibraryPrintsClean(t, lang) })
+	}
+}
+
+func hostileLibraryPrintsClean(t *testing.T, lang string) {
 	e := newEnv(t)
+	e.setLang(lang)
 	lib, up, lures := hostileLibraryLures(t, e)
 	// The trash of someone else's library: no entry it lists, and no id
 	// reaching out of it, moves a directory where skd never takes one
@@ -201,7 +208,7 @@ func TestHostileLibraryPrintsClean(t *testing.T) {
 			t.Errorf("trash lists %q as restorable (%q)", it.ID, it.Problem)
 		}
 	}
-	if out, _, _ := e.skd(lib, "trash"); strings.Count(out, "cannot be restored") != len(listed) {
+	if out, _, _ := e.skd(lib, "trash"); strings.Count(out, e.word("cannot be restored")) != len(listed) {
 		t.Errorf("trash does not say which cannot be restored:\n%s", out)
 	}
 	for _, id := range lures.IDs {
@@ -285,7 +292,14 @@ func TestHostileLibraryPrintsClean(t *testing.T) {
 // hostile library cleanly too: a smoke test of the guarded binary (the
 // gate above checks the commands without it).
 func TestGuardedBuildPrintsClean(t *testing.T) {
+	for _, lang := range langs {
+		t.Run(lang, func(t *testing.T) { guardedBuildPrintsClean(t, lang) })
+	}
+}
+
+func guardedBuildPrintsClean(t *testing.T, lang string) {
 	e := newEnv(t)
+	e.setLang(lang)
 	lib, up, lures := hostileLibraryLures(t, e)
 	for _, args := range [][]string{
 		{"list", "--all"}, {"show", up}, {"outdated"}, {"apply", "-n"}, {"history"}, {"trash"},
@@ -303,6 +317,12 @@ func TestGuardedBuildPrintsClean(t *testing.T) {
 // array element or key, is refused with the place named and quoted, and
 // every command says so cleanly.
 func TestHostileManifestAndLockAreRefused(t *testing.T) {
+	for _, lang := range langs {
+		t.Run(lang, func(t *testing.T) { hostileManifestAndLockAreRefused(t, lang) })
+	}
+}
+
+func hostileManifestAndLockAreRefused(t *testing.T, lang string) {
 	E := hostile.TOML(hostile.Evil)
 	K := hostile.TOML("k" + hostile.Evil) // a key
 	manifests := map[string]string{
@@ -342,6 +362,7 @@ func TestHostileManifestAndLockAreRefused(t *testing.T) {
 		"links.\"agents/a\".path":       "version = 1\n[links.\"agents/a\"]\nmode = \"link\"\nsource = \"skills/a\"\npath = " + E + "\n",
 	}
 	e := newEnv(t)
+	e.setLang(lang)
 	lib := e.p("lib")
 	e.ok("", "init", "--no-skill", lib)
 	mPath, lPath := filepath.Join(lib, "skills.toml"), filepath.Join(lib, "skills.lock")
@@ -352,7 +373,7 @@ func TestHostileManifestAndLockAreRefused(t *testing.T) {
 		t.Helper()
 		out, errOut, code := e.skd(lib, "list")
 		gate(t, file+" "+place, out+errOut, code)
-		if code == 0 || !strings.Contains(errOut, file) || !strings.Contains(errOut, "control characters") || !strings.Contains(errOut, place) {
+		if code == 0 || !strings.Contains(errOut, file) || !strings.Contains(errOut, e.word("control characters")) || !strings.Contains(errOut, place) {
 			t.Errorf("%s with %s: exit %d, want a refusal naming %s:\n%s\n%s", file, place, code, place, body, errOut)
 		}
 	}
@@ -382,7 +403,7 @@ func TestHostileManifestAndLockAreRefused(t *testing.T) {
 		os.WriteFile(mPath, goodM, 0o644)
 		os.WriteFile(lPath, goodL, 0o644)
 		os.WriteFile(path, []byte(everywhere[path]), 0o644)
-		if _, errOut, code := e.skd(lib, "list"); code == 0 || strings.Count(errOut, "control characters") < 10 {
+		if _, errOut, code := e.skd(lib, "list"); code == 0 || strings.Count(errOut, e.word("control characters")) < 10 {
 			t.Errorf("%s hostile everywhere: exit %d, want every place named:\n%s", filepath.Base(path), code, errOut)
 		}
 		for _, args := range hostileCommands {
@@ -412,7 +433,14 @@ func foreign(out string) string {
 // The prompts a person answers at a terminal show the hostile library's
 // names, descriptions and categories cleaned too.
 func TestHostilePromptsDrawClean(t *testing.T) {
+	for _, lang := range langs {
+		t.Run(lang, func(t *testing.T) { hostilePromptsDrawClean(t, lang) })
+	}
+}
+
+func hostilePromptsDrawClean(t *testing.T, lang string) {
 	e := newEnv(t)
+	e.setLang(lang)
 	lib, up := hostileLibrary(t, e)
 	// Something to update.
 	e.write("up/skills/eng/tdd/again.md", hostile.Evil)

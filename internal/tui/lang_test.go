@@ -175,3 +175,18 @@ func TestSettingsPageNamesTheEnvironmentOverride(t *testing.T) {
 		t.Errorf("%q", got)
 	}
 }
+
+// fit gives back exactly n cells, also when a double-width character
+// would be cut in two.
+func TestFitIsExactWithDoubleWidthText(t *testing.T) {
+	for _, s := range []string{"abc", "一二三四五", "a一b二c三d", "测试驱动开发", ""} {
+		for n := 0; n <= 12; n++ {
+			if got := ansi.StringWidth(fit(s, n)); got != n {
+				t.Errorf("fit(%q, %d) is %d cells: %q", s, n, got, fit(s, n))
+			}
+		}
+	}
+	if got := fit("abcdefgh", 5); got != "abcd…" {
+		t.Errorf("English truncation changed: %q", got)
+	}
+}
