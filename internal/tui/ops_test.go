@@ -208,13 +208,13 @@ func TestOpsEndToEnd(t *testing.T) {
 	if !trashed(t, root, "review") {
 		t.Fatal("review not in the trash")
 	}
-	// d on your own skill: unlinked, files kept.
+	// d on your own skill: unlinked and safely moved to trash.
 	s, _ = o.Load()
 	if _, err := o.Trash(s.Mine[0]); err != nil {
 		t.Fatal(err)
 	}
-	if isLink(filepath.Join(agents, "mine")) || !dirExists(filepath.Join(root, "skills", "mine")) {
-		t.Fatal("own skill: want unlinked and kept")
+	if isLink(filepath.Join(agents, "mine")) || dirExists(filepath.Join(root, "skills", "mine")) || !trashed(t, root, "mine") {
+		t.Fatal("own skill: want unlinked and in trash")
 	}
 
 	// fork tdd into private/.

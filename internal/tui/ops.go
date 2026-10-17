@@ -44,8 +44,7 @@ type Ops interface {
 	Check(ctx context.Context) (*app.Outdated, error)
 	// Fork copies a skill into skills/ or private/ as name ("" keeps its name).
 	Fork(s Skill, private bool, name string) (string, error)
-	// Trash takes a skill out of use: a vendored skill is deselected and
-	// its files go to the trash; anything else is unlinked and kept.
+	// Trash moves library skills to the trash; app-owned skills are only unlinked.
 	Trash(s Skill) (string, error)
 	Purge(repo string) (string, error)
 	Apply() (string, error)
@@ -392,10 +391,9 @@ func (o *libOps) Fork(sk Skill, private bool, name string) (string, error) {
 	return withSummary(i18n.Sprintf("forked %s → %s", out.From.LinkName, s.Lib.Rel(out.Path)), out.Apply), nil
 }
 
-// Trash mirrors `skd remove` for vendored skills and `skd disable` for
-// everything else (the CLI never deletes your own or an app's files).
+// Trash mirrors `skd remove` for library skills and `skd disable` for app skills.
 func (o *libOps) Trash(sk Skill) (string, error) {
-	if sk.Kind != engine.KindVendor {
+	if sk.Kind == engine.KindApp {
 		if _, err := o.Disable(sk); err != nil {
 			return "", err
 		}

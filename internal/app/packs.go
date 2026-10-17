@@ -426,6 +426,21 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 	if err != nil {
 		return nil, err
 	}
+	if e.Kind == engine.KindSkill || e.Kind == engine.KindPrivate {
+		if err := s.Lib.Writable(); err != nil {
+			return nil, err
+		}
+		if err := s.writableInLibrary(e.Dir); err != nil {
+			return nil, err
+		}
+		if _, err := engine.TrashLocal(s.Lib, e.Dir); err != nil {
+			return nil, err
+		}
+		// Keep local overrides so restoring the directory restores its selections.
+		ap, err := s.Apply(ApplyOptions{})
+		return &RemoveOutcome{Entry: *e, Apply: ap}, err
+	}
+
 	if e.Kind != engine.KindVendor {
 		return nil, i18n.Errorf("%q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it", r.String(), e.Kind)
 	}

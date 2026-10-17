@@ -104,8 +104,8 @@ func TestOpsSameNameTouchesOnlyTheChosenRow(t *testing.T) {
 			t.Errorf("vendored tdd targets = %v", got)
 		}
 		checkSameNameLinks(t, root, home, true, false)
-		if trashed(t, root, "tdd") {
-			t.Error("a tdd went to the trash")
+		if !trashed(t, root, "tdd") {
+			t.Error("own tdd did not reach the trash")
 		}
 	})
 	t.Run("fork yours is refused", func(t *testing.T) {

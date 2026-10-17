@@ -1,0 +1,12 @@
+{
+  "name": "skilldots",
+  "identifier": "com.maybe404.skilldots",
+  "version": "0.1.0",
+  "main": ".",
+  "devUrl": "http://localhost:5173",
+  "devCommand": "bun run dev --host 127.0.0.1 --strictPort",
+  "buildCommand": "bun run build",
+  "frontendDist": "dist",
+  "bindings": "src/mygo.ts",
+  "out": "build"
+}

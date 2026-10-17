@@ -246,7 +246,7 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 			e := TrashEntry{ID: b.Name() + "/" + it.Name(), Name: it.Name(), Path: p, When: when}
 			origin, err := readOrigin(p)
 			if err == nil {
-				err = checkOrigin(lib, reg, origin)
+				err = checkOrigin(lib, reg, origin, p)
 			}
 			// The record, like the entry, may be someone else's (a
 			// cloned library's trash): it is shown only when it is a
@@ -287,7 +287,7 @@ func Restore(lib *library.Library, reg *targets.Registry, id string) (string, er
 	}
 	dest, err := readOrigin(p)
 	if err == nil {
-		err = checkOrigin(lib, reg, dest)
+		err = checkOrigin(lib, reg, dest, p)
 	}
 	if err != nil {
 		return "", i18n.Errorf("trash entry %q cannot be restored: %w; it stays in the trash at %q", id, err, p)
@@ -386,13 +386,15 @@ func readOrigin(p string) (string, error) {
 //     this machine) also named like a skill (manifest.CheckName: not
 //     ".ssh"), as apply only ever writes such names there;
 //   - inside the library's vendor/ (update and remove move vendored
-//     skills, purge a whole pack).
+//     skills, purge a whole pack);
+//   - a direct child of skills/ or private/ with a matching machine-local
+//     provenance record created by TrashLocal.
 //
 // The record must be an absolute, clean path (no "..", ".", doubled or
 // trailing separators) without control characters, as skd writes it.
 // Symbolic links on the way are resolved before comparing, so neither a
 // link inside vendor/ nor a link elsewhere can lead out of these places.
-func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) error {
+func checkOrigin(lib *library.Library, reg *targets.Registry, origin, entry string) error {
 	switch {
 	case safetext.Has(origin):
 		return i18n.New("its record of where it came from has control characters")
@@ -431,6 +433,14 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 			return nil
 		}
 	}
+	// Local skills are direct children only; never restore metadata, nested
+	// paths or anything through a symlink inside the library.
+	for _, own := range []string{lib.SkillsDir(), lib.PrivateDir()} {
+		if ownsLocalTrash(entry, origin) && parent == filepath.Clean(own) && manifest.CheckName(base) == nil && fsutil.LinkOnPath(lib.Root, origin) == "" {
+			return nil
+		}
+	}
+
 	// vendor/ itself must be the library's own directory: a link there
 	// would make anywhere it points "inside vendor/". The comparison is by
 	// file identity, so another spelling of the library's path (case, or

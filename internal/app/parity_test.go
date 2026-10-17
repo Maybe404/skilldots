@@ -215,6 +215,8 @@ func TestCLIAndDashboardAgree(t *testing.T) {
 		{"new", []string{"new", "notes", "--private"},
 			func(o tui.Ops) error { _, err := o.New("notes", true); return err }},
 		{"disable own", []string{"disable", "skills:my-tdd"},
+			func(o tui.Ops) error { _, err := o.Disable(find(t, o, engine.KindSkill, "my-tdd")); return err }},
+		{"remove own", []string{"remove", "skills:my-tdd"},
 			func(o tui.Ops) error { _, err := o.Trash(find(t, o, engine.KindSkill, "my-tdd")); return err }},
 		{"remove last skill drops the pack", []string{"remove", "review"},
 			func(o tui.Ops) error { _, err := o.Trash(find(t, o, engine.KindVendor, "review")); return err }},

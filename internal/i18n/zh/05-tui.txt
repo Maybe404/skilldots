@@ -472,8 +472,8 @@
 @ Remove %s
 = 移除 %s
 
-@ Unlink it from every agent and drop it from vendor/.
-= 从所有 agent 取消链接，并从 vendor/ 中丢弃。
+@ Unlink it from every agent and move its library directory to the trash.
+= 从所有 agent 取消链接，并将库中的目录移入回收站。
 
 @ The files move to the library trash: t restores them.
 = 文件会移到库的回收站：按 t 可恢复。

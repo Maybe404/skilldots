@@ -21,6 +21,23 @@ type NewOutcome struct {
 // New scaffolds a skill of the user's own in skills/ (private/ when
 // private) and links it to the default agents.
 func (s *Session) New(name string, private bool) (*NewOutcome, error) {
+	return s.newWithTargets(name, private, nil)
+}
+
+// NewForTargets creates a skill with an explicit selection before any links
+// are made, so a private skill never briefly reaches the default agents.
+func (s *Session) NewForTargets(name string, private bool, names []string) (*NewOutcome, error) {
+	for _, n := range names {
+		if _, err := s.Reg.Get(n); err != nil {
+			return nil, err
+		}
+	}
+	selected := append([]string{}, names...)
+	return s.newWithTargets(name, private, &selected)
+}
+
+func (s *Session) newWithTargets(name string, private bool, names *[]string) (*NewOutcome, error) {
+
 	if err := manifest.CheckName(name); err != nil {
 		return nil, err
 	}
@@ -42,7 +59,24 @@ func (s *Session) New(name string, private bool) (*NewOutcome, error) {
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
 		return nil, err
 	}
+	if names != nil {
+		found := false
+		for _, local := range s.Lib.Manifest.Locals {
+			if local.Name == name {
+				local.Targets = names
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.Lib.Manifest.Locals = append(s.Lib.Manifest.Locals, &manifest.Local{Name: name, Targets: names})
+		}
+		if err := s.Lib.Save(); err != nil {
+			return nil, err
+		}
+	}
 	s.logf(Done, "created %s", dir)
+
 	ap, err := s.Apply(ApplyOptions{})
 	if err != nil {
 		return nil, err

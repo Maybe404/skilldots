@@ -472,7 +472,7 @@ func targetsDone(c *ctx) func(*app.TargetsOutcome, error) error {
 func removeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove <skill>",
-		Short: i18n.T("Deselect a vendored skill: unlink everywhere and drop it from vendor/"),
+		Short: i18n.T("Move a library skill to the trash and unlink it from every agent"),
 		Args:  exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
