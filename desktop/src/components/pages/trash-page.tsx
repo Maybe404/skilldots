@@ -5,17 +5,21 @@ import { Trash2, Undo2 } from "lucide-react"
 import { useApp } from "@/lib/app-state"
 import { backend, type TrashEntry } from "@/lib/backend"
 import { ago } from "@/lib/i18n"
-import { ExampleTag, Mono, PageHeader } from "@/components/app/bits"
+import { ExampleTag, Mono, PageError, PageHeader } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function TrashPage() {
   const { t, run, reload, trashCount } = useApp()
-  const [items, setItems] = React.useState<TrashEntry[]>([])
+  const [items, setItems] = React.useState<TrashEntry[] | null>(null)
+  const [failed, setFailed] = React.useState(false)
 
   const load = React.useCallback(async () => {
+    setFailed(false)
     const r = await run(() => backend.trash())
     if (r.ok) setItems(r.value)
+    else setFailed(true)
   }, [run])
   React.useEffect(() => {
     void load()
@@ -34,7 +38,12 @@ export function TrashPage() {
         hint={t("trashHint")}
       />
       <div className="px-8 pb-8">
-        {items.length === 0 ? (
+        {failed ? <PageError onRetry={() => void load()} /> : items === null ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        ) : items.length === 0 ? (
           <Empty className="border border-dashed">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -45,7 +54,7 @@ export function TrashPage() {
           </Empty>
         ) : (
           <ul className="divide-y rounded-xl border">
-            {items.map((e) => (
+            {items?.map((e) => (
               <li key={e.id} className="flex items-center gap-4 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

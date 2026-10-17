@@ -350,7 +350,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selected,
     select: setSelected,
     dialog,
-    openDialog: setDialog,
+    openDialog: React.useCallback((next) => {
+      if (!operation) setDialog(next)
+    }, [operation]),
     closeDialog: () => setDialog(null),
     query,
     setQuery,

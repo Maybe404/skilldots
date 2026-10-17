@@ -137,6 +137,7 @@ export const zh = {
   loadingConfig: "正在读取设置…",
   loadingCheck: "正在检查上游更新…",
   showDetails: "查看详细错误",
+  pageLoadFailed: "读取失败，请重试",
 
   // Confirmations
   cancel: "取消",
@@ -567,6 +568,7 @@ export const en: Record<MessageKey, string> = {
   loadingConfig: "Reading settings…",
   loadingCheck: "Checking upstream updates…",
   showDetails: "Show error details",
+  pageLoadFailed: "Could not load this page. Try again.",
 
   cancel: "Cancel",
   confirm: "OK",

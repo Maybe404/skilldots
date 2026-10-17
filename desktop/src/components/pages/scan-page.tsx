@@ -5,7 +5,7 @@ import { CheckCheck, Loader2, ScanSearch } from "lucide-react"
 import { useApp } from "@/lib/app-state"
 import { backend, type ScanItem } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono, PageHeader } from "@/components/app/bits"
+import { Mono, PageError, PageHeader } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -24,6 +24,7 @@ const STATE: Record<ScanItem["state"], MessageKey> = {
 export function ScanPage() {
   const { t, runTask, reload, agents } = useApp()
   const [items, setItems] = React.useState<ScanItem[] | null>(null)
+  const [failed, setFailed] = React.useState(false)
   const [scanning, setScanning] = React.useState(false)
   const [picked, setPicked] = React.useState<Set<string>>(new Set())
   const [busy, setBusy] = React.useState(false)
@@ -31,9 +32,13 @@ export function ScanPage() {
 
   const scan = React.useCallback(async () => {
     setScanning(true)
+    setFailed(false)
     const r = await runTask(t("scanning"), () => backend.scan())
     setScanning(false)
-    if (!r.ok) return
+    if (!r.ok) {
+      setFailed(true)
+      return
+    }
     setItems(r.value)
     setPicked(new Set(r.value.filter((x) => x.proposal !== "skip").map((x) => x.id)))
   }, [runTask, t])
@@ -102,7 +107,8 @@ export function ScanPage() {
             </EmptyHeader>
           </Empty>
         )}
-        {!scanning &&
+        {!scanning && failed && <PageError onRetry={() => void scan()} />}
+        {!scanning && !failed &&
           byAgent.map(([agent, list]) => (
             <section key={agent} className="mb-6">
               <h2 className="mb-2 text-sm font-semibold">{label(agent)}</h2>
