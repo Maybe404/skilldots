@@ -191,3 +191,23 @@ func TestDesktopHistoryAndOutdatedKeepDetails(t *testing.T) {
 		t.Fatalf("history details lost: %s", b)
 	}
 }
+
+func TestCloneFailureCleansDestinationAndKeepsLibrary(t *testing.T) {
+	s := setup(t)
+	oldRoot := s.root
+	dir := filepath.Join(t.TempDir(), "cloned")
+	_, err := s.cloneLibrary(filepath.Join(t.TempDir(), "missing-repository"), dir)
+	if err == nil {
+		t.Fatal("clone unexpectedly succeeded")
+	}
+	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+		t.Fatalf("failed clone left destination: %v", statErr)
+	}
+	if s.root != oldRoot {
+		t.Fatalf("service root changed after failed clone: %q", s.root)
+	}
+	status := invoke(t, s, "status").(map[string]any)
+	if status["root"] != oldRoot {
+		t.Fatalf("remembered library changed after failed clone: %#v", status["root"])
+	}
+}

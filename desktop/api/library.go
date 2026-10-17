@@ -79,6 +79,25 @@ func (s *Service) cloneLibrary(url, dir string) (any, error) {
 	if _, err = config.Load(); err != nil {
 		return nil, err
 	}
+	previousRoot := s.root
+	if previousRoot == "" {
+		previousRoot, _ = library.Locate("")
+	}
+	// The destination did not exist when checked above. If clone or any
+	// post-clone validation fails, remove only what this operation created and
+	// restore the remembered library selection.
+	cleanup := true
+	defer func() {
+		if !cleanup {
+			return
+		}
+		_ = os.RemoveAll(dir)
+		if previousRoot != "" {
+			_ = app.UseLibrary(previousRoot)
+		}
+		s.root = previousRoot
+		s.previews = map[string]*app.Fetched{}
+	}()
 	app.SealOlderSkd()
 	if _, err = library.Git("", "clone", "--", url, dir); err != nil {
 		return nil, err
@@ -102,5 +121,10 @@ func (s *Service) cloneLibrary(url, dir string) (any, error) {
 	if err = checkApply(o, err); err != nil {
 		return nil, err
 	}
-	return s.status()
+	out, err := s.status()
+	if err != nil {
+		return nil, err
+	}
+	cleanup = false
+	return out, nil
 }
