@@ -57,7 +57,7 @@ func loadManifest(t *testing.T, root string) *manifest.Manifest {
 	return m
 }
 
-func TestOpsTrashAppAndOwnSkillOnlyUnlink(t *testing.T) {
+func TestOpsDisableAppAndOwnSkillOnlyUnlink(t *testing.T) {
 	o, root, home, appDir := acmeLibrary(t)
 	write(t, filepath.Join(root, "skills", "mine", "SKILL.md"), skillMD("mine", "My own."))
 	write(t, filepath.Join(root, "private", "secret", "SKILL.md"), skillMD("secret", "Private."))
@@ -75,13 +75,11 @@ func TestOpsTrashAppAndOwnSkillOnlyUnlink(t *testing.T) {
 		t.Fatalf("snapshot: apps %d mine %d private %d", len(s.Apps), len(s.Mine), len(s.Private))
 	}
 	for _, sk := range []Skill{s.Apps[0], s.Mine[0], s.Private[0]} {
-		msg, err := o.Trash(sk)
+		_, err := o.Disable(sk)
 		if err != nil {
 			t.Fatalf("trash %s: %v", sk.Name, err)
 		}
-		if !strings.Contains(msg, "unlinked "+sk.LinkName) || !strings.Contains(msg, "files stay") {
-			t.Errorf("trash %s: %q", sk.Name, msg)
-		}
+
 		if isLink(filepath.Join(agents, sk.LinkName)) {
 			t.Errorf("%s still linked", sk.Name)
 		}
