@@ -131,6 +131,12 @@ export const zh = {
   agentEnabled: "已启用 {agent}",
   agentDisabled: "已停用 {agent}",
   errorPrefix: "出错了",
+  errorFolderPicker: "系统文件夹选择器暂时不可用",
+  errorLibraryMissing: "找不到技能库，请选择已有资料库或新建一个。",
+  loadErrorHint: "请检查资料库路径，或重试读取。",
+  loadingConfig: "正在读取设置…",
+  loadingCheck: "正在检查上游更新…",
+  showDetails: "查看详细错误",
 
   // Confirmations
   cancel: "取消",
@@ -555,6 +561,12 @@ export const en: Record<MessageKey, string> = {
   agentEnabled: "Enabled {agent}",
   agentDisabled: "Disabled {agent}",
   errorPrefix: "Something went wrong",
+  errorFolderPicker: "The system folder picker is unavailable",
+  errorLibraryMissing: "No skill library was found. Choose an existing library or create one.",
+  loadErrorHint: "Check the library path or retry loading it.",
+  loadingConfig: "Reading settings…",
+  loadingCheck: "Checking upstream updates…",
+  showDetails: "Show error details",
 
   cancel: "Cancel",
   confirm: "OK",
