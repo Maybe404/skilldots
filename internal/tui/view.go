@@ -141,8 +141,16 @@ func (m Model) spliceOverlay(body []string) []string {
 		if gap := x - ansi.StringWidth(left); gap > 0 {
 			left += strings.Repeat(" ", gap)
 		}
+		// Cut keeps the whole of a double-width character the dialog's
+		// right edge falls in the middle of, one cell too many: drop it.
+		want := m.w - x - w
 		right := ansi.Cut(b, x+w, m.w)
-		if gap := m.w - x - w - ansi.StringWidth(right); gap > 0 {
+		// TruncateLeft keeps a double-width character it would split, so
+		// drop one cell more until the rest fits; the gap is padded below.
+		for n := ansi.StringWidth(right) - want; n > 0 && ansi.StringWidth(right) > want; n++ {
+			right = ansi.TruncateLeft(ansi.Cut(b, x+w, m.w), n, "")
+		}
+		if gap := want - ansi.StringWidth(right); gap > 0 {
 			right = strings.Repeat(" ", gap) + right
 		}
 		body[y] = left + l + right

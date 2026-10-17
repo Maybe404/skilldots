@@ -55,7 +55,7 @@ func checkFits(t *testing.T, what string, m Model, w, h int) {
 func TestChineseDashboardFitsTheScreen(t *testing.T) {
 	lipgloss.SetColorProfile(0)
 	useLanguage(t, i18n.ZH)
-	for _, size := range [][2]int{{90, 24}, {100, 30}, {120, 36}, {200, 60}} {
+	for _, size := range [][2]int{{90, 24}, {91, 25}, {92, 30}, {100, 30}, {105, 30}, {106, 30}, {117, 30}, {120, 36}, {121, 30}, {126, 30}, {200, 60}} {
 		w, h := size[0], size[1]
 		for _, snap := range []*Snapshot{sampleSnapshot(), cjkSnapshot()} {
 			m, f := newModel(t, snap, w, h)
