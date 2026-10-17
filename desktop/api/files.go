@@ -113,6 +113,12 @@ func (s *Service) fileOperation(ses *app.Session, method string, args []json.Raw
 	if err != nil {
 		return nil, err
 	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = root.Remove(name + ".skd-save")
+		}
+	}()
 	_, werr := tmp.WriteString(content)
 	cerr := tmp.Close()
 	if werr != nil {
@@ -121,7 +127,11 @@ func (s *Service) fileOperation(ses *app.Session, method string, args []json.Raw
 	if cerr != nil {
 		return nil, cerr
 	}
-	return nil, root.Rename(name+".skd-save", name)
+	if err := root.Rename(name+".skd-save", name); err != nil {
+		return nil, err
+	}
+	cleanup = false
+	return nil, nil
 }
 
 func fileTree(root *os.Root, dir string, count *int) ([]fileNode, error) {
