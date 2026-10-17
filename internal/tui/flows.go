@@ -280,10 +280,17 @@ func (m Model) trashView(entries []engine.TrashEntry) (tea.Model, tea.Cmd) {
 		if e.When.IsZero() {
 			when = "?"
 		}
-		detail := when + "  from " + tildify(e.Origin)
+		from := ""
+		if e.Origin != "" {
+			from = "from " + tildify(e.Origin)
+		}
+		detail := when + "  " + from
 		if !e.Restorable {
 			problems[e.ID] = e.Problem
-			detail = when + "  cannot be restored · from " + tildify(e.Origin)
+			detail = when + "  cannot be restored"
+			if from != "" {
+				detail += " · " + from
+			}
 		}
 		items = append(items, pickItem{label: e.Name, detail: detail, value: e.ID})
 	}

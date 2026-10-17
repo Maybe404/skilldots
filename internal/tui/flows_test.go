@@ -239,8 +239,10 @@ func TestTrashFlow(t *testing.T) {
 	f.trash = []engine.TrashEntry{
 		{ID: "20261016-093000/tdd", Name: "tdd", Origin: "/lib/vendor/acme/skills/eng/tdd", When: when, Restorable: true},
 		{ID: "20261016-093000/old", Name: "old", Origin: "/h/.claude/skills/old", When: when, Restorable: true},
-		{ID: "20261016-093000/lure", Name: "lure", Origin: "/h/Library/LaunchAgents/x", When: when,
-			Problem: `where it came from ("/h/Library/LaunchAgents/x") is neither in an agent's skill directory nor in the library's vendor/`},
+		// A record that is no place skd restores to is not shown
+		// (ListTrash leaves Origin empty): it may be anyone's text.
+		{ID: "20261016-093000/lure", Name: "lure", When: when,
+			Problem: `its record of where it came from is neither in an agent's skill directory nor in the library's vendor/`},
 	}
 	m, cmd := press(t, m, "t")
 	m = drain(t, m, cmd)
@@ -248,7 +250,10 @@ func TestTrashFlow(t *testing.T) {
 		t.Fatal("t opens the trash")
 	}
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"Trash · 3 items", "tdd", "cannot be restored · from /h/Library/LaunchAgents/x", "2026-10-16 09:30", "/lib/vendor/acme/skills/eng/tdd", "r/enter restore", "x empty trash"} {
+	if strings.Contains(v, "cannot be restored · from") || strings.Contains(v, "LaunchAgents") {
+		t.Errorf("an entry that cannot be restored shows where it came from:\n%s", v)
+	}
+	for _, want := range []string{"Trash · 3 items", "tdd", "cannot be restored", "2026-10-16 09:30", "/lib/vendor/acme/skills/eng/tdd", "r/enter restore", "x empty trash"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("trash view lacks %q", want)
 		}
@@ -265,7 +270,7 @@ func TestTrashFlow(t *testing.T) {
 	if cmd != nil || m.busy != "" || lastCall(f) != "trash-list" {
 		t.Fatalf("restoring an entry skd refuses started %q", lastCall(f))
 	}
-	if v := ansi.Strip(m.View()); m.ov == nil || !strings.Contains(v, "Cannot restore lure") || !strings.Contains(v, "LaunchAgents") {
+	if v := ansi.Strip(m.View()); m.ov == nil || !strings.Contains(v, "Cannot restore lure") || !strings.Contains(v, "neither in an agent") {
 		t.Fatalf("no reason shown:\n%s", v)
 	}
 	m, _ = press(t, m, "esc")
