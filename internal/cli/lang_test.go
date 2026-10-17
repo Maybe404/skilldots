@@ -454,3 +454,58 @@ func TestChineseGoldens(t *testing.T) {
 		}
 	}
 }
+
+// What skd writes to files is the same in every language: the library's
+// files, the settings, the history, commit messages, the scaffold of a
+// new skill, the note in a fork. Nothing in Chinese is stored.
+func TestFilesAreWrittenInEnglish(t *testing.T) {
+	e := newEnv(t)
+	e.setLang("zh")
+	e.setenv("GIT_AUTHOR_DATE", "2024-01-02T03:04:05")
+	e.setenv("GIT_COMMITTER_DATE", "2024-01-02T03:04:05")
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	e.write("up/skills/eng/tdd/SKILL.md", "---\nname: tdd\ndescription: test first\n---\nbody\n")
+	e.write("up/skills/eng/review/SKILL.md", "---\nname: review\ndescription: review carefully\n---\nbody\n")
+	up := e.repo("up")
+	e.ok(lib, "add", up, "--skill", "tdd", "--alias", "acme")
+	e.ok(lib, "new", "mine")
+	e.ok(lib, "new", "secret", "--private")
+	e.ok(lib, "fork", "tdd", "--as", "mytdd")
+	e.ok(lib, "config", "set", "theme", "dark")
+	e.ok(lib, "config", "set", "lang", "zh")
+	e.write("up/skills/eng/tdd/more.md", "more\n")
+	e.git(up, "add", "-A")
+	e.git(up, "commit", "-qm", "again")
+	e.ok(lib, "add", up, "--skill", "review")
+	e.ok(lib, "update", "--yes", "--commit")
+	e.ok(lib, "remove", "review")
+	e.ok(lib, "sync", "-m", "my backup")
+	var found []string
+	scan := func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			if d != nil && d.IsDir() && d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		b, _ := os.ReadFile(path)
+		if hasHan(string(b)) {
+			found = append(found, path)
+		}
+		return nil
+	}
+	filepath.WalkDir(lib, scan)
+	filepath.WalkDir(filepath.Dir(e.configPath()), scan)
+	for _, f := range found {
+		b, _ := os.ReadFile(f)
+		t.Errorf("%s holds Chinese:\n%s", strings.TrimPrefix(f, e.home), b)
+	}
+	if log := e.git(lib, "log", "--format=%an %s%n%b"); hasHan(log) || !strings.Contains(log, "my backup") {
+		t.Errorf("git log holds Chinese:\n%s", log)
+	}
+	// And the settings did take: the language was Chinese all along.
+	if out := e.ok(lib, "--library", lib, "trash"); !strings.Contains(out, "来源") {
+		t.Errorf("the lang setting was not used:\n%s", out)
+	}
+}
