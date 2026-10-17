@@ -36,6 +36,10 @@ func TestOlderAppLinksGoOnTheFirstCommand(t *testing.T) {
 		if first[0] == "list" {
 			e.ok(lib, "list")
 			first = first[1:]
+			// Read-only as it is, it writes placed.json (README).
+			if _, err := os.Lstat(placed); err != nil {
+				t.Fatalf("skd list wrote no placed.json: %v", err)
+			}
 		}
 		if first[0] == "apply" {
 			b, _ := os.ReadFile(filepath.Join(lib, "skills.toml"))
