@@ -23,7 +23,7 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的库，并
   outdated    检查所选 skill 在上游的变化，不做任何改动
   path        打印 skill 的文件在库里的位置
   purge       彻底清除一个 pack：清单、锁、vendor/ 和所有链接
-  remove      取消选择一个引入的 skill：到处取消链接，并从 vendor/ 中丢弃
+  remove      将库中的 skill 移入回收站，并从所有 agent 取消链接
   scan        盘点本机上每个 agent 的 skill 目录
   show        列出一个仓库提供的 skill，不安装任何东西
   sync        提交库并推送到它的 git 远程仓库（你的备份）
