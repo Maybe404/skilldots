@@ -122,6 +122,12 @@ func settingsLibrary(root string) bool {
 // library already recorded, an older skd's unrecorded links are no
 // longer looked for from then on (SealOlderSkd).
 func UseLibrary(root string) error {
+	// A settings file skd cannot read is reported before anything is
+	// sealed: once it is fixed, the library it names may still need the
+	// one look for an older skd's links.
+	if _, err := config.Load(); err != nil {
+		return err
+	}
 	if rec := config.Get(config.Library); rec == "" || !sameDir(root, rec) {
 		SealOlderSkd()
 	}
