@@ -141,6 +141,67 @@ func TestForgedAppRecordLeavesOtherLinks(t *testing.T) {
 	}
 }
 
+// A link that leads nowhere is taken for one skd made before the
+// library moved only when the old root itself is gone from a directory
+// that is still there (mv ~/lib ~/lib2): not when the directory it was
+// in is gone too (a volume not mounted) or when the old root is still
+// there without the skill.
+func TestStaleDanglingOnlyWhenTheLibraryMoved(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		to     func(home string) string
+		direct bool
+	}{
+		{"library moved", func(h string) string { return filepath.Join(h, "old-lib", "skills", "s") }, true},
+		{"volume not mounted", func(h string) string { return filepath.Join(h, "Volumes", "Unmounted", "foo", "skills", "s") }, false},
+		{"old root there, skill gone", func(h string) string {
+			os.MkdirAll(filepath.Join(h, "project", "skills"), 0o755)
+			return filepath.Join(h, "project", "skills", "s")
+		}, false},
+	} {
+		for _, wanted := range []bool{false, true} {
+			lib, reg, home := newTestLib(t)
+			writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+			if !wanted {
+				lib.Manifest.Targets.Default = []string{}
+			}
+			agents := filepath.Join(home, ".agents", "skills")
+			os.MkdirAll(agents, 0o755)
+			dest := filepath.Join(agents, "s")
+			to := c.to(home)
+			os.Symlink(to, dest)
+			lib.Lock.Links["agents/s"] = &lock.Link{Mode: "link", Source: "skills/s", Path: dest}
+			entries, _, _ := Resolve(lib, reg)
+			plan, op := planFor(t, func() Plan { return MakePlan(lib, entries, false) }, "agents", "s")
+			res, err := Apply(lib, plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			label := c.name
+			if wanted {
+				label += ", wanted"
+			}
+			switch {
+			case c.direct:
+				if len(res.Backups) != 0 || (!wanted && fsutil.Lexists(dest)) {
+					t.Fatalf("%s: %+v %v", label, op, res.Backups)
+				}
+			case wanted:
+				// Replaced, the old link moved to the trash.
+				if op.Action != "replace" || len(res.Backups) != 1 {
+					t.Fatalf("%s: %+v %v", label, op, res.Backups)
+				}
+			default:
+				if op.Action != "skip" || len(res.Backups) != 0 {
+					t.Fatalf("%s: %+v %v", label, op, res.Backups)
+				}
+				if got, err := os.Readlink(dest); err != nil || got != to {
+					t.Fatalf("%s: the link changed: %q %v", label, got, err)
+				}
+			}
+		}
+	}
+}
 
 
 // A link nothing in skills.lock can confirm is moved to the trash when a

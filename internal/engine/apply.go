@@ -601,10 +601,17 @@ func staleRoot(dest string, prev *lock.Link, lib *library.Library) string {
 // data, only a path the plan shows, so it is removed outright even when
 // skd's placed record does not know it (made before there was one).
 //
+// Only a library that moved counts: the old root itself is gone while
+// the directory it was in is still there (mv ~/lib ~/lib2). A link
+// that leads nowhere because a volume is not mounted, or because the
+// old root still exists but the skill in it does not, is not taken for
+// skd's, and is left in place or moved to the trash.
+//
 // A forged record can claim a link of the user's only when that link,
 // in an agent's directory under the record's name, is absolute, ends in
-// /skills/<name>, /private/<name> or /vendor/.../<name>, and leads
-// nowhere: losing it loses no data, and the path is in the output.
+// /skills/<name>, /private/<name> or /vendor/.../<name>, and leads into
+// a directory that is gone from a parent that is not: losing it loses
+// no data, and the path is in the output.
 func staleDangling(dest string, prev *lock.Link, lib *library.Library) string {
 	if prev == nil || prev.Mode != "link" || libSource(prev.Source, lib) == "" {
 		return ""
@@ -621,6 +628,12 @@ func staleDangling(dest string, prev *lock.Link, lib *library.Library) string {
 		return ""
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		return ""
+	}
+	if _, err := os.Lstat(old); !os.IsNotExist(err) {
+		return ""
+	}
+	if st, err := os.Stat(filepath.Dir(old)); err != nil || !st.IsDir() {
 		return ""
 	}
 	return old
