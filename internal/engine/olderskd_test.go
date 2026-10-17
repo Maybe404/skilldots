@@ -48,7 +48,7 @@ func TestOlderAppLinksRemovedOnFirstDisable(t *testing.T) {
 		lib.Manifest.Apps = []*manifest.App{{Name: "x", Path: app}}
 		if how != "app removed before any command" {
 			entries, _, _ := Resolve(lib, reg)
-			if n := AdoptOlderAppLinks(lib, entries); n != 2 {
+			if n, _ := AdoptOlderAppLinks(lib, entries); n != 2 {
 				t.Fatalf("%s: adopted %d", how, n)
 			}
 		}
@@ -113,7 +113,7 @@ func TestForgedAppRecordLeavesTheUsersLink(t *testing.T) {
 		os.Symlink(mine, dest)
 		lib.Lock.Links["claude/my-skill"] = &lock.Link{Mode: "link", Source: mine}
 		entries, _, _ := Resolve(lib, reg)
-		if n := AdoptOlderAppLinks(lib, entries); n != 0 {
+		if n, _ := AdoptOlderAppLinks(lib, entries); n != 0 {
 			t.Fatalf("adopted %d", n)
 		}
 		plan, op := planFor(t, func() Plan { return MakePlan(lib, entries, force) }, "claude", "my-skill")
@@ -154,7 +154,7 @@ func TestForgedAppRecordThroughAnAgentLink(t *testing.T) {
 			lib.Manifest.Apps = []*manifest.App{{Name: "mine", Path: via, Targets: &[]string{"claude"}}}
 		}
 		entries, _, _ = Resolve(lib, reg)
-		if n := AdoptOlderAppLinks(lib, entries); n != 0 {
+		if n, _ := AdoptOlderAppLinks(lib, entries); n != 0 {
 			t.Fatalf("declared %v: adopted %d", declared, n)
 		}
 		lib.Manifest.Apps = nil
@@ -415,5 +415,66 @@ func TestForcedReplaceOfAnAppLikeLinkGoesToTheTrash(t *testing.T) {
 	res, err := Apply(lib, plan)
 	if err != nil || len(res.Backups) != 1 {
 		t.Fatalf("%v %v", res, err)
+	}
+}
+
+// A placed file that cannot be written (its directory read-only): the
+// app's links an older skd made are recorded for the rest of the
+// process, so a disable in it removes them outright; the window stays
+// shut in that process (looked for once; shut by SealPlaced) though no
+// file says so, and the same file set again (every app.Open) keeps
+// both. Another placed file starts over.
+func TestOlderAppLinksWithAPlacedFileThatCannotBeWritten(t *testing.T) {
+	for _, how := range []string{"adopted", "sealed"} {
+		lib, reg, home := newTestLib(t)
+		ro := filepath.Join(home, "ro")
+		os.MkdirAll(ro, 0o755)
+		p := filepath.Join(ro, "placed.json")
+		SetPlacedFile(p)
+		app := filepath.Join(home, "Applications", "X.app", "Skills", "x")
+		writeSkill(t, app, "x")
+		dir := filepath.Join(home, ".agents", "skills")
+		os.MkdirAll(dir, 0o755)
+		dest := filepath.Join(dir, "x")
+		os.Symlink(app, dest)
+		lib.Lock.Links["agents/x"] = &lock.Link{Mode: "link", Source: app, Path: dest}
+		lib.Manifest.Apps = []*manifest.App{{Name: "x", Path: app}}
+		if err := os.Chmod(ro, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(ro, 0o755) })
+		entries, _, _ := Resolve(lib, reg)
+		if how == "sealed" {
+			SealPlaced(p)
+			if OlderSkd() {
+				t.Fatalf("%s: the window is still open", how)
+			}
+			if n, _ := AdoptOlderAppLinks(lib, entries); n != 0 {
+				t.Fatalf("%s: adopted %d", how, n)
+			}
+			continue
+		}
+		n, err := AdoptOlderAppLinks(lib, entries)
+		if n != 1 || err == nil {
+			t.Fatalf("%s: adopted %d, %v", how, n, err)
+		}
+		SetPlacedFile(p)
+		if OlderSkd() {
+			t.Fatalf("%s: the window is open again", how)
+		}
+		lib.Manifest.Apps = []*manifest.App{{Name: "x", Path: app, Targets: &[]string{}}}
+		entries, _, _ = Resolve(lib, reg)
+		_, op := planFor(t, func() Plan { return MakePlan(lib, entries, false) }, "agents", "x")
+		if op.Action != "remove" {
+			t.Fatalf("%s: %+v", how, op)
+		}
+		SetPlacedFile(filepath.Join(home, "other.json"))
+		SetPlacedFile(p)
+		if !OlderSkd() {
+			t.Fatalf("%s: another placed file did not start over", how)
+		}
+		if _, op := planFor(t, func() Plan { return MakePlan(lib, entries, false) }, "agents", "x"); op.Action != "skip" {
+			t.Fatalf("%s: started over yet %+v", how, op)
+		}
 	}
 }

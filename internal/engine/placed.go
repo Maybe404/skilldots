@@ -47,8 +47,44 @@ var placedPath atomic.Pointer[string]
 // removed, never the other way round.
 var placedMu sync.Mutex
 
+// memPlaced is the record as this process last changed it, while it
+// could not write it to the placed file (the settings directory not
+// writable): what it records holds for the rest of this process, as if
+// written, and is gone with it. Guarded by memMu (MakePlan reads the
+// record without placedMu).
+var (
+	memMu     sync.Mutex
+	memPlaced map[string]placedEntry
+)
+
+// windowShut is set when this process looked for an older skd's links
+// (AdoptOlderAppLinks) or shut the window (SealPlaced) but could not
+// write the placed file that would say so: for the rest of the process
+// the window stays shut all the same (once written, the file does
+// that), so it opens at most once per process and never after a
+// command pointed skd at another library. The next skd looks again.
+var windowShut atomic.Bool
+
 // SetPlacedFile sets where skd records what it placed (see placedEntry).
-func SetPlacedFile(p string) { placedPath.Store(&p) }
+// A file other than the one set starts over: no record kept in memory,
+// the window not yet shut. The same file again (every app.Open in a
+// process) keeps both.
+func SetPlacedFile(p string) {
+	placedMu.Lock()
+	defer placedMu.Unlock()
+	setPlacedFile(p)
+}
+
+func setPlacedFile(p string) {
+	if old := placedPath.Load(); old != nil && *old == p {
+		return
+	}
+	memMu.Lock()
+	memPlaced = nil
+	memMu.Unlock()
+	windowShut.Store(false)
+	placedPath.Store(&p)
+}
 
 // placedFile is the path of the placed file, "" when none is set.
 func placedFile() string {
@@ -66,39 +102,55 @@ func placedKey(dest string) string {
 	return filepath.Clean(dest)
 }
 
-// loadPlaced reads the placed file. A missing or unreadable file is an
-// empty record: nothing is confirmed.
+// loadPlaced reads the placed file, and what this process recorded but
+// could not write (memPlaced) over it. A missing or unreadable file is
+// an empty record: nothing is confirmed.
 func loadPlaced() map[string]placedEntry {
 	out := map[string]placedEntry{}
 	p := placedFile()
 	if p == "" {
 		return out
 	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return out
+	if b, err := os.ReadFile(p); err == nil {
+		var d placedDoc
+		if json.Unmarshal(b, &d) == nil && d.Placed != nil {
+			out = d.Placed
+		}
 	}
-	var d placedDoc
-	if json.Unmarshal(b, &d) != nil || d.Placed == nil {
-		return out
+	memMu.Lock()
+	defer memMu.Unlock()
+	for k, v := range memPlaced {
+		out[k] = v
 	}
-	return d.Placed
+	return out
 }
 
 // savePlaced writes m to the placed file. A failure is not an error of
 // the apply: the record only lets skd remove its own things outright.
-func savePlaced(m map[string]placedEntry) {
+// What could not be written is kept for the rest of this process
+// (memPlaced), and the error returned.
+func savePlaced(m map[string]placedEntry) error {
 	p := placedFile()
 	if p == "" {
-		return
+		return nil
 	}
 	b, err := json.MarshalIndent(placedDoc{Version: 1, Placed: m}, "", "  ")
+	if err == nil {
+		if err = os.MkdirAll(filepath.Dir(p), 0o755); err == nil {
+			err = fsutil.WriteAtomic(p, append(b, '\n'))
+		}
+	}
+	memMu.Lock()
+	defer memMu.Unlock()
 	if err != nil {
-		return
+		memPlaced = make(map[string]placedEntry, len(m))
+		for k, v := range m {
+			memPlaced[k] = v
+		}
+		return err
 	}
-	if os.MkdirAll(filepath.Dir(p), 0o755) == nil {
-		fsutil.WriteAtomic(p, append(b, '\n'))
-	}
+	memPlaced = nil
+	return nil
 }
 
 // confirms reports whether dest is exactly what the placed record m says
@@ -133,7 +185,7 @@ func confirms(m map[string]placedEntry, dest string) bool {
 // skills.toml and skills.lock say.
 func OlderSkd() bool {
 	p := placedFile()
-	if p == "" {
+	if p == "" || windowShut.Load() {
 		return false
 	}
 	_, err := os.Lstat(p)
@@ -150,19 +202,27 @@ func SealPlaced(p string) {
 	}
 	placedMu.Lock()
 	defer placedMu.Unlock()
+	setPlacedFile(p)
 	if _, err := os.Lstat(p); !os.IsNotExist(err) {
 		return
 	}
 	b, _ := json.MarshalIndent(placedDoc{Version: 1, Placed: map[string]placedEntry{}}, "", "  ")
-	if os.MkdirAll(filepath.Dir(p), 0o755) == nil {
-		fsutil.WriteAtomic(p, append(b, '\n'))
+	err := os.MkdirAll(filepath.Dir(p), 0o755)
+	if err == nil {
+		err = fsutil.WriteAtomic(p, append(b, '\n'))
+	}
+	if err != nil {
+		// Shut for this process all the same.
+		windowShut.Store(true)
 	}
 }
 
 // AdoptOlderAppLinks records in the placed file the links of the
 // library's apps an older skd made, which kept no record of them, and
 // writes the file even when there is none (OlderSkd is false after it).
-// It returns how many it recorded. Only while OlderSkd, and only for
+// It returns how many it recorded, and the error writing the file: what
+// it recorded then holds for the rest of this process only (memPlaced),
+// and the next skd looks again. Only while OlderSkd, and only for
 // entries as skills.toml has them now, before a command changes it, so
 // that disabling the app or taking it out of skills.toml later removes
 // them outright, as that skd did. The caller makes sure lib is the
@@ -171,11 +231,11 @@ func SealPlaced(p string) {
 //
 // A link is recorded only when it is exactly what skd makes for an
 // app's skill this library wants in that target (olderAppLink).
-func AdoptOlderAppLinks(lib *library.Library, entries []Entry) int {
+func AdoptOlderAppLinks(lib *library.Library, entries []Entry) (int, error) {
 	placedMu.Lock()
 	defer placedMu.Unlock()
 	if !OlderSkd() {
-		return 0
+		return 0, nil
 	}
 	placed := loadPlaced()
 	n := 0
@@ -195,8 +255,13 @@ func AdoptOlderAppLinks(lib *library.Library, entries []Entry) int {
 			}
 		}
 	}
-	savePlaced(placed)
-	return n
+	err := savePlaced(placed)
+	if err != nil {
+		// Looked for once in this process: what was recorded lasts for
+		// it (memPlaced); the next skd looks again.
+		windowShut.Store(true)
+	}
+	return n, err
 }
 
 // olderAppLink reports whether dest is exactly the link skd makes for

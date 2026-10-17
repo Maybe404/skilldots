@@ -114,7 +114,7 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 		switch mode {
 		case "upgraded, first command":
 			entries, _, _ = Resolve(lib, reg)
-			if n := AdoptOlderAppLinks(lib, entries); n != 1 {
+			if n, _ := AdoptOlderAppLinks(lib, entries); n != 1 {
 				t.Fatalf("adopted %d", n)
 			}
 		case "upgraded, applied":
@@ -139,7 +139,7 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 		if mode == "upgraded, edited by hand" {
 			// [[app]] taken out of skills.toml before skd ran: nothing
 			// names the app any more, so nothing is adopted.
-			if n := AdoptOlderAppLinks(lib, entries); n != 0 {
+			if n, _ := AdoptOlderAppLinks(lib, entries); n != 0 {
 				t.Fatalf("adopted %d", n)
 			}
 		}
@@ -223,7 +223,7 @@ func TestAppLinkRecordedOnlyWhenExact(t *testing.T) {
 		lib.Lock.Links["agents/x"] = prev
 		lib.Manifest.Apps = append(lib.Manifest.Apps, &manifest.App{Name: "x", Path: src, Targets: targets})
 		entries, _, _ := Resolve(lib, reg)
-		n := AdoptOlderAppLinks(lib, entries)
+		n, _ := AdoptOlderAppLinks(lib, entries)
 		_, ok := loadPlaced()[dest]
 		if want := tc == "exact"; ok != want || (n == 1) != want {
 			t.Fatalf("%s: recorded %v (%d)", tc, ok, n)

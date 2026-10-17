@@ -55,7 +55,7 @@ func TestUpgradeOfATypicalLibraryChangesNothing(t *testing.T) {
 	if !OlderSkd() {
 		t.Fatal("no placed file, yet not taken for an older skd's")
 	}
-	if n := AdoptOlderAppLinks(lib, entries); n != len(all) {
+	if n, _ := AdoptOlderAppLinks(lib, entries); n != len(all) {
 		t.Fatalf("adopted %d app links", n)
 	}
 	if OlderSkd() {

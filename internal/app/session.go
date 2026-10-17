@@ -10,7 +10,9 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -49,7 +51,8 @@ type Session struct {
 	// Log receives progress and warnings; nil discards them.
 	Log func(Level, string)
 
-	warned map[string]bool
+	warned  map[string]bool
+	notices []string
 	// claudeOff caches ClaudeDisabled for the session.
 	claudeOff map[string]bool
 }
@@ -71,15 +74,30 @@ func Open(root string) (*Session, error) {
 	}
 	engine.SetRegistry(reg)
 	engine.SetPlacedFile(PlacedFile())
+	ses := &Session{Lib: lib, Reg: reg}
 	if engine.OlderSkd() && settingsLibrary(lib.Root) {
 		// The first time this skd opens the library the user's settings
 		// name, before any command changes skills.toml: record the app
 		// links an older skd made from it (see AdoptOlderAppLinks).
 		if entries, _, err := engine.Resolve(lib, reg); err == nil {
-			engine.AdoptOlderAppLinks(lib, entries)
+			if _, err := engine.AdoptOlderAppLinks(lib, entries); err != nil {
+				var pe *fs.PathError
+				if errors.As(err, &pe) {
+					err = pe.Err
+				}
+				ses.notices = append(ses.notices, fmt.Sprintf("could not write %s: %v; the links an older skd made are taken for skd's in this run only, and looked for again next time", PlacedFile(), err))
+			}
 		}
 	}
-	return &Session{Lib: lib, Reg: reg}, nil
+	return ses, nil
+}
+
+// Notices returns, once, what Open has to tell a person (a placed file
+// it could not write); the CLI prints them as warnings.
+func (s *Session) Notices() []string {
+	n := s.notices
+	s.notices = nil
+	return n
 }
 
 // settingsLibrary reports whether root is the library this user's

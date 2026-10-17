@@ -208,3 +208,52 @@ func TestAnUnrecordedDefaultLibraryTakesNoLinks(t *testing.T) {
 		}
 	}
 }
+
+// When placed.json cannot be written (the settings directory read-only),
+// the app's links an older skd made are still taken for skd's in that
+// run: the first `skd disable` removes them from every agent, as that
+// skd did, and says once on stderr that it could not record them. With
+// nothing written, the next skd looks for them again.
+func TestOlderAppLinksWhenTheRecordCannotBeWritten(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", "--targets", "agents,claude", lib)
+	app := e.p("Apps/X.app/Skills/x")
+	e.skill("Apps/X.app/Skills/x", "x")
+	b, _ := os.ReadFile(filepath.Join(lib, "skills.toml"))
+	os.WriteFile(filepath.Join(lib, "skills.toml"), append(b, []byte("\n[[app]]\nname = \"x\"\npath = \""+app+"\"\n")...), 0o644)
+	e.ok(lib, "apply")
+	dir := filepath.Dir(e.configPath())
+	placed := filepath.Join(dir, "placed.json")
+	if err := os.Remove(placed); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	o, er, code := e.skd(lib, "disable", "x")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, o, er)
+	}
+	for _, tn := range []string{"agents", "claude"} {
+		if _, err := os.Lstat(e.p("." + tn + "/skills/x")); err == nil {
+			t.Fatalf("the link in %s is still there\n%s%s", tn, o, er)
+		}
+	}
+	if n := strings.Count(er, "placed.json"); n != 1 || strings.Contains(o, "placed.json") {
+		t.Fatalf("warned %d times on stderr\nstdout: %s\nstderr: %s", n, o, er)
+	}
+	if strings.Contains(o, "cannot tell") {
+		t.Fatalf("not removed as skd's:\n%s", o)
+	}
+	if _, err := os.Stat(filepath.Join(lib, ".trash")); err == nil {
+		t.Fatalf("something went to the trash\n%s", o)
+	}
+	if _, err := os.Lstat(placed); !os.IsNotExist(err) {
+		t.Fatalf("placed.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(app, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}

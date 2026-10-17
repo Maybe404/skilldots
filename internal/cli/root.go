@@ -129,6 +129,9 @@ func open() (*ctx, error) {
 		return nil, err
 	}
 	s.Log = logLine
+	for _, n := range s.Notices() {
+		logLine(app.Problem, n)
+	}
 	return &ctx{Session: s, lib: s.Lib, reg: s.Reg}, nil
 }
 
