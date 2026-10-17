@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/charmbracelet/x/ansi"
@@ -507,5 +508,37 @@ func TestFilesAreWrittenInEnglish(t *testing.T) {
 	// And the settings did take: the language was Chinese all along.
 	if out := e.ok(lib, "--library", lib, "trash"); !strings.Contains(out, "来源") {
 		t.Errorf("the lang setting was not used:\n%s", out)
+	}
+}
+
+// The real dashboard, in a terminal: the settings page switches the
+// language of the running dashboard at once and saves the setting.
+func TestDashboardSwitchesLanguageFromTheSettingsPage(t *testing.T) {
+	e := newEnv(t)
+	lib, _ := jsonFixture(t, e)
+	e.noLang()
+	e.setenv("LANG", "en_US.UTF-8")
+	keys := []typed{
+		{wait: 2 * time.Second},
+		{wait: 700 * time.Millisecond, keys: ","},
+		{wait: 700 * time.Millisecond, keys: "j"},
+		{wait: 300 * time.Millisecond, keys: "j"},
+		{wait: 300 * time.Millisecond, keys: "j"},
+		{wait: 400 * time.Millisecond, keys: "\r"},
+		{wait: 400 * time.Millisecond, keys: "zh"},
+		{wait: 400 * time.Millisecond, keys: "\r"},
+		{wait: 1500 * time.Millisecond, keys: "?"},
+		{wait: 700 * time.Millisecond, keys: "x"},
+		{wait: 400 * time.Millisecond, keys: "\x03"},
+	}
+	out := e.interactiveShell(lib, keys, "stty rows 40 cols 120; skd --library "+lib)
+	for _, want := range []string{"a add", "lang = zh", "a 添加", "u 更新", "有未提交的改动", "按键"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("no %q in the dashboard's output:\n%q", want, out)
+		}
+	}
+	b, _ := os.ReadFile(e.configPath())
+	if !regexp.MustCompile(`(?m)^lang = ['"]zh['"]$`).Match(b) {
+		t.Errorf("the setting was not saved:\n%s", b)
 	}
 }
