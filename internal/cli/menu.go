@@ -15,6 +15,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/safetext"
@@ -43,28 +44,28 @@ func runMenu() error {
 			}
 		}
 		home, _ := os.UserHomeDir()
-		status := ok("●") + " " + dim("everything linked")
+		status := ok("●") + " " + dim(i18n.T("everything linked"))
 		if n := c.Pending(entries); n > 0 {
-			status = warn("○") + " " + dim(fmt.Sprintf("%d changes pending — Apply", n))
+			status = warn("○") + " " + dim(i18n.Sprintf("%d changes pending — Apply", n))
 		}
 		last := ""
 		if out, err := c.lib.Git("log", "-1", "--format=%cr"); err == nil && out != "" {
-			last = dim("  ·  last change " + out)
+			last = dim(i18n.Sprintf("  ·  last change %s", out))
 		}
 		lines := []string{brand(), dim(strings.Replace(root, home, "~", 1)), "",
-			cyan(plural(len(c.lib.Manifest.Packs), "pack")) + dim(" · ") + cyan(plural(len(entries), "skill")) + dim(" · ") + cyan(fmt.Sprintf("%d linked", linked)) + dim(" · agents: "+strings.Join(c.lib.Manifest.Targets.Default, ", ")),
+			cyan(plural(len(c.lib.Manifest.Packs), "pack")) + dim(" · ") + cyan(plural(len(entries), "skill")) + dim(" · ") + cyan(i18n.Sprintf("%d linked", linked)) + dim(i18n.Sprintf(" · agents: %s", strings.Join(c.lib.Manifest.Targets.Default, ", "))),
 			status + last}
 		rec := c.RecordedOutdated()
 		if line := updatesLine(rec, time.Now()); line != "" {
 			lines = append(lines, line)
 		}
-		updateDesc := "fetch upstream changes"
+		updateDesc := i18n.T("fetch upstream changes")
 		if rec != nil {
 			switch n := rec.Updates(); {
 			case n == 1:
-				updateDesc = "1 pack has updates"
+				updateDesc = i18n.T("1 pack has updates")
 			case n > 1:
-				updateDesc = fmt.Sprintf("%d packs have updates", n)
+				updateDesc = i18n.Sprintf("%d packs have updates", n)
 			}
 		}
 		fmt.Fprintln(stdout)
@@ -93,7 +94,7 @@ func runMenu() error {
 			return nil
 		}
 		if err := menuAction(c, choice, entries); err != nil {
-			fmt.Fprintln(stderr, bad("error:"), err)
+			fmt.Fprintln(stderr, tag(bad, i18n.T("error:"), fmt.Sprint(err)))
 		}
 		fmt.Fprintln(stdout)
 	}
@@ -116,9 +117,9 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		return run("apply")
 	case "add":
 		var src string
-		if err := ask(huh.NewInput().Title("Source").
-			Description("owner/repo · a GitHub or skills.sh link · a pasted `npx skills add …` line · any git URL · @ref pins").
-			Placeholder("mattpocock/skills").Value(&src)); err != nil || strings.TrimSpace(src) == "" {
+		if err := ask(huh.NewInput().Title(i18n.T("Source")).
+			Description(i18n.T("owner/repo · a GitHub or skills.sh link · a pasted `npx skills add …` line · any git URL · @ref pins")).
+			Placeholder(i18n.T("mattpocock/skills")).Value(&src)); err != nil || strings.TrimSpace(src) == "" {
 			return nil
 		}
 		return run("add", strings.TrimSpace(src))
@@ -126,8 +127,8 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		var name string
 		var private bool
 		if err := ask(
-			huh.NewInput().Title("Skill name").Placeholder("my-skill").Value(&name),
-			huh.NewConfirm().Title("Keep it private to this machine?").Value(&private),
+			huh.NewInput().Title(i18n.T("Skill name")).Placeholder(i18n.T("my-skill")).Value(&name),
+			huh.NewConfirm().Title(i18n.T("Keep it private to this machine?")).Value(&private),
 		); err != nil || strings.TrimSpace(name) == "" {
 			return nil
 		}
@@ -159,14 +160,14 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		}
 		var how string
 		opts := []huh.Option[string]{
-			huh.NewOption("Unlink from all agents, keep in library  (skd disable)", "disable"),
+			huh.NewOption(i18n.T("Unlink from all agents, keep in library  (skd disable)"), "disable"),
 		}
 		if e.Kind == engine.KindVendor {
 			opts = append(opts,
-				huh.NewOption("Unlink and drop from the library           (skd remove)", "remove"),
-				huh.NewOption("Delete the whole pack "+e.Origin+"   (skd purge)", "purge"))
+				huh.NewOption(i18n.T("Unlink and drop from the library           (skd remove)"), "remove"),
+				huh.NewOption(i18n.Sprintf("Delete the whole pack %s   (skd purge)", e.Origin), "purge"))
 		}
-		opts = append(opts, huh.NewOption("Cancel", ""))
+		opts = append(opts, huh.NewOption(i18n.T("Cancel"), ""))
 		if err := ask(huh.NewSelect[string]().Title(name).Options(opts...).Value(&how)); err != nil || how == "" {
 			return nil
 		}
@@ -189,8 +190,8 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 		}
 		chosen := append([]string(nil), e.TargetNames...)
 		if err := ask(huh.NewMultiSelect[string]().
-			Title("Agents for " + name).
-			Description("only agents installed on this machine are listed · none = keep in library, link nowhere").
+			Title(i18n.Sprintf("Agents for %s", name)).
+			Description(i18n.T("only agents installed on this machine are listed · none = keep in library, link nowhere")).
 			Options(opts...).Value(&chosen)); err != nil {
 			return nil
 		}
@@ -202,7 +203,7 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 			return err
 		}
 		var adopt bool
-		if err := ask(huh.NewConfirm().Title("Adopt unmanaged entries now?").Affirmative("Adopt").Negative("Not now").Value(&adopt)); err != nil || !adopt {
+		if err := ask(huh.NewConfirm().Title(i18n.T("Adopt unmanaged entries now?")).Affirmative(i18n.T("Adopt")).Negative(i18n.T("Not now")).Value(&adopt)); err != nil || !adopt {
 			return nil
 		}
 		return run("adopt")
@@ -214,15 +215,17 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 
 // opt builds a menu option with a dimmed description.
 func opt(label, desc, value string) huh.Option[string] {
+	label, desc = i18n.T(label), i18n.T(desc)
 	if desc == "" {
 		return huh.NewOption(label, value)
 	}
-	return huh.NewOption(fmt.Sprintf("%-12s%s", label, dim(desc)), value)
+	return huh.NewOption(pad(label, 12)+dim(desc), value)
 }
 
 func pickEntry(title string, entries []engine.Entry) (string, bool) {
+	title = i18n.T(title)
 	if len(entries) == 0 {
-		fmt.Fprintln(stdout, dim("nothing to choose from"))
+		fmt.Fprintln(stdout, dim(i18n.T("nothing to choose from")))
 		return "", false
 	}
 	var opts []huh.Option[string]
@@ -241,16 +244,16 @@ func pickEntry(title string, entries []engine.Entry) (string, bool) {
 func setupMenu() (bool, error) {
 	var how string
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, card(brand(), dim("no library on this machine yet")))
+	fmt.Fprintln(stdout, card(brand(), dim(i18n.T("no library on this machine yet"))))
 	fmt.Fprintln(stdout)
 	if err := ask(huh.NewSelect[string]().
-		Title("Where should your skills live?").
-		Description("A library is a git repository holding your skills and a skills.toml manifest.").
+		Title(i18n.T("Where should your skills live?")).
+		Description(i18n.T("A library is a git repository holding your skills and a skills.toml manifest.")).
 		Options(
-			huh.NewOption("Create a new library at "+library.DefaultRoot(), "new"),
-			huh.NewOption("Clone an existing library from git (e.g. your backup on GitHub)", "clone"),
-			huh.NewOption("Use a directory that already has a skills.toml", "existing"),
-			huh.NewOption("Quit", ""),
+			huh.NewOption(i18n.Sprintf("Create a new library at %s", library.DefaultRoot()), "new"),
+			huh.NewOption(i18n.T("Clone an existing library from git (e.g. your backup on GitHub)"), "clone"),
+			huh.NewOption(i18n.T("Use a directory that already has a skills.toml"), "existing"),
+			huh.NewOption(i18n.T("Quit"), ""),
 		).Value(&how)); err != nil || how == "" {
 		return false, nil
 	}
@@ -260,24 +263,24 @@ func setupMenu() (bool, error) {
 		cmd.SetArgs([]string{"init"})
 	case "clone":
 		var url string
-		if err := ask(huh.NewInput().Title("Git URL").Placeholder("git@github.com:you/agent-skills.git").Value(&url)); err != nil || url == "" {
+		if err := ask(huh.NewInput().Title(i18n.T("Git URL")).Placeholder(i18n.T("git@github.com:you/agent-skills.git")).Value(&url)); err != nil || url == "" {
 			return false, nil
 		}
 		cmd.SetArgs([]string{"clone", strings.TrimSpace(url)})
 	case "existing":
 		var dir string
-		if err := ask(huh.NewInput().Title("Directory").Placeholder("~/code/agent-skills").Value(&dir)); err != nil || dir == "" {
+		if err := ask(huh.NewInput().Title(i18n.T("Directory")).Placeholder(i18n.T("~/code/agent-skills")).Value(&dir)); err != nil || dir == "" {
 			return false, nil
 		}
 		home, _ := os.UserHomeDir()
 		dir = strings.Replace(strings.TrimSpace(dir), "~", home, 1)
 		if !fsutil.Exists(filepath.Join(dir, manifest.FileName)) {
-			return false, fmt.Errorf("%s has no %s", dir, manifest.FileName)
+			return false, i18n.Errorf("%s has no %s", dir, manifest.FileName)
 		}
 		if err := app.UseLibrary(dir); err != nil {
 			return false, err
 		}
-		fmt.Fprintf(stdout, "%s skd now uses %s\n", ok("✓"), dir)
+		i18n.Fprintf(stdout, "%s skd now uses %s\n", ok("✓"), dir)
 		return true, nil
 	}
 	if err := cmd.Execute(); err != nil {
@@ -289,8 +292,8 @@ func setupMenu() (bool, error) {
 func cloneCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clone <git-url> [dir]",
-		Short: "Clone a library (your backup from another machine) and apply it",
-		Args:  cobra.RangeArgs(1, 2),
+		Short: i18n.T("Clone a library (your backup from another machine) and apply it"),
+		Args:  rangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := library.DefaultRoot()
 			if len(args) == 2 {
@@ -301,13 +304,13 @@ func cloneCmd() *cobra.Command {
 				return err
 			}
 			if fsutil.Lexists(dir) {
-				return fmt.Errorf("%s already exists", dir)
+				return i18n.Errorf("%s already exists", dir)
 			}
 			if safetext.Has(args[0]) {
-				return fmt.Errorf("%q has control characters: not a git URL", args[0])
+				return i18n.Errorf("%q has control characters: not a git URL", args[0])
 			}
 			if _, err := config.Load(); err != nil {
-				return fmt.Errorf("%w; clone records the library there, so fix or remove it first (nothing was cloned)", err)
+				return i18n.Errorf("%w; clone records the library there, so fix or remove it first (nothing was cloned)", err)
 			}
 			// Someone else's library is never one an older skd made links
 			// from: no link outside it is taken for skd's on what its
@@ -364,7 +367,7 @@ func syncCmd() *cobra.Command {
 	var remote, msg string
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Commit the library and push it to its git remote (your backup)",
+		Short: i18n.T("Commit the library and push it to its git remote (your backup)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
@@ -375,7 +378,7 @@ func syncCmd() *cobra.Command {
 				if out.Committed {
 					c.printf("%s committed in %s\n", ok("✓"), c.lib.Root)
 				} else {
-					say("%s\n", dim("nothing to commit"))
+					say("%s\n", dim(i18n.T("nothing to commit")))
 				}
 			}
 			if err != nil {
@@ -387,15 +390,15 @@ func syncCmd() *cobra.Command {
 				say("%s pushed\n", ok("✓"))
 			}
 			if out.PrivateUncommitted {
-				say("%s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n", dim("note:"))
+				say("%s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n", dim(i18n.T("note:")))
 			}
 			jsonOut(out)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&remote, "remote", "", "set the git remote (origin) before pushing")
-	cmd.Flags().StringVarP(&msg, "message", "m", "", "commit message")
+	cmd.Flags().StringVar(&remote, "remote", "", i18n.T("set the git remote (origin) before pushing"))
+	cmd.Flags().StringVarP(&msg, "message", "m", "", i18n.T("commit message"))
 	return cmd
 }
 
-var errNoTTY = errors.New("no terminal; run `skd --help` for commands")
+var errNoTTY = i18n.New("no terminal; run `skd --help` for commands")

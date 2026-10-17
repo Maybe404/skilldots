@@ -7,6 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 type ovKind int
@@ -93,7 +95,7 @@ func inputOverlay(title, desc, placeholder, value string, t Theme, s surfaces, o
 	in.SetValue(clean(value)) // a setting from the file may hold anything
 	in.CursorEnd()
 	in.Focus()
-	return &overlay{kind: ovInput, title: title, desc: desc, input: in, verb: "next", onInput: onInput}
+	return &overlay{kind: ovInput, title: title, desc: desc, input: in, verb: i18n.M("next"), onInput: onInput}
 }
 
 func pickOverlay(title, desc string, items []pickItem, allowAll bool, onPick func([]string, bool) step) *overlay {
@@ -120,32 +122,32 @@ func jobChoice(key, label string, j job) choice {
 // helpKeys lists every key of the dashboard. TestHelpListsEveryKey keeps it
 // in step with updateKey.
 var helpKeys = [][2]string{
-	{"↑↓ j k", "move"},
-	{"pgup pgdn ^u ^d", "page up / down"},
-	{"g G home end", "top / end"},
-	{"tab ← → l", "switch column"},
-	{"enter", "open the pack under the cursor"},
-	{"/", "filter this column (esc clears)"},
-	{"space", "enable / disable the skill (installs an upstream one)"},
-	{"a", "add a repository: pick skills or categories, alias, agents"},
-	{"u / U", "update this pack / every pack with upstream changes"},
-	{"h", "update history: what each update changed, with upstream's commit messages"},
-	{"c", "check upstream for changes again (runs at start; skd outdated)"},
-	{"e", "choose agents for the skill or pack"},
-	{"f", "fork a vendored or app skill into your library (rename it there)"},
-	{"o", "open the skill in your editor (asks to fork a vendored one first)"},
-	{"d", "remove skill (to trash) · unlink yours · purge pack"},
-	{"n", "new skill of your own in skills/ or private/"},
-	{"S", "scan agent directories and adopt what skd does not manage"},
-	{"t", "trash: restore what skd set aside, or empty it"},
-	{"T", "agent targets: approve a custom target of skills.toml (skd targets trust)"},
-	{"s", "back up: commit and push the library"},
-	{"A", "apply pending link changes"},
-	{"r", "reload"},
-	{",", "settings: editor, theme (skd config)"},
-	{"?", "this help"},
-	{"q esc", "quit (esc clears a filter first)"},
-	{"ctrl+c", "quit · while busy: quit when done, twice: stop now"},
+	{"↑↓ j k", i18n.M("move")},
+	{"pgup pgdn ^u ^d", i18n.M("page up / down")},
+	{"g G home end", i18n.M("top / end")},
+	{"tab ← → l", i18n.M("switch column")},
+	{"enter", i18n.M("open the pack under the cursor")},
+	{"/", i18n.M("filter this column (esc clears)")},
+	{"space", i18n.M("enable / disable the skill (installs an upstream one)")},
+	{"a", i18n.M("add a repository: pick skills or categories, alias, agents")},
+	{"u / U", i18n.M("update this pack / every pack with upstream changes")},
+	{"h", i18n.M("update history: what each update changed, with upstream's commit messages")},
+	{"c", i18n.M("check upstream for changes again (runs at start; skd outdated)")},
+	{"e", i18n.M("choose agents for the skill or pack")},
+	{"f", i18n.M("fork a vendored or app skill into your library (rename it there)")},
+	{"o", i18n.M("open the skill in your editor (asks to fork a vendored one first)")},
+	{"d", i18n.M("remove skill (to trash) · unlink yours · purge pack")},
+	{"n", i18n.M("new skill of your own in skills/ or private/")},
+	{"S", i18n.M("scan agent directories and adopt what skd does not manage")},
+	{"t", i18n.M("trash: restore what skd set aside, or empty it")},
+	{"T", i18n.M("agent targets: approve a custom target of skills.toml (skd targets trust)")},
+	{"s", i18n.M("back up: commit and push the library")},
+	{"A", i18n.M("apply pending link changes")},
+	{"r", i18n.M("reload")},
+	{",", i18n.M("settings: editor, theme, language (skd config)")},
+	{"?", i18n.M("this help")},
+	{"q esc", i18n.M("quit (esc clears a filter first)")},
+	{"ctrl+c", i18n.M("quit · while busy: quit when done, twice: stop now")},
 }
 
 // textOverlay shows lines to read; any key but ↑↓ closes it.
@@ -156,16 +158,16 @@ func textOverlay(title string, lines []string) *overlay {
 func helpOverlay() *overlay {
 	var lines []string
 	for _, k := range helpKeys {
-		lines = append(lines, fit(k[0], 16)+"  "+k[1])
+		lines = append(lines, fit(k[0], 16)+"  "+i18n.T(k[1]))
 	}
 	lines = append(lines, "",
-		"Nothing is deleted outright: removed files go to <library>/.trash;",
-		"t lists them and restores them. Emptying the trash asks twice.",
+		i18n.T("Nothing is deleted outright: removed files go to <library>/.trash;"),
+		i18n.T("t lists them and restores them. Emptying the trash asks twice."),
 		"",
-		"\"off in Claude\" marks a skill turned off inside Claude Code (its own",
-		"settings); skd still links it. To keep it out of Claude entirely, press e",
-		"and untick claude.")
-	return &overlay{kind: ovHelp, title: "Keys", lines: lines}
+		i18n.T("\"off in Claude\" marks a skill turned off inside Claude Code (its own"),
+		i18n.T("settings); skd still links it. To keep it out of Claude entirely, press e"),
+		i18n.T("and untick claude."))
+	return &overlay{kind: ovHelp, title: i18n.T("Keys"), lines: lines}
 }
 
 func (o *overlay) values() []string {
@@ -375,7 +377,7 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]stri
 	// The key hints, one group per key, laid out over as many rows as
 	// the width needs.
 	var groups [][]seg
-	key := func(k, label string) []seg { return []seg{sgb(k, t.Accent), sg(" "+label+"   ", t.Text)} }
+	key := func(k, label string) []seg { return []seg{sgb(k, t.Accent), sg(" "+i18n.T(label)+"   ", t.Text)} }
 	footRows := func() []string {
 		var rows []string
 		var cur []seg
@@ -401,7 +403,7 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]stri
 			if len(o.lines) > avail {
 				groups = append(groups, key("↑↓", "scroll"), []seg{sg(ansiRange(off, avail, len(o.lines))+"   ", t.Muted)})
 			}
-			groups = append(groups, []seg{sg("any other key closes", t.Muted)})
+			groups = append(groups, []seg{sg(i18n.T("any other key closes"), t.Muted)})
 		}
 		scrollGroups(0, max(1, h-len(lines)-4))
 		avail := max(1, h-len(lines)-3-len(footRows()))
@@ -521,7 +523,7 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]stri
 			if o.all {
 				mark = sg("◉ ", t.OK)
 			}
-			lines = append(lines, row(mark, sg("follow everything, including skills added upstream later", t.Text)))
+			lines = append(lines, row(mark, sg(i18n.T("follow everything, including skills added upstream later"), t.Text)))
 		}
 	}
 	foot := footRows()
@@ -564,5 +566,5 @@ func (o *overlay) box(i int, t Theme) seg {
 // ansiRange describes a scroll window, e.g. "4–15 of 38".
 func ansiRange(off, h, n int) string {
 	end := min(off+h, n)
-	return itoa(off+1) + "–" + itoa(end) + " of " + itoa(n)
+	return i18n.Sprintf("%d–%d of %d", off+1, end, n)
 }

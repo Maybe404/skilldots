@@ -20,18 +20,20 @@ import (
 // name (a method matches by its name alone) and the position of that
 // argument. A function that shows a message and takes it as an argument
 // belongs here, so its literals are held to the catalogue too.
-var wrappers = map[string]int{
-	"logf": 1, // app.Session.logf(level, format, ...)
+var wrappers = map[string][]int{
+	"say": {0}, "printf": {0}, "joinOr": {1}, "confirm": {0}, "printGroup": {4},
+	"pickEntry": {0}, "opt": {0, 1}, "key": {1},
+	"logf": {1}, // app.Session.logf(level, format, ...)
 }
+
+// variadic are functions whose arguments from the position on are all
+// messages (the column headers of newTable).
+var variadic = map[string]int{"newTable": 0}
 
 // Calls of this package whose argument at the position is a message.
 var own = map[string][]int{
 	"T": {0}, "M": {0}, "Sprintf": {0}, "Errorf": {0}, "New": {0}, "Fprintf": {1}, "Count": {1, 2},
 }
-
-// pending are packages not converted yet; their raw errors are not held
-// against the lint below.
-var pending = []string{"internal/cli/", "internal/tui/"}
 
 var verbRE = regexp.MustCompile(`%[-+# 0-9.*]*(?:\[[0-9]+\])?[a-zA-Z%]`)
 var letterRE = regexp.MustCompile(`[A-Za-z]`)
@@ -118,14 +120,18 @@ func uses(t *testing.T) (found []use, rawErrors []string) {
 				if len(call.Args) > 0 {
 					if s, ok := constString(call.Args[0]); ok && needsTranslation(s) {
 						pos := fset.Position(call.Pos())
-						if !strings.Contains(lines[pos.Line-1], "i18n:raw") && !isPending(p) {
+						if !strings.Contains(lines[pos.Line-1], "i18n:raw") {
 							rawErrors = append(rawErrors, fmt.Sprintf("%s: %s(%q)", pos, pkg+"."+name, s))
 						}
 					}
 				}
 			default:
-				if i, ok := wrappers[name]; ok && pkg != "i18n" {
-					at = []int{i}
+				if idx, ok := wrappers[name]; ok && pkg != "i18n" {
+					at = idx
+				} else if from, ok := variadic[name]; ok && pkg != "i18n" {
+					for i := from; i < len(call.Args); i++ {
+						at = append(at, i)
+					}
 				}
 			}
 			for k, i := range at {
@@ -144,6 +150,27 @@ func uses(t *testing.T) (found []use, rawErrors []string) {
 		t.Fatal(err)
 	}
 	return found, rawErrors
+}
+
+var verbPartsRE = regexp.MustCompile(`%[-+# 0-9.*]*(\[([0-9]+)\])?([a-zA-Z%])`)
+
+// argVerbs maps each argument position (from 1) to the verb that formats
+// it, following %[n]s indexes the way fmt does.
+func argVerbs(s string) map[int]string {
+	out := map[int]string{}
+	next := 1
+	for _, m := range verbPartsRE.FindAllStringSubmatch(s, -1) {
+		if m[3] == "%" {
+			continue
+		}
+		pos := next
+		if m[2] != "" {
+			pos, _ = strconv.Atoi(m[2])
+		}
+		out[pos] = m[3]
+		next = pos + 1
+	}
+	return out
 }
 
 func verbs(s string) string {
@@ -220,6 +247,15 @@ func TestTranslationsKeepTheirValues(t *testing.T) {
 		if verbs(k) != verbs(v) {
 			t.Errorf("verbs differ:\n  %q (%s)\n  %q (%s)", k, verbs(k), v, verbs(v))
 		}
+		// Each value is formatted by the same verb as in the message: a
+		// translation that swaps two values needs %[n]s to say so.
+		kv, vv := argVerbs(k), argVerbs(v)
+		for pos, verb := range kv {
+			if vv[pos] != verb {
+				t.Errorf("argument %d is formatted by %%%s in the message but %%%s in the translation:\n  %q\n  %q", pos, verb, vv[pos], k, v)
+				break
+			}
+		}
 		kl, kt := edges(k)
 		vl, vt := edges(v)
 		if kl != vl || kt != vt {
@@ -235,13 +271,4 @@ func TestNoUntranslatedErrors(t *testing.T) {
 	for _, r := range raw {
 		t.Errorf("use i18n.Errorf / i18n.New (or mark the line // i18n:raw if it is not shown): %s", r)
 	}
-}
-
-func isPending(path string) bool {
-	for _, p := range pending {
-		if strings.Contains(filepath.ToSlash(path), p) {
-			return true
-		}
-	}
-	return false
 }

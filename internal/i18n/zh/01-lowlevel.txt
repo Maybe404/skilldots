@@ -172,7 +172,7 @@
 = 它的模式 %q 既不是 link 也不是 copy
 
 @ its path %q is %s, which is, is inside or holds the directory %s of custom target %q; give each custom target a directory of its own
-= 它的路径 %q 是 %s，它就是、位于或包含自定义 target %q 的目录 %s；请让每个自定义 target 使用各自独立的目录
+= 它的路径 %[1]q 是 %[2]s，它就是、位于或包含自定义 target %[4]q 的目录 %[3]s；请让每个自定义 target 使用各自独立的目录
 
 @ skills.toml has no custom target %q
 = skills.toml 里没有自定义 target %q

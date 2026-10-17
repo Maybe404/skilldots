@@ -16,6 +16,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -31,6 +32,7 @@ var flags struct {
 	json    bool
 	yes     bool
 	theme   string
+	lang    string
 }
 
 // ctx is everything a command needs once the library is open.
@@ -51,10 +53,10 @@ func (c *ctx) printf(format string, a ...any) { say(format, a...) }
 // say is printf for code that has no ctx yet (init, clone, use).
 func say(format string, a ...any) {
 	if flags.json {
-		fmt.Fprintf(stderr, format, a...)
+		i18n.Fprintf(stderr, format, a...)
 		return
 	}
-	fmt.Fprintf(stdout, format, a...)
+	i18n.Fprintf(stdout, format, a...)
 }
 
 // txt and errText are text from outside skd (upstream names and
@@ -77,7 +79,7 @@ func logLine(l app.Level, msg string) {
 	msg = safetext.Lines(msg)
 	switch l {
 	case app.Problem:
-		fmt.Fprintf(stderr, "%s %s\n", warn("warning:"), msg)
+		fmt.Fprintln(stderr, tag(warn, i18n.T("warning:"), msg))
 	case app.Done:
 		say("%s %s\n", ok("✓"), msg)
 	case app.Warn:
@@ -141,11 +143,11 @@ func confirm(prompt string) bool {
 		return true
 	}
 	if !isTerminal() {
-		fmt.Fprintln(stderr, "refusing to proceed without a terminal; pass --yes")
+		fmt.Fprintln(stderr, i18n.T("refusing to proceed without a terminal; pass --yes"))
 		return false
 	}
 	var yes bool
-	if err := ask(huh.NewConfirm().Title(prompt).Affirmative("Yes").Negative("No").Value(&yes)); err != nil {
+	if err := ask(huh.NewConfirm().Title(i18n.T(prompt)).Affirmative(i18n.T("Yes")).Negative(i18n.T("No")).Value(&yes)); err != nil {
 		return false
 	}
 	return yes
@@ -162,12 +164,15 @@ func Root() *cobra.Command {
 	var simple bool
 	root := &cobra.Command{
 		Use:           "skd",
-		Short:         "skilldots — declarative skill management for AI agents",
-		Long:          "skd keeps every skill your agents use in one git-backed library and links them into each agent's skill directory.",
+		Short:         i18n.T("skilldots — declarative skill management for AI agents"),
+		Long:          i18n.T("skd keeps every skill your agents use in one git-backed library and links them into each agent's skill directory."),
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := setupLang(); err != nil {
+				return err
+			}
 			return setupTheme(flags.theme)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -189,13 +194,17 @@ func Root() *cobra.Command {
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	root.Flags().BoolVar(&simple, "simple", false, "use the question-and-answer menu instead of the full-screen dashboard")
-	root.PersistentFlags().StringVar(&flags.library, "library", "", "library directory (default: $"+library.EnvLibrary+", nearest skills.toml, the one set by `skd use`, or ~/.skilldots)")
-	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
-	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
-	root.PersistentFlags().StringVar(&flags.theme, "theme", "", "colours: light, dark or auto (default auto: ask the terminal; also $"+EnvTheme+")")
+	root.Args = rootArgs
+	root.SetFlagErrorFunc(flagError)
+	root.Flags().BoolVar(&simple, "simple", false, i18n.T("use the question-and-answer menu instead of the full-screen dashboard"))
+	root.PersistentFlags().StringVar(&flags.library, "library", "", i18n.Sprintf("library directory (default: $%s, nearest skills.toml, the one set by `skd use`, or ~/.skilldots)", library.EnvLibrary))
+	root.PersistentFlags().BoolVar(&flags.json, "json", false, i18n.T("machine-readable output"))
+	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, i18n.T("answer yes to prompts"))
+	root.PersistentFlags().StringVar(&flags.lang, "lang", "", i18n.Sprintf("language of skd's own text: en, zh or auto (default auto: the system's; also $%s, then the lang setting)", i18n.Env))
+	root.PersistentFlags().StringVar(&flags.theme, "theme", "", i18n.Sprintf("colours: light, dark or auto (default auto: ask the terminal; also $%s)", EnvTheme))
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), outdatedCmd(), enableCmd(), disableCmd(),
 		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd(), configCmd(), historyCmd(), editCmd())
+	localizeCobra(root)
 	return root
 }
 
@@ -204,12 +213,16 @@ func Main() int {
 	// What the screen writers hold of a character split between writes
 	// is printed before exit (as U+FFFD: it will not be completed now).
 	defer flushOutput()
+	// The language is chosen before the command tree is built: its help
+	// texts are made with it. setupLang checks the flag again once cobra
+	// has parsed it.
+	applyLang(scanArgs(os.Args[1:]))
 	err := Root().Execute()
 	if w := settingsWarning(err); w != "" {
 		fmt.Fprintln(stderr, w)
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", errText(err))
+		fmt.Fprintln(stderr, label(i18n.T("error:"), errText(err)))
 		return 1
 	}
 	return 0
@@ -224,7 +237,7 @@ func settingsWarning(err error) string {
 	if settingsErr == nil || errors.As(err, &bad) {
 		return ""
 	}
-	return "warning: " + errText(settingsErr) + "; none of its settings (editor, theme, …) were used"
+	return label(i18n.T("warning:"), i18n.Sprintf("%s; none of its settings (editor, theme, …) were used", errText(settingsErr)))
 }
 
 // dashboardLibrary reports whether `skd` should open the full-screen

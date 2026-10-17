@@ -16,6 +16,9 @@ import (
 var skdBin, skdGuarded string
 
 func TestMain(m *testing.M) {
+	// The tests read English: the language of the machine they run on
+	// must not decide (the language tests choose theirs).
+	os.Setenv("SKILLDOTS_LANG", "en")
 	dir, err := os.MkdirTemp("", "skd-e2e")
 	if err != nil {
 		panic(err)
@@ -59,7 +62,7 @@ func newEnv(t *testing.T) *env {
 		"SKILLDOTS_CACHE=" + filepath.Join(home, "cache"),
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "NO_COLOR=1", "TERM=dumb",
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "NO_COLOR=1", "TERM=dumb", "SKILLDOTS_LANG=en",
 	}
 	return e
 }

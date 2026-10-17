@@ -16,6 +16,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 type focus int
@@ -296,7 +297,7 @@ func New(ops Ops, snap *Snapshot, theme Theme, version string) Model {
 	if len(snap.Warnings) > 0 {
 		m.status, m.statusLvl = firstLine(snap.Warnings[0]), lvWarn
 	} else {
-		m.status = "↑↓ move · tab switch column · ? all keys"
+		m.status = i18n.T("↑↓ move · tab switch column · ? all keys")
 	}
 	return m
 }
@@ -348,19 +349,19 @@ func (m Model) leftRows() []leftRow {
 			packs = append(packs, leftRow{kind: rowPack, pack: i})
 		}
 	}
-	rows = append(rows, leftRow{kind: rowHeader, text: "PACKS", count: countOf(len(packs), len(s.Packs), f)})
+	rows = append(rows, leftRow{kind: rowHeader, text: i18n.T("PACKS"), count: countOf(len(packs), len(s.Packs), f)})
 	switch {
 	case len(packs) > 0:
 		rows = append(rows, packs...)
 	case len(s.Packs) == 0:
-		rows = append(rows, leftRow{kind: rowNote, text: "none yet · a adds one"})
+		rows = append(rows, leftRow{kind: rowNote, text: i18n.T("none yet · a adds one")})
 	default:
-		rows = append(rows, leftRow{kind: rowNote, text: "no match"})
+		rows = append(rows, leftRow{kind: rowNote, text: i18n.T("no match")})
 	}
 	for _, g := range []struct {
 		title  string
 		skills []Skill
-	}{{"MINE", s.Mine}, {"PRIVATE", s.Private}, {"APPS", s.Apps}} {
+	}{{i18n.M("MINE"), s.Mine}, {i18n.M("PRIVATE"), s.Private}, {i18n.M("APPS"), s.Apps}} {
 		var items []leftRow
 		for _, sk := range g.skills {
 			if match(f, sk.LinkName, sk.Description) {
@@ -370,7 +371,7 @@ func (m Model) leftRows() []leftRow {
 		if len(items) == 0 {
 			continue
 		}
-		rows = append(rows, leftRow{kind: rowBlank}, leftRow{kind: rowHeader, text: g.title, count: countOf(len(items), len(g.skills), f)})
+		rows = append(rows, leftRow{kind: rowBlank}, leftRow{kind: rowHeader, text: i18n.T(g.title), count: countOf(len(items), len(g.skills), f)})
 		rows = append(rows, items...)
 	}
 	return rows
@@ -467,7 +468,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finish(msg.res)
 	case editedMsg:
 		if msg.err != nil {
-			m.status, m.statusLvl = "editor: "+firstLine(msg.err.Error()), lvErr
+			m.status, m.statusLvl = i18n.Sprintf("editor: %s", firstLine(msg.err.Error())), lvErr
 		}
 		return m, nil
 	case startCheckMsg:
@@ -485,7 +486,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Quitting now would leave git or `skd sync` running
 				// on their own, possibly half-way through a write.
 				m.quitAfter = true
-				m.busyNote = "quitting when it finishes"
+				m.busyNote = i18n.T("quitting when it finishes")
 				return m, nil
 			}
 			m.quitting = true
@@ -604,7 +605,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "left":
 		return m.switchFocus(focusLeft), nil
 	case "h":
-		return m.start(job{label: "reading the update history", run: func(o Ops) result {
+		return m.start(job{label: i18n.T("reading the update history"), run: func(o Ops) result {
 			recs, err := o.History("")
 			return result{history: recs, err: err, historyRead: true}
 		}})
@@ -618,20 +619,20 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ov = helpOverlay()
 		return m, nil
 	case "r":
-		return m.start(job{label: "reloading", run: func(o Ops) result { return result{msg: "reloaded"} }})
+		return m.start(job{label: i18n.T("reloading"), run: func(o Ops) result { return result{msg: i18n.T("reloaded")} }})
 	case ",":
-		return m.start(job{label: "reading settings", run: func(o Ops) result {
+		return m.start(job{label: i18n.T("reading settings"), run: func(o Ops) result {
 			st, err := o.Settings()
 			return result{settings: st, err: err}
 		}})
 	case "c":
 		if m.check == checkRunning {
-			return m.hint("already checking upstream")
+			return m.hint(i18n.T("already checking upstream"))
 		}
 		return m.startCheck()
 	}
 	if m.busy != "" && len(k.String()) == 1 && strings.Contains(" aAudesfntTSoh,", k.String()) {
-		m.busyNote = "wait until it finishes"
+		m.busyNote = i18n.T("wait until it finishes")
 		return m, nil
 	}
 	switch k.String() {
@@ -642,17 +643,17 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		return m.newFlow()
 	case "t":
-		return m.start(job{label: "reading the trash", run: func(o Ops) result {
+		return m.start(job{label: i18n.T("reading the trash"), run: func(o Ops) result {
 			items, err := o.TrashList()
 			return result{trash: items, err: err}
 		}})
 	case "T":
-		return m.start(job{label: "reading the agent targets", run: func(o Ops) result {
+		return m.start(job{label: i18n.T("reading the agent targets"), run: func(o Ops) result {
 			rows, err := o.Targets()
 			return result{targets: rows, err: err}
 		}})
 	case "S":
-		return m.start(job{label: "scanning agent directories", run: func(o Ops) result {
+		return m.start(job{label: i18n.T("scanning agent directories"), run: func(o Ops) result {
 			r, err := o.Scan()
 			return result{scan: r, err: err}
 		}})
@@ -672,16 +673,16 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		return m.trash()
 	case "s":
-		m.ov = confirmOverlay("Back up the library", []string{
-			"Commit everything in " + m.snap.Name + " and push it to its git remote (skd sync).",
-			"private/ is a separate repository and is never pushed.",
-		}, jobChoice("y", "commit and push", job{label: "backing up", run: func(o Ops) result {
+		m.ov = confirmOverlay(i18n.T("Back up the library"), []string{
+			i18n.Sprintf("Commit everything in %s and push it to its git remote (skd sync).", m.snap.Name),
+			i18n.T("private/ is a separate repository and is never pushed."),
+		}, jobChoice("y", i18n.T("commit and push"), job{label: i18n.T("backing up"), run: func(o Ops) result {
 			msg, err := o.Sync()
 			return result{msg: msg, err: err}
 		}}))
 		return m, nil
 	case "A":
-		return m.start(job{label: "applying", run: func(o Ops) result {
+		return m.start(job{label: i18n.T("applying"), run: func(o Ops) result {
 			msg, err := o.Apply()
 			return result{msg: msg, err: err}
 		}})
@@ -691,7 +692,7 @@ func (m Model) updateKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.busy != "" {
-		m.busyNote = "q again when it finishes · ctrl+c quits once it is done"
+		m.busyNote = i18n.T("q again when it finishes · ctrl+c quits once it is done")
 		return m, nil
 	}
 	m.quitting = true
@@ -710,12 +711,12 @@ func (m Model) pageSize() int {
 // Nothing is updated until the person confirms (see planView).
 func (m Model) planUpdate(repo string) (tea.Model, tea.Cmd) {
 	if len(m.snap.Packs) == 0 {
-		return m.hint("no packs to update · a to add one")
+		return m.hint(i18n.T("no packs to update · a to add one"))
 	}
 	var repos []string
-	label := "checking upstream"
+	label := i18n.T("checking upstream")
 	if repo != "" {
-		repos, label = []string{repo}, "checking "+repo
+		repos, label = []string{repo}, i18n.Sprintf("checking %s", repo)
 	}
 	return m.start(job{label: label, run: func(o Ops) result {
 		plan, err := o.PlanUpdate(repos)
@@ -786,10 +787,10 @@ func (m Model) finishCheck(c checkMsg) Model {
 	}
 	switch {
 	case m.check == checkFailed:
-		m.status, m.statusLvl = "upstream check failed: "+m.checkErr+" · c checks again", lvWarn
+		m.status, m.statusLvl = i18n.Sprintf("upstream check failed: %s · c checks again", m.checkErr), lvWarn
 	case len(m.checkFail) > 0:
 		f := m.checkFail[0]
-		m.status, m.statusLvl = fmt.Sprintf("could not check %s: %s · c checks again", f.Repo, firstLine(f.Error)), lvWarn
+		m.status, m.statusLvl = i18n.Sprintf("could not check %s: %s · c checks again", f.Repo, firstLine(f.Error)), lvWarn
 	}
 	return m
 }
@@ -840,27 +841,27 @@ func (m Model) toggle() (tea.Model, tea.Cmd) {
 	s, p := m.target()
 	if s == nil {
 		if p != nil && len(p.Skills) > 0 {
-			return m.hint("→ to pick a skill in " + p.Repo + ", then space")
+			return m.hint(i18n.Sprintf("→ to pick a skill in %s, then space", p.Repo))
 		}
-		return m.hint("nothing to toggle here")
+		return m.hint(i18n.T("nothing to toggle here"))
 	}
 	sk := *s
 	if !sk.Installed {
-		return m.start(job{label: "installing " + sk.Name, run: func(o Ops) result {
+		return m.start(job{label: i18n.Sprintf("installing %s", sk.Name), run: func(o Ops) result {
 			msg, err := o.Add(sk.Origin, AddRequest{Names: []string{sk.Name}})
 			return result{msg: msg, err: err}
 		}})
 	}
 	if sk.Enabled() {
-		return m.start(job{label: "disabling " + sk.LinkName, run: func(o Ops) result {
+		return m.start(job{label: i18n.Sprintf("disabling %s", sk.LinkName), run: func(o Ops) result {
 			msg, err := o.Disable(sk)
 			return result{msg: msg, err: err}
 		}})
 	}
 	if len(m.snap.Defaults) == 0 {
-		return m.hint("no default agents in skills.toml · e to pick agents")
+		return m.hint(i18n.T("no default agents in skills.toml · e to pick agents"))
 	}
-	return m.start(job{label: "enabling " + sk.LinkName, run: func(o Ops) result {
+	return m.start(job{label: i18n.Sprintf("enabling %s", sk.LinkName), run: func(o Ops) result {
 		msg, err := o.Enable(sk)
 		return result{msg: msg, err: err}
 	}})
@@ -873,10 +874,10 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 	var run func(Ops, []string) (string, error)
 	switch {
 	case s != nil && !s.Installed:
-		return m.hint(s.Name + " is not installed · space installs it")
+		return m.hint(i18n.Sprintf("%s is not installed · space installs it", s.Name))
 	case s != nil:
 		sk := *s
-		cur, title = sk.Agents, "Agents for "+sk.LinkName
+		cur, title = sk.Agents, i18n.Sprintf("Agents for %s", sk.LinkName)
 		run = func(o Ops, a []string) (string, error) { return o.SetTargets(&sk, "", a) }
 	case p != nil:
 		repo := p.Repo
@@ -884,10 +885,10 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 		if cur == nil {
 			cur = m.snap.Defaults
 		}
-		title = "Agents for every skill in " + repo
+		title = i18n.Sprintf("Agents for every skill in %s", repo)
 		run = func(o Ops, a []string) (string, error) { return o.SetTargets(nil, repo, a) }
 	default:
-		return m.hint("select a skill or a pack first")
+		return m.hint(i18n.T("select a skill or a pack first"))
 	}
 	on := map[string]bool{}
 	for _, a := range cur {
@@ -901,16 +902,16 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 	}
 	for _, a := range cur {
 		if !seen[a] {
-			items = append(items, pickItem{label: a, detail: "not found on this machine", value: a, on: true})
+			items = append(items, pickItem{label: a, detail: i18n.T("not found on this machine"), value: a, on: true})
 		}
 	}
 	if len(items) == 0 {
-		return m.hint("no agent skill directories found on this machine")
+		return m.hint(i18n.T("no agent skill directories found on this machine"))
 	}
-	m.ov = pickOverlay(title, "only agents installed here are listed · none = keep in library, link nowhere", items, false,
+	m.ov = pickOverlay(title, i18n.T("only agents installed here are listed · none = keep in library, link nowhere"), items, false,
 		func(values []string, _ bool) step {
 			chosen := append([]string{}, values...)
-			return step{job: &job{label: "linking", run: func(o Ops) result {
+			return step{job: &job{label: i18n.T("linking"), run: func(o Ops) result {
 				msg, err := run(o, chosen)
 				return result{msg: msg, err: err}
 			}}}
@@ -922,22 +923,22 @@ func (m Model) trash() (tea.Model, tea.Cmd) {
 	s, p := m.target()
 	switch {
 	case s != nil && !s.Installed:
-		return m.hint(s.Name + " is not installed; nothing to remove")
+		return m.hint(i18n.Sprintf("%s is not installed; nothing to remove", s.Name))
 	case s != nil && s.Kind == engine.KindVendor:
 		sk := *s
-		m.ov = confirmOverlay("Remove "+sk.LinkName, []string{
-			"Unlink it from every agent and drop it from vendor/.",
-			"The files move to the library trash: t restores them.",
-		}, jobChoice("y", "remove", job{label: "removing " + sk.LinkName, run: func(o Ops) result {
+		m.ov = confirmOverlay(i18n.Sprintf("Remove %s", sk.LinkName), []string{
+			i18n.T("Unlink it from every agent and drop it from vendor/."),
+			i18n.T("The files move to the library trash: t restores them."),
+		}, jobChoice("y", i18n.T("remove"), job{label: i18n.Sprintf("removing %s", sk.LinkName), run: func(o Ops) result {
 			msg, err := o.Trash(sk)
 			return result{msg: msg, err: err}
 		}}))
 	case s != nil:
 		sk := *s
-		m.ov = confirmOverlay("Unlink "+sk.LinkName, []string{
-			"Unlink it from every agent. Your files stay where they are:",
+		m.ov = confirmOverlay(i18n.Sprintf("Unlink %s", sk.LinkName), []string{
+			i18n.T("Unlink it from every agent. Your files stay where they are:"),
 			tildify(sk.Dir),
-		}, jobChoice("y", "unlink", job{label: "unlinking " + sk.LinkName, run: func(o Ops) result {
+		}, jobChoice("y", i18n.T("unlink"), job{label: i18n.Sprintf("unlinking %s", sk.LinkName), run: func(o Ops) result {
 			msg, err := o.Trash(sk)
 			return result{msg: msg, err: err}
 		}}))
@@ -947,15 +948,15 @@ func (m Model) trash() (tea.Model, tea.Cmd) {
 		for _, sk := range p.Skills {
 			links += len(sk.Agents)
 		}
-		m.ov = confirmOverlay("Purge "+repo, []string{
-			fmt.Sprintf("Unsubscribe and remove %d link(s) from agent directories.", links),
-			"vendor/" + repo + " moves to the library trash (t restores it).",
-		}, jobChoice("y", "purge pack", job{label: "purging " + repo, run: func(o Ops) result {
+		m.ov = confirmOverlay(i18n.Sprintf("Purge %s", repo), []string{
+			i18n.Sprintf("Unsubscribe and remove %d link(s) from agent directories.", links),
+			i18n.Sprintf("vendor/%s moves to the library trash (t restores it).", repo),
+		}, jobChoice("y", i18n.T("purge pack"), job{label: i18n.Sprintf("purging %s", repo), run: func(o Ops) result {
 			msg, err := o.Purge(repo)
 			return result{msg: msg, err: err}
 		}}))
 	default:
-		return m.hint("select a skill or a pack first")
+		return m.hint(i18n.T("select a skill or a pack first"))
 	}
 	return m, nil
 }
@@ -1021,7 +1022,7 @@ func (m Model) clearFilter(f focus) Model {
 
 func (m Model) start(j job) (tea.Model, tea.Cmd) {
 	if m.busy != "" {
-		m.busyNote = "wait until it finishes"
+		m.busyNote = i18n.T("wait until it finishes")
 		return m, nil
 	}
 	m.busy, m.busyNote = j.label, ""
@@ -1063,17 +1064,17 @@ func (m Model) finish(r result) (tea.Model, tea.Cmd) {
 	case r.err != nil:
 	case r.browse != nil:
 		m.ov = m.browseOverlay(r.src, r.browse)
-		m.status, m.statusLvl = fmt.Sprintf("%s · %d skills · pick and press enter", r.browse.Repo, len(r.browse.Skills)), lvInfo
+		m.status, m.statusLvl = i18n.Sprintf("%s · %d skills · pick and press enter", r.browse.Repo, len(r.browse.Skills)), lvInfo
 		if n := len(r.browse.Preselect); n > 0 {
-			m.status = fmt.Sprintf("%s · %d skills · %d ticked from what you pasted · enter to continue", r.browse.Repo, len(r.browse.Skills), n)
+			m.status = i18n.Sprintf("%s · %d skills · %d ticked from what you pasted · enter to continue", r.browse.Repo, len(r.browse.Skills), n)
 		}
 		if len(r.browse.Missing) > 0 {
-			m.status, m.statusLvl = fmt.Sprintf("%s has nothing named %s · pick and press enter", r.browse.Repo, strings.Join(r.browse.Missing, ", ")), lvWarn
+			m.status, m.statusLvl = i18n.Sprintf("%s has nothing named %s · pick and press enter", r.browse.Repo, strings.Join(r.browse.Missing, ", ")), lvWarn
 		}
 		return m, nil
 	case r.scan != nil:
 		return m.scanView(r.scan)
-	case r.trash != nil || label == "reading the trash":
+	case r.trash != nil || label == i18n.T("reading the trash"):
 		return m.trashView(r.trash)
 	case r.settings != nil:
 		return m.settingsView(r.settings)
@@ -1119,7 +1120,7 @@ func (m Model) setResult(label string, r result) Model {
 	case r.msg != "":
 		m.status, m.statusLvl = r.msg, lvOK
 	default:
-		m.status, m.statusLvl = label+" done", lvOK
+		m.status, m.statusLvl = i18n.Sprintf("%s done", label), lvOK
 	}
 	return m
 }

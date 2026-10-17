@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/config"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // settingRow is one setting as `skd config list --json` prints it.
@@ -21,17 +22,17 @@ type settingRow struct {
 func configCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Show or change your settings (editor, theme, lang)",
-		Long: "Settings are per user and per machine, in " + config.Path() + ". " +
-			"An empty value unsets a setting. lang is reserved: only English exists so far. " +
-			"set changes only that setting's line: your comments and other lines stay, and so does a comment at the end of " +
-			"that line (unsetting removes the line with it; a value written over several lines is the exception: then the " +
-			"file is written again, without comments). Lines end like the file's (LF or CRLF).",
+		Short: i18n.T("Show or change your settings (editor, theme, lang)"),
+		Long: i18n.Sprintf("Settings are per user and per machine, in %s. "+
+			"An empty value unsets a setting. lang is the language of skd's own text: en, zh or auto (the system's). "+
+			"set changes only that setting's line: your comments and other lines stay, and so does a comment at the end of "+
+			"that line (unsetting removes the line with it; a value written over several lines is the exception: then the "+
+			"file is written again, without comments). Lines end like the file's (LF or CRLF).", config.Path()),
 	}
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "Every setting with its value",
-		Args:  cobra.NoArgs,
+		Short: i18n.T("Every setting with its value"),
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			all, err := config.Load()
 			if err != nil {
@@ -48,11 +49,11 @@ func configCmd() *cobra.Command {
 			for _, r := range rows {
 				v := txt(r.Value)
 				if v == "" {
-					v = dim("unset")
+					v = dim(i18n.T("unset"))
 				}
-				note := r.Help
+				note := i18n.T(r.Help)
 				if r.ReadOnly != "" {
-					note += " · set with " + r.ReadOnly
+					note += i18n.Sprintf(" · set with %s", r.ReadOnly)
 				}
 				t.Row(r.Key, v, dim(note))
 			}
@@ -62,8 +63,8 @@ func configCmd() *cobra.Command {
 	}
 	get := &cobra.Command{
 		Use:   "get <key>",
-		Short: "Print one setting (empty when unset)",
-		Args:  cobra.ExactArgs(1),
+		Short: i18n.T("Print one setting (empty when unset)"),
+		Args:  exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := config.Lookup(args[0]); err != nil {
 				return err
@@ -80,8 +81,8 @@ func configCmd() *cobra.Command {
 	}
 	set := &cobra.Command{
 		Use:   "set <key> [value]",
-		Short: "Change a setting; without a value it is unset",
-		Args:  cobra.RangeArgs(1, 2),
+		Short: i18n.T("Change a setting; without a value it is unset"),
+		Args:  rangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			value := ""
 			if len(args) == 2 {

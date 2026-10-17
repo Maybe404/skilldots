@@ -5,7 +5,6 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +16,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
@@ -112,10 +112,10 @@ func runDashboard(p program, m Model, sigs, hup <-chan os.Signal, stop func() er
 	}()
 	final, err := p.Run()
 	close(ran)
-	label := "the running operation"
+	label := i18n.T("the running operation")
 	force := false
 	if <-hungUp {
-		err = errors.New("the terminal hung up")
+		err = i18n.New("the terminal hung up")
 		force = true
 	}
 	if fm, ok := final.(Model); ok {
@@ -132,7 +132,7 @@ func runDashboard(p program, m Model, sigs, hup <-chan os.Signal, stop func() er
 	// wait for a slow network, and wait just long enough for its git to
 	// exit (it removes its lock files on the way out).
 	if !m.checks.stop(checkGrace) {
-		fmt.Fprintln(termErr, "skd: the upstream check did not stop in time; its git may still be running")
+		fmt.Fprintln(termErr, i18n.T("skd: the upstream check did not stop in time; its git may still be running"))
 	}
 	if werr := waitJobs(m.jobs, label, sigs, force, stop); werr != nil {
 		return werr
@@ -196,22 +196,22 @@ drain: // signals delivered while the dashboard ran already made it quit
 	default:
 	}
 	if !force {
-		fmt.Fprintf(termErr, "skd: waiting for %s to finish… (ctrl+c again to stop it now)\n", label)
+		i18n.Fprintf(termErr, "skd: waiting for %s to finish… (ctrl+c again to stop it now)\n", label)
 		select {
 		case <-idle:
 			return nil
 		case <-sigs:
 		}
 	}
-	fmt.Fprintf(termErr, "skd: stopping %s…\n", label)
+	i18n.Fprintf(termErr, "skd: stopping %s…\n", label)
 	if err := stop(); err != nil {
-		fmt.Fprintf(termErr, "skd: could not stop its processes: %v\n", err)
+		i18n.Fprintf(termErr, "skd: could not stop its processes: %v\n", err)
 	}
 	select {
 	case <-idle:
 	case <-time.After(stopGrace):
 	}
-	return fmt.Errorf("stopped %s before it finished; run `skd` again to check the library (`git status` in it shows what was left half-way)", label)
+	return i18n.Errorf("stopped %s before it finished; run `skd` again to check the library (`git status` in it shows what was left half-way)", label)
 }
 
 func statusText(l level, s string) string {

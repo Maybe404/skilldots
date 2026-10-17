@@ -1,0 +1,1049 @@
+# Dashboard (the full-screen skd).
+
+# Add, new, fork
+@ Add a repository
+= 添加仓库
+
+@ owner/repo · a GitHub or skills.sh link to a skill · a pasted `npx skills add …` line · any git URL · @ref pins a branch or tag
+= owner/repo · 指向某个 skill 的 GitHub 或 skills.sh 链接 · 粘贴的 `npx skills add …` 命令 · 任意 git URL · @ref 固定分支或 tag
+
+@ fetching %s
+= 拉取 %s
+
+@ installed
+= 已安装
+
+@ (no category)
+= （无分类）
+
+@ %s @ %s — %d skills
+= %s @ %s —— %d 个 skill
+
+@ space toggles a skill, or a whole category on its heading · * follows everything
+= 空格切换一个 skill，在分类标题上则切换整个分类 · * 跟随全部
+
+@ a short name for %s in commands (alias:skill) · empty: none
+= %s 在命令里的简短别名（alias:skill）· 留空：不设
+
+@ a short name for %s · empty keeps %s
+= %s 的简短别名 · 留空保持 %s
+
+@ Alias
+= 别名
+
+@ optional
+= 可选
+
+@ alias %q: no / \\ or : and not skills, private, app or vendor
+= 别名 %q：不能含 / \\ 或 :，也不能是 skills、private、app 或 vendor
+
+@ the default agents (%s)
+= 默认的 agent（%s）
+
+@ the pack's agents (%s)
+= 这个 pack 的 agent（%s）
+
+@ none ticked: %s
+= 一个都不勾选时：%s
+
+@ adding %s
+= 添加 %s
+
+@ letters, digits, . _ - · created with a SKILL.md template and linked to %s
+= 字母、数字、. _ - · 会用 SKILL.md 模板创建，并链接到 %s
+
+@ type a name
+= 请输入名称
+
+@ creating %s
+= 创建 %s
+
+@ Create %s
+= 创建 %s
+
+@ skills/ is published with the library; private/ stays on this machine.
+= skills/ 会随库一起发布；private/ 只留在这台机器上。
+
+@ in skills/
+= 放进 skills/
+
+@ in private/
+= 放进 private/
+
+@ select a skill to fork
+= 请先选中要 fork 的 skill
+
+@ %s is not installed · space installs it, then fork
+= %s 尚未安装 · 按空格安装，然后再 fork
+
+@ %s is already yours · edit it in %s
+= %s 已经是你自己的 · 请直接到 %s 编辑
+
+@ Fork %s
+= fork %s
+
+@ name of your copy · enter keeps %s
+= 副本的名字 · 回车保持 %s
+
+@ forking %s
+= fork %s
+
+@ Fork %s as %s
+= 把 %s fork 为 %s
+
+@ Copy it into your library so you can edit it.
+= 把它复制进你的库，这样你就能编辑它。
+
+@ The upstream copy is deselected; updates no longer touch your fork.
+= 上游的那份会被取消选择；更新不会再动你的 fork。
+
+@ into skills/ (published)
+= 放进 skills/（会发布）
+
+@ into private/ (this machine)
+= 放进 private/（仅本机）
+
+# Scan and adopt
+@ app link
+= app 链接
+
+@ left by a target not in use
+= 已停用 target 遗留的
+
+@ nothing to adopt · %s
+= 没有可接管的 · %s
+
+@ Scan · adopt
+= 扫描 · 接管
+
+@ %s · ticked entries are taken over; displaced directories go to the trash
+= %s · 勾选的条目会被接管；被替换的目录会进回收站
+
+@ adopting %d
+= 接管 %d 项
+
+# Trash
+@   cannot be restored
+=   无法恢复
+
+@ restore
+= 恢复
+
+@ skd only puts back what it took from an agent's skill
+= skd 只会放回它从 agent 的 skill 目录或库的 vendor/ 里
+
+@ directory or the library's vendor/. Move it by hand if you trust it.
+= 拿走的东西。如果你信任它，请手动挪动。
+
+@ Cannot restore %s
+= 无法恢复 %s
+
+@ restoring %s
+= 恢复 %s
+
+@ empty trash
+= 清空回收站
+
+@ This cannot be undone. Nothing else in skd deletes anything.
+= 此操作无法撤销。skd 里没有别的操作会删除东西。
+
+@ delete forever
+= 永久删除
+
+@ emptying the trash
+= 清空回收站
+
+@ Empty the trash
+= 清空回收站
+
+@ %s in %s will be deleted permanently.
+= %s（位于 %s）将被永久删除。
+
+@ continue
+= 继续
+
+@ Trash · %s
+= 回收站 · %s
+
+@ what skd set aside, newest first · restoring puts it back where it came from
+= skd 挪开的东西，最新的在前 · 恢复会把它放回原处
+
+@ %d item
+= %d 项
+
+@ %d items
+= %d 项
+
+@ %d update
+= %d 次更新
+
+@ %d updates
+= %d 次更新
+
+# Settings
+@ unset · %s
+= 未设置 · %s
+
+@ change
+= 修改
+
+@ Change it with: %s
+= 请用这个修改：%s
+
+@ %s · empty unsets it
+= %s · 留空表示取消设置
+
+@ %s · one of %s · empty unsets it
+= %s · 可选值：%s · 留空表示取消设置
+
+@ Set %s
+= 设置 %s
+
+@ saving %s
+= 保存 %s
+
+@ Settings
+= 设置
+
+@ per user and per machine (skd config) · the theme applies the next time skd starts
+= 按用户、按机器保存（skd config）· 主题在 skd 下次启动时生效
+
+@ no settings
+= 没有设置
+
+# Targets
+@ not approved · a approves · %s
+= 未批准 · 按 a 批准 · %s
+
+@ not used · %s
+= 未启用 · %s
+
+@ custom · %s
+= 自定义 · %s
+
+@ approve
+= 批准
+
+@ A built-in target: always in use.
+= 内置 target：始终启用。
+
+@ Approved already: skd links skills into
+= 已经批准：skd 会把 skill 链接到
+
+@ Cannot approve %s
+= 无法批准 %s
+
+@ that came from it, and with --force move what is in their way into
+= 放回原处，使用 --force 时还会把挡路的东西挪进
+
+@ the library trash. Approve only a directory you meant for skills.
+= 库的回收站。请只批准你确实打算用来放 skill 的目录。
+
+@ approving %s
+= 批准 %s
+
+@ Approve custom target %s
+= 批准自定义 target %s
+
+@ ! This directory is not named skills. Whatever reads or runs files
+= ! 这个目录的名字不是 skills。凡是会读取或运行
+
+@   from it (an editor, a shell, a service) would load what skd puts there.
+=   其中文件的东西（编辑器、shell、服务），都会加载 skd 放进去的内容。
+
+@ Type %s to approve
+= 输入 %s 以批准
+
+@ the directory %s is not named skills · esc cancels
+= 目录 %s 的名字不是 skills · 按 esc 取消
+
+@ type %s exactly to approve it, or esc to cancel
+= 请原样输入 %s 来批准，或按 esc 取消
+
+@ type its name to approve
+= 输入它的名字以批准
+
+@ Agent targets
+= Agent target
+
+@ where skd links skills · a custom target of skills.toml is used once you approve it here (skd targets trust)
+= skd 把 skill 链接到的地方 · skills.toml 里的自定义 target 在这里批准后才会启用（skd targets trust）
+
+@ no targets
+= 没有 target
+
+# History and update plan
+@ no updates recorded yet · u and U record each one
+= 还没有记录过更新 · u 和 U 会记录每一次更新
+
+@ details
+= 详情
+
+@ Update history · %s
+= 更新历史 · %s
+
+@ newest first · recorded in %s in the library (skd history)
+= 最新的在前 · 记录在库里的 %s（skd history）
+
+@ linking failed: %s · A applies again
+= 链接失败：%s · 按 A 重新应用
+
+@ no upstream commits touched these skills
+= 上游没有涉及这些 skill 的 commit
+
+@ upstream commits:
+= 上游 commit：
+
+@   … more: git log %s..%s in the cache clone
+=   …… 更多：在缓存克隆里运行 git log %s..%s
+
+@ could not check %s: %s
+= 无法检查 %s：%s
+
+@ updating %s
+= 更新 %s
+
+@ %s was not checked
+= %s 没有被检查
+
+@ not vendored yet · upstream %s
+= 尚未引入 · 上游 %s
+
+@ Nothing changed upstream. Updating anyway re-vendors missing skills and re-links.
+= 上游没有变化。仍然更新的话，会重新引入缺失的 skill 并重新链接。
+
+@ Recorded in the update history (h).
+= 会记录在更新历史里（按 h 查看）。
+
+@ Update %s
+= 更新 %s
+
+@ update
+= 更新
+
+@ nothing to update upstream · c checks again · u on a pack updates it anyway
+= 上游没有可更新的 · 按 c 再检查一次 · 在某个 pack 上按 u 可仍然更新它
+
+@ every pack is ticked · space unticks one · enter updates the ticked packs · recorded in the update history (h)
+= 所有 pack 都已勾选 · 空格取消勾选 · 回车更新已勾选的 pack · 会记录在更新历史里（按 h）
+
+@ select a skill to open
+= 请先选中要打开的 skill
+
+@ %s is not installed · space installs it
+= %s 尚未安装 · 按空格安装
+
+@ opening %s
+= 打开 %s
+
+@ Open %s
+= 打开 %s
+
+@ It %s.
+= 它%s。
+
+@ Fork it to edit your own copy: upstream no longer touches it.
+= fork 一份来编辑你自己的副本：上游不会再动它。
+
+@ fork into skills/ and open
+= fork 到 skills/ 并打开
+
+@ fork into private/ and open
+= fork 到 private/ 并打开
+
+@ open anyway
+= 仍然打开
+
+# Main model: status and jobs
+@ ↑↓ move · tab switch column · ? all keys
+= ↑↓ 移动 · tab 切换栏 · ? 查看全部按键
+
+@ none yet · a adds one
+= 还没有 · 按 a 添加
+
+@ no match
+= 没有匹配
+
+@ editor: %s
+= 编辑器：%s
+
+@ quitting when it finishes
+= 完成后退出
+
+@ reading the update history
+= 读取更新历史
+
+@ reloading
+= 重新加载
+
+@ reading settings
+= 读取设置
+
+@ already checking upstream
+= 正在检查上游
+
+@ wait until it finishes
+= 请等它完成
+
+@ reading the trash
+= 读取回收站
+
+@ reading the agent targets
+= 读取 agent target
+
+@ scanning agent directories
+= 扫描 agent 目录
+
+@ Back up the library
+= 备份库
+
+@ Commit everything in %s and push it to its git remote (skd sync).
+= 提交 %s 里的所有内容，并推送到它的 git 远程仓库（skd sync）。
+
+@ private/ is a separate repository and is never pushed.
+= private/ 是独立的仓库，永远不会被推送。
+
+@ commit and push
+= 提交并推送
+
+@ backing up
+= 备份
+
+@ applying
+= 应用
+
+@ q again when it finishes · ctrl+c quits once it is done
+= 完成后再按 q · ctrl+c 在完成后退出
+
+@ no packs to update · a to add one
+= 没有可更新的 pack · 按 a 添加一个
+
+@ checking upstream
+= 检查上游
+
+@ checking %s
+= 检查 %s
+
+@ upstream check failed: %s · c checks again
+= 上游检查失败：%s · 按 c 再检查一次
+
+@ could not check %s: %s · c checks again
+= 无法检查 %s：%s · 按 c 再检查一次
+
+@ → to pick a skill in %s, then space
+= 按 → 在 %s 里选一个 skill，然后按空格
+
+@ nothing to toggle here
+= 这里没有可切换的
+
+@ installing %s
+= 安装 %s
+
+@ disabling %s
+= 停用 %s
+
+@ no default agents in skills.toml · e to pick agents
+= skills.toml 里没有默认 agent · 按 e 选择 agent
+
+@ enabling %s
+= 启用 %s
+
+@ Agents for every skill in %s
+= %s 里所有 skill 的 agent
+
+@ select a skill or a pack first
+= 请先选中一个 skill 或 pack
+
+@ not found on this machine
+= 本机上没有找到
+
+@ no agent skill directories found on this machine
+= 本机上没有找到 agent 的 skill 目录
+
+@ only agents installed here are listed · none = keep in library, link nowhere
+= 只列出本机上装了的 agent · 都不选 = 留在库里，不链接到任何地方
+
+@ linking
+= 链接
+
+@ %s is not installed; nothing to remove
+= %s 尚未安装；没有可移除的
+
+@ Remove %s
+= 移除 %s
+
+@ Unlink it from every agent and drop it from vendor/.
+= 从所有 agent 取消链接，并从 vendor/ 中丢弃。
+
+@ The files move to the library trash: t restores them.
+= 文件会移到库的回收站：按 t 可恢复。
+
+@ remove
+= 移除
+
+@ removing %s
+= 移除 %s
+
+@ Unlink %s
+= 取消链接 %s
+
+@ Unlink it from every agent. Your files stay where they are:
+= 从所有 agent 取消链接。你的文件原地不动：
+
+@ unlink
+= 取消链接
+
+@ unlinking %s
+= 取消链接 %s
+
+@ Purge %s
+= 清除 %s
+
+@ Unsubscribe and remove %d link(s) from agent directories.
+= 取消订阅，并从 agent 目录中移除 %d 个链接。
+
+@ vendor/%s moves to the library trash (t restores it).
+= vendor/%s 会移到库的回收站（按 t 可恢复）。
+
+@ purge pack
+= 清除 pack
+
+@ purging %s
+= 清除 %s
+
+@ %s · %d skills · pick and press enter
+= %s · %d 个 skill · 挑选后按回车
+
+@ %s · %d skills · %d ticked from what you pasted · enter to continue
+= %s · %d 个 skill · 按你粘贴的内容已勾选 %d 个 · 回车继续
+
+@ %s has nothing named %s · pick and press enter
+= %s 里没有叫 %s 的东西 · 挑选后按回车
+
+@ %s done
+= %s 完成
+
+# Operation results
+@ %d skipped (%s; skd apply -n shows all)
+= 跳过 %d 个（%s；skd apply -n 可查看全部）
+
+@ %d moved to trash
+= %d 个已移入回收站
+
+@ %d not changed: %s
+= %d 个未改动：%s
+
+@ applied %s
+= 已应用 %s
+
+@ already up to date
+= 已经是最新
+
+@ vendored %d from %s @ %s
+= 已从 %[2]s @ %[3]s 引入 %[1]d 个
+
+@ %s as %s
+= %s → %s
+
+@  · name taken, linked %s
+=  · 名称已被占用，改为链接 %s
+
+@  · no license found: check before redistributing
+=  · 没有找到许可证：再分发之前请先确认
+
+@ no packs to update
+= 没有可更新的 pack
+
+@ 0 changed
+= 0 个变更
+
+@ changed %s
+= 变更 %s
+
+@ changed %s … %d more
+= 变更 %s …… 还有 %d 个
+
+@ updated %d pack(s): %s · %d added · %d new upstream
+= 已更新 %d 个 pack：%s · 新增 %d 个 · 上游新增 %d 个
+
+@  · h shows what changed
+=  · 按 h 查看改了什么
+
+@ forked %s → %s
+= 已 fork %s → %s
+
+@ unlinked %s from every agent; its files stay in %s
+= 已从所有 agent 取消链接 %s；它的文件仍留在 %s
+
+@ %s had no skills left · %s
+= %s 里没有剩下的 skill 了 · %s
+
+@ removed %s; its files are in the library trash (t)
+= 已移除 %s；它的文件在库的回收站里（按 t）
+
+@ purged %s; vendor/%s is in the library trash (t)
+= 已清除 %s；vendor/%s 在库的回收站里（按 t）
+
+@ pushed to %s
+= 已推送到 %s
+
+@ no remote configured; add one with: skd sync --remote <git-url> · %s
+= 没有配置远程仓库；请这样添加：skd sync --remote <git-url> · %s
+
+@ adopted %d
+= 已接管 %d 项
+
+@ restored %s
+= 已恢复 %s
+
+@ deleted %d item(s) from the trash for good
+= 已从回收站永久删除 %d 项
+
+@ %s: %d line(s) could not be read and were skipped
+= %s：有 %d 行无法读取，已跳过
+
+@ opened %s in %s
+= 已用 %[2]s 打开 %[1]s
+
+@ forked %s → %s · %s
+= 已 fork %s → %s · %s
+
+@ approved custom target %s → %s · A applies
+= 已批准自定义 target %s → %s · 按 A 应用
+
+@ %s unset
+= %s 已取消设置
+
+@  · takes effect the next time skd starts
+=  · 下次启动 skd 时生效
+
+@  · $%s overrides it the next time skd starts
+=  · 下次启动 skd 时 $%s 会覆盖它
+
+# Help
+@ move
+= 移动
+
+@ page up / down
+= 上 / 下翻页
+
+@ top / end
+= 到顶部 / 到末尾
+
+@ switch column
+= 切换栏
+
+@ open the pack under the cursor
+= 打开光标所在的 pack
+
+@ filter this column (esc clears)
+= 过滤这一栏（esc 清除）
+
+@ enable / disable the skill (installs an upstream one)
+= 启用 / 停用 skill（上游的 skill 会被安装）
+
+@ add a repository: pick skills or categories, alias, agents
+= 添加仓库：挑选 skill 或分类、别名、agent
+
+@ update this pack / every pack with upstream changes
+= 更新这个 pack / 所有上游有变化的 pack
+
+@ update history: what each update changed, with upstream's commit messages
+= 更新历史：每次更新改了什么，附上游的 commit 信息
+
+@ check upstream for changes again (runs at start; skd outdated)
+= 重新检查上游有无变化（启动时会自动运行；skd outdated）
+
+@ choose agents for the skill or pack
+= 为 skill 或 pack 选择 agent
+
+@ fork a vendored or app skill into your library (rename it there)
+= 把引入的或应用自带的 skill fork 进你的库（可在此改名）
+
+@ open the skill in your editor (asks to fork a vendored one first)
+= 用编辑器打开 skill（引入的 skill 会先问你是否 fork）
+
+@ remove skill (to trash) · unlink yours · purge pack
+= 移除 skill（进回收站）· 取消你自己 skill 的链接 · 清除 pack
+
+@ new skill of your own in skills/ or private/
+= 在 skills/ 或 private/ 里新建你自己的 skill
+
+@ scan agent directories and adopt what skd does not manage
+= 扫描 agent 目录，接管 skd 尚未管理的东西
+
+@ trash: restore what skd set aside, or empty it
+= 回收站：恢复 skd 挪开的东西，或清空它
+
+@ agent targets: approve a custom target of skills.toml (skd targets trust)
+= agent target：批准 skills.toml 里的自定义 target（skd targets trust）
+
+@ back up: commit and push the library
+= 备份：提交并推送库
+
+@ apply pending link changes
+= 应用待处理的链接改动
+
+@ reload
+= 重新加载
+
+@ settings: editor, theme, language (skd config)
+= 设置：编辑器、主题、语言（skd config）
+
+@ this help
+= 本帮助
+
+@ quit (esc clears a filter first)
+= 退出（esc 会先清除过滤）
+
+@ quit · while busy: quit when done, twice: stop now
+= 退出 · 忙碌时：完成后退出，按两次：立即停止
+
+@ Nothing is deleted outright: removed files go to <library>/.trash;
+= 不会直接删除任何东西：被移除的文件会进入 <库>/.trash；
+
+@ t lists them and restores them. Emptying the trash asks twice.
+= 按 t 可以查看并恢复它们。清空回收站会确认两次。
+
+@ "off in Claude" marks a skill turned off inside Claude Code (its own
+= "已在 Claude 中关闭" 表示这个 skill 在 Claude Code 内部（它自己的
+
+@ settings); skd still links it. To keep it out of Claude entirely, press e
+= 设置里）被关掉了；skd 仍然会链接它。要让 Claude 完全用不到它，请按 e
+
+@ and untick claude.
+= 并取消勾选 claude。
+
+@ Keys
+= 按键
+
+# Overlay chrome
+@ scroll
+= 滚动
+
+@ any other key closes
+= 按其他任意键关闭
+
+@ cancel
+= 取消
+
+@ toggle
+= 切换
+
+@ all
+= 全部
+
+@ confirm
+= 确认
+
+@ follow everything, including skills added upstream later
+= 跟随全部，包括上游以后新增的 skill
+
+@ %d–%d of %d
+= 第 %d–%d 项，共 %d 项
+
+# Times
+@ vendored %s
+= 引入于 %s
+
+@ %d minutes ago
+= %d 分钟前
+
+@ %d hours ago
+= %d 小时前
+
+@ %d days ago
+= %d 天前
+
+@ %d months ago
+= %d 个月前
+
+@ %d years ago
+= %d 年前
+
+@ %d minute ago
+= %d 分钟前
+
+@ %d hour ago
+= %d 小时前
+
+@ %d day ago
+= %d 天前
+
+@ %d month ago
+= %d 个月前
+
+@ %d year ago
+= %d 年前
+
+# Process life cycle
+@ cannot stop child processes on this system
+= 这个系统上无法停止子进程
+
+@ the terminal hung up
+= 终端已挂断
+
+@ skd: the upstream check did not stop in time; its git may still be running
+= skd：上游检查没能及时停止；它的 git 可能还在运行
+
+@ skd: waiting for %s to finish… (ctrl+c again to stop it now)\n
+= skd：等待 %s 结束……（再按一次 ctrl+c 立即停止）\n
+
+@ skd: stopping %s…\n
+= skd：正在停止 %s……\n
+
+@ skd: could not stop its processes: %v\n
+= skd：无法停止它的进程：%v\n
+
+@ stopped %s before it finished; run `skd` again to check the library (`git status` in it shows what was left half-way)
+= %s 在完成之前被停止了；请再运行一次 `skd` 检查库（在库里运行 `git status` 可看到做到一半的东西）
+
+# Screen
+@ window too small (%d×%d) · need %d×%d · q quits
+= 窗口太小（%d×%d）· 至少需要 %d×%d · 按 q 退出
+
+@ check failed
+= 检查失败
+
+@ ✓ no updates
+= ✓ 没有更新
+
+@ ↑ %d to update
+= ↑ %d 个待更新
+
+@ ↑ 1 pack has updates
+= ↑ 有 1 个 pack 有更新
+
+@ ↑ %d packs have updates
+= ↑ 有 %d 个 pack 有更新
+
+@ %d check failed
+= %d 个检查失败
+
+@ %d to apply
+= %d 项待应用
+
+@ ✎ uncommitted
+= ✎ 有未提交的改动
+
+@ no remote
+= 没有远程仓库
+
+@ ↑ not pushed
+= ↑ 尚未推送
+
+@ ↑%d unpushed
+= ↑%d 个未推送
+
+@ synced
+= 已同步
+
+@ linked
+= 已链接
+
+@  · no remote
+=  · 没有远程仓库
+
+@   esc clears
+=   esc 清除
+
+@ conflict 
+= 冲突 
+
+@ missing 
+= 缺失 
+
+@ off in Claude 
+= 已在 Claude 中关闭 
+
+@ not fetched
+= 尚未拉取
+
+@ no license
+= 没有许可证
+
+@ default (%s)
+= 默认（%s）
+
+@ %d of %d selected
+= 已选 %d / %d
+
+@ follows everything upstream
+= 跟随上游的全部
+
+@  · upstream list unknown until u
+=  · 按 u 之前不知道上游有哪些
+
+@ agents 
+= agent 
+
+@ %d new
+= %d 个新增
+
+@ ↑ upstream 
+= ↑ 上游 
+
+@  · %s · u updates
+=  · %s · 按 u 更新
+
+@ update 
+= 更新 
+
+@ %s · up to date
+= %s · 已是最新
+
+@ %d problems (skd apply -n lists them) · %s
+= %d 个问题（skd apply -n 会列出）· %s
+
+@  · r reloads after a fix
+=  · 修复后按 r 重新加载
+
+@ Your library is empty
+= 你的库是空的
+
+@ Press 
+= 按 
+
+@ a
+= a
+
+@  to subscribe to a repository of skills,
+=  订阅一个 skill 仓库，
+
+@ for example mattpocock/skills or anthropics/skills.
+= 比如 mattpocock/skills 或 anthropics/skills。
+
+@ Skills you write go in %s/skills/.
+= 你自己写的 skill 放在 %s/skills/。
+
+@ AGENTS
+= AGENT
+
+@ no skills vendored yet · u fetches upstream
+= 还没有引入任何 skill · 按 u 拉取上游
+
+@ not installed
+= 未安装
+
+@ name conflict · not linked
+= 名称冲突 · 未链接
+
+@ missing from vendor/ · u re-fetches
+= vendor/ 里缺失 · 按 u 重新拉取
+
+@ off · in library
+= 关闭 · 在库里
+
+@   ↑ changed
+=   ↑ 已变更
+
+@   gone upstream
+=   上游已删除
+
+@   moved upstream (path only)
+=   上游已移动（仅路径变化）
+
+@ new upstream
+= 上游新增
+
+@ selected · u vendors it
+= 已选 · 按 u 引入
+
+@   off in Claude Code
+=   已在 Claude Code 中关闭
+
+@  · / filter
+=  · / 过滤
+
+@ linked as %s (upstream %s) · %s
+= 链接名 %s（上游名 %s）· %s
+
+@ your skill · skills/, published with the library
+= 你自己的 skill · skills/，随库一起发布
+
+@ private · this machine only, never pushed
+= 私有 · 仅本机，永远不推送
+
+@ app · shipped with %s
+= app · 随 %s 一起提供
+
+@ off · kept in library
+= 关闭 · 保留在库里
+
+@ source directory is missing
+= 来源目录不存在
+
+@ not linked: %s
+= 未链接：%s
+
+@ space toggle · e agents · d unlink · o open in your editor
+= 空格切换 · e 选 agent · d 取消链接 · o 用编辑器打开
+
+@  · f fork
+=  · f fork
+
+@ off in Claude Code (its own skill settings); skd still links it · e and untick claude keeps it out of Claude entirely
+= 已在 Claude Code 中关闭（它自己的 skill 设置）；skd 仍然会链接它 · 按 e 并取消勾选 claude 可让 Claude 完全用不到它
+
+@  checking upstream…
+=  正在检查上游……
+
+@ quitting when it finishes · ctrl+c again to stop it now
+= 完成后退出 · 再按一次 ctrl+c 立即停止
+
+@ add
+= 添加
+
+@ agents
+= agent
+
+@ fork
+= fork
+
+@ trash
+= 回收站
+
+@ sync
+= 同步
+
+@ filter
+= 过滤
+
+@ help
+= 帮助
+
+@ quit
+= 退出
+
+@ keep filter
+= 保留过滤
+
+@ clear
+= 清除
+
+@ MINE
+= 我的
+
+@ PRIVATE
+= 私有
+
+@ APPS
+= 应用
+
+@ PACKS
+= PACKS
+
+@ reloaded
+= 已重新加载
+
+@ committed
+= 已提交
+
+@ private/ has uncommitted changes (a separate repo, never pushed here)
+= private/ 里有未提交的改动（它是独立的仓库，不会在这里推送）
+
+@ the running operation
+= 正在运行的操作
+
+@ next
+= 下一步

@@ -11,6 +11,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/pack"
@@ -214,7 +215,7 @@ func packMeta(lib *library.Library, lp *lock.Pack, pk *Pack) {
 	}
 	if pk.When == "" {
 		if out, err := lib.Git("log", "-1", "--format=%ct", "--", "vendor/"+pk.Repo); err == nil && out != "" {
-			pk.When = "vendored " + ago(out, time.Now())
+			pk.When = i18n.Sprintf("vendored %s", ago(out, time.Now()))
 		}
 	}
 	dir := lib.PackDir(pk.Repo)
@@ -234,25 +235,19 @@ func ago(unix string, now time.Time) string {
 		return ""
 	}
 	d := now.Sub(time.Unix(sec, 0))
-	unit := func(n int, w string) string {
-		if n == 1 {
-			return "1 " + w + " ago"
-		}
-		return strconv.Itoa(n) + " " + w + "s ago"
-	}
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return i18n.T("just now")
 	case d < time.Hour:
-		return unit(int(d.Minutes()), "minute")
+		return i18n.Count(int(d.Minutes()), "%d minute ago", "%d minutes ago")
 	case d < 24*time.Hour:
-		return unit(int(d.Hours()), "hour")
+		return i18n.Count(int(d.Hours()), "%d hour ago", "%d hours ago")
 	case d < 30*24*time.Hour:
-		return unit(int(d.Hours()/24), "day")
+		return i18n.Count(int(d.Hours()/24), "%d day ago", "%d days ago")
 	case d < 365*24*time.Hour:
-		return unit(int(d.Hours()/24/30), "month")
+		return i18n.Count(int(d.Hours()/24/30), "%d month ago", "%d months ago")
 	}
-	return unit(int(d.Hours()/24/365), "year")
+	return i18n.Count(int(d.Hours()/24/365), "%d year ago", "%d years ago")
 }
 
 // licenseName recognises the common licenses by their text.

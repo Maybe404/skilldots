@@ -25,7 +25,7 @@
 = %s 不是 skills.sh 上的 skill 页面（应为 skills.sh/<owner>/<repo>/<skill>）
 
 @ unterminated %c quote in %q
-= %q 中有未闭合的 %c 引号
+= %[2]q 中有未闭合的 %[1]c 引号
 
 @ %v; enable one with skd enable <name> --agent %s
 = %v；可以用 skd enable <name> --agent %s 启用其中一个
@@ -223,13 +223,13 @@
 = --alias %q 是保留名（skills:<name> 用它指代你自己的 skill）；请换一个
 
 @ no skill %q in %s (try `skd add %s` without --skill to browse)
-= %s 里没有 skill %q（可以不带 --skill 运行 `skd add %s` 来浏览）
+= %[2]s 里没有 skill %[1]q（可以不带 --skill 运行 `skd add %[3]s` 来浏览）
 
 @ no category %q in %s (categories: %s)
-= %s 里没有分类 %q（现有分类：%s）
+= %[2]s 里没有分类 %[1]q（现有分类：%[3]s）
 
 @ %s is excluded by skip = [%q] of %s in skills.toml, which excludes other skills too; edit skills.toml: remove %q from that skip (or replace it with the names to keep out), then run skd update %s
-= %s 被 skills.toml 里 %s 的 skip = [%q] 排除了，而那一项也排除了其他 skill；请编辑 skills.toml：把 %q 从那条 skip 里去掉（或换成要排除的具体名字），然后运行 skd update %s
+= %[1]s 被 skills.toml 里 %[3]s 的 skip = [%[2]q] 排除了，而那一项也排除了其他 skill；请编辑 skills.toml：把 %[4]q 从那条 skip 里去掉（或换成要排除的具体名字），然后运行 skd update %[5]s
 
 @ could not write the update history (%s): %v
 = 无法写入更新历史（%s）：%v

@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"errors"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -11,20 +9,21 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 func targetsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "targets",
-		Short: "List known agent targets and whether they exist here",
-		Long: "List the built-in agent targets and the custom ones of skills.toml.\n\n" +
+		Short: i18n.T("List known agent targets and whether they exist here"),
+		Long: i18n.T("List the built-in agent targets and the custom ones of skills.toml.\n\n" +
 			"A custom target is used only after a person approves it on this machine\n" +
 			"(skd targets trust <name>, at a terminal), and never when its directory is\n" +
 			"outside your home directory, is your home directory, is or holds a\n" +
 			"sensitive place (~/.ssh, ~/.aws, ~/Library/LaunchAgents, ~/.vscode, …) or the\n" +
 			"library, is inside a built-in target's directory, or is, is inside or holds\n" +
-			"another custom target's directory.",
+			"another custom target's directory."),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
@@ -76,11 +75,11 @@ func targetsCmd() *cobra.Command {
 					flag = ok("●")
 				}
 				if r.Default {
-					d = accent("default")
+					d = accent(i18n.T("default"))
 				}
 				if !r.Active {
-					flag, d = warn("!"), warn("not used")
-					notes = append(notes, fmt.Sprintf("%s custom target %s is not used: %s", warn("!"), txt(r.Name), txt(r.Problem)))
+					flag, d = warn("!"), warn(i18n.T("not used"))
+					notes = append(notes, i18n.Sprintf("%s custom target %s is not used: %s", warn("!"), txt(r.Name), txt(r.Problem)))
 				}
 				t.Row(flag, txt(r.Name), d, dim(txt(r.Path)))
 			}
@@ -101,22 +100,22 @@ func targetsCmd() *cobra.Command {
 func personAtTerminal() bool { return isTerminal() && !flags.yes && !flags.json }
 
 func errNeedsPerson(w targets.Withheld) error {
-	return fmt.Errorf("approving custom target %q lets skd write into %s; only a person at a terminal can do that (--yes and --json do not): ask the user to run `skd targets trust %s` in a terminal", w.Name, w.Real, w.Name)
+	return i18n.Errorf("approving custom target %q lets skd write into %s; only a person at a terminal can do that (--yes and --json do not): ask the user to run `skd targets trust %s` in a terminal", w.Name, w.Real, w.Name)
 }
 
 func trustCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "trust <name>",
-		Short: "Approve a custom target of skills.toml on this machine (a person at a terminal only)",
-		Long: "Show where a custom target of skills.toml leads and, when you agree, let skd\n" +
+		Short: i18n.T("Approve a custom target of skills.toml on this machine (a person at a terminal only)"),
+		Long: i18n.T("Show where a custom target of skills.toml leads and, when you agree, let skd\n" +
 			"write skills there on this machine. The approval names the target and its\n" +
 			"directory (symbolic links resolved) and its mode (link or copy); when\n" +
 			"skills.toml later points the target elsewhere or changes its mode it needs\n" +
 			"approving again. A directory not named skills is approved only by typing\n" +
 			"the target's name. Approvals are kept beside the\n" +
 			"settings file, never in a library. Only a person at a terminal can approve:\n" +
-			"without one, and with --yes or --json, skd refuses.",
-		Args: cobra.ExactArgs(1),
+			"without one, and with --yes or --json, skd refuses."),
+		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
@@ -124,7 +123,7 @@ func trustCmd() *cobra.Command {
 			}
 			name := args[0]
 			if _, ok := c.lib.Manifest.Targets.Custom[name]; !ok {
-				return fmt.Errorf("skills.toml has no custom target %q (see `skd targets`)", name)
+				return i18n.Errorf("skills.toml has no custom target %q (see `skd targets`)", name)
 			}
 			w, held := c.reg.WithheldTarget(name)
 			if !held {
@@ -134,7 +133,7 @@ func trustCmd() *cobra.Command {
 				return nil
 			}
 			if !w.Approvable {
-				return fmt.Errorf("custom target %q cannot be approved: %s", name, w.Problem)
+				return i18n.Errorf("custom target %q cannot be approved: %s", name, w.Problem)
 			}
 			if !personAtTerminal() {
 				return errNeedsPerson(w)
@@ -144,9 +143,9 @@ func trustCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				return errors.New("not approved; nothing changed")
+				return i18n.New("not approved; nothing changed")
 			}
-			c.printf("%s approved custom target %s → %s %s\n", ok("✓"), txt(name), txt(w.Real), dim("(skd apply links skills there)"))
+			c.printf("%s approved custom target %s → %s %s\n", ok("✓"), txt(name), txt(w.Real), dim(i18n.T("(skd apply links skills there)")))
 			return nil
 		},
 	}
@@ -155,18 +154,18 @@ func trustCmd() *cobra.Command {
 func untrustCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "untrust <name>",
-		Short: "Withdraw the approval of a custom target on this machine",
-		Args:  cobra.ExactArgs(1),
+		Short: i18n.T("Withdraw the approval of a custom target on this machine"),
+		Args:  exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := targets.Revoke(args[0])
 			if err != nil {
 				return err
 			}
 			if n == 0 {
-				say("%s\n", dim(fmt.Sprintf("custom target %s was not approved", txt(args[0]))))
+				say("%s\n", dim(i18n.Sprintf("custom target %s was not approved", txt(args[0]))))
 			} else {
 				say("%s custom target %s is no longer approved %s\n", ok("✓"), txt(args[0]),
-					dim("(skd stops using it; what it linked there stays until you take the target out of skills.toml and run skd apply)"))
+					dim(i18n.T("(skd stops using it; what it linked there stays until you take the target out of skills.toml and run skd apply)")))
 			}
 			jsonOut(map[string]any{"name": args[0], "revoked": n})
 			return nil
@@ -180,32 +179,32 @@ func untrustCmd() *cobra.Command {
 // must type the target's name: a y is not enough.
 func approveTarget(reg *targets.Registry, w targets.Withheld) (bool, error) {
 	lines := []string{
-		bold("Custom target " + txt(w.Name)),
-		"skills.toml path  " + txt(w.Path),
-		"directory         " + txt(w.Real),
-		"mode              " + txt(w.Mode),
+		bold(i18n.Sprintf("Custom target %s", txt(w.Name))),
+		pad(i18n.T("skills.toml path"), 18) + txt(w.Path),
+		pad(i18n.T("directory"), 18) + txt(w.Real),
+		pad(i18n.T("mode"), 18) + txt(w.Mode),
 		"",
-		dim("skd will " + map[bool]string{true: "copy", false: "link"}[w.Mode == "copy"] + " skills into this directory, put back trash entries"),
-		dim("that came from it, and with --force move what is in their way into the"),
-		dim("library trash. Approve only a directory you meant for skills."),
+		dim(map[bool]string{true: i18n.T("skd will copy skills into this directory, put back trash entries"), false: i18n.T("skd will link skills into this directory, put back trash entries")}[w.Mode == "copy"]),
+		dim(i18n.T("that came from it, and with --force move what is in their way into the")),
+		dim(i18n.T("library trash. Approve only a directory you meant for skills.")),
 	}
 	unusual := targets.Unusual(w.Real)
 	if unusual {
 		lines = append(lines, "",
-			warn("! This directory is not named skills. Whatever reads or runs files from"),
-			warn("  it (an editor, a shell, a service) would load what skd puts there."))
+			warn(i18n.T("! This directory is not named skills. Whatever reads or runs files from")),
+			warn(i18n.T("  it (an editor, a shell, a service) would load what skd puts there.")))
 	}
 	say("%s\n", card(lines...))
 	if unusual {
 		var typed string
-		err := ask(huh.NewInput().Title(fmt.Sprintf("Type %s to let skd write skills into %s (anything else refuses)", txt(w.Name), txt(w.Real))).Value(&typed))
+		err := ask(huh.NewInput().Title(i18n.Sprintf("Type %s to let skd write skills into %s (anything else refuses)", txt(w.Name), txt(w.Real))).Value(&typed))
 		if err != nil || typed != w.Name {
 			return false, nil
 		}
 		return true, reg.Approve(w, typed)
 	}
 	var yes bool
-	err := ask(huh.NewConfirm().Title(fmt.Sprintf("Let skd write skills into %s?", txt(w.Real))).Affirmative("Approve").Negative("No").Value(&yes))
+	err := ask(huh.NewConfirm().Title(i18n.Sprintf("Let skd write skills into %s?", txt(w.Real))).Affirmative(i18n.T("Approve")).Negative(i18n.T("No")).Value(&yes))
 	if err != nil || !yes {
 		return false, nil
 	}
@@ -251,7 +250,7 @@ func reviewCustomTargets(reg *targets.Registry) (approved bool, err error) {
 		}
 	}
 	if len(later) > 0 {
-		say("  %s\n", dim("a person approves one at a terminal with `skd targets trust <name>` ("+strings.Join(txts(later), ", ")+"), then runs `skd apply`"))
+		say("  %s\n", dim(i18n.Sprintf("a person approves one at a terminal with `skd targets trust <name>` (%s), then runs `skd apply`", strings.Join(txts(later), ", "))))
 	}
 	return approved, nil
 }

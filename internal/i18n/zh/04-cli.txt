@@ -1,0 +1,1100 @@
+# Command line: help texts, tables, prompts, progress and results.
+
+@ Show or change your settings (editor, theme, lang)
+= 查看或修改设置（editor、theme、lang）
+
+@ Settings are per user and per machine, in %s. An empty value unsets a setting. lang is the language of skd's own text: en, zh or auto (the system's). set changes only that setting's line: your comments and other lines stay, and so does a comment at the end of that line (unsetting removes the line with it; a value written over several lines is the exception: then the file is written again, without comments). Lines end like the file's (LF or CRLF).
+= 设置按用户、按机器保存，位于 %s。值为空表示取消该设置。lang 是 skd 自身文字的语言：en、zh 或 auto（跟随系统）。set 只改动该设置所在的那一行：你的注释和其他行都保留，那一行末尾的注释也保留（取消设置时整行一起删除；值跨多行是例外，那时会整个文件重写，注释不保留）。换行符与文件原有的一致（LF 或 CRLF）。
+
+@ Every setting with its value
+= 列出所有设置及其值
+
+@ SETTING
+= 设置项
+
+@ VALUE
+= 值
+
+@ unset
+= 未设置
+
+@  · set with %s
+=  · 用 %s 设置
+
+@ Print one setting (empty when unset)
+= 打印一个设置的值（未设置时为空）
+
+@ Change a setting; without a value it is unset
+= 修改一个设置；不给值就是取消设置
+
+@ %s %s unset\n
+= %s %s 已取消设置\n
+
+@ Open a skill's directory in your editor
+= 用编辑器打开 skill 的目录
+
+@ The editor is the editor setting (skd config set editor <command>), else $VISUAL, else $EDITOR, else VS Code, Cursor, Zed or Sublime Text when installed, else the system's default opener. A vendored skill (or one an application ships) is replaced on update, so skd does not open it as is: at a terminal it asks whether to fork it first; otherwise it refuses unless --fork (copy it into skills/, or private/ with --private, and open the copy) or --force (open the files that will be replaced) is given.
+= 编辑器依次取：editor 设置（skd config set editor <command>）、$VISUAL、$EDITOR，再是已安装的 VS Code、Cursor、Zed 或 Sublime Text，最后用系统默认的打开方式。引入的 skill（或应用自带的 skill）会在更新时被替换，所以 skd 不会直接打开它：在终端里会先问你是否 fork；否则会拒绝，除非给了 --fork（复制到 skills/，加 --private 则复制到 private/，并打开副本）或 --force（打开将被替换的原文件）。
+
+@ --fork and --force: pick one
+= --fork 和 --force 只能选一个
+
+@ Fork it into skills/ and open your copy (upstream no longer touches it)
+= fork 到 skills/ 并打开你的副本（上游不再动它）
+
+@ Fork it into private/ (this machine only) and open your copy
+= fork 到 private/（仅本机）并打开你的副本
+
+@ Open the files anyway (edits are lost on the next update)
+= 仍然打开这些文件（下次更新时改动会丢失）
+
+@ Cancel
+= 取消
+
+@ %s forked %s → %s\n
+= %s 已 fork %s → %s\n
+
+@ opening
+= 正在打开
+
+@ with %s (%s)
+= 使用 %s（%s）
+
+@ for a vendored or app skill: fork it into skills/ first and open the copy
+= 针对引入的或应用自带的 skill：先 fork 到 skills/，再打开副本
+
+@ with --fork: into private/ instead of skills/
+= 配合 --fork：fork 到 private/ 而不是 skills/
+
+@ with --fork: name for the copy
+= 配合 --fork：副本的名字
+
+@ open a vendored or app skill's own files although an update replaces them
+= 即使更新会替换它们，也打开引入的或应用自带的 skill 的原文件
+
+@ What each update changed: commits, skills, and upstream's commit messages
+= 每次更新改了什么：commit、skill 以及上游的 commit 信息
+
+@ Every `skd update` records, per pack it moved, the old and new commit, the skills that changed, were added, moved, went away upstream or appeared there, and the subjects of the upstream commits that touched them (at most %d). The record is %s in the library: it is committed and pushed with it, so another machine sees it after a clone. Reading it needs no network.
+= 每次 `skd update` 都会为它更新的每个 pack 记录：新旧 commit，发生变更、新增、移动、在上游消失或在上游出现的 skill，以及涉及这些 skill 的上游 commit 的标题（最多 %d 条）。记录保存在库里的 %s：它随库一起提交和推送，所以另一台机器 clone 之后也能看到。读取它不需要网络。
+
+@ %s %s: %d line(s) could not be read and were skipped\n
+= %s %s：有 %d 行无法读取，已跳过\n
+
+@ no updates recorded yet
+= 还没有记录过更新
+
+@ no updates of %s recorded
+= 没有 %s 的更新记录
+
+@  · skd update records each one
+=  · skd update 会记录每一次更新
+
+@ show at most this many records (0: all)
+= 最多显示这么多条记录（0：全部）
+
+@ new
+= 新建
+
+@ link failed
+= 链接失败
+
+@  · skd apply finishes it
+=  · 运行 skd apply 完成链接
+
+@ upstream commits unknown (history rewritten or not fetched)
+= 上游 commit 未知（历史被改写，或尚未拉取）
+
+@ … more (git -C %s log %s..%s)
+= …… 还有更多（git -C %s log %s..%s）
+
+@ %s %q: use auto, en or zh
+= %s %q：请使用 auto、en 或 zh
+
+@ warning: the lang setting %q is not auto, en or zh; using auto (skd config set lang auto fixes it)\n
+= 警告：lang 设置 %q 不是 auto、en 或 zh；改用 auto（运行 skd config set lang auto 可修复）\n
+
+@ help for %s
+= %s 的帮助
+
+@ version for %s
+= %s 的版本
+
+@ Help about any command
+= 查看任意命令的帮助
+
+@ Help provides help for any command in the application.\nSimply type %s help [path to command] for full details.
+= help 可以查看本程序任意命令的帮助。\n输入 %s help [命令路径] 即可看到完整说明。
+
+@ Create a library (default ~/.skilldots)
+= 创建库（默认 ~/.skilldots）
+
+@ %s already has a %s
+= %s 里已经有 %s
+
+@ %w; init records the library there, so fix or remove it first (nothing was created)
+= %w；init 要把库记录在那里，所以请先修复或删除它（没有创建任何东西）
+
+@ %s is a symbolic link; skd does not set up private/ through it (make it a directory of its own; nothing was created)
+= %s 是符号链接；skd 不会通过它建立 private/（请把它改成独立的目录；没有创建任何东西）
+
+@ %s initialised library at %s\n  %s\n
+= %s 已在 %s 初始化库\n  %s\n
+
+@ default targets: %s  (skd enable <skill> --agent claude to add more)
+= 默认 target：%s  （用 skd enable <skill> --agent claude 添加更多）
+
+@   %s could not fetch the %s skill (%s); run `skd add %s --skill %s` later\n
+=   %s 无法拉取 %s skill（%s）；稍后请运行 `skd add %s --skill %s`\n
+
+@ installed the %s skill so agents on this machine know how to use skd
+= 已安装 %s skill，让本机上的 agent 知道怎么使用 skd
+
+@ turn an existing directory into the library
+= 把已有的目录变成库
+
+@ default targets (default: agents)
+= 默认 target（默认：agents）
+
+@ do not install the skilldots skill for agents
+= 不为 agent 安装 skilldots skill
+
+@ Show packs and skills (one line per pack unless expanded)
+= 显示 pack 和 skill（除非展开，每个 pack 一行）
+
+@ expand every pack
+= 展开每个 pack
+
+@ one line per skill
+= 每个 skill 一行
+
+@ show what one agent target receives
+= 显示某个 agent target 收到的 skill
+
+@ %d linked
+= 已链接 %d 个
+
+@  · agents: %s
+=  · agent：%s
+
+@ PACK
+= PACK
+
+@ SKILLS
+= SKILL 数
+
+@ COMMIT
+= COMMIT
+
+@ TARGETS
+= TARGET
+
+@ %d of %d
+= %d / %d
+
+@ all %d
+= 全部 %d
+
+@ yours, published with the library
+= 你自己的，随库一起发布
+
+@ this machine only
+= 仅本机
+
+@ shipped with installed applications
+= 随已安装的应用提供
+
+@ checked %s
+= 检查于 %s
+
+@  · stale, skd outdated checks again
+=  · 已过期，skd outdated 会重新检查
+
+@ no updates · %s
+= 没有更新 · %s
+
+@ ↑ 1 update available
+= ↑ 有 1 个更新
+
+@  · %s · skd update
+=  · %s · skd update
+
+@ ↑ %d updates available
+= ↑ 有 %d 个更新
+
+@ %d could not be checked
+= %d 个无法检查
+
+@ default
+= 默认
+
+@ off
+= 关闭
+
+@ SKILL
+= SKILL
+
+@ CATEGORY
+= 分类
+
+@ DESCRIPTION
+= 描述
+
+@ missing
+= 缺失
+
+@ conflict
+= 冲突
+
+@ off in Claude Code
+= 已在 Claude Code 中关闭
+
+@ off in Claude Code: turned off in Claude Code's own skill settings; skd still links it. To keep it out of Claude entirely, remove the claude target: skd disable <skill> --agent claude (e in the dashboard).
+= 已在 Claude Code 中关闭：在 Claude Code 自己的 skill 设置里被关掉了；skd 仍然会链接它。要让 Claude 完全用不到它，请移除 claude target：skd disable <skill> --agent claude（仪表盘里按 e）。
+
+@ FROM
+= 来源
+
+@ Make agent directories match the manifest
+= 让 agent 目录与清单一致
+
+@ show the plan without changing anything
+= 只显示计划，不做任何改动
+
+@ replace unmanaged or modified entries (they are moved to the library trash, not deleted)
+= 替换未受管理或已被修改的条目（它们会被移到库的回收站，不会被删除）
+
+@ %d planned change(s) not made (listed above); the agent directories do not match skills.toml yet
+= 有 %d 项计划中的改动没有完成（见上方）；agent 目录与 skills.toml 还不一致
+
+@ up to date, %d linked
+= 已是最新，已链接 %d 个
+
+@ , %d skipped
+= ，跳过 %d 个
+
+@ +%d ↻%d −%d · %d kept · %d skipped
+= +%d ↻%d −%d · 保持 %d · 跳过 %d
+
+@ dry run · %s
+= 预演 · %s
+
+@ moved aside
+= 已挪开
+
+@ ! skipped
+= ! 已跳过
+
+@ applied · %s · %d not changed
+= 已应用 · %s · %d 项未改动
+
+@ applied · %s
+= 已应用 · %s
+
+@ Scaffold a skill of your own in skills/ (or private/)
+= 在 skills/（或 private/）里新建一个你自己的 skill 骨架
+
+@ create under private/ (never pushed)
+= 创建在 private/ 下（永远不会推送）
+
+@ Point skd at an existing library directory from now on
+= 让 skd 从现在起使用一个已有的库目录
+
+@ %s has no %s
+= %s 里没有 %s
+
+@ %s skd now uses %s %s\n
+= %s skd 现在使用 %s %s\n
+
+@ What skd has set aside: list, restore, or empty (empty is for a person at a terminal)
+= skd 挪开的东西：列出、恢复或清空（清空只能由终端前的人来做）
+
+@ trash is empty
+= 回收站是空的
+
+@ ID
+= ID
+
+@ WHEN
+= 时间
+
+@ %s %s cannot be restored: %s
+= %s %s 无法恢复：%s
+
+@ skd trash restore <id>   ·   skd trash empty
+= skd trash restore <id>   ·   skd trash empty
+
+@ Put a parked directory back where it came from
+= 把挪开的目录放回原处
+
+@ %s restored to %s\n
+= %s 已恢复到 %s\n
+
+@ Permanently delete everything in the trash (interactive only; --yes is ignored)
+= 永久删除回收站里的所有东西（仅限交互使用；--yes 无效）
+
+@ skd trash empty is irreversible and only runs interactively; ask the user to run it
+= skd trash empty 不可撤销，只能交互运行；请让用户自己来运行
+
+@ permanently delete
+= 永久删除
+
+@ Delete %d item(s) forever?
+= 永久删除这 %d 项吗？
+
+@ Delete
+= 删除
+
+@ Keep
+= 保留
+
+@ cancelled
+= 已取消
+
+@ %s deleted %d\n
+= %s 已删除 %d 项\n
+
+@ everything linked
+= 全部已链接
+
+@ %d changes pending — Apply
+= 有 %d 项改动待应用 —— 请选择 Apply
+
+@   ·  last change %s
+=   ·  上次改动 %s
+
+@ fetch upstream changes
+= 拉取上游的改动
+
+@ 1 pack has updates
+= 有 1 个 pack 有更新
+
+@ %d packs have updates
+= 有 %d 个 pack 有更新
+
+@ Overview
+= 概览
+
+@ packs and skills at a glance
+= 一眼看清 pack 和 skill
+
+@ Add
+= 添加
+
+@ subscribe to a repository and pick skills
+= 订阅一个仓库并挑选 skill
+
+@ Update
+= 更新
+
+@ Outdated
+= 检查更新
+
+@ check upstream without changing anything
+= 检查上游，不做任何改动
+
+@ Agents
+= Agent
+
+@ choose which agents get a skill
+= 选择哪些 agent 能用某个 skill
+
+@ Fork
+= Fork
+
+@ make a vendored skill your own
+= 把引入的 skill 变成你自己的
+
+@ Remove
+= 移除
+
+@ unlink, drop, or purge
+= 取消链接、丢弃或清除
+
+@ New skill
+= 新建 skill
+
+@ scaffold one of your own
+= 新建一个你自己的 skill 骨架
+
+@ Scan
+= 扫描
+
+@ find skills installed by other tools
+= 找出其他工具装的 skill
+
+@ Trash
+= 回收站
+
+@ what skd set aside
+= skd 挪开的东西
+
+@ Apply
+= 应用
+
+@ re-link to match the manifest
+= 重新链接以符合清单
+
+@ Backup
+= 备份
+
+@ commit and push the library
+= 提交并推送库
+
+@ Quit
+= 退出
+
+@ error:
+= 错误：
+
+@ Source
+= 来源
+
+@ owner/repo · a GitHub or skills.sh link · a pasted `npx skills add …` line · any git URL · @ref pins
+= owner/repo · GitHub 或 skills.sh 链接 · 粘贴的 `npx skills add …` 命令 · 任意 git URL · @ref 用来固定版本
+
+@ mattpocock/skills
+= mattpocock/skills
+
+@ Skill name
+= Skill 名称
+
+@ my-skill
+= my-skill
+
+@ Keep it private to this machine?
+= 只留在本机，不公开吗？
+
+@ Fork which skill?
+= fork 哪个 skill？
+
+@ Remove which skill?
+= 移除哪个 skill？
+
+@ Unlink from all agents, keep in library  (skd disable)
+= 从所有 agent 取消链接，保留在库里  （skd disable）
+
+@ Unlink and drop from the library           (skd remove)
+= 取消链接并从库中丢弃  （skd remove）
+
+@ Delete the whole pack %s   (skd purge)
+= 清除整个 pack %s  （skd purge）
+
+@ Which skill?
+= 哪个 skill？
+
+@ Agents for %s
+= %s 的 agent
+
+@ only agents installed on this machine are listed · none = keep in library, link nowhere
+= 只列出本机上装了的 agent · 都不选 = 留在库里，不链接到任何地方
+
+@ Adopt unmanaged entries now?
+= 现在接管未受管理的条目吗？
+
+@ Adopt
+= 接管
+
+@ Not now
+= 暂不
+
+@ nothing to choose from
+= 没有可选的
+
+@ no library on this machine yet
+= 本机上还没有库
+
+@ Where should your skills live?
+= 你的 skill 放在哪里？
+
+@ A library is a git repository holding your skills and a skills.toml manifest.
+= 库是一个 git 仓库，存放你的 skill 和一份 skills.toml 清单。
+
+@ Create a new library at %s
+= 在 %s 新建一个库
+
+@ Clone an existing library from git (e.g. your backup on GitHub)
+= 从 git 克隆一个已有的库（比如你在 GitHub 上的备份）
+
+@ Use a directory that already has a skills.toml
+= 使用已经有 skills.toml 的目录
+
+@ Git URL
+= Git URL
+
+@ git@github.com:you/agent-skills.git
+= git@github.com:you/agent-skills.git
+
+@ Directory
+= 目录
+
+@ ~/code/agent-skills
+= ~/code/agent-skills
+
+@ %s skd now uses %s\n
+= %s skd 现在使用 %s\n
+
+@ Clone a library (your backup from another machine) and apply it
+= 克隆一个库（你在另一台机器上的备份）并应用它
+
+@ %q has control characters: not a git URL
+= %q 含有控制字符：不是 git URL
+
+@ %w; clone records the library there, so fix or remove it first (nothing was cloned)
+= %w；clone 要把库记录在那里，所以请先修复或删除它（没有克隆任何东西）
+
+@ %s cloned into %s\n
+= %s 已克隆到 %s\n
+
+@ %s %v; nothing was set up there, and skills under it are skipped\n
+= %s %v；没有在那里设置任何东西，它下面的 skill 会被跳过\n
+
+@ Commit the library and push it to its git remote (your backup)
+= 提交库并推送到它的 git 远程仓库（你的备份）
+
+@ %s committed in %s\n
+= %s 已在 %s 提交\n
+
+@ nothing to commit
+= 没有可提交的
+
+@ %s no remote configured; add one with: skd sync --remote <git-url>\n
+= %s 没有配置远程仓库；请这样添加：skd sync --remote <git-url>\n
+
+@ %s pushed\n
+= %s 已推送\n
+
+@ %s private/ has uncommitted changes (it is a separate repo and is never pushed here)\n
+= %s private/ 里有未提交的改动（它是独立的仓库，不会在这里推送）\n
+
+@ note:
+= 注：
+
+@ set the git remote (origin) before pushing
+= 推送前设置 git 远程仓库（origin）
+
+@ commit message
+= commit 信息
+
+@ no terminal; run `skd --help` for commands
+= 没有终端；运行 `skd --help` 查看命令
+
+@ Subscribe to a repository and pick the skills to vendor
+= 订阅一个仓库，并挑选要引入的 skill
+
+@ The source is owner/repo, a GitHub URL or any git URL (@ref pins a branch or tag), a skills.sh skill page, a GitHub link to a skill directory (/tree/<ref>/<dir>) or its SKILL.md (/blob/<ref>/…/SKILL.md), or an install command pasted whole, quoted: `npx skills add owner/repo --skill name` (also bunx, pnpm dlx, npx add-skill). The skills a link or --skill names are preselected; the text is only read, never run. The ref in a GitHub link is ignored: append @ref to pin one. Without a source at a terminal, skd asks for one.
+= 来源可以是 owner/repo、GitHub URL 或任意 git URL（@ref 固定分支或 tag）、skills.sh 的 skill 页面、指向 skill 目录（/tree/<ref>/<dir>）或其 SKILL.md（/blob/<ref>/…/SKILL.md）的 GitHub 链接，或者整条粘贴进来的安装命令（要加引号）：`npx skills add owner/repo --skill name`（bunx、pnpm dlx、npx add-skill 也行）。链接或 --skill 指明的 skill 会被预先选中；这段文字只会被读取，绝不会被执行。GitHub 链接里的 ref 会被忽略：想固定版本请追加 @ref。在终端里不给来源时，skd 会问你。
+
+@ give a source: skd add owner/repo (or a URL, or a pasted `npx skills add …`)
+= 请给出来源：skd add owner/repo（或 URL，或粘贴的 `npx skills add …`）
+
+@ fetching
+= 正在拉取
+
+@ %s contains no SKILL.md
+= %s 里没有 SKILL.md
+
+@ %s %s: nothing named %q upstream\n
+= %s %s：上游没有叫 %q 的东西\n
+
+@ no skill %q in %s (skd show %s lists them)
+= %[2]s 里没有 skill %[1]q（skd show %[3]s 会列出它们）
+
+@ nothing selected
+= 没有选择任何东西
+
+@ %s vendored %s from %s %s\n
+= %[1]s 已从 %[3]s 引入 %[2]s %[4]s\n
+
+@ skill names to select (repeatable)
+= 要选择的 skill 名称（可重复）
+
+@ select every skill in a category
+= 选择某个分类下的所有 skill
+
+@ follow every skill, including ones added upstream later
+= 跟随所有 skill，包括上游以后新增的
+
+@ short name for the pack
+= pack 的简短别名
+
+@ targets for this pack (default: manifest default)
+= 这个 pack 的 target（默认：清单里的默认值）
+
+@ no terminal: pass --skill, --category or --all
+= 没有终端：请传 --skill、--category 或 --all
+
+@ %s — %d skills
+= %s —— %d 个 skill
+
+@ Pick skills
+= 挑选 skill
+
+@ Follow everything (new upstream skills are added automatically)
+= 跟随全部（上游新增的 skill 会自动加入）
+
+@ Select skills
+= 选择 skill
+
+@ space to toggle · type to filter · enter to confirm
+= 空格切换 · 输入可过滤 · 回车确认
+
+@ %s %s: %q is already used in the library; linking it as %q (as in skills.toml)\n
+= %s %s：%q 在库里已被占用；改用 %q 作为链接名（skills.toml 里的 as）\n
+
+@ %s %s: no license found for %s — check before redistributing\n
+= %s %s：没有找到 %s 的许可证 —— 再分发之前请先确认\n
+
+@ Fetch upstream changes for packs and re-vendor selected skills
+= 拉取 pack 的上游改动，并重新引入所选的 skill
+
+@ At a terminal, update first checks upstream and lists what would change per pack (changed, new, gone, moved), all ticked; untick what you do not want, and only the ticked packs are updated. With --yes, --json or without a terminal it updates straight away (every pack when none are named), as scripts and agents expect. Every update is recorded: skd history.
+= 在终端里，update 会先检查上游，按 pack 列出会有哪些变化（变更、新增、消失、移动），默认全部勾选；取消勾选不想要的，只有勾选的 pack 会被更新。加了 --yes、--json 或没有终端时会直接更新（没指定 pack 就更新所有 pack），这是脚本和 agent 期望的行为。每次更新都会被记录：skd history。
+
+@ recorded in %s · skd history shows what changed and why
+= 已记录在 %s · skd history 会显示改了什么、为什么改
+
+@ %d pack(s) failed: %s
+= 有 %d 个 pack 失败：%s
+
+@ git commit and push the library when something changed
+= 有改动时 git commit 并推送库
+
+@ checking upstream…
+= 正在检查上游……
+
+@ %d pack(s) could not be checked: %s
+= 有 %d 个 pack 无法检查：%s
+
+@ ✓ nothing to update upstream
+= ✓ 上游没有可更新的
+
+@ · skd apply re-links · skd update <pack> re-vendors one anyway
+= · skd apply 重新链接 · skd update <pack> 仍可重新引入某个 pack
+
+@ ✓ nothing changed upstream for %s
+= ✓ %s 在上游没有变化
+
+@ Update anyway?
+= 仍然更新吗？
+
+@ re-vendors skills missing from vendor/ and re-links them
+= 重新引入 vendor/ 中缺失的 skill 并重新链接
+
+@ Update anyway
+= 仍然更新
+
+@ No
+= 否
+
+@ nothing updated
+= 没有更新任何东西
+
+@ Update %s?
+= 更新这 %s 吗？
+
+@ space or x unticks · enter updates the ticked ones · ctrl+c cancels
+= 空格或 x 取消勾选 · 回车更新已勾选的 · ctrl+c 取消
+
+@   new @ %s
+=   新增 @ %s
+
+@   %s  up to date
+=   %s  已是最新
+
+@  … %d more (skd add %s to browse)
+=  …… 还有 %d 个（skd add %s 可浏览）
+
+@ rejected
+= 已拒绝
+
+@ see changes: git -C %s diff -- vendor/%s
+= 查看改动：git -C %s diff -- vendor/%s
+
+@ Link a skill (or whole pack) into agents
+= 把 skill（或整个 pack）链接到 agent
+
+@ targets to add (default: manifest default)
+= 要添加的 target（默认：清单里的默认值）
+
+@ Unlink a skill (or pack) from agents; the library keeps it
+= 从 agent 取消 skill（或 pack）的链接；库里仍保留
+
+@ targets to remove (default: all)
+= 要移除的 target（默认：全部）
+
+@ Deselect a vendored skill: unlink everywhere and drop it from vendor/
+= 取消选择一个引入的 skill：到处取消链接，并从 vendor/ 中丢弃
+
+@ Delete a pack entirely: manifest, lock, vendor/ and every link
+= 彻底清除一个 pack：清单、锁、vendor/ 和所有链接
+
+@ proceed?
+= 继续吗？
+
+@ %s %s: unlink %s and move vendor/%s to the trash\n
+= %s %s：取消 %s，并把 vendor/%s 移到回收站\n
+
+@ purge
+= 清除
+
+@ Print where a skill's files live in the library
+= 打印 skill 的文件在库里的位置
+
+@ Copy a vendored skill into skills/ so you can edit it; upstream no longer touches it
+= 把引入的 skill 复制到 skills/ 以便编辑；上游从此不再动它
+
+@ copy into private/ instead of skills/
+= 复制到 private/ 而不是 skills/
+
+@ name for the fork (default: same name)
+= fork 的名字（默认：同名）
+
+@ List the skills a repository offers, without installing anything
+= 列出一个仓库提供的 skill，不安装任何东西
+
+@ %s: uses %s; %d other copies with different content are ignored (%s)
+= %s：使用 %s；另有 %d 份内容不同的副本被忽略（%s）
+
+@ install: skd add %s --skill <name>   or   --category <category>   or   --all
+= 安装：skd add %s --skill <name>   或   --category <category>   或   --all
+
+@ Check upstream for changes to the selected skills, without changing anything
+= 检查所选 skill 在上游的变化，不做任何改动
+
+@ Fetches each pack into the cache and compares it with what is vendored: skills that changed, appeared or disappeared upstream. vendor/, skills.lock and skills.toml are left alone; `skd update` applies the changes. The result is remembered for `skd list` and the menu.
+= 把每个 pack 拉取到缓存里，与已引入的内容比较：找出在上游发生变化、新出现或消失的 skill。vendor/、skills.lock 和 skills.toml 都不会被动；`skd update` 才会应用这些改动。检查结果会被记住，供 `skd list` 和菜单使用。
+
+@ skd update
+= skd update
+
+@ ✓ everything is up to date
+= ✓ 一切都是最新的
+
+@ not vendored yet · skd update %s
+= 尚未引入 · skd update %s
+
+@ %s  ✓ up to date
+= %s  ✓ 已是最新
+
+@ %s → %s  no skill changes
+= %s → %s  skill 没有变化
+
+@ kept by update
+= update 会保留
+
+@ warning:
+= 警告：
+
+@ refusing to proceed without a terminal; pass --yes
+= 没有终端，拒绝继续；请传 --yes
+
+@ Yes
+= 是
+
+@ skilldots — declarative skill management for AI agents
+= skilldots —— 声明式管理 AI agent 的 skill
+
+@ skd keeps every skill your agents use in one git-backed library and links them into each agent's skill directory.
+= skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的库，并把它们链接到每个 agent 的 skill 目录。
+
+@ use the question-and-answer menu instead of the full-screen dashboard
+= 使用问答式菜单，而不是全屏仪表盘
+
+@ library directory (default: $%s, nearest skills.toml, the one set by `skd use`, or ~/.skilldots)
+= 库目录（默认：$%s、最近的 skills.toml、`skd use` 设置的库，或 ~/.skilldots）
+
+@ machine-readable output
+= 机器可读的输出
+
+@ answer yes to prompts
+= 对所有提问回答"是"
+
+@ language of skd's own text: en, zh or auto (default auto: the system's; also $%s, then the lang setting)
+= skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $%s，其次是 lang 设置）
+
+@ colours: light, dark or auto (default auto: ask the terminal; also $%s)
+= 配色：light、dark 或 auto（默认 auto：询问终端；也可用 $%s）
+
+@ %s; none of its settings (editor, theme, …) were used
+= %s；其中的设置（editor、theme 等）都没有生效
+
+@ Inventory every agent skill directory on this machine
+= 盘点本机上每个 agent 的 skill 目录
+
+@ include entries skilldots already manages
+= 包含 skilldots 已经管理的条目
+
+@ scan
+= 扫描
+
+@ %d entries · %d managed · %d unmanaged · %d broken
+= %d 个条目 · %d 个已管理 · %d 个未管理 · %d 个失效
+
+@ STATE
+= 状态
+
+@ DETAIL
+= 详情
+
+@ (not in use)
+= （未启用）
+
+@ take these over with: skd adopt
+= 用 skd adopt 接管这些
+
+@ left: links into the library, recorded for targets no longer in use; skd leaves them in place (they may be the user's own)
+= 遗留：指向库的链接，记录在已不再使用的 target 名下；skd 原样保留它们（它们可能是用户自己的）
+
+@ managed
+= 已管理
+
+@ → library
+= → 库
+
+@ reaches the library via %s; not enabled for this agent yet
+= 经由 %s 指向库；尚未为这个 agent 启用
+
+@ app
+= app
+
+@ link
+= 链接
+
+@ copied files
+= 复制的文件
+
+@ from %s
+= 来自 %s
+
+@ differs from a same-named copy elsewhere
+= 与别处的同名副本不同
+
+@ copy
+= 副本
+
+@ broken
+= 失效
+
+@ left
+= 遗留
+
+@ %s → %s; target not in use, skd no longer manages it and leaves it in place
+= %s → %s；target 已不再使用，skd 不再管理它，原样保留
+
+@ Bring skills installed by other tools under skilldots management
+= 把其他工具装的 skill 纳入 skilldots 管理
+
+@ adopt scans every agent directory and proposes how to take over each\nunmanaged entry: copies installed by "npx skills" become subscriptions to\ntheir upstream repository, links into application bundles become [[app]]\nentries, and anything else becomes a skill of your own under skills/.\nDisplaced directories are moved aside, never deleted.
+= adopt 会扫描每个 agent 目录，并为每个未受管理的条目提出接管方案：\n"npx skills" 装的副本会变成对其上游仓库的订阅，指向应用包的链接会变成\n[[app]] 条目，其余的都变成 skills/ 下你自己的 skill。\n被替换掉的目录只会被挪开，绝不会被删除。
+
+@ nothing to adopt
+= 没有可接管的
+
+@ run without --dry-run to apply (interactive) or with --yes
+= 去掉 --dry-run 运行即可应用（交互式），或加上 --yes
+
+@ no terminal: pass --yes to adopt everything, or --dry-run to see proposals
+= 没有终端：传 --yes 接管全部，或传 --dry-run 查看方案
+
+@ show proposals only
+= 只显示方案
+
+@ space to toggle · enter to confirm · displaced directories go to the trash, not deleted
+= 空格切换 · 回车确认 · 被替换的目录会进回收站，不会被删除
+
+@ List known agent targets and whether they exist here
+= 列出已知的 agent target，以及它们在本机是否存在
+
+@ List the built-in agent targets and the custom ones of skills.toml.\n\nA custom target is used only after a person approves it on this machine\n(skd targets trust <name>, at a terminal), and never when its directory is\noutside your home directory, is your home directory, is or holds a\nsensitive place (~/.ssh, ~/.aws, ~/Library/LaunchAgents, ~/.vscode, …) or the\nlibrary, is inside a built-in target's directory, or is, is inside or holds\nanother custom target's directory.
+= 列出内置的 agent target 和 skills.toml 里的自定义 target。\n\n自定义 target 只有在本人于这台机器上批准后才会启用\n（在终端里运行 skd targets trust <name>），而且在以下情况永远不会启用：\n它的目录在你的主目录之外，就是你的主目录，就是或包含敏感位置\n（~/.ssh、~/.aws、~/Library/LaunchAgents、~/.vscode 等）或库，\n位于内置 target 的目录内，或者就是、位于或包含另一个自定义 target 的目录。
+
+@ TARGET
+= TARGET
+
+@ PATH
+= 路径
+
+@ not used
+= 未启用
+
+@ %s custom target %s is not used: %s
+= %s 自定义 target %s 未启用：%s
+
+@ approving custom target %q lets skd write into %s; only a person at a terminal can do that (--yes and --json do not): ask the user to run `skd targets trust %s` in a terminal
+= 批准自定义 target %q 会让 skd 往 %s 里写入；只有终端前的本人才能这样做（--yes 和 --json 都不行）：请让用户在终端里运行 `skd targets trust %s`
+
+@ Approve a custom target of skills.toml on this machine (a person at a terminal only)
+= 在这台机器上批准 skills.toml 里的一个自定义 target（只能由终端前的本人操作）
+
+@ Show where a custom target of skills.toml leads and, when you agree, let skd\nwrite skills there on this machine. The approval names the target and its\ndirectory (symbolic links resolved) and its mode (link or copy); when\nskills.toml later points the target elsewhere or changes its mode it needs\napproving again. A directory not named skills is approved only by typing\nthe target's name. Approvals are kept beside the\nsettings file, never in a library. Only a person at a terminal can approve:\nwithout one, and with --yes or --json, skd refuses.
+= 显示 skills.toml 里的某个自定义 target 指向哪里，经你同意后，让 skd\n在这台机器上往那里写入 skill。批准记录包含 target 的名字、它的\n目录（符号链接已解析）和模式（link 或 copy）；之后 skills.toml 若把该\ntarget 指向别处或改了模式，就需要重新批准。目录名不是 skills 的，\n只有输入 target 的名字才能批准。批准记录保存在设置文件旁边，\n绝不会放进库里。只有终端前的本人才能批准：没有终端，\n或加了 --yes、--json 时，skd 会拒绝。
+
+@ skills.toml has no custom target %q (see `skd targets`)
+= skills.toml 里没有自定义 target %q（见 `skd targets`）
+
+@ %s custom target %s is approved already: %s\n
+= %s 自定义 target %s 已经批准：%s\n
+
+@ custom target %q cannot be approved: %s
+= 自定义 target %q 无法批准：%s
+
+@ not approved; nothing changed
+= 未批准；没有任何改动
+
+@ %s approved custom target %s → %s %s\n
+= %s 已批准自定义 target %s → %s %s\n
+
+@ (skd apply links skills there)
+= （skd apply 会把 skill 链接到那里）
+
+@ Withdraw the approval of a custom target on this machine
+= 撤销这台机器上对某个自定义 target 的批准
+
+@ custom target %s was not approved
+= 自定义 target %s 本来就没有被批准
+
+@ %s custom target %s is no longer approved %s\n
+= %s 自定义 target %s 不再被批准 %s\n
+
+@ (skd stops using it; what it linked there stays until you take the target out of skills.toml and run skd apply)
+= （skd 不再使用它；已链接到那里的东西会留着，直到你把 target 从 skills.toml 里去掉并运行 skd apply）
+
+@ Custom target %s
+= 自定义 target %s
+
+@ skills.toml path
+= skills.toml 路径
+
+@ directory
+= 目录
+
+@ mode
+= 模式
+
+@ skd will copy skills into this directory, put back trash entries
+= skd 会把 skill 复制到这个目录，把来自该目录的回收站条目
+
+@ skd will link skills into this directory, put back trash entries
+= skd 会把 skill 链接到这个目录，把来自该目录的回收站条目
+
+@ that came from it, and with --force move what is in their way into the
+= 放回原处，使用 --force 时还会把挡路的东西挪进
+
+@ library trash. Approve only a directory you meant for skills.
+= 库的回收站。请只批准你确实打算用来放 skill 的目录。
+
+@ ! This directory is not named skills. Whatever reads or runs files from
+= ! 这个目录的名字不是 skills。凡是会读取或运行
+
+@   it (an editor, a shell, a service) would load what skd puts there.
+=   其中文件的东西（编辑器、shell、服务），都会加载 skd 放进去的内容。
+
+@ Type %s to let skd write skills into %s (anything else refuses)
+= 输入 %s 才会让 skd 往 %s 里写入 skill（输入别的就是拒绝）
+
+@ Let skd write skills into %s?
+= 允许 skd 往 %s 里写入 skill 吗？
+
+@ Approve
+= 批准
+
+@ %s this library defines %s: directories outside the agents' own skill directories that skd would write skills into\n
+= %s 这个库定义了 %s：位于 agent 自身 skill 目录之外、skd 会往里写 skill 的目录\n
+
+@   %s %s (%s) is not used: %s\n
+=   %s %s（%s）未启用：%s\n
+
+@   %s %s (%s) is skipped: not approved on this machine\n
+=   %s %s（%s）已跳过：在这台机器上尚未批准\n
+
+@   %s approved %s\n
+=   %s 已批准 %s\n
+
+@   %s %s is skipped\n
+=   %s %s 已跳过\n
+
+@ a person approves one at a terminal with `skd targets trust <name>` (%s), then runs `skd apply`
+= 请由本人在终端里用 `skd targets trust <name>` 批准（%s），然后运行 `skd apply`
+
+@ the theme setting (skd config set theme)
+= theme 设置（skd config set theme）
+
+@ warning: the theme setting %q is not light, dark or auto; using auto (skd config set theme auto fixes it)\n
+= 警告：theme 设置 %q 不是 light、dark 或 auto；改用 auto（运行 skd config set theme auto 可修复）\n
+
+@ %s %q: use light, dark or auto
+= %s %q：请使用 light、dark 或 auto
+
+@ %d pack
+= %d 个 pack
+
+@ %d packs
+= %d 个 pack
+
+@ %d skill
+= %d 个 skill
+
+@ %d skills
+= %d 个 skill
+
+@ %d parked directory
+= %d 个被挪开的目录
+
+@ %d parked directorys
+= %d 个被挪开的目录
+
+@ %d link
+= %d 个链接
+
+@ %d links
+= %d 个链接
+
+@ %d custom target
+= %d 个自定义 target
+
+@ %d custom targets
+= %d 个自定义 target
+
+@ none
+= 无
+
+@ no agents
+= 没有 agent
+
+@ no agents (kept in library)
+= 没有 agent（留在库里）
+
+@ none (kept in library)
+= 无（留在库里）
+
+# What cobra and pflag say of a command line.
+@ accepts %d arg(s), received %d
+= 需要 %d 个参数，收到 %d 个
+
+@ accepts between %d and %d arg(s), received %d
+= 需要 %d 到 %d 个参数，收到 %d 个
+
+@ accepts at most %d arg(s), received %d
+= 最多接受 %d 个参数，收到 %d 个
+
+@ unknown command %q for %q
+= %[2]q 没有 %[1]q 这个命令
+
+@ \n\nDid you mean this?\n
+= \n\n你是想输入这个吗？\n
+
+@ unknown flag: %s
+= 未知的选项：%s
+
+@ unknown shorthand flag: %s in -%s
+= 未知的短选项 %[1]s（在 -%[2]s 中）
+
+@ flag needs an argument: %s in -%s
+= 短选项 %[1]s 需要一个参数（在 -%[2]s 中）
+
+@ flag needs an argument: %s
+= 选项需要一个参数：%s
+
+@ invalid argument %s for %s flag: %s
+= %[2]s 选项的参数 %[1]s 无效：%[3]s
