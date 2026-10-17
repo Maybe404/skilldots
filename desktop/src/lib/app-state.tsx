@@ -18,6 +18,10 @@ import { translator, type T } from "@/lib/i18n"
 export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
 
 export type Result<R> = { ok: true; value: R } | { ok: false }
+export interface ActiveOperation {
+  label: string
+  startedAt: number
+}
 
 export type SkillFilter = "all" | "mine" | "vendor" | "updates"
 
@@ -56,6 +60,8 @@ interface AppContextValue {
   plan: PlanItem[]
   trashCount: number
   checking: boolean
+  operation: ActiveOperation | null
+  runTask: <R>(label: string, fn: () => Promise<R>) => Promise<Result<R>>
   /** Keys of skills with a pending update. */
   updatable: Set<string>
   updatablePacks: PackStatus[]
@@ -119,6 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [plan, setPlan] = React.useState<PlanItem[]>([])
   const [trashCount, setTrashCount] = React.useState(0)
   const [checking, setChecking] = React.useState(false)
+  const [operation, setOperation] = React.useState<ActiveOperation | null>(null)
   const [view, setView] = React.useState<View>("skills")
   const [editing, setEditing] = React.useState<Ref | null>(null)
   const [selected, setSelected] = React.useState<string | null>(null)
@@ -153,6 +160,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [t],
   )
 
+  const runTask = React.useCallback(
+    async <R,>(label: string, fn: () => Promise<R>): Promise<Result<R>> => {
+      setOperation({ label, startedAt: Date.now() })
+      try {
+        return await run(fn)
+      } finally {
+        setOperation(null)
+      }
+    },
+    [run],
+  )
+
   const reload = React.useCallback(async () => {
     const st = await backend.status()
     setStatus(st)
@@ -178,6 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const check = React.useCallback(
     async (repos?: string[]) => {
       setChecking(true)
+      setOperation({ label: t("checking"), startedAt: Date.now() })
       try {
         const out = await backend.outdated(repos)
         setOutdated(out)
@@ -186,6 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toast.error(t("checkFailed"), { description: e instanceof Error ? e.message : String(e) })
       } finally {
         setChecking(false)
+        setOperation(null)
       }
     },
     [t],
@@ -264,6 +285,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     plan,
     trashCount,
     checking,
+    operation,
     updatable,
     updatablePacks,
     reload,
@@ -287,6 +309,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       guard.current = g
     },
     run,
+    runTask,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

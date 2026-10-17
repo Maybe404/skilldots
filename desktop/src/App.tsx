@@ -4,7 +4,7 @@ import { isMyGo } from "mygo-runtime"
 
 import { AppProvider, useApp } from "@/lib/app-state"
 import { CommandPalette } from "@/components/app/command-palette"
-import { AppSidebar, PendingBanner, Toolbar, searchInputId } from "@/components/app/shell"
+import { AppSidebar, OperationBanner, PendingBanner, Toolbar, searchInputId } from "@/components/app/shell"
 import { Dialogs } from "@/components/dialogs/dialogs"
 import { AgentsPage } from "@/components/pages/agents-page"
 import { HistoryPage } from "@/components/pages/history-page"
@@ -102,6 +102,7 @@ function Shell() {
           <>
             <Toolbar />
             <PendingBanner />
+            <OperationBanner />
             <div className="flex min-h-0 flex-1 flex-col">{page}</div>
           </>
         )}
