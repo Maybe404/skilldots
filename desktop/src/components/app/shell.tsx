@@ -142,31 +142,34 @@ export const searchInputId = "toolbar-search"
 /** Glass toolbar over the content panel. */
 export function Toolbar() {
   const { t, view, navigate, query, setQuery, outdated, checking, check, updatablePacks, openDialog, setPaletteOpen } = useApp()
+  const showSkillTools = view === "skills"
   return (
     <header className="glass-bar sticky top-0 z-20 flex h-13 shrink-0 items-center gap-2 rounded-t-xl px-3" data-drag-region>
       <SidebarTrigger aria-label={t("toggleSidebar")} />
-      <span className="sr-only">{t(TITLES[view])}</span>
+      <span className="truncate text-sm font-medium text-muted-foreground">{t(TITLES[view])}</span>
       <div className="ml-auto flex items-center gap-2">
-        <InputGroup className="h-8 w-60 bg-background/60">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            id={searchInputId}
-            aria-label={t("search")}
-            placeholder={t("searchPlaceholder")}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              if (view !== "skills") navigate("skills")
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setQuery("")
-            }}
-          />
-        </InputGroup>
+        {showSkillTools && (
+          <InputGroup className="h-8 w-60 max-[900px]:w-40 max-[640px]:w-32 bg-background/60">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              id={searchInputId}
+              aria-label={t("search")}
+              placeholder={t("searchPlaceholder")}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                if (view !== "skills") navigate("skills")
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setQuery("")
+              }}
+            />
+          </InputGroup>
+        )}
 
-        <Tooltip>
+        {showSkillTools && <Tooltip>
           <TooltipTrigger
             render={
               <Button variant="ghost" size="sm" onClick={() => check()} disabled={checking} className="text-muted-foreground" aria-label={`${t("recheck")} · ${t("checkOnlyHint")}`}>
@@ -180,18 +183,18 @@ export function Toolbar() {
           <TooltipContent>
             {t("recheck")} · {t("checkOnlyHint")}
           </TooltipContent>
-        </Tooltip>
+        </Tooltip>}
 
-        {updatablePacks.length > 0 && (
+        {showSkillTools && updatablePacks.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => openDialog({ kind: "update" })}>
             <UpdateDot decorative />
             {t("updatesAvailable", { n: updatablePacks.length })}
           </Button>
         )}
 
-        <Button size="sm" onClick={() => openDialog({ kind: "add" })}>
+        {showSkillTools && <Button size="sm" onClick={() => openDialog({ kind: "add" })}>
           <Plus /> {t("add")}
-        </Button>
+        </Button>}
         <Tooltip>
           <TooltipTrigger
             render={

@@ -81,7 +81,7 @@ function Shell() {
       } else if (k === "," && !dialog) {
         e.preventDefault()
         navigate("settings")
-      } else if (k === "f" && view !== "editor" && !dialog) {
+      } else if (k === "f" && view === "skills" && !dialog) {
         e.preventDefault()
         document.getElementById(searchInputId)?.focus()
       }
