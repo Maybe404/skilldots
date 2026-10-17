@@ -63,6 +63,8 @@ export function HistoryPage() {
                       ["added", h.added],
                       ["skillGone", h.gone],
                       ["skillMoved", h.moved],
+                      ["dropped", h.dropped ?? []],
+                      ["skillNew", h.new ?? []],
                     ] as [MessageKey, string[]][]
                   )
                     .filter(([, list]) => list.length)
@@ -85,6 +87,10 @@ export function HistoryPage() {
                     ))}
                   </ul>
                 )}
+                {h.moreCommits && <p className="mt-2 text-[0.8rem] text-muted-foreground">{t("historyMoreCommits")}</p>}
+                {h.commitsUnknown && <p className="mt-2 text-[0.8rem] text-muted-foreground">{t("historyCommitsUnknown")}</p>}
+                {h.applyError && <p className="mt-2 text-[0.8rem] text-destructive">{t("historyApplyError", { error: h.applyError })}</p>}
+                {!!h.omitted && <p className="mt-2 text-[0.8rem] text-muted-foreground">{t("historyOmitted", { n: h.omitted })}</p>}
                 {h.backups.map((b) => (
                   <p key={b} className="mt-2 text-[0.8rem]">
                     {t("backupNote", { file: b })}

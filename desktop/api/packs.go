@@ -182,7 +182,11 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 		if err = checkApply(o.Apply, nil); err != nil {
 			return nil, err
 		}
-		return history(o.History), nil
+		backups := []string{}
+		if o.Apply != nil {
+			backups = o.Apply.Backups
+		}
+		return historyWithBackups(o.History, backups), nil
 	}
 	return nil, errors.New("unknown pack operation")
 }

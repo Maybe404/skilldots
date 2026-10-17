@@ -499,18 +499,29 @@ func outdated(o *app.Outdated) any {
 	}
 	ps := []object{}
 	for _, p := range o.Packs {
-		ps = append(ps, object{"repo": p.Repo, "commit": p.Commit, "latest": p.Latest, "changed": p.Changed, "moved": p.Moved, "new": p.New, "gone": p.Gone, "pending": p.Pending, "checked": p.Checked, "commits": []object{}})
+		commits := []object{}
+		for _, c := range p.Commits {
+			commits = append(commits, object{"id": c.Hash, "title": c.Subject})
+		}
+		ps = append(ps, object{"repo": p.Repo, "commit": p.Commit, "latest": p.Latest, "changed": p.Changed, "moved": p.Moved, "new": p.New, "gone": p.Gone, "pending": p.Pending, "checked": p.Checked, "commits": commits, "moreCommits": p.MoreCommits, "commitsUnknown": p.CommitsUnknown})
 	}
 	return object{"checked": o.Checked, "packs": ps, "failed": o.Failed}
 }
 func history(rows []app.UpdateRecord) []object {
+	return historyWithBackups(rows, nil)
+}
+func historyWithBackups(rows []app.UpdateRecord, backups []string) []object {
 	out := []object{}
 	for _, r := range rows {
 		cs := []object{}
 		for _, c := range r.Commits {
 			cs = append(cs, object{"id": c.Hash, "title": c.Subject})
 		}
-		out = append(out, object{"id": r.Time.String() + r.Repo + r.To, "when": r.Time, "repo": r.Repo, "from": r.From, "to": r.To, "changed": r.Changed, "added": r.Added, "gone": r.Gone, "moved": r.Moved, "commits": cs, "backups": []string{}})
+		rowBackups := append([]string{}, r.Backups...)
+		if len(rowBackups) == 0 && len(out) == 0 {
+			rowBackups = append(rowBackups, backups...)
+		}
+		out = append(out, object{"id": r.Time.String() + r.Repo + r.To, "when": r.Time, "repo": r.Repo, "from": r.From, "to": r.To, "changed": r.Changed, "added": r.Added, "gone": r.Gone, "moved": r.Moved, "dropped": r.Dropped, "new": r.New, "commits": cs, "moreCommits": r.MoreCommits, "commitsUnknown": r.CommitsUnknown, "applyError": r.ApplyError, "omitted": r.Omitted, "backups": rowBackups})
 	}
 	return out
 }

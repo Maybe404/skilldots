@@ -36,7 +36,7 @@ func historyCmd() *cobra.Command {
 			if skipped > 0 {
 				i18n.Fprintf(stderr, "%s %s: %d line(s) could not be read and were skipped\n", warn("!"), c.HistoryPath(), skipped)
 			}
-			if c.jsonOut(map[string]any{"records": recs, "skipped": skipped}) {
+			if c.jsonOut(historyJSON(recs, skipped)) {
 				return nil
 			}
 			if len(recs) == 0 {
@@ -58,6 +58,34 @@ func historyCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVarP(&n, "number", "n", 20, i18n.T("show at most this many records (0: all)"))
 	return cmd
+}
+
+// historyJSON keeps the CLI contract stable while the desktop bridge exposes
+// transient backup details separately.
+func historyJSON(recs []app.UpdateRecord, skipped int) map[string]any {
+	rows := []map[string]any{}
+	for _, r := range recs {
+		row := map[string]any{
+			"time": r.Time, "repo": r.Repo, "from": r.From, "to": r.To,
+			"changed": r.Changed, "added": r.Added, "moved": r.Moved,
+			"gone": r.Gone, "dropped": r.Dropped, "new": r.New,
+			"commits": r.Commits,
+		}
+		if r.MoreCommits {
+			row["moreCommits"] = true
+		}
+		if r.CommitsUnknown {
+			row["commitsUnknown"] = true
+		}
+		if r.ApplyError != "" {
+			row["applyError"] = r.ApplyError
+		}
+		if r.Omitted != 0 {
+			row["omitted"] = r.Omitted
+		}
+		rows = append(rows, row)
+	}
+	return map[string]any{"records": rows, "skipped": skipped}
 }
 
 // printRecord is one entry of `skd history`.
