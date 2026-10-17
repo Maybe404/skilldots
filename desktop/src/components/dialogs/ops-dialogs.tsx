@@ -18,8 +18,7 @@ import { Input } from "@/components/ui/input"
 export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: () => void }) {
   const { t, outdated, run, reload } = useApp()
   const all = outdated?.packs ?? []
-  const candidates = all.filter((p) => hasUpdates(p))
-  const movedOnly = all.filter((p) => !hasUpdates(p) && p.moved.length > 0)
+  const candidates = all.filter((p) => hasUpdates(p) || p.moved.length > 0)
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(repos?.length ? repos.filter((r) => candidates.some((c) => c.repo === r)) : candidates.map((c) => c.repo)))
   const [addNew, setAddNew] = React.useState<Record<string, string[]>>({})
   const [busy, setBusy] = React.useState(false)
@@ -62,18 +61,6 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
               onAddNew={(list) => setAddNew((m) => ({ ...m, [p.repo]: list }))}
             />
           ))}
-          {movedOnly.length > 0 && (
-            <div className="rounded-lg border border-dashed p-3 text-[0.8rem] text-muted-foreground">
-              <p>{t("moveOnlyNote")}</p>
-              <ul className="mt-1.5 space-y-0.5">
-                {movedOnly.map((p) => (
-                  <li key={p.repo}>
-                    <span className="text-foreground">{p.repo}</span> · {p.moved.join(", ")}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
         <DialogFooter className="m-0 rounded-b-xl px-5 py-3">
           <Button variant="outline" onClick={onClose}>
