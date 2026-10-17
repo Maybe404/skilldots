@@ -97,7 +97,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd targets [trust <名> \| untrust <名>]` | 列出内置与自定义 target、是否存在、是否生效（不生效的自定义 target 带原因；`--json` 的 `Active`、`Approvable`、`Problem`）；`trust` 由人在终端批准自定义 target，`untrust` 撤销（见上文“自定义 target 先由人批准”） |
 | `skd doctor` | 体检：Windows 符号链接权限、target 不存在、锁与清单不一致、断链 |
 
-所有命令 `--json`；破坏性命令先列清单再确认。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`，再次是 `skd config set theme`）选配色，`NO_COLOR` 关闭颜色。
+所有命令 `--json`（任何语言下输出都是英文，见下文“语言”）；破坏性命令先列清单再确认。`--lang en|zh|auto` 选语言。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`，再次是 `skd config set theme`）选配色，`NO_COLOR` 关闭颜色。
 
 ## 仪表盘
 
@@ -131,6 +131,21 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 **共享流程**：所有写操作在 `internal/app`（targets 编辑与继承、取消选择、add（含粘贴来源解析 `ParseAddText` 与预选 `Preselect`）、fork、remove/purge、enable/disable、new、adopt、update（含 `PlanUpdate` 与更新记录）、history、edit（编辑器选择 `FindEditor`）、Claude 关闭状态、apply、trash、sync 的 git 操作）；用户设置在更底层的 `internal/config`。`internal/cli` 和 `internal/tui` 只负责收集输入和展示结果，`internal/app` 的测试用同一夹具分别走两条路径并比对清单、锁、文件和链接。
 
 **配色**：两套调色板同一组色相（紫色强调、青色、绿/黄/红状态色）。文字分 Text、Muted、Faint 三级，依次变淡，Muted 和 Faint 在终端底色和仪表盘各层底色上都不低于 4.5:1（`TestPaletteContrast` 检查）；选中行上 Faint 按 Muted 画。边框、分隔线和各层底色的色调用单独的 Line 色，不承载文字。`auto` 时向终端发 OSC 11 加 DA1（所有终端都回 DA1，所以不支持 OSC 11 的终端也立即结束），300ms 无回应按深色；`--json`、`NO_COLOR`、`TERM=dumb`、stdout 非终端、后台进程组时不询问。询问期间终端处于 cbreak（关回显、行缓冲、ICRNL、IXON、IEXTEN，按键与仪表盘 raw 模式下读到的一致，Enter 仍是 CR；保留 ISIG：ctrl+c、ctrl+\ 照常中断，退出前恢复终端模式）；切换后若已有待读输入（用户预先敲的键，含未回车的半行）就不询问、按深色，键留给后续读取者；等待期间读到的非回复字节由仪表盘在启动时按序重放（`termbg.Unread`）；DA1 之后的字节都算按键，紧跟其后被截断的转义序列（ESC、`ESC [`）再等至多 100ms 补全。问答菜单和普通命令拿不到这些字节：不回应的终端上，在这 300ms 内敲的键对它们会丢失。Bubble Tea 的包 init 会让 termenv 询问背景并最多等 5 秒，所以 `internal/termbg` 的 init 抢先设定背景值（Go 按导入路径顺序初始化，`github.com/Maybe404/…` 排在 `github.com/charmbracelet/…` 之前）。
+
+## 语言
+
+界面文字有英文和简体中文两种。**选择顺序**（先匹配者生效）：命令行 `--lang en|zh|auto` > 环境变量 `SKILLDOTS_LANG` > 设置 `skd config set lang zh|en|auto` > `auto`。`auto` 跟随系统：`LC_ALL`、`LC_MESSAGES`、`LANG` 中第一个非空的决定（`zh*` 是中文，其余包括 `C` 都是英文）；三者都没设时，macOS 上读 `defaults read -g AppleLanguages` 的第一项；读不出来就是英文。`--lang`/环境变量写错会像 `--theme` 一样报错；设置写错只在 stderr 警告一次并按 `auto` 处理。仪表盘设置页（`,`）里改 `lang` 立即生效：设置页的显式选择在本次运行里压过环境变量，并在状态行说明下次启动环境变量仍会覆盖。
+
+**实现**（`internal/i18n`）：文案以英文原文为键，写在显示它的地方（`i18n.T`、`Sprintf`、`Errorf`、`Count`…）；中文在 `internal/i18n/zh/*.txt`（`@ 英文` / `= 中文` 成对）。选英文时每个函数原样返回英文，所以英文输出逐字等于源码里的英文。表、包装函数里的文案用 `i18n.M` 标记，显示处再 `T`。测试（`catalog_test.go`）遍历全部源码：每条文案必须有译文、译文不能多余、动词（`%s` `%d` `%q`…）及其对应的参数位置必须与原文一致（调换顺序要用 `%[2]s`）、错误必须经 `i18n.Errorf`/`i18n.New` 而不是 `fmt.Errorf`。新增文案：英文写在用处，中文加进 `zh/*.txt`，漏了测试会指出并可用 `I18N_SKELETON=文件 go test ./internal/i18n` 生成待译条目。
+
+**不随语言变的东西**：
+- **`--json`**：不管选了什么语言，`--json` 下所有文案（stdout 的 JSON、里面的 `reason`/`problem`/`error`/`help` 等字段、stderr 的进度和错误）都是英文，字节上与 `--lang en` 相同。做法是 `--json` 时进程语言直接设为英文（`cli.applyLang`），不是逐处翻译回去；所以字段值不会混入中文，agent 解析不受影响。
+- **写进文件的东西**：`skills.toml` / `skills.lock` / 配置文件里的注释，`skills.history.jsonl`（其中 `applyError` 用 `i18n.English(err)` 取英文），commit 信息，新建 skill 的模板，fork 备注，`placed.json`。库会被推送、在别的机器上 clone，文件内容不能取决于某台机器的语言。
+- 命令名、选项名、`Use` 里的占位符（`<name>`、`[pack…]`）、skill 名、路径、git 输出、`skills.toml` 的键。
+
+**宽度**：中文字符占两格。表格（lipgloss）、仪表盘（`ansi.StringWidth`）、对齐填充（`cli.pad`、`tui.fit`）和截断（`i18n.Truncate`）一律按显示宽度，不按字节或字符数；`ansi.StringWidth` 用 uniseg 的宽度，不随 `LANG` 里的东亚宽度设置变。对话框盖在双宽字符上时（`spliceOverlay`）补齐被截掉的一格。cobra 自己生成的帮助模板、`help`/`completion` 命令和 pflag/cobra 的参数错误、huh 提示的按键说明，中文由 `cli.localizeCobra`、`cli.flagError`、`cli.keyMap` 替换。
+
+**术语**：见 [i18n.md](i18n.md)。
 
 ## 关键规则
 
