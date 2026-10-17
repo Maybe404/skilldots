@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -33,6 +34,36 @@ type TrashEntry struct {
 	// Problem then says why (it holds no control characters).
 	Restorable bool   `json:"restorable"`
 	Problem    string `json:"problem,omitempty"`
+	// Unsafe is set when the entry's batch or name is not one skd gives
+	// what it sets aside (trashName): a cloned library's .trash may hold
+	// anything, named anything (text addressed to an agent, say). Such
+	// an entry's ID, Name and Path show only what is safe, with
+	// UnsafeName in place of the rest, and it is not restorable.
+	Unsafe bool `json:"unsafe,omitempty"`
+}
+
+// UnsafeName stands for a trash batch or entry name that is not shown.
+const UnsafeName = "(unsafe name)"
+
+// batchRE is how batch() names a batch.
+var batchRE = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}$`)
+
+// suffixRE is the "-<n>" Trash adds to a name taken in its batch.
+var suffixRE = regexp.MustCompile(`^(.+)-[0-9]+$`)
+
+// trashName reports whether batch and name are as skd names what it
+// sets aside: a batch named by batch(), and an entry named like a skill
+// (manifest.CheckName: what apply, adopt and vendor move are), maybe
+// with the "-<n>" Trash adds.
+func trashName(batch, name string) bool {
+	if !batchRE.MatchString(batch) {
+		return false
+	}
+	if manifest.CheckName(name) == nil {
+		return true
+	}
+	m := suffixRE.FindStringSubmatch(name)
+	return m != nil && manifest.CheckName(m[1]) == nil
 }
 
 // trashBatch is the per-run folder so one command's moves stay together.
@@ -145,6 +176,18 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 			}
 			p := filepath.Join(root, b.Name(), it.Name())
 			when, _ := time.ParseInLocation("20060102-150405", b.Name(), time.Local)
+			if !trashName(b.Name(), it.Name()) {
+				// Shown as data: neither its name nor its record is text
+				// skd wrote, and whoever reads the list (an agent too)
+				// must not read them as anything else.
+				batch, at := UnsafeName, root
+				if batchRE.MatchString(b.Name()) {
+					batch, at = b.Name(), filepath.Join(root, b.Name())
+				}
+				out = append(out, TrashEntry{ID: batch + "/" + UnsafeName, Name: UnsafeName, Path: at, When: when, Unsafe: true,
+					Problem: "its name is not one skd gives what it sets aside, so it is not shown and skd does not restore it; look at it by hand in the library's " + TrashDir})
+				continue
+			}
 			e := TrashEntry{ID: b.Name() + "/" + it.Name(), Name: it.Name(), Path: p, When: when}
 			origin, err := readOrigin(p)
 			if err == nil {
@@ -221,6 +264,11 @@ func entryPath(lib *library.Library, id string) (string, error) {
 	}
 	if bad {
 		return "", fmt.Errorf("no trash entry %q (an id is <batch>/<name>, as `skd trash` lists it)", id)
+	}
+	if !trashName(parts[0], parts[1]) {
+		// Not a name skd gives what it sets aside (ListTrash does not
+		// show it): restoring it is left to a person.
+		return "", fmt.Errorf("trash entry %q is not named as skd names what it sets aside; skd does not restore it (look at it by hand in the library's %s)", id, TrashDir)
 	}
 	root := filepath.Join(lib.Root, TrashDir)
 	p := root
