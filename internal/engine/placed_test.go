@@ -84,10 +84,11 @@ func TestPlacedConfirmsOnlyWhatWasPlaced(t *testing.T) {
 // An app's link (its source outside the library) skd made is removed
 // outright when the app is disabled. One made by an older skd, with no
 // record, is recorded by the next apply (one with nothing to change
-// too) while it is exactly the link skd would make; until then it is
-// left in place when the app is disabled, and said so. Links into the
-// library made by an older skd are recorded the same way, so they stay
-// known as skd's when the library moves.
+// too) while it is exactly the link skd would make; disabled before
+// that (the first command after the upgrade), it is removed outright
+// too while it is exactly that link (appLink), as the older skd did.
+// Links into the library made by an older skd are recorded the same
+// way, so they stay known as skd's when the library moves.
 func TestAppLinksAndOlderLinks(t *testing.T) {
 	for _, mode := range []string{"recorded", "upgraded, applied", "upgraded"} {
 		lib, reg, home := newTestLib(t)
@@ -136,16 +137,14 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 				op = o
 			}
 		}
-		removed := mode != "upgraded"
-		want := map[bool]string{true: "remove", false: "skip"}[removed]
-		if op.Action != want {
+		if op.Action != "remove" {
 			t.Fatalf("%s: %+v", mode, op)
 		}
 		if _, err := Apply(lib, plan); err != nil {
 			t.Fatal(err)
 		}
-		if got := fileExists(dest); got == removed {
-			t.Fatalf("%s: link there %v", mode, got)
+		if fsutil.Lexists(dest) {
+			t.Fatalf("%s: the app's link is still there", mode)
 		}
 		if items, _ := ListTrash(lib, reg); len(items) != 0 {
 			t.Fatalf("trashed %+v", items)

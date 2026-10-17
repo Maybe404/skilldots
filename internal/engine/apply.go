@@ -239,6 +239,9 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			op.Action, op.Reason = "remove", "already gone"
 		case ownLink(dest, prev, lib) || confirms(placed, dest):
 			op.Action = "remove"
+		case appLink(dest, prev, lib):
+			// An app's link made by an skd that kept no placed record.
+			op.Action, op.Reason = "remove", "the app's link to "+prev.Source
 		case staleDangling(dest, prev, lib) != "":
 			op.Action, op.Reason = "remove", "a link to the previous library location "+staleDangling(dest, prev, lib)+", where nothing is any more"
 		default:
@@ -290,12 +293,14 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		if !fsutil.Lexists(op.Dest) {
 			return nil
 		}
-		if ownLink(op.Dest, prev, lib) || confirms(placed, op.Dest) || staleDangling(op.Dest, prev, lib) != "" {
+		if ownLink(op.Dest, prev, lib) || confirms(placed, op.Dest) || staleDangling(op.Dest, prev, lib) != "" ||
+			(op.Action == "remove" && appLink(op.Dest, prev, lib)) {
 			// A link skd made holds no data, and a copy exactly as skd
 			// wrote it is reproducible from the library; a link to where
 			// the library was, leading nowhere now, holds only that path
-			// (said in the plan). RemoveAll does not follow a link: it
-			// removes the link itself.
+			// (said in the plan); an app's link that nothing wants any
+			// more holds only the app's directory (appLink). RemoveAll
+			// does not follow a link: it removes the link itself.
 			if err := os.RemoveAll(op.Dest); err != nil {
 				return err
 			}
@@ -619,6 +624,48 @@ func staleDangling(dest string, prev *lock.Link, lib *library.Library) string {
 		return ""
 	}
 	return old
+}
+
+// appLink reports whether dest is an app's link as skd makes them,
+// made by an skd that kept no placed record: a symbolic link whose
+// target is exactly the absolute, clean source prev records, outside
+// the library, while that directory is a skill (CheckAppDir). It holds
+// no data, only the app's directory, so when nothing wants it any more
+// it is removed outright, as an older skd did (Apply removes it only
+// for a remove).
+//
+// The record may be forged (the manifest that named the app may be too,
+// and an app taken out of skills.toml is in no manifest any more): it
+// can claim a link of the user's only when that link, in an agent's
+// directory under the record's name, says exactly an absolute path to
+// a directory with a SKILL.md of its own, not a place of keys and not
+// in an agent's skill directory (where a link of the user's from one
+// agent to another leads; an app's skill is never there). Losing it
+// loses a link, never what it points at, and the plan says where it
+// led.
+func appLink(dest string, prev *lock.Link, lib *library.Library) bool {
+	if prev == nil || prev.Mode != "link" || !filepath.IsAbs(prev.Source) || filepath.Clean(prev.Source) != prev.Source || fsutil.Within(lib.Root, prev.Source) {
+		return false
+	}
+	st, err := os.Lstat(dest)
+	if err != nil || st.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	got, err := os.Readlink(dest)
+	if err != nil || got != prev.Source || CheckAppDir(prev.Source) != nil {
+		return false
+	}
+	reg := registryPtr.Load()
+	if reg == nil {
+		return false
+	}
+	real := fsutil.Resolve(prev.Source)
+	for _, t := range reg.All() {
+		if fsutil.Inside(fsutil.Resolve(t.Path), real, true) {
+			return false
+		}
+	}
+	return true
 }
 
 func isLinkTo(dest, src string) bool {
