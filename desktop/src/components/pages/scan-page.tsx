@@ -22,7 +22,7 @@ const STATE: Record<ScanItem["state"], MessageKey> = {
 }
 
 export function ScanPage() {
-  const { t, run, reload, agents } = useApp()
+  const { t, runTask, reload, agents } = useApp()
   const [items, setItems] = React.useState<ScanItem[] | null>(null)
   const [scanning, setScanning] = React.useState(false)
   const [picked, setPicked] = React.useState<Set<string>>(new Set())
@@ -31,12 +31,12 @@ export function ScanPage() {
 
   const scan = React.useCallback(async () => {
     setScanning(true)
-    const r = await run(() => backend.scan())
+    const r = await runTask(t("scanning"), () => backend.scan())
     setScanning(false)
     if (!r.ok) return
     setItems(r.value)
     setPicked(new Set(r.value.filter((x) => x.proposal !== "skip").map((x) => x.id)))
-  }, [run])
+  }, [runTask, t])
 
   React.useEffect(() => {
     void scan()
@@ -61,7 +61,7 @@ export function ScanPage() {
 
   const adopt = async () => {
     setBusy(true)
-    const r = await run(() => backend.adopt([...picked]))
+    const r = await runTask(t("operating"), () => backend.adopt([...picked]))
     setBusy(false)
     if (!r.ok) return
     toast(t("adoptedToast", { n: r.value.adopted }))

@@ -8,9 +8,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 /** Filled dot: an update is available. Shape, not colour. */
 export function UpdateDot({ className, label, decorative }: { className?: string; label?: string; decorative?: boolean }) {
   const { t } = useApp()
-  if (decorative) return <span aria-hidden className={cn("inline-block size-1.5 shrink-0 rounded-full bg-foreground", className)} />
+  if (decorative) return <span aria-hidden className={cn("inline-block size-2 shrink-0 rounded-full bg-foreground/80 ring-2 ring-foreground/10", className)} />
   return (
-    <span role="img" aria-label={label ?? t("updateMarker")} title={label ?? t("updateMarker")} className={cn("inline-block size-1.5 shrink-0 rounded-full bg-foreground", className)} />
+    <span role="img" aria-label={label ?? t("updateMarker")} title={label ?? t("updateMarker")} className={cn("inline-block size-2 shrink-0 rounded-full bg-foreground/80 ring-2 ring-foreground/10", className)} />
   )
 }
 

@@ -3,6 +3,7 @@ import {
   Bot,
   CloudUpload,
   Command as CommandIcon,
+  Loader2,
   FolderGit2,
   History,
   Inbox,
@@ -219,6 +220,30 @@ export function PendingBanner() {
       <Button variant="link" size="sm" className="h-auto p-0 text-[0.82rem] underline" onClick={() => openDialog({ kind: "apply" })}>
         {t("reviewApply")}
       </Button>
+    </div>
+  )
+}
+
+/** Keeps long native operations visible instead of making the window look stuck. */
+export function OperationBanner() {
+  const { t, operation } = useApp()
+  const [elapsed, setElapsed] = React.useState(0)
+  React.useEffect(() => {
+    if (!operation) {
+      setElapsed(0)
+      return
+    }
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - operation.startedAt) / 1000)))
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [operation])
+  if (!operation) return null
+  return (
+    <div className="flex items-center gap-2 border-b bg-muted/50 px-8 py-2 text-[0.8rem]" role="status" aria-live="polite">
+      <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+      <span>{operation.label}</span>
+      <span className="text-muted-foreground">{elapsed}s · {t("operationWait")}</span>
     </div>
   )
 }

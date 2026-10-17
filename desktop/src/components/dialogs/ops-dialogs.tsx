@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 // Update ---------------------------------------------------------------------
 
 export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: () => void }) {
-  const { t, outdated, run, reload } = useApp()
+  const { t, outdated, runTask, reload } = useApp()
   const all = outdated?.packs ?? []
   const candidates = all.filter((p) => hasUpdates(p) || p.moved.length > 0)
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(repos?.length ? repos.filter((r) => candidates.some((c) => c.repo === r)) : candidates.map((c) => c.repo)))
@@ -25,7 +25,7 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
 
   const go = async () => {
     setBusy(true)
-    const r = await run(() => backend.update([...picked], { addNew }))
+    const r = await runTask(t("updating"), () => backend.update([...picked], { addNew }))
     setBusy(false)
     if (!r.ok) return
     await reload()
@@ -152,7 +152,7 @@ function PackUpdate({
 const ACT: Record<PlanItem["action"], MessageKey> = { link: "actLink", unlink: "actUnlink", relink: "actRelink", blocked: "actBlocked" }
 
 export function ApplyDialog({ onClose }: { onClose: () => void }) {
-  const { t, plan, run, reload, agents } = useApp()
+  const { t, plan, runTask, reload, agents } = useApp()
   const [force, setForce] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const blocked = plan.some((p) => p.action === "blocked")
@@ -160,7 +160,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
 
   const go = async () => {
     setBusy(true)
-    const r = await run(() => backend.apply({ force }))
+    const r = await runTask(t("operating"), () => backend.apply({ force }))
     setBusy(false)
     if (!r.ok) return
     await reload()
@@ -219,7 +219,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
 // Sync -----------------------------------------------------------------------
 
 export function SyncDialog({ onClose }: { onClose: () => void }) {
-  const { t, status, run, reload } = useApp()
+  const { t, status, runTask, reload } = useApp()
   const [remote, setRemote] = React.useState("")
   const [message, setMessage] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -227,7 +227,7 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
 
   const go = async () => {
     setBusy(true)
-    const r = await run(() => backend.sync({ remote: needsRemote ? remote.trim() : undefined, message: message.trim() || undefined }))
+    const r = await runTask(t("syncing"), () => backend.sync({ remote: needsRemote ? remote.trim() : undefined, message: message.trim() || undefined }))
     setBusy(false)
     if (!r.ok) return
     await reload()
@@ -290,7 +290,7 @@ export function LibraryForm({
   onCancel?: () => void
   autoFocus?: boolean
 }) {
-  const { t, run, reload } = useApp()
+  const { t, runTask, run, reload } = useApp()
   const [dir, setDir] = React.useState(mode === "init" ? "~/.skilldots" : mode === "clone" ? "~/.skilldots" : "")
   const [url, setUrl] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -298,7 +298,7 @@ export function LibraryForm({
 
   const go = async () => {
     setBusy(true)
-    const r = await run(() =>
+    const r = await runTask(t("operating"), () =>
       mode === "init" ? backend.initLibrary(expand(dir)) : mode === "clone" ? backend.cloneLibrary(url.trim(), expand(dir)) : backend.useLibrary(expand(dir)),
     )
     setBusy(false)

@@ -31,7 +31,7 @@ const FORM_LABEL: Record<ParsedSource["form"], MessageKey> = {
 }
 
 export function AddDialog({ initial, onClose }: { initial?: string; onClose: () => void }) {
-  const { t, run, reload, agents: allAgents } = useApp()
+  const { t, runTask, reload, agents: allAgents } = useApp()
   const enabled = useEnabledAgents()
   const [input, setInput] = React.useState(initial ?? "")
   const [parsed, setParsed] = React.useState<ParsedSource | null>(null)
@@ -114,7 +114,7 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
   const submit = async () => {
     if (!preview) return
     setAdding(true)
-    const r = await run(() =>
+    const r = await runTask(t("operating"), () =>
       backend.add(preview, { skills: [...picked], categories: [], all: followAll, alias: alias.trim() || undefined, agents: [...targets] }),
     )
     setAdding(false)
