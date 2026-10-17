@@ -265,7 +265,7 @@ func TestHostileLibraryPrintsClean(t *testing.T) {
 			t.Errorf("%q was created", p)
 		}
 	}
-	if b, _ := os.ReadFile(e.configPath()); strings.Contains(string(b), "code") {
+	if b, _ := os.ReadFile(e.configPath()); strings.Contains(strings.ReplaceAll(string(b), e.home, "~"), "code") { // the paths in it (the library) are the test's own
 		t.Errorf("config set stored a hostile value:\n%s", b)
 	}
 	if out, _, _ := e.skd(lib, "show", up); !strings.Contains(out, "review") {
