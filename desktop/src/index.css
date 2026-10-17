@@ -204,6 +204,24 @@
     backdrop-filter: blur(30px) saturate(1.7);
   }
 
+  /* Keep the wide skills matrix legible while scrolling horizontally. */
+  .skills-table-scroll {
+    scrollbar-gutter: stable both-edges;
+    overscroll-behavior: contain;
+  }
+  .skills-table-scroll::after {
+    content: "";
+    pointer-events: none;
+    position: sticky;
+    right: 0;
+    display: block;
+    width: 1.25rem;
+    height: 100%;
+    margin-top: -100%;
+    background: linear-gradient(90deg, transparent, var(--background));
+    opacity: 0.8;
+  }
+
   /* Rendered Markdown (preview) */
   .prose-skill {
     font-size: 0.93rem;

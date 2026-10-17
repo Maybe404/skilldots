@@ -103,7 +103,7 @@ export function SkillsPage() {
         ...agents.map((a) =>
           col.display({
             id: `agent:${a.name}`,
-            header: a.label,
+            header: a.name === "agents" ? t("colAgents") : a.label,
             enableSorting: false,
             cell: ({ row }) => (
               <AgentCell skill={row.original} agent={a} off={a.name === "claude" && overrides.has(row.original.name)} onToggle={setAgent} />
@@ -206,15 +206,20 @@ export function SkillsPage() {
               )}
             </Empty>
           ) : (
-            <Table className="table-fixed" containerClassName="min-h-0 flex-1 overflow-auto">
-              <colgroup>
-                <col className="w-[22rem]" />
-                <col className="w-[11rem]" />
-                {agents.map((a) => (
-                  <col key={a.name} className="w-[5.4rem]" />
-                ))}
-              </colgroup>
-              <TableHeader className="sticky top-0 z-10 bg-background">
+            <div className="relative min-h-0 flex-1">
+              <Table
+                aria-label={t("navSkills")}
+                className="table-fixed"
+                containerClassName="skills-table-scroll min-h-0 h-full overflow-auto"
+              >
+                <colgroup>
+                  <col className="w-[22rem]" />
+                  <col className="w-[11rem]" />
+                  {agents.map((a) => (
+                    <col key={a.name} className="w-[5.4rem]" />
+                  ))}
+                </colgroup>
+                <TableHeader className="bg-background">
                 {table.getHeaderGroups().map((hg) => (
                   <TableRow key={hg.id} className="hover:bg-transparent">
                     {hg.headers.map((h, index) => {
@@ -225,7 +230,7 @@ export function SkillsPage() {
                         <TableHead
                           key={h.id}
                           aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : h.column.getCanSort() ? "none" : undefined}
-                          className={cn("text-[0.8rem] font-medium text-muted-foreground", isAgent && "text-center", pinned)}
+                          className={cn("sticky top-0 z-30 h-11 border-b bg-background/95 text-[0.8rem] font-medium text-muted-foreground backdrop-blur", isAgent && "text-center", pinned)}
                         >
                           {h.column.getCanSort() ? (
                             <button
@@ -244,8 +249,8 @@ export function SkillsPage() {
                     })}
                   </TableRow>
                 ))}
-              </TableHeader>
-              <TableBody>
+                </TableHeader>
+                <TableBody>
                 {table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
@@ -283,8 +288,12 @@ export function SkillsPage() {
                     ))}
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end px-3 pb-2">
+                <span className="rounded-full border bg-background/90 px-2.5 py-1 text-[0.7rem] text-muted-foreground shadow-sm backdrop-blur sm:hidden">{t("tableScrollHint")}</span>
+              </div>
+            </div>
           )}
         </div>
 
