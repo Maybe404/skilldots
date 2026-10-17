@@ -54,6 +54,19 @@ func TestAppMustBeASkill(t *testing.T) {
 			os.Symlink(d, filepath.Join(home, "innocent"))
 			return filepath.Join(home, "innocent")
 		}},
+		// A skill there, from where skd runs: checked there, but a link
+		// to it would be read from the agent's directory.
+		{"a relative path", func(home string) string {
+			writeSkill(t, filepath.Join(home, "rel", "x"), "x")
+			t.Chdir(home)
+			return "rel/x"
+		}},
+		// Nothing there from where skd runs: still said to be refused
+		// for being relative, not taken for a missing app.
+		{"a relative path to nothing here", func(home string) string {
+			t.Chdir(home)
+			return "nowhere/x"
+		}},
 	}
 	for _, tc := range cases {
 		lib, _, home := newTestLib(t)
@@ -119,5 +132,20 @@ func TestAppCheckedAgainWhenApplied(t *testing.T) {
 	}
 	if len(res.Refused) != 1 || fileExists(filepath.Join(home, ".agents", "skills", "x")) {
 		t.Fatalf("refused %v", res.Refused)
+	}
+}
+
+// CheckAppDir refuses a relative path whatever it names, and says so
+// without repeating it (it comes from skills.toml).
+func TestCheckAppDirWantsAnAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	writeSkill(t, filepath.Join(dir, "x"), "x")
+	t.Chdir(dir)
+	err := CheckAppDir("x")
+	if err == nil || !strings.Contains(err.Error(), "not absolute") || strings.Contains(err.Error(), `"x"`) {
+		t.Fatalf("%v", err)
+	}
+	if err := CheckAppDir(filepath.Join(dir, "x")); err != nil {
+		t.Fatal(err)
 	}
 }

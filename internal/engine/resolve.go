@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,7 +81,12 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 				linked[l] = append(linked[l], e.LinkName)
 			}
 		}
-		if _, err := os.Stat(e.Dir); err != nil {
+		if e.Kind == KindApp && !filepath.IsAbs(e.Dir) {
+			// Checked before anything is looked up: a relative path would
+			// be read from wherever skd runs.
+			e.Refused = CheckAppDir(e.Dir).Error()
+			warnings = append(warnings, fmt.Sprintf("[[app]] %s: %s; skipped", e.Name, e.Refused))
+		} else if _, err := os.Stat(e.Dir); err != nil {
 			e.Missing = true
 		} else if e.Kind == KindApp && CheckAppDir(e.Dir) != nil {
 			e.Refused = CheckAppDir(e.Dir).Error()
@@ -407,7 +413,15 @@ func Lookup(entries []Entry, key string) (*Entry, error) {
 // file (not a link: one could lead anywhere), as every skill does, and
 // must not be, be inside or hold a place of keys and credentials
 // (targets.SecretDirs). Links on the way are resolved first.
+//
+// The path must be absolute (after ~ is expanded): a relative one is
+// read from wherever skd runs, and a link to it would be read from the
+// agent's directory, so the checks and the link would not agree on
+// which directory it is.
 func CheckAppDir(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return errors.New("its path is not absolute (write it in full, or starting with ~/)")
+	}
 	st, err := os.Lstat(filepath.Join(dir, "SKILL.md"))
 	switch {
 	case os.IsNotExist(err):
