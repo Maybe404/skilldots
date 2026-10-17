@@ -11,7 +11,6 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -19,6 +18,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
@@ -85,7 +85,7 @@ func Open(root string) (*Session, error) {
 				if errors.As(err, &pe) {
 					err = pe.Err
 				}
-				ses.notices = append(ses.notices, fmt.Sprintf("could not write %s: %v; the links an older skd made are taken for skd's in this run only, and looked for again next time", PlacedFile(), err))
+				ses.notices = append(ses.notices, i18n.Sprintf("could not write %s: %v; the links an older skd made are taken for skd's in this run only, and looked for again next time", PlacedFile(), err))
 			}
 		}
 	}
@@ -148,7 +148,7 @@ func sameDir(a, b string) bool {
 
 func (s *Session) logf(l Level, format string, a ...any) {
 	if s.Log != nil {
-		s.Log(l, fmt.Sprintf(format, a...))
+		s.Log(l, i18n.Sprintf(format, a...))
 	}
 }
 
@@ -246,7 +246,7 @@ func (s *Session) mustEntry(entries []engine.Entry, r Ref) (*engine.Entry, error
 		return nil, err
 	}
 	if e == nil {
-		return nil, fmt.Errorf("no skill %q", r.String())
+		return nil, i18n.Errorf("no skill %q", r.String())
 	}
 	return e, nil
 }

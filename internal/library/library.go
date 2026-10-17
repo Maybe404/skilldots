@@ -6,8 +6,6 @@ package library
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
@@ -76,10 +75,10 @@ func Locate(flag string) (string, error) {
 				return c, nil
 			}
 			if c != "" && c == flag {
-				return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
+				return "", i18n.Errorf("no %s in %s", manifest.FileName, c)
 			}
 		}
-		return "", fmt.Errorf("cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s", serr, EnvLibrary)
+		return "", i18n.Errorf("cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s", serr, EnvLibrary)
 	}
 	candidates = append(candidates, settings[config.Library], DefaultRoot())
 	for _, c := range candidates {
@@ -90,10 +89,10 @@ func Locate(flag string) (string, error) {
 			return c, nil
 		}
 		if c == flag {
-			return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
+			return "", i18n.Errorf("no %s in %s", manifest.FileName, c)
 		}
 	}
-	return "", errors.New("no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`")
+	return "", i18n.New("no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`")
 }
 
 // Open loads manifest and lock from root.
@@ -153,11 +152,11 @@ func CheckFile(root, p string) error {
 		return nil
 	}
 	refuse := func(why string) error {
-		return fmt.Errorf("%s is a symbolic link %s; skd does not write through it (replace it with the file itself)", p, why)
+		return i18n.Errorf("%s is a symbolic link %s; skd does not write through it (replace it with the file itself)", p, why)
 	}
 	real, err := filepath.EvalSymlinks(p)
 	if err != nil {
-		return refuse("that leads nowhere")
+		return refuse(i18n.T("that leads nowhere"))
 	}
 	if a, err := filepath.Abs(real); err == nil {
 		real = a
@@ -170,17 +169,17 @@ func CheckFile(root, p string) error {
 		r = rr
 	}
 	if !fsutil.Within(r, real) {
-		return refuse("to " + real + ", outside the library")
+		return refuse(i18n.Sprintf("to %s, outside the library", real))
 	}
 	base := filepath.Base(real)
 	if !fsutil.SameDir(filepath.Dir(real), r, false) {
-		return refuse("to " + real + ", not a file directly in the library's folder")
+		return refuse(i18n.Sprintf("to %s, not a file directly in the library's folder", real))
 	}
 	if strings.HasPrefix(base, ".") || slices.Contains(ownFiles, base) {
-		return refuse("to " + real + ", one of the library's hidden or own files")
+		return refuse(i18n.Sprintf("to %s, one of the library's hidden or own files", real))
 	}
 	if st, err := os.Stat(real); err != nil || !st.Mode().IsRegular() {
-		return refuse("to " + real + ", which is not a file")
+		return refuse(i18n.Sprintf("to %s, which is not a file", real))
 	}
 	return nil
 }
@@ -247,7 +246,7 @@ func GitContext(ctx context.Context, dir string, args ...string) (string, error)
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), ctx.Err())
+			return "", i18n.Errorf("git %s: %w", strings.Join(args, " "), ctx.Err())
 		}
 		msg := strings.TrimSpace(errb.String())
 		if msg == "" {
@@ -261,10 +260,10 @@ func GitContext(ctx context.Context, dir string, args ...string) (string, error)
 				return GitContext(ctx, dir, older...)
 			}
 			if slices.Contains(args, "--end-of-options") {
-				msg += "\n(skd needs git 2.24 or later: this git does not know --end-of-options)"
+				msg += i18n.T("\n(skd needs git 2.24 or later: this git does not know --end-of-options)")
 			}
 		}
-		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		return "", i18n.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
 	return strings.TrimSpace(out.String()), nil
 }
@@ -310,7 +309,7 @@ func samePath(a, b string) bool {
 
 // ErrPrivateLink is returned by EnsurePrivateGit when the library's
 // private/ is reached through a symbolic link inside the library.
-var ErrPrivateLink = errors.New("a symbolic link")
+var ErrPrivateLink = i18n.New("a symbolic link")
 
 // PrivateLink returns the symbolic link on the way from root to its
 // private/ (private/ itself, as a rule), or "" when there is none.
@@ -327,7 +326,7 @@ func PrivateLink(root string) string {
 // and the error wraps ErrPrivateLink.
 func EnsurePrivateGit(root string) error {
 	if l := PrivateLink(root); l != "" {
-		return fmt.Errorf("%s is %w; skd does not set up a git repository through it (make private/ a directory of its own)", l, ErrPrivateLink)
+		return i18n.Errorf("%s is %w; skd does not set up a git repository through it (make private/ a directory of its own)", l, ErrPrivateLink)
 	}
 	return EnsureGit(filepath.Join(root, DirPrivate))
 }

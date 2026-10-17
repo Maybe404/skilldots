@@ -12,6 +12,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
@@ -75,7 +76,7 @@ func Load(path string) (*Lock, error) {
 	}
 	for _, repo := range sortedKeys(l.Packs) {
 		if p := l.Packs[repo]; p != nil && p.Commit != "" && !commitRE.MatchString(p.Commit) {
-			return nil, fmt.Errorf("%s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line", path, repo, p.Commit, FileName)
+			return nil, i18n.Errorf("%s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line", path, repo, p.Commit, FileName)
 		}
 	}
 	return l, nil
@@ -118,7 +119,7 @@ func checkText(b []byte) error {
 	}
 	var errs []error
 	for _, p := range safetext.DocSchema(raw, known) {
-		errs = append(errs, fmt.Errorf("%s has control characters; restore the file (git checkout -- %s) or remove the line", p, FileName))
+		errs = append(errs, i18n.Errorf("%s has control characters; restore the file (git checkout -- %s) or remove the line", p, FileName))
 	}
 	return errors.Join(errs...)
 }
@@ -129,7 +130,7 @@ func (l *Lock) Save(path string) error {
 		return err
 	}
 	if err := checkText(b); err != nil {
-		return fmt.Errorf("not saving %s: %w", FileName, err)
+		return i18n.Errorf("not saving %s: %w", FileName, err)
 	}
 	return fsutil.WriteAtomic(path, append([]byte("# Written by skilldots. Do not edit.\n"), b...))
 }

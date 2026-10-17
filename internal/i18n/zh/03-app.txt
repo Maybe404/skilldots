@@ -1,0 +1,289 @@
+# App layer: shared flows (add, adopt, editor, fork, history, update plan).
+
+@ no source given
+= 没有指定来源
+
+@ %q is not an install command skd understands (try owner/repo, a GitHub or skills.sh link, or `npx skills add …`)
+= %q 不是 skd 能理解的安装命令（请试试 owner/repo、GitHub 或 skills.sh 链接，或 `npx skills add …`）
+
+@ add takes one source, got %d arguments (%s); a path or URL with spaces needs quotes (skd add "./my skills"), and so does a pasted install command
+= add 只接受一个来源，却给了 %d 个参数（%s）；带空格的路径或 URL 要加引号（skd add "./my skills"），粘贴的安装命令也一样
+
+@ only `skills add` commands can be pasted here (got %q)
+= 这里只能粘贴 `skills add` 命令（收到的是 %q）
+
+@ %s needs a skill name (got %q)
+= %s 后面需要 skill 名称（收到的是 %q）
+
+@ the command names no repository
+= 这条命令没有指明仓库
+
+@ --skill %q: %w
+= --skill %q：%w
+
+@ %s is not a skill page on skills.sh (expected skills.sh/<owner>/<repo>/<skill>)
+= %s 不是 skills.sh 上的 skill 页面（应为 skills.sh/<owner>/<repo>/<skill>）
+
+@ unterminated %c quote in %q
+= %q 中有未闭合的 %c 引号
+
+@ %v; enable one with skd enable <name> --agent %s
+= %v；可以用 skd enable <name> --agent %s 启用其中一个
+
+@ enable for %s (already in library)
+= 启用到 %s（库里已有）
+
+@ broken link; move to the trash
+= 失效的链接；移入回收站
+
+@ not a valid skill name (letters, digits, '.', '_' and '-'); rename it first
+= 不是有效的 skill 名称（只能用字母、数字、'.'、'_' 和 '-'）；请先改名
+
+@ same name with different content in several agents; resolve by hand
+= 多个 agent 里有同名但内容不同的 skill；请手动处理
+
+@ app → %s
+= app → %s
+
+@ subscribe to %s
+= 订阅 %s
+
+@ subscribe to %s (link target is a clone of it)
+= 订阅 %s（链接指向它的克隆）
+
+@ copy into skills/ as your own
+= 复制到 skills/，成为你自己的
+
+@ copy into skills/ as your own (no known upstream)
+= 复制到 skills/，成为你自己的（不知道上游）
+
+@ enable for %s
+= 启用到 %s
+
+@ [[app]] %s already points at %s; not changing it to %s
+= [[app]] %s 已指向 %s；不改成 %s
+
+@ copied %s → %s
+= 已复制 %s → %s
+
+@ %s: not removed; it is no longer an entry of the %s target's directory
+= %s：未移除；它已不是 %s target 目录里的条目
+
+@ %s: %v; not removing it
+= %s：%v；不移除它
+
+@ %s is no longer a broken link (something was put there since the scan); left in place
+= %s 已不是失效的链接（扫描之后那里放了别的东西）；原样保留
+
+@ %s is no longer a broken link (it points at something now); left in place
+= %s 已不是失效的链接（它现在有指向了）；原样保留
+
+@ moved broken link %s to %s
+= 已把失效的链接 %s 移到 %s
+
+@ %s is not in %s any more; keeping your copy under skills/
+= %s 已不在 %s 里；保留你在 skills/ 下的副本
+
+@ %s already exists; leaving it as is
+= %s 已存在；保持原样
+
+@ %s differs from the library's %s (%s); left in place — compare them and remove one by hand
+= %s 与库里的 %s（%s）不同；原样保留——请比较两者，再手动删掉其中一个
+
+@ %s: not moved aside; it is no longer an entry of the %s target's directory
+= %s：未挪开；它已不是 %s target 目录里的条目
+
+@ %d repositories could not be fetched
+= 有 %d 个仓库无法拉取
+
+@ editor setting
+= 设置里的 editor
+
+@ found on this machine
+= 在本机上找到
+
+@ no editor found: set one with `skd config set editor <command>`, or $EDITOR
+= 没有找到编辑器：请用 `skd config set editor <command>` 设置一个，或设置 $EDITOR
+
+@ system default
+= 系统默认
+
+@ %s runs in a terminal
+= %s 要在终端里运行
+
+@ %s is not an editor skd knows to open a window, so it runs it in the terminal
+= %s 不是 skd 已知会打开窗口的编辑器，所以在终端里运行它
+
+@ %s, and there is none. If it opens a window: skd config set editor-kind window. Or choose another editor (skd config set editor <command>), or open %s yourself
+= %s，而现在没有终端。如果它会打开窗口：skd config set editor-kind window。或者换一个编辑器（skd config set editor <command>），或自己打开 %s
+
+@ %s %s; fork it to edit your own copy (skd edit %s --fork), or open the files anyway (--force)
+= %s %s；可以 fork 一份来编辑你自己的副本（skd edit %s --fork），或仍然打开这些文件（--force）
+
+@ is vendored from %s: skd update replaces its files, so edits there are lost
+= 是从 %s 引入的：skd update 会替换它的文件，所以在那里的改动会丢失
+
+@ ships with the %s application: its updates replace the files, so edits there are lost
+= 随 %s 应用一起提供：应用更新会替换这些文件，所以在那里的改动会丢失
+
+@ editor %q (%s) not found; set one with skd config set editor <command>
+= 找不到编辑器 %q（%s）；请用 skd config set editor <command> 设置一个
+
+@ %q is already yours (%s); nothing to fork
+= %q 已经是你自己的（%s）；无需 fork
+
+@ %s is missing (skd update fetches a vendored skill again)
+= 缺少 %s（skd update 会重新拉取引入的 skill）
+
+@ remote %q has control characters: not a git URL
+= 远程地址 %q 含有控制字符：不是 git URL
+
+@ could not mark the update history linked: %v
+= 无法把更新历史标记为已链接：%v
+
+@ could not mark the update history linked (%s): %v
+= 无法把更新历史标记为已链接（%s）：%v
+
+@ changed
+= 已变更
+
+@ added
+= 新增
+
+@ moved
+= 已移动
+
+@ upstream gone
+= 上游已删除
+
+@ dropped
+= 已移除
+
+@ upstream new
+= 上游新增
+
+@ not recorded
+= 未记录
+
+@ %d more skill names (the record would have been too long)
+= 还有 %d 个 skill 名称（记录会太长）
+
+@ %d changed
+= %d 个变更
+
+@ %d added
+= %d 个新增
+
+@ %d moved
+= %d 个移动
+
+@ %d gone
+= %d 个已删除
+
+@ %d dropped
+= %d 个已移除
+
+@ %d new upstream
+= %d 个上游新增
+
+@ new commit, no skill changes
+= 有新 commit，skill 没有变化
+
+@ created %s
+= 已创建 %s
+
+@ %s goes through %s, a symbolic link inside the library; skd writes nothing through it (make it a directory of its own)
+= %s 经过 %s，这是库内的一个符号链接；skd 不会通过它写入任何东西（请把它改成独立的目录）
+
+@ no pack %q
+= 没有 pack %q
+
+@ could not record the check: %v
+= 无法记录这次检查：%v
+
+@ unreadable
+= 无法读取
+
+@ %s: %v; replacing it
+= %s：%v；将替换它
+
+@ just now
+= 刚刚
+
+@ %dm ago
+= %d 分钟前
+
+@ %dh ago
+= %d 小时前
+
+@ %dd ago
+= %d 天前
+
+@ --alias %q is reserved (it names your own skills in skills:<name>); pick another
+= --alias %q 是保留名（skills:<name> 用它指代你自己的 skill）；请换一个
+
+@ no skill %q in %s (try `skd add %s` without --skill to browse)
+= %s 里没有 skill %q（可以不带 --skill 运行 `skd add %s` 来浏览）
+
+@ no category %q in %s (categories: %s)
+= %s 里没有分类 %q（现有分类：%s）
+
+@ %s is excluded by skip = [%q] of %s in skills.toml, which excludes other skills too; edit skills.toml: remove %q from that skip (or replace it with the names to keep out), then run skd update %s
+= %s 被 skills.toml 里 %s 的 skip = [%q] 排除了，而那一项也排除了其他 skill；请编辑 skills.toml：把 %q 从那条 skip 里去掉（或换成要排除的具体名字），然后运行 skd update %s
+
+@ could not write the update history (%s): %v
+= 无法写入更新历史（%s）：%v
+
+@ could not record the update for skd outdated: %v
+= 无法为 skd outdated 记录这次更新：%v
+
+@ %q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it
+= %q 是 %s 类的 skill；用 `skd disable` 取消链接，或删除它的目录来去掉它
+
+@ %s has no skills left; dropping the pack
+= %s 里没有剩下的 skill 了；移除这个 pack
+
+@ %q is already yours (%s)
+= %q 已经是你自己的（%s）
+
+@ %q: %s; skd does not copy it
+= %q：%s；skd 不会复制它
+
+@ %q: its directory goes through %s, a symbolic link inside the library; skd does not copy it
+= %q：它的目录经过 %s，这是库内的一个符号链接；skd 不会复制它
+
+@ --as: %w
+= --as：%w
+
+@ could not write %s: %v; the links an older skd made are taken for skd's in this run only, and looked for again next time
+= 无法写入 %s：%v；旧版 skd 建的链接只在这次运行中被当作 skd 的，下次会重新查找
+
+@ no skill %q
+= 没有 skill %q
+
+@ no skill or pack %q
+= 没有 skill 或 pack %q
+
+@ %d to add
+= %d 个待新增
+
+@ %d gone upstream
+= %d 个上游已删除
+
+@ not vendored yet
+= 尚未引入
+
+@ up to date
+= 已是最新
+
+@ will add
+= 将新增
+
+@  (not selected)
+= （未选）
+
+@  (kept)
+= （保留）
+
+@  (path only)
+= （仅路径变化）

@@ -1,0 +1,238 @@
+# Engine: plans, links, vendoring, the trash.
+
+@ name conflict: %s
+= 名称冲突：%s
+
+@ its directory goes through %s, a symbolic link inside the library
+= 它的目录经过 %s，这是库内的一个符号链接
+
+@ source directory missing
+= 来源目录不存在
+
+@ source changed
+= 来源已变化
+
+@ points at the previous library location %s
+= 指向库先前的位置 %s
+
+@ modified since skilldots wrote it (--force)
+= 自 skilldots 写入后已被修改（--force）
+
+@ modified since skilldots wrote it; use --force
+= 自 skilldots 写入后已被修改；请用 --force
+
+@ adopting existing link
+= 接管已有的链接
+
+@ unmanaged entry (--force)
+= 未受管理的条目（--force）
+
+@ exists and not managed by skilldots; use --force
+= 已存在，且不受 skilldots 管理；请用 --force
+
+@ unknown target %s
+= 未知的 target %s
+
+@ custom target %s is not used (see skd targets)
+= 自定义 target %s 未启用（见 skd targets）
+
+@ skills.lock link record: %v
+= skills.lock 里的链接记录：%v
+
+@ is no longer defined
+= 已不再定义
+
+@ is not used (see skd targets)
+= 未启用（见 skd targets）
+
+@ target %q %s; %s is a link into this library; skd no longer manages it and leaves it in place: it may be the user's own
+= target %q %s；%s 是指向本库的链接；skd 不再管理它，原样保留：它可能是用户自己的
+
+@ target %q %s; forgetting the record (nothing on disk is touched)
+= target %q %s；忘掉这条记录（不会动磁盘上的任何东西）
+
+@ already gone
+= 已经不在了
+
+@ a link to the previous library location %s, where nothing is any more
+= 指向库先前位置 %s 的链接，那里已经什么都没有了
+
+@ a link to the previous library location %s, whose skills.lock records it
+= 指向库先前位置 %s 的链接，该处的 skills.lock 记录了它
+
+@ no longer wanted, but skd cannot tell it made it (changed since, made by an older skd, or not made by skd); left in place: it may be the user's own
+= 已不再需要，但 skd 无法确认它是自己建的（之后被改过、由旧版 skd 建立，或并非 skd 所建）；原样保留：它可能是用户自己的
+
+@ moving %s to trash: %w
+= 把 %s 移入回收站：%w
+
+@ %s: not changed: %v
+= %s：未改动：%v
+
+@ %s: not changed: its source goes through %s, a symbolic link inside the library
+= %s：未改动：它的来源经过 %s，这是库内的一个符号链接
+
+@ target %q: registry not initialised
+= target %q：登记表尚未初始化
+
+@ [[app]] %s: %s; skipped
+= [[app]] %s：%s；已跳过
+
+@ %s in the library is a symbolic link; skd does not link or copy skills through it (skipped: %s); make it a directory of its own
+= 库里的 %s 是符号链接；skd 不会通过它链接或复制 skill（已跳过：%s）；请把它改成独立的目录
+
+@ unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name
+= 未知的 target %q（%s 在使用）已跳过；请在 skills.toml 的 [targets.custom] 下定义它，或修正名字
+
+@ custom target %q in skills.toml is not used: %s
+= skills.toml 里的自定义 target %q 未启用：%s
+
+@  (skipped for %s)
+= （已为 %s 跳过）
+
+@ [[local]] %v; ignored
+= [[local]] %v；已忽略
+
+@ %v; skipped
+= %v；已跳过
+
+@ pack %s is in skills.toml but has not been fetched; run `skd update %s`
+= pack %s 在 skills.toml 里，但尚未拉取；请运行 `skd update %s`
+
+@ pack %s: skill %q in skills.lock: %v; skipped
+= pack %s：skills.lock 里的 skill %q：%v；已跳过
+
+@ pack %s: as for %s: %v; skipped
+= pack %s：%s 的 as：%v；已跳过
+
+@ [[app]] %v; skipped
+= [[app]] %v；已跳过
+
+@ %s: SKILL.md %v; skipped
+= %s：SKILL.md %v；已跳过
+
+@ %q is provided by %s
+= %q 由 %s 提供
+
+@  and 
+=  和 
+
+@ %s; neither is linked until one is renamed (set `as` under [pack.skill.<name>] in skills.toml, or rename your own skill)
+= %s；在改名之前两者都不会被链接（在 skills.toml 的 [pack.skill.<name>] 下设置 `as`，或给你自己的 skill 改名）
+
+@ %q matches several skills; name one of: %s
+= %q 匹配多个 skill；请指明其中之一：%s
+
+@ its path is not absolute (write it in full, or starting with ~/)
+= 它的路径不是绝对路径（请写完整路径，或以 ~/ 开头）
+
+@ %s has no SKILL.md, so it is not a skill
+= %s 里没有 SKILL.md，所以它不是 skill
+
+@ %s/SKILL.md is not a regular file
+= %s/SKILL.md 不是普通文件
+
+@ %s is, is inside or holds %s, a place of keys and credentials
+= %s 就是、位于或包含 %s，那是存放密钥和凭据的地方
+
+@ (unsafe name %d)
+= （不安全的名称 %d）
+
+@ the trash %s is reached through the symbolic link %s; skd moves nothing there (make it a directory of its own)
+= 回收站 %s 要经过符号链接 %s 才能到达；skd 不会往那里移动任何东西（请把它改成独立的目录）
+
+@ %s was moved to %s, but where it came from could not be recorded: %w
+= %s 已移到 %s，但无法记录它原来的位置：%w
+
+@ moving %s across devices: %w
+= 跨设备移动 %s：%w
+
+@ the trash %q: %w; skd does not follow it
+= 回收站 %q：%w；skd 不会跟随它
+
+@ its name is not one skd gives what it sets aside, so it is not shown and skd does not restore it; look at it by hand in the library's %s
+= 它的名字不是 skd 给被挪开的东西起的名字，所以不显示，skd 也不会恢复它；请到库的 %s 里手动查看
+
+@ it is a symbolic link; skd does not restore links: whether to put it back is the user's decision
+= 它是符号链接；skd 不恢复链接：是否放回去由用户决定
+
+@ trash entry %q cannot be restored: %w; it stays in the trash at %q
+= 回收站条目 %q 无法恢复：%w；它仍留在回收站的 %q
+
+@ %q already exists, so skd leaves it as it is; the entry stays in the trash at %q
+= %q 已存在，skd 保持原样；该条目仍留在回收站的 %q
+
+@ no trash entry %q (an id is <batch>/<name>, as `skd trash` lists it)
+= 没有回收站条目 %q（ID 的形式是 <批次>/<名称>，与 `skd trash` 列出的一致）
+
+@ trash entry %q is not named as skd names what it sets aside; skd does not restore it (look at it by hand in the library's %s)
+= 回收站条目 %q 的名字不符合 skd 给被挪开的东西起名的方式；skd 不会恢复它（请到库的 %s 里手动查看）
+
+@ no trash entry %q
+= 没有回收站条目 %q
+
+@ trash entry %q: %q %w
+= 回收站条目 %q：%q %w
+
+@ is a symbolic link
+= 是符号链接
+
+@ is not a directory
+= 不是目录
+
+@ where it came from is not recorded
+= 没有记录它原来的位置
+
+@ its record of where it came from is not a file skd wrote
+= 记录它原位置的不是 skd 写的文件
+
+@ its record of where it came from has control characters
+= 记录它原位置的内容含有控制字符
+
+@ its record of where it came from is not an absolute path
+= 记录的原位置不是绝对路径
+
+@ its record of where it came from is not a clean path
+= 记录的原位置不是规范路径
+
+@ its record of where it came from names no directory skd manages
+= 记录的原位置不是 skd 管理的任何目录
+
+@ its record of where it came from is in the custom target %s, under a name that is not a skill's
+= 记录的原位置在自定义 target %s 里，名字不是 skill 的名字
+
+@ the library's vendor/ %w
+= 库的 vendor/ %w
+
+@ its record of where it came from is neither in an agent's skill directory nor in the library's vendor/
+= 记录的原位置既不在 agent 的 skill 目录里，也不在库的 vendor/ 里
+
+@ pack %q would be vendored at %s, outside %s
+= pack %q 会被引入到 %s，在 %s 之外
+
+@ %s goes through %s, a symbolic link inside the library; skd does not follow it (make it a directory of its own)
+= %s 经过 %s，这是库内的一个符号链接；skd 不会跟随它（请把它改成独立的目录）
+
+@ %s is outside %s
+= %s 在 %s 之外
+
+@ %s: no usable SKILL.md (%s)
+= %s：没有可用的 SKILL.md（%s）
+
+@ %s: no SKILL.md found
+= %s：没有找到 SKILL.md
+
+@ %s: renamed from %s upstream
+= %s：上游已从 %s 改名
+
+@ %s is a symlink, not a file; it was not copied into vendor/
+= %s 是符号链接而不是文件；没有复制到 vendor/
+
+@ upstream renamed %s to %s, but renaming %s failed: %w; nothing was changed
+= 上游把 %s 改名为 %s，但重命名 %s 失败：%w；没有做任何改动
+
+@ %s already exists
+= %s 已存在
+
+@ upstream renamed %s to %s; renaming failed (%v) and restoring %s failed too (%v): move %s back by hand
+= 上游把 %s 改名为 %s；重命名失败（%v），恢复 %s 也失败了（%v）：请手动把 %s 移回去

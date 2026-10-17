@@ -1,9 +1,8 @@
 package app
 
 import (
-	"fmt"
-
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
 
@@ -40,7 +39,7 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 			setEntryTargets(m, e, next)
 			out.Label = e.LinkName
 		} else if r.Kind != "" {
-			return nil, fmt.Errorf("no skill %q", r.String())
+			return nil, i18n.Errorf("no skill %q", r.String())
 		}
 	}
 	if out.Label == "" {
@@ -51,9 +50,9 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 		p := m.FindPack(key)
 		if p == nil {
 			if r.Pack != "" {
-				return nil, fmt.Errorf("no pack %q", key)
+				return nil, i18n.Errorf("no pack %q", key)
 			}
-			return nil, fmt.Errorf("no skill or pack %q", key)
+			return nil, i18n.Errorf("no skill or pack %q", key)
 		}
 		cur := append([]string(nil), m.Targets.Default...)
 		if p.Targets != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
@@ -83,7 +84,7 @@ func Load(path string) (*Manifest, error) {
 	}
 	m := &Manifest{}
 	if err := toml.Unmarshal(b, m); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, i18n.Errorf("parse %s: %w", path, err)
 	}
 	if m.Targets.Custom == nil {
 		m.Targets.Custom = map[string]CustomTarget{}
@@ -120,7 +121,7 @@ func checkText(b []byte) error {
 	}
 	var errs []error
 	for _, p := range safetext.DocSchema(raw, known) {
-		errs = append(errs, fmt.Errorf("%s has control characters; fix it by hand", p))
+		errs = append(errs, i18n.Errorf("%s has control characters; fix it by hand", p))
 	}
 	return errors.Join(errs...)
 }
@@ -143,7 +144,7 @@ func (m *Manifest) Save(path string) error {
 	// characters that came in some other way (an option, an old file)
 	// is an error now, not a library that no longer opens.
 	if err := checkText(b); err != nil {
-		return fmt.Errorf("not saving %s: %w", FileName, err)
+		return i18n.Errorf("not saving %s: %w", FileName, err)
 	}
 	header := "# skilldots manifest — edit by hand or with `skd`.\n# Docs: https://github.com/Maybe404/skilldots\n\n"
 	return fsutil.WriteAtomic(path, []byte(header+string(b)))
@@ -174,17 +175,17 @@ func (m *Manifest) CheckAlias(alias, self string) error {
 		return nil
 	}
 	if safetext.Has(alias) {
-		return fmt.Errorf("--alias %q has control characters; pick a short name such as \"acme\"", alias)
+		return i18n.Errorf("--alias %q has control characters; pick a short name such as \"acme\"", alias)
 	}
 	if strings.ContainsAny(alias, `/\:`) {
-		return fmt.Errorf(`--alias %q may not contain "/", "\" or ":"; pick a short name such as "acme"`, alias)
+		return i18n.Errorf(`--alias %q may not contain "/", "\" or ":"; pick a short name such as "acme"`, alias)
 	}
 	for _, p := range m.Packs {
 		if strings.EqualFold(p.Repo, alias) {
-			return fmt.Errorf("--alias %q is the repository of a subscribed pack; pick another", alias)
+			return i18n.Errorf("--alias %q is the repository of a subscribed pack; pick another", alias)
 		}
 		if p.Repo != self && p.Alias != "" && strings.EqualFold(p.Alias, alias) {
-			return fmt.Errorf("--alias %q is already the alias of %s; pick another", alias, p.Repo)
+			return i18n.Errorf("--alias %q is already the alias of %s; pick another", alias, p.Repo)
 		}
 	}
 	return nil
@@ -292,4 +293,4 @@ func matchSkip(pat, name, category string) bool {
 }
 
 // ErrNotFound is returned by lookups that miss.
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = i18n.New("not found")

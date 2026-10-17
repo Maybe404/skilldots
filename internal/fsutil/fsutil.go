@@ -4,7 +4,6 @@ package fsutil
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // Skip lists directory names never copied or hashed.
@@ -64,7 +65,7 @@ func HashTree(dir string) (string, error) {
 // decide what happens to whatever was there.
 func CopyTree(src, dst string) error {
 	if Lexists(dst) {
-		return fmt.Errorf("copy %s: %s already exists", src, dst)
+		return i18n.Errorf("copy %s: %s already exists", src, dst)
 	}
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -94,7 +95,7 @@ func CopyTree(src, dst string) error {
 // about to remove src never loses data silently.
 func CopyAll(src, dst string) error {
 	if Lexists(dst) {
-		return fmt.Errorf("copy %s: %s already exists", src, dst)
+		return i18n.Errorf("copy %s: %s already exists", src, dst)
 	}
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -118,14 +119,14 @@ func CopyAll(src, dst string) error {
 		case info.Mode().IsRegular():
 			return copyFile(p, target)
 		}
-		return fmt.Errorf("copy %s: cannot copy special file %s", src, p)
+		return i18n.Errorf("copy %s: cannot copy special file %s", src, p)
 	})
 }
 
 // CopyFile copies one regular file to dst, replacing a regular file there.
 func CopyFile(src, dst string) error {
 	if st, err := os.Lstat(dst); err == nil && !st.Mode().IsRegular() {
-		return fmt.Errorf("copy %s: %s exists and is not a regular file", src, dst)
+		return i18n.Errorf("copy %s: %s exists and is not a regular file", src, dst)
 	}
 	return copyFile(src, dst)
 }
@@ -179,7 +180,7 @@ func copyFile(src, dst string) error {
 	if st, err := os.Lstat(src); err != nil {
 		return err
 	} else if !st.Mode().IsRegular() {
-		return fmt.Errorf("copy %s: not a regular file", src)
+		return i18n.Errorf("copy %s: not a regular file", src)
 	}
 	in, err := os.Open(src)
 	if err != nil {

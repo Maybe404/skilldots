@@ -1,10 +1,10 @@
 package manifest
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
@@ -17,13 +17,13 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
 func CheckName(name string) error {
 	switch {
 	case name == "":
-		return fmt.Errorf("empty name")
+		return i18n.Errorf("empty name")
 	case len(name) > 128:
-		return fmt.Errorf("name %q is longer than 128 characters", name)
+		return i18n.Errorf("name %q is longer than 128 characters", name)
 	case strings.Contains(name, ".."):
-		return fmt.Errorf("invalid name %q: must not contain \"..\"", name)
+		return i18n.Errorf("invalid name %q: must not contain \"..\"", name)
 	case !nameRE.MatchString(name):
-		return fmt.Errorf("invalid name %q: use letters, digits, '.', '_' and '-' only, not starting with '.'", name)
+		return i18n.Errorf("invalid name %q: use letters, digits, '.', '_' and '-' only, not starting with '.'", name)
 	}
 	return nil
 }
@@ -37,11 +37,11 @@ func CheckCategory(cat string) error {
 		return nil
 	}
 	if safetext.Has(cat) {
-		return fmt.Errorf("invalid category %q: control characters", cat)
+		return i18n.Errorf("invalid category %q: control characters", cat)
 	}
 	for _, seg := range strings.Split(cat, "/") {
 		if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, "\\\x00") {
-			return fmt.Errorf("invalid category %q", cat)
+			return i18n.Errorf("invalid category %q", cat)
 		}
 	}
 	return nil

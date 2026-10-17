@@ -19,6 +19,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/safetext"
@@ -455,14 +456,14 @@ func RecordRows(r UpdateRecord) [][2]string {
 	for _, row := range []struct {
 		label string
 		names []string
-	}{{"changed", r.Changed}, {"added", r.Added}, {"moved", r.Moved}, {"upstream gone", r.Gone},
-		{"dropped", r.Dropped}, {"upstream new", r.New}} {
+	}{{i18n.M("changed"), r.Changed}, {i18n.M("added"), r.Added}, {i18n.M("moved"), r.Moved}, {i18n.M("upstream gone"), r.Gone},
+		{i18n.M("dropped"), r.Dropped}, {i18n.M("upstream new"), r.New}} {
 		if len(row.names) > 0 {
-			out = append(out, [2]string{row.label, strings.Join(row.names, ", ")})
+			out = append(out, [2]string{i18n.T(row.label), strings.Join(row.names, ", ")})
 		}
 	}
 	if r.Omitted > 0 {
-		out = append(out, [2]string{"not recorded", fmt.Sprintf("%d more skill names (the record would have been too long)", r.Omitted)})
+		out = append(out, [2]string{i18n.T("not recorded"), i18n.Sprintf("%d more skill names (the record would have been too long)", r.Omitted)})
 	}
 	return out
 }
@@ -471,16 +472,16 @@ func RecordRows(r UpdateRecord) [][2]string {
 func RecordSummary(r UpdateRecord) string {
 	var parts []string
 	for _, c := range []struct {
-		n    int
-		word string
-	}{{len(r.Changed), "changed"}, {len(r.Added), "added"}, {len(r.Moved), "moved"}, {len(r.Gone), "gone"},
-		{len(r.Dropped), "dropped"}, {len(r.New), "new upstream"}} {
+		n      int
+		format string
+	}{{len(r.Changed), i18n.M("%d changed")}, {len(r.Added), i18n.M("%d added")}, {len(r.Moved), i18n.M("%d moved")}, {len(r.Gone), i18n.M("%d gone")},
+		{len(r.Dropped), i18n.M("%d dropped")}, {len(r.New), i18n.M("%d new upstream")}} {
 		if c.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", c.n, c.word))
+			parts = append(parts, i18n.Sprintf(c.format, c.n))
 		}
 	}
 	if len(parts) == 0 {
-		return "new commit, no skill changes"
+		return i18n.T("new commit, no skill changes")
 	}
 	return strings.Join(parts, " · ")
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // A custom target is a directory skills.toml names, and skills.toml may
@@ -113,7 +114,7 @@ func CheckPath(path, lib string) (real string, err error) {
 func checkPath(path, home, lib string) (string, error) {
 	p := Expand(path, home)
 	if path == "" || !filepath.IsAbs(p) {
-		return "", fmt.Errorf("its path %q is not absolute; start it with ~/ or /", path)
+		return "", i18n.Errorf("its path %q is not absolute; start it with ~/ or /", path)
 	}
 	real := fsutil.Resolve(p)
 	// Resolve leaves a link it cannot follow as it is: a link that leads
@@ -122,7 +123,7 @@ func checkPath(path, home, lib string) (string, error) {
 	// cannot be known.
 	for q := real; ; q = filepath.Dir(q) {
 		if st, err := os.Lstat(q); err == nil && st.Mode()&os.ModeSymlink != 0 {
-			return real, fmt.Errorf("its path %q goes through %s, a symbolic link that leads nowhere", path, q)
+			return real, i18n.Errorf("its path %q goes through %s, a symbolic link that leads nowhere", path, q)
 		}
 		if filepath.Dir(q) == q {
 			break
@@ -130,15 +131,15 @@ func checkPath(path, home, lib string) (string, error) {
 	}
 	h := fsutil.Resolve(filepath.Clean(home))
 	if fsutil.SameDir(real, h, true) {
-		return real, fmt.Errorf("its path %q is your home directory itself", path)
+		return real, i18n.Errorf("its path %q is your home directory itself", path)
 	}
 	if !fsutil.Inside(h, real, false) {
-		return real, fmt.Errorf("its path %q is %s, not inside your home directory", path, real)
+		return real, i18n.Errorf("its path %q is %s, not inside your home directory", path, real)
 	}
 	for _, s := range SensitiveDirs(home) {
 		s = fsutil.Resolve(s)
 		if fsutil.Inside(s, real, true) || fsutil.Inside(real, s, true) {
-			return real, fmt.Errorf("its path %q is %s, which is or holds %s; skd never writes there", path, real, s)
+			return real, i18n.Errorf("its path %q is %s, which is or holds %s; skd never writes there", path, real, s)
 		}
 	}
 	if lib != "" {
@@ -146,7 +147,7 @@ func checkPath(path, home, lib string) (string, error) {
 			lib = a
 		}
 		if l := fsutil.Resolve(lib); fsutil.Inside(l, real, true) || fsutil.Inside(real, l, true) {
-			return real, fmt.Errorf("its path %q is %s, which is, is inside or holds the library %s; skd never writes there", path, real, l)
+			return real, i18n.Errorf("its path %q is %s, which is, is inside or holds the library %s; skd never writes there", path, real, l)
 		}
 	}
 	for _, b := range builtin {
@@ -155,10 +156,10 @@ func checkPath(path, home, lib string) (string, error) {
 			continue
 		}
 		if fsutil.Inside(real, d, true) {
-			return real, fmt.Errorf("its path %q is %s, which holds the %s agent's skill directory %s; skd never writes beside it", path, real, b.name, d)
+			return real, i18n.Errorf("its path %q is %s, which holds the %s agent's skill directory %s; skd never writes beside it", path, real, b.name, d)
 		}
 		if fsutil.Inside(d, real, true) {
-			return real, fmt.Errorf("its path %q is %s, inside the %s agent's skill directory %s, whose entries skd writes itself", path, real, b.name, d)
+			return real, i18n.Errorf("its path %q is %s, inside the %s agent's skill directory %s, whose entries skd writes itself", path, real, b.name, d)
 		}
 	}
 	return real, nil
@@ -190,9 +191,9 @@ func (r *Registry) inspect(name string, approved []Approval) (string, error) {
 	real, err := checkPath(c.Path, r.home, r.lib)
 	switch {
 	case IsBuiltin(name):
-		return real, fmt.Errorf("it has the name of a built-in target; the built-in %s is used, give the custom one another name in skills.toml", name)
+		return real, i18n.Errorf("it has the name of a built-in target; the built-in %s is used, give the custom one another name in skills.toml", name)
 	case c.Mode != "link" && c.Mode != "copy":
-		return real, fmt.Errorf("its mode %q is neither link nor copy", c.Mode)
+		return real, i18n.Errorf("its mode %q is neither link nor copy", c.Mode)
 	case err != nil:
 		return real, err
 	}
@@ -210,7 +211,7 @@ func (r *Registry) inspect(name string, approved []Approval) (string, error) {
 			continue
 		}
 		if fsutil.Inside(o, real, true) || fsutil.Inside(real, o, true) {
-			return real, fmt.Errorf("its path %q is %s, which is, is inside or holds the directory %s of custom target %q; give each custom target a directory of its own", c.Path, real, o, n)
+			return real, i18n.Errorf("its path %q is %s, which is, is inside or holds the directory %s of custom target %q; give each custom target a directory of its own", c.Path, real, o, n)
 		}
 	}
 	return real, nil
@@ -279,24 +280,24 @@ func (r *Registry) Approve(shown Withheld, typed string) error {
 	name := shown.Name
 	c, ok := r.custom[name]
 	if !ok {
-		return fmt.Errorf("skills.toml has no custom target %q", name)
+		return i18n.Errorf("skills.toml has no custom target %q", name)
 	}
 	if c.Path != shown.Path || c.Mode != shown.Mode {
-		return fmt.Errorf("custom target %q is now %q (%s) in skills.toml, not %q (%s) as shown; nothing was approved", name, c.Path, c.Mode, shown.Path, shown.Mode)
+		return i18n.Errorf("custom target %q is now %q (%s) in skills.toml, not %q (%s) as shown; nothing was approved", name, c.Path, c.Mode, shown.Path, shown.Mode)
 	}
 	list, err := Approvals()
 	if err != nil {
-		return fmt.Errorf("%w; fix or remove it first", err)
+		return i18n.Errorf("%w; fix or remove it first", err)
 	}
 	real, err := r.inspect(name, list)
 	if err != nil {
-		return fmt.Errorf("custom target %q cannot be approved: %w", name, err)
+		return i18n.Errorf("custom target %q cannot be approved: %w", name, err)
 	}
 	if real != shown.Real {
-		return fmt.Errorf("custom target %q now leads to %s, not %s as shown; nothing was approved", name, real, shown.Real)
+		return i18n.Errorf("custom target %q now leads to %s, not %s as shown; nothing was approved", name, real, shown.Real)
 	}
 	if Unusual(real) && typed != name {
-		return fmt.Errorf("custom target %q leads to %s, which is not named skills; it is approved only when its name is typed to confirm; nothing was approved", name, real)
+		return i18n.Errorf("custom target %q leads to %s, which is not named skills; it is approved only when its name is typed to confirm; nothing was approved", name, real)
 	}
 	if isApproved(list, name, real, c.Mode) {
 		return nil
@@ -309,7 +310,7 @@ func (r *Registry) Approve(shown Withheld, typed string) error {
 func Revoke(name string) (int, error) {
 	list, err := Approvals()
 	if err != nil {
-		return 0, fmt.Errorf("%w; fix or remove it first", err)
+		return 0, i18n.Errorf("%w; fix or remove it first", err)
 	}
 	var keep []Approval
 	for _, a := range list {

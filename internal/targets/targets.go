@@ -2,7 +2,6 @@
 package targets
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // Target is one agent skill directory.
@@ -34,12 +34,12 @@ type Target struct {
 // that is not intact.
 func (t Target) Intact() error {
 	if t.Real == "" {
-		return fmt.Errorf("the directory of target %q was not checked", t.Name)
+		return i18n.Errorf("the directory of target %q was not checked", t.Name)
 	}
 	// The same string, not the same file: Real itself may have become a
 	// link to elsewhere, and a file comparison would follow it.
 	if now := fsutil.Resolve(t.Path); now != t.Real {
-		return fmt.Errorf("target %q (%s) now leads to %s, not %s", t.Name, t.Path, now, t.Real)
+		return i18n.Errorf("target %q (%s) now leads to %s, not %s", t.Name, t.Path, now, t.Real)
 	}
 	return nil
 }
@@ -140,10 +140,10 @@ func NewRegistry(lib string, custom map[string]struct{ Path, Mode string }) (*Re
 		case err != nil:
 			w.Problem = err.Error()
 		case trustErr != nil:
-			w.Problem = fmt.Sprintf("the approvals file cannot be read (%v); fix or remove it, then approve again", trustErr)
+			w.Problem = i18n.Sprintf("the approvals file cannot be read (%v); fix or remove it, then approve again", trustErr)
 		case !isApproved(approved, name, real, c.Mode):
 			w.Approvable = true
-			w.Problem = fmt.Sprintf("it is not approved on this machine (with this directory and mode %s); a person approves it at a terminal with `skd targets trust %s`", c.Mode, name)
+			w.Problem = i18n.Sprintf("it is not approved on this machine (with this directory and mode %s); a person approves it at a terminal with `skd targets trust %s`", c.Mode, name)
 		default:
 			r.targets[name] = Target{Name: name, Path: Expand(c.Path, home), Mode: c.Mode, Real: real}
 			continue
@@ -173,10 +173,10 @@ func (r *Registry) WithheldTarget(name string) (Withheld, bool) {
 func (r *Registry) Get(name string) (Target, error) {
 	t, ok := r.targets[name]
 	if w, held := r.withheld[name]; held && (!ok || !t.Builtin) {
-		return Target{}, fmt.Errorf("custom target %q is not used: %s", name, w.Problem)
+		return Target{}, i18n.Errorf("custom target %q is not used: %s", name, w.Problem)
 	}
 	if !ok {
-		return Target{}, fmt.Errorf("unknown target %q (see `skd targets`)", name)
+		return Target{}, i18n.Errorf("unknown target %q (see `skd targets`)", name)
 	}
 	return t, nil
 }

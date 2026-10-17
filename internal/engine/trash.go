@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/safetext"
@@ -53,7 +54,7 @@ func unsafeName(n int) string {
 	if n <= 1 {
 		return UnsafeName
 	}
-	return fmt.Sprintf("(unsafe name %d)", n)
+	return i18n.Sprintf("(unsafe name %d)", n)
 }
 
 // finderFile is what macOS Finder leaves in a folder it shows; it is never
@@ -136,7 +137,7 @@ func Trash(lib *library.Library, src string) (string, error) {
 	// .trash can be a link to anywhere (a directory that is cleaned up,
 	// or shared), and what is moved there would go with it.
 	if l := fsutil.LinkOnPath(lib.Root, dir); l != "" {
-		return "", fmt.Errorf("the trash %s is reached through the symbolic link %s; skd moves nothing there (make it a directory of its own)", dir, l)
+		return "", i18n.Errorf("the trash %s is reached through the symbolic link %s; skd moves nothing there (make it a directory of its own)", dir, l)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -171,7 +172,7 @@ func Trash(lib *library.Library, src string) (string, error) {
 		}
 	}
 	if err != nil {
-		return "", fmt.Errorf("%s was moved to %s, but where it came from could not be recorded: %w", src, dest, err)
+		return "", i18n.Errorf("%s was moved to %s, but where it came from could not be recorded: %w", src, dest, err)
 	}
 	return dest, nil
 }
@@ -190,7 +191,7 @@ func move(src, dst string) error {
 	}
 	if err := fsutil.CopyAll(src, dst); err != nil {
 		os.RemoveAll(dst) // a partial copy; src is still complete
-		return fmt.Errorf("moving %s across devices: %w", src, err)
+		return i18n.Errorf("moving %s across devices: %w", src, err)
 	}
 	return os.RemoveAll(src)
 }
@@ -203,7 +204,7 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 	if err := realDir(root); os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
-		return nil, fmt.Errorf("the trash %q: %w; skd does not follow it", root, err)
+		return nil, i18n.Errorf("the trash %q: %w; skd does not follow it", root, err)
 	}
 	batches, err := os.ReadDir(root)
 	if err != nil {
@@ -239,7 +240,7 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 				unsafe++
 				name := unsafeName(unsafe)
 				out = append(out, TrashEntry{ID: batch + "/" + name, Name: name, Path: at, When: when, Unsafe: true,
-					Problem: "its name is not one skd gives what it sets aside, so it is not shown and skd does not restore it; look at it by hand in the library's " + TrashDir})
+					Problem: i18n.Sprintf("its name is not one skd gives what it sets aside, so it is not shown and skd does not restore it; look at it by hand in the library's %s", TrashDir)})
 				continue
 			}
 			e := TrashEntry{ID: b.Name() + "/" + it.Name(), Name: it.Name(), Path: p, When: when}
@@ -259,7 +260,7 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 				// and a cloned library's trash may hold any: a person
 				// moves it back. What it points at is not shown, for the
 				// same reason as the record.
-				err = errors.New("it is a symbolic link; skd does not restore links: whether to put it back is the user's decision")
+				err = i18n.New("it is a symbolic link; skd does not restore links: whether to put it back is the user's decision")
 			}
 			e.Restorable = err == nil
 			if err != nil {
@@ -289,10 +290,10 @@ func Restore(lib *library.Library, reg *targets.Registry, id string) (string, er
 		err = checkOrigin(lib, reg, dest)
 	}
 	if err != nil {
-		return "", fmt.Errorf("trash entry %q cannot be restored: %w; it stays in the trash at %q", id, err, p)
+		return "", i18n.Errorf("trash entry %q cannot be restored: %w; it stays in the trash at %q", id, err, p)
 	}
 	if fsutil.Lexists(dest) {
-		return "", fmt.Errorf("%q already exists, so skd leaves it as it is; the entry stays in the trash at %q", dest, p)
+		return "", i18n.Errorf("%q already exists, so skd leaves it as it is; the entry stays in the trash at %q", dest, p)
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
@@ -317,21 +318,21 @@ func entryPath(lib *library.Library, id string) (string, error) {
 		}
 	}
 	if bad {
-		return "", fmt.Errorf("no trash entry %q (an id is <batch>/<name>, as `skd trash` lists it)", id)
+		return "", i18n.Errorf("no trash entry %q (an id is <batch>/<name>, as `skd trash` lists it)", id)
 	}
 	if !trashName(parts[0], parts[1]) {
 		// Not a name skd gives what it sets aside (ListTrash does not
 		// show it): restoring it is left to a person.
-		return "", fmt.Errorf("trash entry %q is not named as skd names what it sets aside; skd does not restore it (look at it by hand in the library's %s)", id, TrashDir)
+		return "", i18n.Errorf("trash entry %q is not named as skd names what it sets aside; skd does not restore it (look at it by hand in the library's %s)", id, TrashDir)
 	}
 	root := filepath.Join(lib.Root, TrashDir)
 	p := root
 	for _, d := range []string{"", parts[0], parts[1]} {
 		p = filepath.Join(p, d)
 		if err := realDir(p); os.IsNotExist(err) {
-			return "", fmt.Errorf("no trash entry %q", id)
+			return "", i18n.Errorf("no trash entry %q", id)
 		} else if err != nil {
-			return "", fmt.Errorf("trash entry %q: %q %w", id, p, err)
+			return "", i18n.Errorf("trash entry %q: %q %w", id, p, err)
 		}
 	}
 	return p, nil
@@ -345,9 +346,9 @@ func realDir(p string) error {
 	case err != nil:
 		return err
 	case st.Mode()&os.ModeSymlink != 0:
-		return errors.New("is a symbolic link")
+		return i18n.New("is a symbolic link")
 	case !st.IsDir():
-		return errors.New("is not a directory")
+		return i18n.New("is not a directory")
 	}
 	return nil
 }
@@ -361,10 +362,10 @@ func readOrigin(p string) (string, error) {
 	f := p + ".origin"
 	st, err := os.Lstat(f)
 	if err != nil {
-		return "", errors.New("where it came from is not recorded")
+		return "", i18n.New("where it came from is not recorded")
 	}
 	if !st.Mode().IsRegular() || st.Size() > maxOrigin {
-		return "", errors.New("its record of where it came from is not a file skd wrote")
+		return "", i18n.New("its record of where it came from is not a file skd wrote")
 	}
 	b, err := os.ReadFile(f)
 	if err != nil {
@@ -394,15 +395,15 @@ func readOrigin(p string) (string, error) {
 func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) error {
 	switch {
 	case safetext.Has(origin):
-		return errors.New("its record of where it came from has control characters")
+		return i18n.New("its record of where it came from has control characters")
 	case !filepath.IsAbs(origin):
-		return errors.New("its record of where it came from is not an absolute path")
+		return i18n.New("its record of where it came from is not an absolute path")
 	case filepath.Clean(origin) != origin:
-		return errors.New("its record of where it came from is not a clean path")
+		return i18n.New("its record of where it came from is not a clean path")
 	}
 	parent, base := filepath.Dir(origin), filepath.Base(origin)
 	if base == "." || base == ".." || parent == origin {
-		return errors.New("its record of where it came from names no directory skd manages")
+		return i18n.New("its record of where it came from names no directory skd manages")
 	}
 	at := resolve(parent)
 	if reg != nil {
@@ -425,7 +426,7 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 		// or anything else starting with a dot.
 		if len(custom) > 0 {
 			if err := manifest.CheckName(base); err != nil {
-				return fmt.Errorf("its record of where it came from is in the custom target %s, under a name that is not a skill's", custom[0])
+				return i18n.Errorf("its record of where it came from is in the custom target %s, under a name that is not a skill's", custom[0])
 			}
 			return nil
 		}
@@ -437,11 +438,11 @@ func checkOrigin(lib *library.Library, reg *targets.Registry, origin string) err
 	// does) is still the library.
 	if vd, err := filepath.Abs(lib.VendorDir()); err == nil && insideStrict(resolve(vd), filepath.Join(at, base)) {
 		if err := realDir(vd); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("the library's vendor/ %w", err)
+			return i18n.Errorf("the library's vendor/ %w", err)
 		}
 		return nil
 	}
-	return errors.New("its record of where it came from is neither in an agent's skill directory nor in the library's vendor/")
+	return i18n.New("its record of where it came from is neither in an agent's skill directory nor in the library's vendor/")
 }
 
 // insideStrict reports whether p is inside dir and not dir itself,

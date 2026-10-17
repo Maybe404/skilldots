@@ -1,10 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"path/filepath"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
@@ -55,7 +55,7 @@ const DefaultBackupMessage = "chore: update skills library"
 func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 	lib := s.Lib
 	if safetext.Has(remote) {
-		return nil, fmt.Errorf("remote %q has control characters: not a git URL", remote)
+		return nil, i18n.Errorf("remote %q has control characters: not a git URL", remote)
 	}
 	if remote != "" {
 		if _, err := lib.Git("remote", "get-url", "origin"); err == nil {

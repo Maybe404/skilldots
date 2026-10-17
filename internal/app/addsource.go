@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 )
@@ -53,7 +54,7 @@ func ParseAddText(text string) (AddHint, error) {
 		text = strings.TrimSpace(strings.TrimPrefix(text, p))
 	}
 	if text == "" {
-		return AddHint{}, fmt.Errorf("no source given")
+		return AddHint{}, i18n.Errorf("no source given")
 	}
 	first := strings.Fields(text)[0]
 	if !isCommandWord(first) {
@@ -69,7 +70,7 @@ func ParseAddText(text string) (AddHint, error) {
 		return AddHint{}, err
 	}
 	if !ok {
-		return AddHint{}, fmt.Errorf("%q is not an install command skd understands (try owner/repo, a GitHub or skills.sh link, or `npx skills add …`)", truncateText(text, 60))
+		return AddHint{}, i18n.Errorf("%q is not an install command skd understands (try owner/repo, a GitHub or skills.sh link, or `npx skills add …`)", truncateText(text, 60))
 	}
 	return h, nil
 }
@@ -97,7 +98,7 @@ func truncateText(s string, n int) string {
 // extra argument is an error before anything is fetched.
 func AddArgs(args []string) (string, error) {
 	if len(args) > 1 && !isCommandWord(args[0]) {
-		return "", fmt.Errorf("add takes one source, got %d arguments (%s); a path or URL with spaces needs quotes (skd add \"./my skills\"), and so does a pasted install command", len(args), truncateText(strings.Join(args, " "), 60))
+		return "", i18n.Errorf("add takes one source, got %d arguments (%s); a path or URL with spaces needs quotes (skd add \"./my skills\"), and so does a pasted install command", len(args), truncateText(strings.Join(args, " "), 60))
 	}
 	return strings.Join(args, " "), nil
 }
@@ -163,7 +164,7 @@ func parseCommand(words []string) (h AddHint, ok bool, err error) {
 			case "add", "a", "install", "i":
 				i++
 			default:
-				return h, false, fmt.Errorf("only `skills add` commands can be pasted here (got %q)", strings.Join(words, " "))
+				return h, false, i18n.Errorf("only `skills add` commands can be pasted here (got %q)", strings.Join(words, " "))
 			}
 		case "add-skill":
 			i++
@@ -203,7 +204,7 @@ func parseCommand(words []string) (h AddHint, ok bool, err error) {
 				if i+1 < len(words) {
 					next = words[i+1]
 				}
-				return h, false, fmt.Errorf("%s needs a skill name (got %q)", name, next)
+				return h, false, i18n.Errorf("%s needs a skill name (got %q)", name, next)
 			}
 		case name == "-a" || name == "--agent" || name == "--agents":
 			if !hasVal {
@@ -219,7 +220,7 @@ func parseCommand(words []string) (h AddHint, ok bool, err error) {
 		}
 	}
 	if len(positional) == 0 {
-		return h, false, fmt.Errorf("the command names no repository")
+		return h, false, i18n.Errorf("the command names no repository")
 	}
 	src := positional[0]
 	for _, p := range positional {
@@ -236,7 +237,7 @@ func parseCommand(words []string) (h AddHint, ok bool, err error) {
 	h.Skills = append(link.Skills, skills...)
 	for _, s := range h.Skills {
 		if err := manifest.CheckName(s); err != nil {
-			return h, false, fmt.Errorf("--skill %q: %w", s, err)
+			return h, false, i18n.Errorf("--skill %q: %w", s, err)
 		}
 	}
 	h.Skills = dedupe(h.Skills)
@@ -266,7 +267,7 @@ func parseLink(s string) (AddHint, error) {
 	switch host {
 	case "skills.sh":
 		if len(segs) < 2 {
-			return h, fmt.Errorf("%s is not a skill page on skills.sh (expected skills.sh/<owner>/<repo>/<skill>)", s)
+			return h, i18n.Errorf("%s is not a skill page on skills.sh (expected skills.sh/<owner>/<repo>/<skill>)", s)
 		}
 		h.Source, h.From = segs[0]+"/"+strings.TrimSuffix(segs[1], ".git"), "skills.sh"
 		if len(segs) >= 3 {
@@ -350,7 +351,7 @@ func shellWords(s string, windows bool) ([]string, error) {
 		}
 	}
 	if quote != 0 {
-		return nil, fmt.Errorf("unterminated %c quote in %q", quote, s)
+		return nil, i18n.Errorf("unterminated %c quote in %q", quote, s)
 	}
 	if escaped {
 		cur.WriteRune('\\')
@@ -359,7 +360,7 @@ func shellWords(s string, windows bool) ([]string, error) {
 		out = append(out, cur.String())
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no source given")
+		return nil, i18n.Errorf("no source given")
 	}
 	return out, nil
 }

@@ -1,0 +1,251 @@
+# Settings, files, library, manifest, lock, targets.
+
+@ unknown setting %q (settings: %s)
+= 未知的设置 %q（可用设置：%s）
+
+@ the settings file %s is not valid TOML: %v
+= 设置文件 %s 不是有效的 TOML：%v
+
+@ %s %q: use %s
+= %s %q：请使用 %s
+
+@ %s is set with `%s`
+= %s 要用 `%s` 设置
+
+@ %s %q has control characters
+= %s %q 含有控制字符
+
+@ %w; fix or remove it first
+= %w；请先修复或删除它
+
+@ %s: would not read back (%v); left as it was
+= %s：写入后无法读回（%v）；保持原样
+
+@ copy %s: %s already exists
+= 复制 %s：%s 已存在
+
+@ copy %s: cannot copy special file %s
+= 复制 %s：无法复制特殊文件 %s
+
+@ copy %s: %s exists and is not a regular file
+= 复制 %s：%s 已存在，且不是普通文件
+
+@ copy %s: not a regular file
+= 复制 %s：不是普通文件
+
+@ no %s in %s
+= %s 中没有 %s
+
+@ cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s
+= 找不到库：%w（它记录着库的位置）；请修复，或用 --library 或 $%s 指定库
+
+@ no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`
+= 没有找到 skilldots 库；请运行 `skd init`、`skd clone <url>` 或 `skd use <dir>`
+
+@ %s is a symbolic link %s; skd does not write through it (replace it with the file itself)
+= %s 是符号链接，%s；skd 不会通过它写入（请换成文件本身）
+
+@ that leads nowhere
+= 指向的位置不存在
+
+@ to %s, outside the library
+= 指向 %s，在库之外
+
+@ to %s, not a file directly in the library's folder
+= 指向 %s，它不是库根目录下的文件
+
+@ to %s, one of the library's hidden or own files
+= 指向 %s，它是库的隐藏文件或 skd 自己的文件
+
+@ to %s, which is not a file
+= 指向 %s，它不是文件
+
+@ git %s: %w
+= git %s：%w
+
+@ \n(skd needs git 2.24 or later: this git does not know --end-of-options)
+= \n（skd 需要 git 2.24 或更高版本：当前的 git 不认识 --end-of-options）
+
+@ git %s: %s
+= git %s：%s
+
+@ a symbolic link
+= 符号链接
+
+@ %s is %w; skd does not set up a git repository through it (make private/ a directory of its own)
+= %s 是%w；skd 不会通过它建立 git 仓库（请把 private/ 改成它自己的目录）
+
+@ %s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line
+= %s：pack %q：commit %q 不是 commit 哈希；请恢复该文件（git checkout -- %s）或删除这一行
+
+@ %s has control characters; restore the file (git checkout -- %s) or remove the line
+= %s 含有控制字符；请恢复该文件（git checkout -- %s）或删除这一行
+
+@ not saving %s: %w
+= 未保存 %s：%w
+
+@ parse %s: %w
+= 解析 %s：%w
+
+@ %s has control characters; fix it by hand
+= %s 含有控制字符；请手动修复
+
+@ --alias %q has control characters; pick a short name such as "acme"
+= --alias %q 含有控制字符；请选一个简短的名字，例如 "acme"
+
+@ --alias %q may not contain "/", "\\" or ":"; pick a short name such as "acme"
+= --alias %q 不能包含 "/"、"\\" 或 ":"；请选一个简短的名字，例如 "acme"
+
+@ --alias %q is the repository of a subscribed pack; pick another
+= --alias %q 是已订阅 pack 的仓库名；请换一个
+
+@ --alias %q is already the alias of %s; pick another
+= --alias %q 已是 %s 的别名；请换一个
+
+@ not found
+= 未找到
+
+@ empty name
+= 名称为空
+
+@ name %q is longer than 128 characters
+= 名称 %q 超过 128 个字符
+
+@ invalid name %q: must not contain ".."
+= 名称 %q 无效：不能包含 ".."
+
+@ invalid name %q: use letters, digits, '.', '_' and '-' only, not starting with '.'
+= 名称 %q 无效：只能使用字母、数字、'.'、'_' 和 '-'，且不能以 '.' 开头
+
+@ invalid category %q: control characters
+= 分类 %q 无效：含有控制字符
+
+@ invalid category %q
+= 分类 %q 无效
+
+@ the directory of target %q was not checked
+= target %q 的目录尚未检查
+
+@ target %q (%s) now leads to %s, not %s
+= target %q（%s）现在指向 %s，而不是 %s
+
+@ the approvals file cannot be read (%v); fix or remove it, then approve again
+= 无法读取批准记录文件（%v）；请修复或删除它，然后重新批准
+
+@ it is not approved on this machine (with this directory and mode %s); a person approves it at a terminal with `skd targets trust %s`
+= 它在这台机器上尚未获批（按此目录和模式 %s）；请由本人在终端里用 `skd targets trust %s` 批准
+
+@ custom target %q is not used: %s
+= 自定义 target %q 未启用：%s
+
+@ unknown target %q (see `skd targets`)
+= 未知的 target %q（见 `skd targets`）
+
+@ its path %q is not absolute; start it with ~/ or /
+= 它的路径 %q 不是绝对路径；请以 ~/ 或 / 开头
+
+@ its path %q goes through %s, a symbolic link that leads nowhere
+= 它的路径 %q 经过 %s，这是一个指向不存在位置的符号链接
+
+@ its path %q is your home directory itself
+= 它的路径 %q 就是你的主目录本身
+
+@ its path %q is %s, not inside your home directory
+= 它的路径 %q 是 %s，不在你的主目录内
+
+@ its path %q is %s, which is or holds %s; skd never writes there
+= 它的路径 %q 是 %s，它就是或包含 %s；skd 从不在那里写入
+
+@ its path %q is %s, which is, is inside or holds the library %s; skd never writes there
+= 它的路径 %q 是 %s，它就是、位于或包含库 %s；skd 从不在那里写入
+
+@ its path %q is %s, which holds the %s agent's skill directory %s; skd never writes beside it
+= 它的路径 %q 是 %s，它包含 %s agent 的 skill 目录 %s；skd 从不在它旁边写入
+
+@ its path %q is %s, inside the %s agent's skill directory %s, whose entries skd writes itself
+= 它的路径 %q 是 %s，位于 %s agent 的 skill 目录 %s 内，该目录里的条目由 skd 自己写入
+
+@ it has the name of a built-in target; the built-in %s is used, give the custom one another name in skills.toml
+= 它与内置 target 同名；实际使用的是内置的 %s，请在 skills.toml 里给自定义的换一个名字
+
+@ its mode %q is neither link nor copy
+= 它的模式 %q 既不是 link 也不是 copy
+
+@ its path %q is %s, which is, is inside or holds the directory %s of custom target %q; give each custom target a directory of its own
+= 它的路径 %q 是 %s，它就是、位于或包含自定义 target %q 的目录 %s；请让每个自定义 target 使用各自独立的目录
+
+@ skills.toml has no custom target %q
+= skills.toml 里没有自定义 target %q
+
+@ custom target %q is now %q (%s) in skills.toml, not %q (%s) as shown; nothing was approved
+= 自定义 target %q 在 skills.toml 里现在是 %q（%s），与所示的 %q（%s）不同；没有批准任何东西
+
+@ custom target %q cannot be approved: %w
+= 自定义 target %q 无法批准：%w
+
+@ custom target %q now leads to %s, not %s as shown; nothing was approved
+= 自定义 target %q 现在指向 %s，与所示的 %s 不同；没有批准任何东西
+
+@ custom target %q leads to %s, which is not named skills; it is approved only when its name is typed to confirm; nothing was approved
+= 自定义 target %q 指向 %s，其目录名不是 skills；只有输入它的名字确认后才会批准；没有批准任何东西
+
+# Settings (skd config, the dashboard's settings page).
+
+@ command that opens a skill directory (skd edit, o in the dashboard)
+= 用来打开 skill 目录的命令（skd edit，仪表盘里按 o）
+
+@ $VISUAL, $EDITOR, then VS Code, Cursor, Zed or Sublime Text if installed, else the system's default
+= 依次尝试 $VISUAL、$EDITOR，再是已安装的 VS Code、Cursor、Zed 或 Sublime Text，最后用系统默认方式
+
+@ whether the editor command (setting, $VISUAL or $EDITOR) opens a window or runs in the terminal
+= 编辑器命令（设置项、$VISUAL 或 $EDITOR）是打开窗口，还是在终端里运行
+
+@ auto: known window editors (code, cursor, zed, subl, …) open a window, any other command runs in the terminal
+= auto：已知的窗口编辑器（code、cursor、zed、subl 等）打开窗口，其他命令在终端里运行
+
+@ colours: light, dark or auto (ask the terminal)
+= 配色：light、dark 或 auto（询问终端）
+
+@ auto; --theme and $SKILLDOTS_THEME take precedence
+= auto；--theme 和 $SKILLDOTS_THEME 优先
+
+@ language of skd's own text: en, zh (简体中文) or auto (the system's)
+= skd 自身文字的语言：en、zh（简体中文）或 auto（跟随系统）
+
+@ auto; --lang and $SKILLDOTS_LANG take precedence
+= auto；--lang 和 $SKILLDOTS_LANG 优先
+
+@ the library skd uses when none is given
+= 未指定时 skd 使用的库
+
+# Packs.
+
+@ source %q has control characters: not a repository
+= 来源 %q 含有控制字符：不是仓库
+
+@ source %q starts with "-": not a repository
+= 来源 %q 以 "-" 开头：不是仓库
+
+@ ref %q starts with "-": not a branch or tag
+= ref %q 以 "-" 开头：不是分支或 tag
+
+@ cannot parse GitHub URL %q
+= 无法解析 GitHub URL %q
+
+@ unrecognised source %q
+= 无法识别的来源 %q
+
+@ skipped: its category %q would place it inside the directory of skill %q
+= 已跳过：它的分类 %q 会让它落在 skill %q 的目录里面
+
+@ skipped: name differs only in case from %q (they would overwrite each other on case-insensitive file systems)
+= 已跳过：名称与 %q 只有大小写之差（在不区分大小写的文件系统上它们会互相覆盖）
+
+@ skipped: frontmatter name is empty
+= 已跳过：frontmatter 的 name 为空
+
+@ skipped: frontmatter %v
+= 已跳过：frontmatter %v
+
+@ skipped: %v
+= 已跳过：%v

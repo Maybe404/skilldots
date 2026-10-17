@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -112,18 +113,18 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			if e.Conflict != "" {
 				if !conflictShown[key] {
 					conflictShown[key] = true
-					op.Action, op.Reason = "skip", "name conflict: "+e.Conflict
+					op.Action, op.Reason = "skip", i18n.Sprintf("name conflict: %s", e.Conflict)
 					plan.Ops = append(plan.Ops, op)
 				}
 				continue
 			}
 			if e.LinkedVia != "" {
-				op.Action, op.Reason = "skip", "its directory goes through "+lib.Rel(e.LinkedVia)+", a symbolic link inside the library"
+				op.Action, op.Reason = "skip", i18n.Sprintf("its directory goes through %s, a symbolic link inside the library", lib.Rel(e.LinkedVia))
 				plan.Ops = append(plan.Ops, op)
 				continue
 			}
 			if e.Missing {
-				op.Action, op.Reason = "skip", "source directory missing"
+				op.Action, op.Reason = "skip", i18n.T("source directory missing")
 				plan.Ops = append(plan.Ops, op)
 				continue
 			}
@@ -140,7 +141,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				if sameAs(dest, prev, e.Dir, lib) {
 					op.Action = "keep"
 				} else {
-					op.Action, op.Reason = "replace", "source changed"
+					op.Action, op.Reason = "replace", i18n.T("source changed")
 				}
 			case prev != nil && prev.Mode == "link" && t.Mode == "link" && isLinkTo(dest, e.Dir):
 				// Already the link wanted (an app's, whose source is outside
@@ -150,24 +151,24 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				// Our link, made when the library lived somewhere else
 				// (removed outright when skd's record confirms it, else
 				// moved to the trash).
-				op.Action, op.Reason = "replace", "points at the previous library location "+staleRoot(dest, prev, lib)
+				op.Action, op.Reason = "replace", i18n.Sprintf("points at the previous library location %s", staleRoot(dest, prev, lib))
 			case prev != nil && confirms(placed, dest):
-				op.Action, op.Reason = "replace", "source changed"
+				op.Action, op.Reason = "replace", i18n.T("source changed")
 			case prev != nil:
 				// We placed it, but it was modified or replaced since.
 				if forceKey(key) {
-					op.Action, op.Reason = "replace", "modified since skilldots wrote it (--force)"
+					op.Action, op.Reason = "replace", i18n.T("modified since skilldots wrote it (--force)")
 				} else {
-					op.Action, op.Reason = "skip", "modified since skilldots wrote it; use --force"
+					op.Action, op.Reason = "skip", i18n.T("modified since skilldots wrote it; use --force")
 				}
 			default:
 				// Exists and we never placed it.
 				if isLinkTo(dest, e.Dir) {
-					op.Action, op.Reason = "create", "adopting existing link"
+					op.Action, op.Reason = "create", i18n.T("adopting existing link")
 				} else if forceKey(key) {
-					op.Action, op.Reason = "replace", "unmanaged entry (--force)"
+					op.Action, op.Reason = "replace", i18n.T("unmanaged entry (--force)")
 				} else {
-					op.Action, op.Reason = "skip", "exists and not managed by skilldots; use --force"
+					op.Action, op.Reason = "skip", i18n.T("exists and not managed by skilldots; use --force")
 				}
 			}
 			plan.Ops = append(plan.Ops, op)
@@ -175,10 +176,10 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		for _, n := range e.UnknownTargets {
 			// Leave whatever is recorded for this target alone.
 			desired[n+"/"+e.LinkName] = true
-			why := "unknown target " + n
+			why := i18n.Sprintf("unknown target %s", n)
 			if r := registryPtr.Load(); r != nil {
 				if _, held := r.WithheldTarget(n); held {
-					why = "custom target " + n + " is not used (see skd targets)"
+					why = i18n.Sprintf("custom target %s is not used (see skd targets)", n)
 				}
 			}
 			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: n}, Name: e.LinkName,
@@ -194,7 +195,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		tname, name, _ := splitKey(key)
 		if err := manifest.CheckName(name); err != nil {
 			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: tname}, Name: name,
-				Reason: "skills.lock link record: " + err.Error()})
+				Reason: i18n.Sprintf("skills.lock link record: %v", err)})
 			continue
 		}
 		t, err := regTarget(lib, tname)
@@ -204,10 +205,10 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			// never defined) says nothing skd can trust about the place it
 			// names. It is forgotten; nothing there is moved or removed,
 			// with --force too.
-			state := "is no longer defined"
+			state := i18n.T("is no longer defined")
 			if r := registryPtr.Load(); r != nil {
 				if _, held := r.WithheldTarget(tname); held {
-					state = "is not used (see skd targets)"
+					state = i18n.T("is not used (see skd targets)")
 				}
 			}
 			if LeftLink(prev, lib) {
@@ -219,14 +220,14 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				// suggests removing it (a forged record can name a link of
 				// the user's that happens to look like this).
 				plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: tname}, Name: name, Dest: prev.Path,
-					Reason: fmt.Sprintf("target %q %s; %s is a link into this library; skd no longer manages it and leaves it in place: it may be the user's own", tname, state, prev.Path)})
+					Reason: i18n.Sprintf("target %q %s; %s is a link into this library; skd no longer manages it and leaves it in place: it may be the user's own", tname, state, prev.Path)})
 				continue
 			}
 			// The record's path is not shown: it says nothing skd checked,
 			// and whoever reads this (an agent too) must not take it for
 			// something to remove.
 			plan.Ops = append(plan.Ops, Op{Action: "forget", Target: targets.Target{Name: tname}, Name: name,
-				Reason: fmt.Sprintf("target %q %s; forgetting the record (nothing on disk is touched)", tname, state)})
+				Reason: i18n.Sprintf("target %q %s; forgetting the record (nothing on disk is touched)", tname, state)})
 			continue
 		}
 		dest := filepath.Join(t.Path, name)
@@ -239,15 +240,15 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 		// a previous library location, may be the user's own.
 		switch {
 		case !fsutil.Lexists(dest):
-			op.Action, op.Reason = "remove", "already gone"
+			op.Action, op.Reason = "remove", i18n.T("already gone")
 		case ownLink(dest, prev, lib) || confirms(placed, dest):
 			op.Action = "remove"
 		case staleDangling(dest, prev, lib) != "":
-			op.Action, op.Reason = "remove", "a link to the previous library location "+staleDangling(dest, prev, lib)+", where nothing is any more"
+			op.Action, op.Reason = "remove", i18n.Sprintf("a link to the previous library location %s, where nothing is any more", staleDangling(dest, prev, lib))
 		case staleKnown(dest, key, prev, lib, olds) != "":
-			op.Action, op.Reason = "remove", "a link to the previous library location "+staleKnown(dest, key, prev, lib, olds)+", whose skills.lock records it"
+			op.Action, op.Reason = "remove", i18n.Sprintf("a link to the previous library location %s, whose skills.lock records it", staleKnown(dest, key, prev, lib, olds))
 		default:
-			op.Action, op.Reason = "skip", "no longer wanted, but skd cannot tell it made it (changed since, made by an older skd, or not made by skd); left in place: it may be the user's own"
+			op.Action, op.Reason = "skip", i18n.T("no longer wanted, but skd cannot tell it made it (changed since, made by an older skd, or not made by skd); left in place: it may be the user's own")
 		}
 		plan.Ops = append(plan.Ops, op)
 	}
@@ -311,7 +312,7 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		} else {
 			to, err := Trash(lib, op.Dest)
 			if err != nil {
-				return fmt.Errorf("moving %s to trash: %w", op.Dest, err)
+				return i18n.Errorf("moving %s to trash: %w", op.Dest, err)
 			}
 			res.Backups = append(res.Backups, op.Dest+" → "+lib.Rel(to))
 		}
@@ -328,7 +329,7 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 	// then written, moved aside or removed there.
 	intact := func(op Op) bool {
 		if err := op.Target.Intact(); err != nil {
-			res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: %v", op.Dest, err))
+			res.Refused = append(res.Refused, i18n.Sprintf("%s: not changed: %v", op.Dest, err))
 			return false
 		}
 		return true
@@ -341,14 +342,14 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 				continue
 			}
 			if l := sourceLink(lib, op.Source); l != "" {
-				res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: its source goes through %s, a symbolic link inside the library", op.Dest, lib.Rel(l)))
+				res.Refused = append(res.Refused, i18n.Sprintf("%s: not changed: its source goes through %s, a symbolic link inside the library", op.Dest, lib.Rel(l)))
 				continue
 			}
 			if !fsutil.Within(lib.Root, op.Source) {
 				// An app's skill: checked again, as it may have changed
 				// since the plan.
 				if err := CheckAppDir(op.Source); err != nil {
-					res.Refused = append(res.Refused, fmt.Sprintf("%s: not changed: %v", op.Dest, err))
+					res.Refused = append(res.Refused, i18n.Sprintf("%s: not changed: %v", op.Dest, err))
 					continue
 				}
 			}
@@ -752,7 +753,7 @@ func evalClean(p string) string {
 func regTarget(lib *library.Library, name string) (targets.Target, error) {
 	registry := registryPtr.Load()
 	if registry == nil {
-		return targets.Target{}, fmt.Errorf("target %q: registry not initialised", name)
+		return targets.Target{}, i18n.Errorf("target %q: registry not initialised", name)
 	}
 	return registry.Get(name)
 }

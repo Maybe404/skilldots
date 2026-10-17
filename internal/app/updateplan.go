@@ -2,9 +2,10 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // UpdatePlan is what `update` would do, from a fresh upstream check: the
@@ -53,20 +54,20 @@ func (p PackStatus) Summary() string {
 	var parts []string
 	offered := p.Offered()
 	for _, c := range []struct {
-		n    int
-		word string
-	}{{len(p.Changed), "changed"}, {len(p.Pending), "to add"}, {len(offered), "new upstream"}, {len(p.Gone), "gone upstream"}, {len(p.Moved), "moved"}} {
+		n      int
+		format string
+	}{{len(p.Changed), i18n.M("%d changed")}, {len(p.Pending), i18n.M("%d to add")}, {len(offered), i18n.M("%d new upstream")}, {len(p.Gone), i18n.M("%d gone upstream")}, {len(p.Moved), i18n.M("%d moved")}} {
 		if c.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", c.n, c.word))
+			parts = append(parts, i18n.Sprintf(c.format, c.n))
 		}
 	}
 	switch {
 	case p.Commit == "":
-		parts = append([]string{"not vendored yet"}, parts...)
+		parts = append([]string{i18n.T("not vendored yet")}, parts...)
 	case len(parts) == 0 && p.Commit != p.Latest:
-		parts = []string{"new commit, no skill changes"}
+		parts = []string{i18n.T("new commit, no skill changes")}
 	case len(parts) == 0:
-		parts = []string{"up to date"}
+		parts = []string{i18n.T("up to date")}
 	}
 	return strings.Join(parts, " · ")
 }
@@ -92,10 +93,10 @@ func (p PackStatus) Rows() [][2]string {
 		label string
 		names []string
 		note  string
-	}{{"changed", p.Changed, ""}, {"will add", p.Pending, ""}, {"upstream new", p.Offered(), " (not selected)"},
-		{"upstream gone", p.Gone, " (kept)"}, {"moved", p.Moved, " (path only)"}} {
+	}{{i18n.M("changed"), p.Changed, ""}, {i18n.M("will add"), p.Pending, ""}, {i18n.M("upstream new"), p.Offered(), i18n.M(" (not selected)")},
+		{i18n.M("upstream gone"), p.Gone, i18n.M(" (kept)")}, {i18n.M("moved"), p.Moved, i18n.M(" (path only)")}} {
 		if len(row.names) > 0 {
-			out = append(out, [2]string{row.label, strings.Join(row.names, ", ") + row.note})
+			out = append(out, [2]string{i18n.T(row.label), strings.Join(row.names, ", ") + i18n.T(row.note)})
 		}
 	}
 	return out

@@ -4,7 +4,6 @@ package pack
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/safetext"
@@ -39,11 +39,11 @@ func ParseSource(s string) (Source, error) {
 	s = strings.TrimSpace(s)
 	// It becomes the pack's name, printed by every command.
 	if safetext.Has(s) {
-		return src, fmt.Errorf("source %q has control characters: not a repository", s)
+		return src, i18n.Errorf("source %q has control characters: not a repository", s)
 	}
 	// git would take a leading "-" as an option (--upload-pack=…).
 	if strings.HasPrefix(s, "-") {
-		return src, fmt.Errorf("source %q starts with \"-\": not a repository", s)
+		return src, i18n.Errorf("source %q starts with \"-\": not a repository", s)
 	}
 	if i := strings.LastIndex(s, "@"); i > 0 && !strings.Contains(s[i:], "/") && !strings.HasPrefix(s, "git@") {
 		src.Ref = s[i+1:]
@@ -55,7 +55,7 @@ func ParseSource(s string) (Source, error) {
 		}
 	}
 	if strings.HasPrefix(src.Ref, "-") {
-		return src, fmt.Errorf("ref %q starts with \"-\": not a branch or tag", src.Ref)
+		return src, i18n.Errorf("ref %q starts with \"-\": not a branch or tag", src.Ref)
 	}
 	s = strings.TrimPrefix(s, "github:")
 	s = strings.TrimSuffix(s, "/")
@@ -67,7 +67,7 @@ func ParseSource(s string) (Source, error) {
 		p := strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
 		parts := strings.Split(strings.TrimPrefix(p, "github.com/"), "/")
 		if len(parts) < 2 {
-			return src, fmt.Errorf("cannot parse GitHub URL %q", s)
+			return src, i18n.Errorf("cannot parse GitHub URL %q", s)
 		}
 		src.Repo = parts[0] + "/" + strings.TrimSuffix(parts[1], ".git")
 		src.URL = "https://github.com/" + src.Repo + ".git"
@@ -83,7 +83,7 @@ func ParseSource(s string) (Source, error) {
 		}
 		p = strings.TrimSuffix(strings.ReplaceAll(p, ":", "/"), ".git")
 		if !strings.Contains(p, "/") {
-			return src, fmt.Errorf("unrecognised source %q", s)
+			return src, i18n.Errorf("unrecognised source %q", s)
 		}
 		src.Repo = p
 		src.URL = s
@@ -416,16 +416,16 @@ func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
 		}
 		rel, _ := filepath.Rel(root, d)
 		if meta.EmptyName {
-			rejected = append(rejected, Rejected{Name: "", Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter name is empty"})
+			rejected = append(rejected, Rejected{Name: "", Dir: filepath.ToSlash(rel), Reason: i18n.T("skipped: frontmatter name is empty")})
 			continue
 		}
 		if err := manifest.CheckName(meta.Name); err != nil {
-			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter " + err.Error()})
+			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: i18n.Sprintf("skipped: frontmatter %v", err)})
 			continue
 		}
 		cat := Category(filepath.ToSlash(rel))
 		if err := manifest.CheckCategory(cat); err != nil {
-			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: " + err.Error()})
+			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: i18n.Sprintf("skipped: %v", err)})
 			continue
 		}
 		if _, ok := byName[meta.Name]; !ok {
@@ -492,7 +492,7 @@ func dropNested(root string, skills []Skill, rejected []Rejected) ([]Skill, []Re
 		}
 		rel, _ := filepath.Rel(root, s.Dir)
 		rejected = append(rejected, Rejected{Name: s.Name, Dir: filepath.ToSlash(rel),
-			Reason: fmt.Sprintf("skipped: its category %q would place it inside the directory of skill %q", s.Category, clash)})
+			Reason: i18n.Sprintf("skipped: its category %q would place it inside the directory of skill %q", s.Category, clash)})
 	}
 	return out, rejected
 }
@@ -516,7 +516,7 @@ func dropCaseClashes(root string, skills []Skill, rejected []Rejected) ([]Skill,
 		}
 		rel, _ := filepath.Rel(root, s.Dir)
 		rejected = append(rejected, Rejected{Name: s.Name, Dir: filepath.ToSlash(rel),
-			Reason: fmt.Sprintf("skipped: name differs only in case from %q (they would overwrite each other on case-insensitive file systems)", out[i].Name)})
+			Reason: i18n.Sprintf("skipped: name differs only in case from %q (they would overwrite each other on case-insensitive file systems)", out[i].Name)})
 	}
 	return out, rejected
 }

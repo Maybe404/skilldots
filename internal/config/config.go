@@ -6,7 +6,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +14,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
@@ -42,20 +42,27 @@ type Key struct {
 	Default string
 }
 
-// Keys are the settings, in display order.
+// Keys are the settings, in display order. Help and Default are English
+// messages (i18n.M): show them with HelpText and DefaultText.
 var Keys = []Key{
-	{Name: Editor, Help: "command that opens a skill directory (skd edit, o in the dashboard)",
-		Default: "$VISUAL, $EDITOR, then VS Code, Cursor, Zed or Sublime Text if installed, else the system's default"},
-	{Name: EditorKind, Help: "whether the editor command (setting, $VISUAL or $EDITOR) opens a window or runs in the terminal",
+	{Name: Editor, Help: i18n.M("command that opens a skill directory (skd edit, o in the dashboard)"),
+		Default: i18n.M("$VISUAL, $EDITOR, then VS Code, Cursor, Zed or Sublime Text if installed, else the system's default")},
+	{Name: EditorKind, Help: i18n.M("whether the editor command (setting, $VISUAL or $EDITOR) opens a window or runs in the terminal"),
 		Values:  []string{"auto", "window", "terminal"},
-		Default: "auto: known window editors (code, cursor, zed, subl, …) open a window, any other command runs in the terminal"},
-	{Name: Theme, Help: "colours: light, dark or auto (ask the terminal)", Values: []string{"auto", "light", "dark"},
-		Default: "auto; --theme and $SKILLDOTS_THEME take precedence"},
-	{Name: Lang, Help: "language of skd's own text (reserved: only English exists so far)", Values: []string{"auto", "en", "zh"},
-		Default: "auto"},
-	{Name: Library, Help: "the library skd uses when none is given", ReadOnly: "skd use <dir>",
+		Default: i18n.M("auto: known window editors (code, cursor, zed, subl, …) open a window, any other command runs in the terminal")},
+	{Name: Theme, Help: i18n.M("colours: light, dark or auto (ask the terminal)"), Values: []string{"auto", "light", "dark"},
+		Default: i18n.M("auto; --theme and $SKILLDOTS_THEME take precedence")},
+	{Name: Lang, Help: i18n.M("language of skd's own text: en, zh (简体中文) or auto (the system's)"), Values: []string{"auto", "en", "zh"},
+		Default: i18n.M("auto; --lang and $SKILLDOTS_LANG take precedence")},
+	{Name: Library, Help: i18n.M("the library skd uses when none is given"), ReadOnly: "skd use <dir>",
 		Default: "~/.skilldots"},
 }
+
+// HelpText is Help in the language in use.
+func (k Key) HelpText() string { return i18n.T(k.Help) }
+
+// DefaultText is Default in the language in use.
+func (k Key) DefaultText() string { return i18n.T(k.Default) }
 
 // Lookup returns the key named name.
 func Lookup(name string) (Key, error) {
@@ -68,7 +75,7 @@ func Lookup(name string) (Key, error) {
 	for _, k := range Keys {
 		names = append(names, k.Name)
 	}
-	return Key{}, fmt.Errorf("unknown setting %q (settings: %s)", name, strings.Join(names, ", "))
+	return Key{}, i18n.Errorf("unknown setting %q (settings: %s)", name, strings.Join(names, ", "))
 }
 
 // Path is the settings file.
@@ -87,7 +94,7 @@ type InvalidError struct {
 }
 
 func (e *InvalidError) Error() string {
-	return fmt.Sprintf("the settings file %s is not valid TOML: %v", e.Path, e.Err)
+	return i18n.Sprintf("the settings file %s is not valid TOML: %v", e.Path, e.Err)
 }
 
 func (e *InvalidError) Unwrap() error { return e.Err }
@@ -134,7 +141,7 @@ func (k Key) Check(value string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%s %q: use %s", k.Name, value, strings.Join(k.Values, ", "))
+	return i18n.Errorf("%s %q: use %s", k.Name, value, strings.Join(k.Values, ", "))
 }
 
 // Set changes one setting (an empty value unsets it) and keeps the others,
@@ -146,11 +153,11 @@ func Set(name, value string) error {
 		return err
 	}
 	if k.ReadOnly != "" {
-		return fmt.Errorf("%s is set with `%s`", name, k.ReadOnly)
+		return i18n.Errorf("%s is set with `%s`", name, k.ReadOnly)
 	}
 	value = strings.TrimSpace(value)
 	if safetext.Has(value) {
-		return fmt.Errorf("%s %q has control characters", name, value)
+		return i18n.Errorf("%s %q has control characters", name, value)
 	}
 	if err := k.Check(value); err != nil {
 		return err
@@ -166,7 +173,7 @@ func write(name, value string) error {
 	raw := map[string]any{}
 	if b, err := os.ReadFile(p); err == nil {
 		if err := toml.Unmarshal(b, &raw); err != nil {
-			return fmt.Errorf("%w; fix or remove it first", &InvalidError{p, err})
+			return i18n.Errorf("%w; fix or remove it first", &InvalidError{p, err})
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -198,7 +205,7 @@ func write(name, value string) error {
 		return err
 	}
 	if err := toml.Unmarshal(body, &map[string]any{}); err != nil {
-		return fmt.Errorf("%s: would not read back (%v); left as it was", p, err)
+		return i18n.Errorf("%s: would not read back (%v); left as it was", p, err)
 	}
 	var b strings.Builder
 	b.WriteString("# skilldots settings: skd config list | get | set\n")

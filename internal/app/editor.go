@@ -1,8 +1,6 @@
 package app
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +10,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // Editor is the program that opens a skill directory.
@@ -75,14 +74,14 @@ var (
 // application), then the system's default opener.
 func FindEditor() (Editor, error) {
 	for _, c := range []struct{ value, from string }{
-		{config.Get(config.Editor), "editor setting"}, {os.Getenv("VISUAL"), "$VISUAL"}, {os.Getenv("EDITOR"), "$EDITOR"},
+		{config.Get(config.Editor), i18n.M("editor setting")}, {os.Getenv("VISUAL"), "$VISUAL"}, {os.Getenv("EDITOR"), "$EDITOR"},
 	} {
 		if strings.TrimSpace(c.value) == "" {
 			continue
 		}
 		argv, err := SplitCommand(c.value)
 		if err != nil {
-			return Editor{}, fmt.Errorf("%s %q: %w", c.from, c.value, err)
+			return Editor{}, i18n.Errorf("%s %q: %w", i18n.T(c.from), c.value, err)
 		}
 		terminal := !windowed[strings.ToLower(filepath.Base(argv[0]))]
 		switch strings.ToLower(strings.TrimSpace(config.Get(config.EditorKind))) {
@@ -95,14 +94,14 @@ func FindEditor() (Editor, error) {
 	}
 	for _, d := range detected {
 		if p, err := lookPath(d.cmd); err == nil {
-			return Editor{Argv: []string{p}, From: "found on this machine"}, nil
+			return Editor{Argv: []string{p}, From: i18n.M("found on this machine")}, nil
 		}
 	}
 	if goos == "darwin" {
 		for _, d := range detected {
 			for _, dir := range appDirs() {
 				if p := filepath.Join(dir, d.app); fsutil.Exists(p) {
-					return Editor{Argv: []string{"open", "-a", p}, From: "found on this machine"}, nil
+					return Editor{Argv: []string{"open", "-a", p}, From: i18n.M("found on this machine")}, nil
 				}
 			}
 		}
@@ -112,20 +111,20 @@ func FindEditor() (Editor, error) {
 		opener = []string{"xdg-open"}
 	}
 	if _, err := lookPath(opener[0]); err != nil {
-		return Editor{}, errors.New("no editor found: set one with `skd config set editor <command>`, or $EDITOR")
+		return Editor{}, i18n.New("no editor found: set one with `skd config set editor <command>`, or $EDITOR")
 	}
-	return Editor{Argv: opener, From: "system default"}, nil
+	return Editor{Argv: opener, From: i18n.M("system default")}, nil
 }
 
 // NoTerminalError is why ed cannot open dir: it is taken for a terminal
 // editor and there is no terminal to hand it. It says how to tell skd the
 // editor opens a window instead, when that is what it is.
 func NoTerminalError(ed Editor, dir string) error {
-	why := ed.Name() + " runs in a terminal"
+	why := i18n.Sprintf("%s runs in a terminal", ed.Name())
 	if config.Get(config.EditorKind) != "terminal" {
-		why = ed.Name() + " is not an editor skd knows to open a window, so it runs it in the terminal"
+		why = i18n.Sprintf("%s is not an editor skd knows to open a window, so it runs it in the terminal", ed.Name())
 	}
-	return fmt.Errorf("%s, and there is none. If it opens a window: skd config set editor-kind window. "+
+	return i18n.Errorf("%s, and there is none. If it opens a window: skd config set editor-kind window. "+
 		"Or choose another editor (skd config set editor <command>), or open %s yourself", why, dir)
 }
 
@@ -136,7 +135,7 @@ type OverwrittenError struct {
 }
 
 func (e *OverwrittenError) Error() string {
-	return fmt.Sprintf("%s %s; fork it to edit your own copy (skd edit %s --fork), or open the files anyway (--force)",
+	return i18n.Sprintf("%s %s; fork it to edit your own copy (skd edit %s --fork), or open the files anyway (--force)",
 		e.Entry.LinkName, OverwriteNote(e.Entry), e.Entry.LinkName)
 }
 
@@ -145,9 +144,9 @@ func (e *OverwrittenError) Error() string {
 func OverwriteNote(e engine.Entry) string {
 	switch e.Kind {
 	case engine.KindVendor:
-		return "is vendored from " + e.Origin + ": skd update replaces its files, so edits there are lost"
+		return i18n.Sprintf("is vendored from %s: skd update replaces its files, so edits there are lost", e.Origin)
 	case engine.KindApp:
-		return "ships with the " + e.Origin + " application: its updates replace the files, so edits there are lost"
+		return i18n.Sprintf("ships with the %s application: its updates replace the files, so edits there are lost", e.Origin)
 	}
 	return ""
 }
@@ -197,7 +196,7 @@ func (s *Session) Edit(r Ref, opts EditOptions) (*EditOutcome, error) {
 		return nil, err
 	}
 	if _, err := lookPath(ed.Argv[0]); err != nil {
-		return nil, fmt.Errorf("editor %q (%s) not found; set one with skd config set editor <command>", ed.Argv[0], ed.From)
+		return nil, i18n.Errorf("editor %q (%s) not found; set one with skd config set editor <command>", ed.Argv[0], i18n.T(ed.From))
 	}
 	if ed.Terminal && opts.NoTerminal {
 		return nil, NoTerminalError(ed, e.Dir)
@@ -206,7 +205,7 @@ func (s *Session) Edit(r Ref, opts EditOptions) (*EditOutcome, error) {
 	over := OverwriteNote(*e) != ""
 	switch {
 	case opts.Fork && !over:
-		return nil, fmt.Errorf("%q is already yours (%s); nothing to fork", e.LinkName, e.Dir)
+		return nil, i18n.Errorf("%q is already yours (%s); nothing to fork", e.LinkName, e.Dir)
 	case opts.Fork:
 		f, err := s.Fork(r, opts.Private, opts.As)
 		if err != nil {
@@ -217,7 +216,7 @@ func (s *Session) Edit(r Ref, opts EditOptions) (*EditOutcome, error) {
 		return nil, &OverwrittenError{Entry: *e}
 	}
 	if !fsutil.Exists(out.Dir) {
-		return nil, fmt.Errorf("%s is missing (skd update fetches a vendored skill again)", out.Dir)
+		return nil, i18n.Errorf("%s is missing (skd update fetches a vendored skill again)", out.Dir)
 	}
 	return out, nil
 }
