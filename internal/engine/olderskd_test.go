@@ -303,7 +303,8 @@ func TestStaleDanglingOnlyWhenTheLibraryMoved(t *testing.T) {
 // (not wanted): the current lock may be forged, the old library's is
 // not part of it.
 func TestLinksOfACopiedLibrary(t *testing.T) {
-	for _, c := range []string{"recorded", "not recorded", "another path", "another source", "lock is a link", "no skills.toml", "inside this library"} {
+	for _, c := range []string{"recorded", "not recorded", "another path", "another source", "lock is a link", "no skills.toml", "inside this library",
+		"skill gone from it", "skill is a file there", "skill reached through a link there"} {
 		for _, wanted := range []bool{true, false} {
 			lib, reg, home := newTestLib(t)
 			writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
@@ -345,6 +346,19 @@ func TestLinksOfACopiedLibrary(t *testing.T) {
 			if c != "no skills.toml" {
 				os.WriteFile(filepath.Join(old, manifest.FileName), []byte("[targets]\n"), 0o644)
 			}
+			switch c {
+			case "skill gone from it":
+				os.RemoveAll(filepath.Join(old, "skills", "s"))
+			case "skill is a file there":
+				os.RemoveAll(filepath.Join(old, "skills", "s"))
+				os.WriteFile(filepath.Join(old, "skills", "s"), []byte("x"), 0o644)
+			case "skill reached through a link there":
+				// old/skills is a link to a directory with the skill: the
+				// link to old/skills/s is not one skd made from old.
+				writeSkill(t, filepath.Join(home, "elsewhere", "s"), "s")
+				os.RemoveAll(filepath.Join(old, "skills"))
+				os.Symlink(filepath.Join(home, "elsewhere"), filepath.Join(old, "skills"))
+			}
 			entries, _, _ := Resolve(lib, reg)
 			plan, op := planFor(t, func() Plan { return MakePlan(lib, entries, false) }, "agents", "s")
 			res, err := Apply(lib, plan)
@@ -372,7 +386,7 @@ func TestLinksOfACopiedLibrary(t *testing.T) {
 					t.Fatalf("%s: %+v", label, op)
 				}
 			}
-			if !fileExists(filepath.Join(old, "skills", "s", "SKILL.md")) {
+			if !strings.HasPrefix(c, "skill ") && !fileExists(filepath.Join(old, "skills", "s", "SKILL.md")) {
 				t.Fatalf("%s: the old library's skill went", label)
 			}
 		}
