@@ -167,7 +167,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = config.lang === "zh" ? "zh-CN" : "en"
   }, [config.lang])
 
-  const run = React.useCallback(
+  const execute = React.useCallback(
     async <R,>(fn: () => Promise<R>): Promise<Result<R>> => {
       try {
         return { ok: true, value: await fn() }
@@ -177,6 +177,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [t],
+  )
+
+  const run = React.useCallback(
+    async <R,>(fn: () => Promise<R>): Promise<Result<R>> => {
+      if (operation) {
+        toast(t("operationWait"))
+        return { ok: false }
+      }
+      return execute(fn)
+    },
+    [execute, operation, t],
   )
 
   const beginOperation = React.useCallback((label: string) => {
@@ -196,12 +207,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async <R,>(label: string, fn: () => Promise<R>): Promise<Result<R>> => {
       const id = beginOperation(label)
       try {
-        return await run(fn)
+        return await execute(fn)
       } finally {
         endOperation(id)
       }
     },
-    [beginOperation, endOperation, run],
+    [beginOperation, endOperation, execute],
   )
 
   const reload = React.useCallback(async () => {
@@ -228,6 +239,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const check = React.useCallback(
     async (repos?: string[]) => {
+      if (operation) {
+        toast(t("operationWait"))
+        return
+      }
       setChecking(true)
       const id = beginOperation(t("checking"))
       try {
@@ -241,7 +256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         endOperation(id)
       }
     },
-    [beginOperation, endOperation, t],
+    [beginOperation, endOperation, operation, t],
   )
 
   // Load config and library once.
