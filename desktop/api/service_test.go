@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,4 +211,63 @@ func TestCloneFailureCleansDestinationAndKeepsLibrary(t *testing.T) {
 	if status["root"] != oldRoot {
 		t.Fatalf("remembered library changed after failed clone: %#v", status["root"])
 	}
+}
+
+func TestNewSkillDescriptionAndRetry(t *testing.T) {
+	s := setup(t)
+	invoke(t, s, "newSkill", object{"name": "atomic-check", "description": "description survives one transaction", "private": false, "agents": []string{"agents"}})
+	body, err := os.ReadFile(filepath.Join(s.root, "skills", "atomic-check", "SKILL.md"))
+	if err != nil || !strings.Contains(string(body), "description: \"description survives one transaction\"") {
+		t.Fatalf("description was not written with the skill: %s (%v)", body, err)
+	}
+	if _, err := s.Invoke(context.Background(), "newSkill", mustArgs(t, object{"name": "atomic-check", "description": "second attempt", "private": false, "agents": []string{"agents"}})); err == nil {
+		t.Fatal("duplicate new skill unexpectedly succeeded")
+	}
+}
+
+func TestNewSkillApplyFailureRollsBackLibrary(t *testing.T) {
+	s := setup(t)
+	ses, err := s.session()
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(s.root, "skills.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	targetRoot := filepath.Join(home, ".agents", "skills")
+	outside := t.TempDir()
+	if err := os.RemoveAll(targetRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(targetRoot), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, targetRoot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ses.NewForTargetsWithDescription("rollback-check", false, []string{"agents"}, "will roll back"); err == nil {
+		t.Fatal("new skill unexpectedly succeeded through a changed target")
+	}
+	if _, statErr := os.Stat(filepath.Join(s.root, "skills", "rollback-check")); !os.IsNotExist(statErr) {
+		t.Fatalf("failed new skill left directory: %v", statErr)
+	}
+	after, err := os.ReadFile(filepath.Join(s.root, "skills.toml"))
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("failed new skill changed manifest: %v", err)
+	}
+}
+
+func mustArgs(t *testing.T, values ...any) []json.RawMessage {
+	t.Helper()
+	args := make([]json.RawMessage, 0, len(values))
+	for _, value := range values {
+		b, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		args = append(args, b)
+	}
+	return args
 }
