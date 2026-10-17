@@ -195,14 +195,15 @@ export function SkillsPage() {
               <TableHeader className="sticky top-0 z-10 bg-background">
                 {table.getHeaderGroups().map((hg) => (
                   <TableRow key={hg.id} className="hover:bg-transparent">
-                    {hg.headers.map((h) => {
+                    {hg.headers.map((h, index) => {
                       const sorted = h.column.getIsSorted()
                       const isAgent = h.column.id.startsWith("agent:")
+                      const pinned = index === 0 ? "sticky left-0 z-20 bg-background" : index === 1 ? "sticky left-[22rem] z-20 bg-background shadow-[1px_0_0_var(--border)]" : ""
                       return (
                         <TableHead
                           key={h.id}
                           aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : h.column.getCanSort() ? "none" : undefined}
-                          className={cn("text-[0.8rem] font-medium text-muted-foreground", isAgent && "text-center")}
+                          className={cn("text-[0.8rem] font-medium text-muted-foreground", isAgent && "text-center", pinned)}
                         >
                           {h.column.getCanSort() ? (
                             <button
@@ -245,8 +246,16 @@ export function SkillsPage() {
                       }
                     }}
                   >
-                    {row.getAllCells().map((cell) => (
-                      <TableCell key={cell.id} className={cn("py-2", cell.column.id.startsWith("agent:") && "text-center")}>
+                    {row.getAllCells().map((cell, index) => (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          "py-2",
+                          cell.column.id.startsWith("agent:") && "text-center",
+                          index === 0 && "sticky left-0 z-[1] bg-background",
+                          index === 1 && "sticky left-[22rem] z-[1] bg-background shadow-[1px_0_0_var(--border)]",
+                        )}
+                      >
                         <table.FlexRender cell={cell} />
                       </TableCell>
                     ))}
