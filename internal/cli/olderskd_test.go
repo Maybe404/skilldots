@@ -153,3 +153,58 @@ path = '`+e.p(".claude/skills/via")+`'
 		}
 	}
 }
+
+// On a machine where skd never recorded a library (no config.toml, no
+// placed.json), someone's library cloned into ~/.skilldots names the
+// user's own `~/.claude/skills/my-skill -> ~/projects/my-skill` as an
+// app's link in skills.toml and skills.lock. ~/.skilldots is where skd
+// looks then, but it is not the library an older skd made links from
+// (that skd recorded every library it used): the first command takes
+// nothing for skd's and writes no placed.json, and neither the [[app]]
+// taken out and apply, nor disabling it, removes the link.
+func TestAnUnrecordedDefaultLibraryTakesNoLinks(t *testing.T) {
+	for _, first := range [][]string{{"list"}, {"disable", "my-skill"}} {
+		e := newEnv(t)
+		e.skill("projects/my-skill", "my-skill")
+		user := e.p("projects/my-skill")
+		os.MkdirAll(e.p(".claude/skills"), 0o755)
+		if err := os.Symlink(user, e.p(".claude/skills/my-skill")); err != nil {
+			t.Fatal(err)
+		}
+		e.write("evil/skills.toml", "[targets]\ndefault = [\"claude\"]\n\n[[app]]\nname = \"my-skill\"\npath = \""+user+"\"\n")
+		e.write("evil/skills.lock", "version = 1\n\n[links.'claude/my-skill']\nmode = 'link'\nsource = '"+user+"'\npath = '"+e.p(".claude/skills/my-skill")+"'\n")
+		lib := e.p(".skilldots")
+		e.git(e.home, "clone", "-q", e.repo("evil"), lib)
+		if _, err := os.Stat(e.configPath()); !os.IsNotExist(err) {
+			t.Fatalf("a settings file to begin with: %v", err)
+		}
+		placed := filepath.Join(filepath.Dir(e.configPath()), "placed.json")
+		o, er, _ := e.skd("", first...)
+		log := o + er
+		if first[0] == "list" {
+			if _, err := os.Lstat(placed); !os.IsNotExist(err) {
+				t.Fatalf("placed.json written: %v\n%s", err, log)
+			}
+			if !strings.Contains(o, "my-skill") {
+				t.Fatalf("not the library at ~/.skilldots:\n%s", log)
+			}
+			// The attacker's next commit: no [[app]] any more.
+			os.WriteFile(filepath.Join(lib, "skills.toml"), []byte("[targets]\ndefault = [\"claude\"]\n"), 0o644)
+			o, er, _ = e.skd("", "apply", "-y")
+			log += o + er
+			if !strings.Contains(o, "cannot tell") {
+				t.Fatalf("not skipped as the user's own:\n%s", log)
+			}
+		}
+		isLink(t, e.p(".claude/skills/my-skill"), user)
+		if _, err := os.Stat(filepath.Join(lib, ".trash")); err == nil {
+			t.Fatalf("%v: something went to the trash\n%s", first, log)
+		}
+		if strings.Contains(log, "app's link") {
+			t.Fatalf("%v: called an app's link\n%s", first, log)
+		}
+		if _, err := os.Stat(filepath.Join(user, "SKILL.md")); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

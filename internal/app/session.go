@@ -84,13 +84,17 @@ func Open(root string) (*Session, error) {
 
 // settingsLibrary reports whether root is the library this user's
 // settings name: the one `skd init`, `skd use` and `skd clone` record
-// (an older skd recorded it the same way), or ~/.skilldots when none
-// is recorded. Not --library, $SKILLDOTS_LIBRARY or the current
-// directory, which whoever runs skd (an agent too) chooses per command.
+// (an older skd recorded it the same way, so an older skd's user always
+// has one). None recorded is no library at all, not ~/.skilldots:
+// whatever is there may have been put there by anyone (git clone
+// someone's library into ~/.skilldots) on a machine where skd never
+// made a link. Not --library, $SKILLDOTS_LIBRARY or the current
+// directory either, which whoever runs skd (an agent too) chooses per
+// command.
 func settingsLibrary(root string) bool {
 	want := config.Get(config.Library)
 	if want == "" {
-		want = library.DefaultRoot()
+		return false
 	}
 	return sameDir(root, want)
 }
