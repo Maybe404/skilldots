@@ -4,18 +4,24 @@ import { ArrowRight, History } from "lucide-react"
 import { useApp } from "@/lib/app-state"
 import { backend, type HistoryEntry } from "@/lib/backend"
 import { formatDate, type MessageKey } from "@/lib/i18n"
-import { ExampleTag, Mono, PageHeader } from "@/components/app/bits"
+import { ExampleTag, Mono, PageError, PageHeader } from "@/components/app/bits"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function HistoryPage() {
   const { t, config, run, skills } = useApp()
   const [items, setItems] = React.useState<HistoryEntry[] | null>(null)
+  const [failed, setFailed] = React.useState(false)
 
   // reload whenever the library changes (skills is a cheap proxy)
   React.useEffect(() => {
     let live = true
-    run(() => backend.history()).then((r) => live && r.ok && setItems(r.value))
+    setFailed(false)
+    run(() => backend.history()).then((r) => {
+      if (!live) return
+      if (r.ok) setItems(r.value)
+      else setFailed(true)
+    })
     return () => {
       live = false
     }
@@ -25,7 +31,16 @@ export function HistoryPage() {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageHeader title={t("historyTitle")} hint={t("historyHint")} />
       <div className="px-8 pb-10">
-        {items === null ? (
+        {failed ? (
+          <PageError onRetry={() => {
+            setItems(null)
+            setFailed(false)
+            void run(() => backend.history()).then((r) => {
+              if (r.ok) setItems(r.value)
+              else setFailed(true)
+            })
+          }} />
+        ) : items === null ? (
           <div className="space-y-3">
             <Skeleton className="h-20" />
             <Skeleton className="h-20" />

@@ -1,8 +1,11 @@
 import * as React from "react"
+import { AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { kindLabel, useApp } from "@/lib/app-state"
 import type { Skill } from "@/lib/backend"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 /** Filled dot: an update is available. Shape, not colour. */
@@ -48,6 +51,21 @@ export function ExampleTag() {
     <Badge variant="outline" className="h-4.5 px-1.5 text-[0.7rem] font-normal text-muted-foreground">
       {t("example")}
     </Badge>
+  )
+}
+
+export function PageError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useApp()
+  return (
+    <Empty className="border border-dashed">
+      <EmptyHeader>
+        <EmptyMedia variant="icon"><AlertCircle /></EmptyMedia>
+        <EmptyTitle>{t("pageLoadFailed")}</EmptyTitle>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button variant="outline" size="sm" onClick={onRetry}>{t("retry")}</Button>
+      </EmptyContent>
+    </Empty>
   )
 }
 

@@ -170,7 +170,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="sm:max-w-xl">
+      <DialogContent closeLabel={t("close")} className="min-h-0 max-h-[calc(100svh-2rem)] overflow-hidden sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t("applyTitle")}</DialogTitle>
           <DialogDescription>{t("applyHint")}</DialogDescription>
@@ -178,7 +178,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
         {plan.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("nothingPending")}</p>
         ) : (
-          <ul className="divide-y rounded-lg border">
+          <ul className="min-h-0 max-h-[calc(100svh-13rem)] overflow-y-auto divide-y rounded-lg border">
             {plan.map((p) => (
               <li key={p.skill + p.agent} className="grid grid-cols-[6rem_1fr] gap-x-3 px-3 py-2 text-[0.82rem]">
                 <span className={cn("font-medium", p.action === "blocked" && "underline decoration-dotted underline-offset-4")}>{t(ACT[p.action])}</span>
