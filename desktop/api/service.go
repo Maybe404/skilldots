@@ -389,7 +389,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 				return nil, err
 			}
 		}
-		o, err := ses.NewForTargets(opts.Name, opts.Private, opts.Agents)
+		o, err := ses.NewForTargetsWithDescription(opts.Name, opts.Private, opts.Agents, opts.Description)
 		if err != nil {
 			return nil, err
 		}
@@ -397,19 +397,6 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			return nil, err
 		}
 		r := app.EntryRef(app.NewKind(opts.Private), "", opts.Name)
-		if opts.Description != "" {
-			body := "---\nname: " + opts.Name + "\ndescription: " + strconv.Quote(opts.Description) + "\n---\n\n# " + opts.Name + "\n"
-			if err = os.WriteFile(filepath.Join(o.Path, "SKILL.md"), []byte(body), 0644); err != nil {
-				return nil, err
-			}
-		}
-		a, err := ses.SetTargets(r, opts.Agents)
-		if err != nil {
-			return nil, err
-		}
-		if err = checkApply(a.Apply, nil); err != nil {
-			return nil, err
-		}
 		return findSkill(ses, r)
 	case "revealLibrary":
 		if s.native.Reveal == nil {

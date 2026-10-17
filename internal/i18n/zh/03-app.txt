@@ -237,6 +237,9 @@
 @ could not record the update for skd outdated: %v
 = 无法为 skd outdated 记录这次更新：%v
 
+@ some links were not changed: %s
+= 有些链接没有改动：%s
+
 @ %q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it
 = %q 是 %s 类的 skill；用 `skd disable` 取消链接，或删除它的目录来去掉它
 
