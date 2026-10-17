@@ -167,7 +167,7 @@ func pickSkills(c *ctx, repo string, f *app.Fetched, pre []string) ([]string, er
 				Value(&chosen),
 		).WithHideFunc(func() bool { return mode == "all" }),
 	)
-	form = form.WithTheme(theme())
+	form = form.WithTheme(theme()).WithKeyMap(keyMap())
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return nil, nil

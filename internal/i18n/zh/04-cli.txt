@@ -1079,7 +1079,7 @@
 = 最多接受 %d 个参数，收到 %d 个
 
 @ unknown command %q for %q
-= %[2]q 没有 %[1]q 这个命令
+= 未知命令 %[1]q（%[2]q 里没有这个命令）
 
 @ \n\nDid you mean this?\n
 = \n\n你是想输入这个吗？\n

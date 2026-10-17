@@ -180,7 +180,10 @@ func fit(s string, n int) string {
 	s = clean(s)
 	w := ansi.StringWidth(s)
 	if w > n {
-		return ansi.Truncate(s, n, "…")
+		// A double-width character that does not fit is left out whole:
+		// the text can come out a cell short, which padding makes up.
+		s = ansi.Truncate(s, n, "…")
+		w = ansi.StringWidth(s)
 	}
 	return s + strings.Repeat(" ", n-w)
 }

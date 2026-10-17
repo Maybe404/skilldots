@@ -183,7 +183,7 @@ func theme() *huh.Theme {
 
 // ask runs one or more prompts as a themed form.
 func ask(fields ...huh.Field) error {
-	return huh.NewForm(huh.NewGroup(fields...)).WithTheme(theme()).WithShowHelp(true).Run()
+	return huh.NewForm(huh.NewGroup(fields...)).WithTheme(theme()).WithKeyMap(keyMap()).WithShowHelp(true).Run()
 }
 
 // card renders the branded header block.
