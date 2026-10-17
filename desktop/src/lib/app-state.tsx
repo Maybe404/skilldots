@@ -18,9 +18,15 @@ import { translator, type T } from "@/lib/i18n"
 export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
 
 export type Result<R> = { ok: true; value: R } | { ok: false }
+export type LoadStage = "config" | "library" | "checking" | "ready"
+export interface LoadError {
+  stage: LoadStage
+  detail: string
+}
 export interface ActiveOperation {
   label: string
   startedAt: number
+  id: number
 }
 
 export type SkillFilter = "all" | "mine" | "vendor" | "updates"
@@ -49,7 +55,9 @@ interface AppContextValue {
   setConfig: (patch: Partial<Config>) => Promise<void>
   resolvedTheme: "light" | "dark"
 
-  loadError: string | null
+  loadError: LoadError | null
+  loadStage: LoadStage
+  retryLoad: () => void
   ready: boolean
   status: LibraryStatus | null
   skills: Skill[]
@@ -98,6 +106,14 @@ export function useApp() {
   return ctx
 }
 
+function errorText(t: T, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error)
+  const lower = detail.toLowerCase()
+  if (lower.includes("folder picker")) return t("errorFolderPicker")
+  if (lower.includes("no skilldots library") || lower.includes("cannot find the library")) return t("errorLibraryMissing")
+  return detail
+}
+
 const DEFAULT_CONFIG: Config = { editor: "auto", editorCommand: "", lang: "zh", theme: "system", checkOnLaunch: true }
 
 function useSystemDark() {
@@ -114,7 +130,8 @@ function useSystemDark() {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfigState] = React.useState<Config>(DEFAULT_CONFIG)
-  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [loadError, setLoadError] = React.useState<LoadError | null>(null)
+  const [loadStage, setLoadStage] = React.useState<LoadStage>("config")
   const [ready, setReady] = React.useState(false)
   const [status, setStatus] = React.useState<LibraryStatus | null>(null)
   const [skills, setSkills] = React.useState<Skill[]>([])
@@ -126,6 +143,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [trashCount, setTrashCount] = React.useState(0)
   const [checking, setChecking] = React.useState(false)
   const [operation, setOperation] = React.useState<ActiveOperation | null>(null)
+  const operationId = React.useRef(0)
+  const operations = React.useRef(new Map<number, ActiveOperation>())
   const [view, setView] = React.useState<View>("skills")
   const [editing, setEditing] = React.useState<Ref | null>(null)
   const [selected, setSelected] = React.useState<string | null>(null)
@@ -153,23 +172,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         return { ok: true, value: await fn() }
       } catch (e) {
-        toast.error(t("errorPrefix"), { description: e instanceof Error ? e.message : String(e) })
+        toast.error(t("errorPrefix"), { description: errorText(t, e) })
         return { ok: false }
       }
     },
     [t],
   )
 
+  const beginOperation = React.useCallback((label: string) => {
+    const op = { id: ++operationId.current, label, startedAt: Date.now() }
+    operations.current.set(op.id, op)
+    setOperation(op)
+    return op.id
+  }, [])
+
+  const endOperation = React.useCallback((id: number) => {
+    operations.current.delete(id)
+    const latest = [...operations.current.values()].sort((a, b) => a.id - b.id).at(-1) ?? null
+    setOperation(latest)
+  }, [])
+
   const runTask = React.useCallback(
     async <R,>(label: string, fn: () => Promise<R>): Promise<Result<R>> => {
-      setOperation({ label, startedAt: Date.now() })
+      const id = beginOperation(label)
       try {
         return await run(fn)
       } finally {
-        setOperation(null)
+        endOperation(id)
       }
     },
-    [run],
+    [beginOperation, endOperation, run],
   )
 
   const reload = React.useCallback(async () => {
@@ -197,37 +229,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const check = React.useCallback(
     async (repos?: string[]) => {
       setChecking(true)
-      setOperation({ label: t("checking"), startedAt: Date.now() })
+      const id = beginOperation(t("checking"))
       try {
         const out = await backend.outdated(repos)
         setOutdated(out)
         return
       } catch (e) {
-        toast.error(t("checkFailed"), { description: e instanceof Error ? e.message : String(e) })
+        toast.error(t("checkFailed"), { description: errorText(t, e) })
       } finally {
         setChecking(false)
-        setOperation(null)
+        endOperation(id)
       }
     },
-    [t],
+    [beginOperation, endOperation, t],
   )
 
   // Load config and library once.
   const launched = React.useRef(false)
-  React.useEffect(() => {
-    if (launched.current) return
-    launched.current = true
-    ;(async () => {
+  const load = React.useCallback(async () => {
+    let stage: LoadStage = "config"
+    setLoadError(null)
+    setReady(false)
+    setLoadStage(stage)
+    try {
       const c = await backend.config()
       setConfigState(c)
+      stage = "library"
+      setLoadStage(stage)
       await reload()
       setReady(true)
       const st = await backend.status()
-      if (st.root && c.checkOnLaunch) void check()
-    })().catch((error: unknown) => {
-      setLoadError(error instanceof Error ? error.message : String(error))
-    })
-  }, [reload, check])
+      if (st.root && c.checkOnLaunch) {
+        stage = "checking"
+        setLoadStage(stage)
+        void check()
+      }
+      setLoadStage("ready")
+    } catch (error: unknown) {
+      setLoadError({ stage, detail: error instanceof Error ? error.message : String(error) })
+    }
+  }, [check, reload])
+
+  React.useEffect(() => {
+    if (launched.current) return
+    launched.current = true
+    void load()
+  }, [load])
+
+  const retryLoad = React.useCallback(() => {
+    void load()
+  }, [load])
 
   const setConfig = React.useCallback(
     async (patch: Partial<Config>) => {
@@ -275,6 +326,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConfig,
     resolvedTheme,
     loadError,
+    loadStage,
+    retryLoad,
     ready,
     status,
     skills,
