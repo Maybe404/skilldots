@@ -364,7 +364,7 @@ func (m Model) settingsView(settings []Setting) (tea.Model, tea.Cmd) {
 		if len(st.Values) > 0 {
 			desc = i18n.Sprintf("%s · one of %s · empty unsets it", i18n.T(st.Help), strings.Join(st.Values, ", "))
 		}
-		return step{next: inputOverlay(i18n.Sprintf("Set %s", st.Name), desc, st.Default, st.Value, m.theme, m.surf, func(v string) (step, error) {
+		return step{next: inputOverlay(i18n.Sprintf("Set %s", st.Name), desc, i18n.T(st.Default), st.Value, m.theme, m.surf, func(v string) (step, error) {
 			if err := st.Check(v); err != nil {
 				return step{}, err
 			}
