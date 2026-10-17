@@ -81,9 +81,11 @@ export function SkillsPage() {
             const s = row.original
             return (
               <div className="min-w-0 py-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium">{s.linkName}</span>
-                  {updatable.has(s.ref.key) && <UpdateDot />}
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                    {updatable.has(s.ref.key) && <UpdateDot />}
+                  </span>
+                  <span className="min-w-0 truncate font-medium">{s.linkName}</span>
                   {s.description === PLACEHOLDER_DESC && <span className="text-[0.75rem] text-muted-foreground">· {t("placeholderDesc")}</span>}
                 </div>
                 <p className="mt-0.5 truncate text-[0.8rem] text-muted-foreground">{s.description}</p>
@@ -156,7 +158,7 @@ export function SkillsPage() {
           </ToggleGroup>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto px-8 pb-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 pb-4">
           {data.length === 0 ? (
             <Empty className="mt-10 border border-dashed">
               <EmptyHeader>
@@ -182,9 +184,9 @@ export function SkillsPage() {
               )}
             </Empty>
           ) : (
-            <Table className="table-fixed">
+            <Table className="table-fixed" containerClassName="min-h-0 flex-1 overflow-auto">
               <colgroup>
-                <col />
+                <col className="w-[22rem]" />
                 <col className="w-[11rem]" />
                 {agents.map((a) => (
                   <col key={a.name} className="w-[5.4rem]" />
@@ -257,7 +259,7 @@ export function SkillsPage() {
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t px-8 py-2.5 text-[0.78rem] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
-            <UpdateDot /> {t("legendUpdate")}
+            <span className="inline-flex size-4 items-center justify-center"><UpdateDot /></span> {t("legendUpdate")}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <OffRing /> {t("legendClaudeOff")}
@@ -322,7 +324,7 @@ function AgentCell({
           </span>
         ) : (
           <span className="inline-flex size-4 items-center justify-center rounded-[5px] border border-transparent group-hover/cell:border-foreground/45 group-focus-visible/cell:border-foreground/45">
-            <span className="size-1 rounded-full bg-foreground/25 group-hover/cell:opacity-0" />
+            <span className="size-1.5 rounded-full border border-muted-foreground/45 bg-transparent group-hover/cell:border-foreground/70 group-focus-visible/cell:border-foreground/70" />
           </span>
         )}
         {off && <OffRing className="absolute -top-0.5 -right-0.5 size-2 bg-background" label={t("claudeOffMarker")} />}

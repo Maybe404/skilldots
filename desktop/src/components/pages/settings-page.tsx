@@ -47,7 +47,7 @@ export function SettingsPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageHeader title={t("settingsTitle")} hint={t("settingsShared")} />
-      <div className="max-w-3xl px-8 pb-10">
+      <div className="mx-auto w-full max-w-6xl px-8 pb-10">
         <Group title={t("appearance")}>
           <Row label={t("theme")}>
             <ToggleGroup
