@@ -236,9 +236,6 @@ func TestWidth(t *testing.T) {
 	if got := PadRight("中", 4); got != "中  " {
 		t.Errorf("PadRight %q", got)
 	}
-	if got := PadLeft("中", 4); got != "  中" {
-		t.Errorf("PadLeft %q", got)
-	}
 	if got := PadRight("long", 2); got != "long" {
 		t.Errorf("PadRight shorter %q", got)
 	}

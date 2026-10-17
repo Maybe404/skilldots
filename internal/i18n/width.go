@@ -22,14 +22,6 @@ func PadRight(s string, w int) string {
 	return s
 }
 
-// PadLeft pads s on the left with spaces to w cells.
-func PadLeft(s string, w int) string {
-	if n := w - Width(s); n > 0 {
-		return strings.Repeat(" ", n) + s
-	}
-	return s
-}
-
 // Truncate shortens s to at most w cells, ending it with "…" when it was
 // cut. It never splits a character.
 func Truncate(s string, w int) string {

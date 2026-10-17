@@ -12,9 +12,6 @@ import (
 // Env is the environment variable that selects the language.
 const Env = "SKILLDOTS_LANG"
 
-// Settings are the values of the lang setting and of --lang / $SKILLDOTS_LANG.
-var Settings = []string{"auto", "en", "zh"}
-
 // Parse reads a lang value ("" is auto): "auto", "en" or "zh", in any
 // case. ok is false for anything else.
 func Parse(v string) (code string, ok bool) {

@@ -126,6 +126,18 @@ func uses(t *testing.T) (found []use, rawErrors []string) {
 					}
 				}
 			default:
+				if idx, ok := displayCalls[name]; ok && pkg != "i18n" {
+					for _, i := range idx {
+						if i < len(call.Args) {
+							if s, ok := constString(call.Args[i]); ok && needsTranslation(s) {
+								pos := fset.Position(call.Args[i].Pos())
+								if !strings.Contains(lines[pos.Line-1], "i18n:raw") {
+									rawErrors = append(rawErrors, fmt.Sprintf("%s: %s(%q)", pos, name, s))
+								}
+							}
+						}
+					}
+				}
 				if idx, ok := wrappers[name]; ok && pkg != "i18n" {
 					at = idx
 				} else if from, ok := variadic[name]; ok && pkg != "i18n" {
@@ -171,6 +183,15 @@ func argVerbs(s string) map[int]string {
 		next = pos + 1
 	}
 	return out
+}
+
+// displayCalls are functions that put the text they are given on the
+// screen as it is (colouring it, drawing it): a message must reach them
+// translated, so a literal with words in it is a message that was not.
+var displayCalls = map[string][]int{
+	"dim": {0}, "warn": {0}, "ok": {0}, "bad": {0}, "accent": {0}, "bold": {0}, "cyan": {0},
+	"sg": {0}, "sgb": {0}, "hint": {0}, "confirmOverlay": {0}, "pickOverlay": {0, 1}, "inputOverlay": {0, 1}, "listOverlay": {0, 1, 2},
+	"textOverlay": {0},
 }
 
 func verbs(s string) string {
@@ -264,11 +285,13 @@ func TestTranslationsKeepTheirValues(t *testing.T) {
 	}
 }
 
-// Errors and messages are made with i18n.Errorf / i18n.New, so that they
-// are translated; fmt.Errorf and errors.New with words in them are not.
-func TestNoUntranslatedErrors(t *testing.T) {
+// Errors are made with i18n.Errorf / i18n.New, and what is drawn or
+// coloured (dim, warn, sg, hint, the dialogs…) is given translated:
+// fmt.Errorf, errors.New and those with a literal that has words in it are
+// messages nobody translated.
+func TestNoUntranslatedText(t *testing.T) {
 	_, raw := uses(t)
 	for _, r := range raw {
-		t.Errorf("use i18n.Errorf / i18n.New (or mark the line // i18n:raw if it is not shown): %s", r)
+		t.Errorf("a message with words must go through i18n (Errorf, New, T, Sprintf…), or the line say // i18n:raw if it is not shown: %s", r)
 	}
 }
