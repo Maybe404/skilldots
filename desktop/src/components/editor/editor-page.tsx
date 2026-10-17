@@ -42,7 +42,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
   const [tree, setTree] = React.useState<FileNode[] | null>(null)
   const [buffers, setBuffers] = React.useState<Record<string, Buffer>>({})
   const [active, setActive] = React.useState("SKILL.md")
-  const [preview, setPreview] = React.useState(true)
+  const [preview, setPreview] = React.useState(() => typeof window === "undefined" || window.innerWidth >= 1100)
   const [metadataOpen, setMetadataOpen] = React.useState(false)
   const [cursor, setCursor] = React.useState({ line: 1, col: 1 })
   const [saving, setSaving] = React.useState(false)
