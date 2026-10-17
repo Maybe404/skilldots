@@ -79,7 +79,7 @@ func TestCtrlCWhileBusyWaits(t *testing.T) {
 // an action dialog is refused with a visible reason, and nothing is called.
 func TestBusyRefusesOperationKeys(t *testing.T) {
 	for _, start := range [][]string{{"tab"}, nil, {"j", "j", "j"}} { // a skill in a pack, a pack, an own skill
-		for _, k := range []string{"space", "a", "A", "u", "U", "d", "e", "s", "f", "r"} {
+		for _, k := range []string{"space", "a", "A", "u", "U", "d", "e", "s", "f", "r", "o", "h", ","} {
 			m, f := newModel(t, sampleSnapshot(), 120, 36)
 			m, _ = press(t, m, start...)
 			m.busy = "updating acme/skills"

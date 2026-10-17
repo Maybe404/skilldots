@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
-
-	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // richDir builds a directory with everything a hash-based copy ignores.
@@ -48,8 +46,8 @@ func TestTrashRoundTrip(t *testing.T) {
 		{"other error", &os.LinkError{Op: "rename", Err: syscall.EACCES}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			lib, _, home := newTestLib(t)
-			src := filepath.Join(home, "agent", "skill")
+			lib, reg, home := newTestLib(t)
+			src := filepath.Join(home, ".agents", "skills", "skill")
 			richDir(t, src)
 			if tc.renameErr != nil {
 				rename = func(string, string) error { return tc.renameErr }
@@ -73,11 +71,11 @@ func TestTrashRoundTrip(t *testing.T) {
 				t.Fatal("source still there")
 			}
 			checkRich(t, to)
-			items, _ := ListTrash(lib)
-			if len(items) != 1 || items[0].Origin != src {
+			items, _ := ListTrash(lib, reg)
+			if len(items) != 1 || items[0].Origin != src || !items[0].Restorable {
 				t.Fatalf("trash list %+v", items)
 			}
-			back, err := Restore(lib, items[0].ID)
+			back, err := Restore(lib, reg, items[0].ID)
 			if err != nil || back != src {
 				t.Fatalf("restore %q %v", back, err)
 			}
@@ -87,16 +85,15 @@ func TestTrashRoundTrip(t *testing.T) {
 }
 
 // In copy mode, a copy someone added .git, node_modules or a symlink to
-// is moved to the trash whole when skilldots unlinks it.
+// is not skd's to remove: no longer wanted, it is left where it is; in
+// the way of a new copy, it is moved to the trash whole.
 func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	lib, _, home := newTestLib(t)
-	reg, err := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 	SetRegistry(reg)
 	lib.Manifest.Targets.Default = []string{"box"}
-	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+	src := filepath.Join(lib.Root, "skills", "s")
+	writeSkill(t, src, "s")
 	entries, _, _ := Resolve(lib, reg)
 	if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
 		t.Fatal(err)
@@ -112,57 +109,164 @@ func TestCopyModeExtrasGoToTrash(t *testing.T) {
 	os.MkdirAll(filepath.Join(cp, "node_modules", "m"), 0o755)
 	os.WriteFile(filepath.Join(cp, "node_modules", "m", "index.js"), []byte("js"), 0o644)
 	os.Symlink("SKILL.md", filepath.Join(cp, "link"))
+	check := func(dir string) {
+		t.Helper()
+		for _, p := range []string{".git/HEAD", "node_modules/m/index.js", "SKILL.md"} {
+			if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+				t.Errorf("%s lost", p)
+			}
+		}
+		if l, err := os.Readlink(filepath.Join(dir, "link")); err != nil || l != "SKILL.md" {
+			t.Errorf("symlink lost: %v", err)
+		}
+	}
 	lib.Manifest.Targets.Default = []string{}
 	entries, _, _ = Resolve(lib, reg)
-	plan := MakePlan(lib, entries, false)
+	plan := MakePlan(lib, entries, true)
 	res, err := Apply(lib, plan)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Backups) != 0 || len(plan.Ops) != 1 || plan.Ops[0].Action != "skip" {
+		t.Fatalf("backups %v (plan %+v)", res.Backups, plan.ChangeList())
+	}
+	check(cp)
+
+	// Wanted again with a changed source: the copy is in the way.
+	lib.Manifest.Targets.Default = []string{"box"}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: s\n---\nnew\n"), 0o644)
+	entries, _, _ = Resolve(lib, reg)
+	plan = MakePlan(lib, entries, false)
+	if res, err = Apply(lib, plan); err != nil {
 		t.Fatal(err)
 	}
 	if len(res.Backups) != 1 {
 		t.Fatalf("backups %v (plan %+v)", res.Backups, plan.ChangeList())
 	}
-	items, _ := ListTrash(lib)
+	items, _ := ListTrash(lib, reg)
 	if len(items) != 1 {
 		t.Fatalf("trash %+v", items)
 	}
-	for _, p := range []string{".git/HEAD", "node_modules/m/index.js", "SKILL.md"} {
-		if _, err := os.Stat(filepath.Join(items[0].Path, p)); err != nil {
-			t.Errorf("%s lost", p)
-		}
-	}
-	if l, err := os.Readlink(filepath.Join(items[0].Path, "link")); err != nil || l != "SKILL.md" {
-		t.Errorf("symlink lost: %v", err)
-	}
+	check(items[0].Path)
 
-	// A pristine copy is simply replaced, nothing trashed.
-	lib.Manifest.Targets.Default = []string{"box"}
-	entries, _, _ = Resolve(lib, reg)
-	Apply(lib, MakePlan(lib, entries, false))
+	// A pristine copy skd recorded is simply removed, nothing trashed.
 	lib.Manifest.Targets.Default = []string{}
 	entries, _, _ = Resolve(lib, reg)
-	if res, _ := Apply(lib, MakePlan(lib, entries, false)); len(res.Backups) != 0 {
-		t.Fatalf("pristine copy trashed: %v", res.Backups)
+	if res, _ := Apply(lib, MakePlan(lib, entries, false)); len(res.Backups) != 0 || fileExists(cp) {
+		t.Fatalf("pristine copy trashed or left: %v", res.Backups)
 	}
 }
 
 func TestCopyModeDSStoreDirectoryGoesToTrash(t *testing.T) {
 	lib, _, home := newTestLib(t)
-	reg, _ := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
+	reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 	SetRegistry(reg)
 	lib.Manifest.Targets.Default = []string{"box"}
-	writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+	src := filepath.Join(lib.Root, "skills", "s")
+	writeSkill(t, src, "s")
 	entries, _, _ := Resolve(lib, reg)
 	Apply(lib, MakePlan(lib, entries, false))
 	cp := filepath.Join(home, "box", "s")
 	os.MkdirAll(filepath.Join(cp, ".DS_Store"), 0o755)
 	os.WriteFile(filepath.Join(cp, ".DS_Store", "notes.txt"), []byte("n"), 0o644)
-	lib.Manifest.Targets.Default = []string{}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: s\n---\nnew\n"), 0o644)
 	entries, _, _ = Resolve(lib, reg)
 	if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
 		t.Fatal(err)
 	}
 	if m, _ := filepath.Glob(filepath.Join(lib.Root, TrashDir, "*", "s", ".DS_Store", "notes.txt")); len(m) != 1 {
-		t.Fatal("notes.txt under a .DS_Store directory was deleted on disable")
+		t.Fatal("notes.txt under a .DS_Store directory was deleted on update")
+	}
+}
+
+// A trash that is a link (a cloned library's .trash pointing at a
+// directory that is cleaned up, or shared) receives nothing: Trash fails
+// and what it was to move stays where it is.
+func TestTrashRefusesALinkedTrash(t *testing.T) {
+	for _, linked := range []string{"trash", "batch"} {
+		lib, _, home := newTestLib(t)
+		elsewhere := filepath.Join(home, "elsewhere")
+		os.MkdirAll(elsewhere, 0o755)
+		if linked == "trash" {
+			os.Symlink(elsewhere, filepath.Join(lib.Root, TrashDir))
+		} else {
+			os.MkdirAll(filepath.Join(lib.Root, TrashDir), 0o755)
+			os.Symlink(elsewhere, filepath.Join(lib.Root, TrashDir, batch()))
+		}
+		victim := filepath.Join(home, "victim")
+		writeSkill(t, victim, "victim")
+		if to, err := Trash(lib, victim); err == nil {
+			t.Fatalf("%s: moved to %s", linked, to)
+		}
+		if !fileExists(filepath.Join(victim, "SKILL.md")) {
+			t.Fatalf("%s: victim moved", linked)
+		}
+		if m, _ := filepath.Glob(filepath.Join(elsewhere, "*")); len(m) != 0 {
+			t.Fatalf("%s: wrote %v", linked, m)
+		}
+	}
+}
+
+// A batch directory of a cloned library's trash (force-added, one per
+// second it may be used) can hold a "<name>.origin" that is a link to
+// a file of the user's. Trash writes its record as a new file beside an
+// entry name nothing uses yet, so that file is never written.
+func TestTrashNeverWritesThroughAPlantedRecord(t *testing.T) {
+	for _, planted := range []string{"link", "dangling", "file"} {
+		lib, _, home := newTestLib(t)
+		victim := filepath.Join(home, "victim.txt")
+		os.WriteFile(victim, []byte("mine\n"), 0o644)
+		bd := filepath.Join(lib.Root, TrashDir, batch())
+		os.MkdirAll(bd, 0o755)
+		switch planted {
+		case "link":
+			os.Symlink(victim, filepath.Join(bd, "mine.origin"))
+		case "dangling":
+			os.Symlink(filepath.Join(home, "new.txt"), filepath.Join(bd, "mine.origin"))
+		case "file":
+			os.WriteFile(filepath.Join(bd, "mine.origin"), []byte("/x\n"), 0o644)
+		}
+		src := filepath.Join(home, "agent", "mine")
+		writeSkill(t, src, "mine")
+		to, err := Trash(lib, src)
+		if err != nil {
+			t.Fatalf("%s: %v", planted, err)
+		}
+		if b, _ := os.ReadFile(victim); string(b) != "mine\n" {
+			t.Fatalf("%s: victim written: %q", planted, b)
+		}
+		if fileExists(filepath.Join(home, "new.txt")) {
+			t.Fatalf("%s: a file was created through the dangling link", planted)
+		}
+		if filepath.Base(to) != "mine-2" || !fileExists(filepath.Join(to, "SKILL.md")) {
+			t.Fatalf("%s: moved to %s", planted, to)
+		}
+		if st, err := os.Lstat(to + ".origin"); err != nil || !st.Mode().IsRegular() {
+			t.Fatalf("%s: record %v %v", planted, st, err)
+		}
+		if got, _ := readOrigin(to); got != src {
+			t.Fatalf("%s: origin %q", planted, got)
+		}
+	}
+}
+
+// A record that appears between the check and the write (a link put
+// there meanwhile) is an error, never a write through it.
+func TestTrashRecordIsCreatedNew(t *testing.T) {
+	lib, _, home := newTestLib(t)
+	victim := filepath.Join(home, "victim.txt")
+	os.WriteFile(victim, []byte("mine\n"), 0o644)
+	src := filepath.Join(home, "agent", "mine")
+	writeSkill(t, src, "mine")
+	rename = func(a, b string) error {
+		os.Symlink(victim, b+".origin")
+		return os.Rename(a, b)
+	}
+	defer func() { rename = os.Rename }()
+	if _, err := Trash(lib, src); err == nil {
+		t.Fatal("no error")
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "mine\n" {
+		t.Fatalf("victim written: %q", b)
 	}
 }

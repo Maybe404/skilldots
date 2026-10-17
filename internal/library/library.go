@@ -6,14 +6,16 @@ package library
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/Maybe404/skilldots/internal/config"
+	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
@@ -39,37 +41,13 @@ func DefaultRoot() string {
 	return filepath.Join(home, ".skilldots")
 }
 
-// ConfigPath is the small per-user file that remembers where the library is.
-func ConfigPath() string {
-	if d, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(d, "skilldots", "config.toml")
-	}
-	return filepath.Join(DefaultRoot(), "config.toml")
-}
+// ConfigPath is the small per-user file that remembers where the library
+// is, along with the settings `skd config` changes.
+func ConfigPath() string { return config.Path() }
 
 // Remember records root in the user config so later invocations find it
-// from any directory.
-func Remember(root string) error {
-	p := ConfigPath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(p, []byte("# Written by skd init/clone. The library skd uses when none is given.\nlibrary = \""+filepath.ToSlash(root)+"\"\n"), 0o644)
-}
-
-// remembered returns the library recorded by Remember, or "".
-func remembered() string {
-	b, err := os.ReadFile(ConfigPath())
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(b), "\n") {
-		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == "library" {
-			return strings.Trim(strings.TrimSpace(v), "\"'")
-		}
-	}
-	return ""
-}
+// from any directory. Other settings in the file are kept.
+func Remember(root string) error { return config.SetLibrary(root) }
 
 // Locate finds the library: explicit flag, $SKILLDOTS_LIBRARY, a skills.toml
 // in the current directory or any parent, the remembered config, then the
@@ -87,7 +65,22 @@ func Locate(flag string) (string, error) {
 			}
 		}
 	}
-	candidates = append(candidates, remembered(), DefaultRoot())
+	// The settings file remembers the library (skd use). When it cannot
+	// be read, say so rather than fall back to the default directory or
+	// claim there is no library.
+	settings, serr := config.Load()
+	if serr != nil {
+		for _, c := range candidates {
+			if _, err := os.Stat(filepath.Join(c, manifest.FileName)); c != "" && err == nil {
+				return c, nil
+			}
+			if c != "" && c == flag {
+				return "", i18n.Errorf("no %s in %s", manifest.FileName, c)
+			}
+		}
+		return "", i18n.Errorf("cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s", serr, EnvLibrary)
+	}
+	candidates = append(candidates, settings[config.Library], DefaultRoot())
 	for _, c := range candidates {
 		if c == "" {
 			continue
@@ -96,10 +89,10 @@ func Locate(flag string) (string, error) {
 			return c, nil
 		}
 		if c == flag {
-			return "", fmt.Errorf("no %s in %s", manifest.FileName, c)
+			return "", i18n.Errorf("no %s in %s", manifest.FileName, c)
 		}
 	}
-	return "", errors.New("no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`")
+	return "", i18n.New("no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`")
 }
 
 // Open loads manifest and lock from root.
@@ -115,12 +108,80 @@ func Open(root string) (*Library, error) {
 	return &Library{Root: root, Manifest: m, Lock: l}, nil
 }
 
+// Writable reports why Save would refuse to write the manifest or the
+// lock (CheckFile), before anything else is changed.
+func (l *Library) Writable() error {
+	for _, f := range []string{manifest.FileName, lock.FileName} {
+		if err := CheckFile(l.Root, filepath.Join(l.Root, f)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Save writes manifest and lock back.
 func (l *Library) Save() error {
+	if err := l.Writable(); err != nil {
+		return err
+	}
 	if err := l.Manifest.Save(filepath.Join(l.Root, manifest.FileName)); err != nil {
 		return err
 	}
 	return l.Lock.Save(filepath.Join(l.Root, lock.FileName))
+}
+
+// ownFiles are the library files skd writes at its root, besides
+// .gitignore.
+var ownFiles = []string{manifest.FileName, lock.FileName, "skills.history.jsonl"}
+
+// CheckFile reports why skd must not write p, one of the library's own
+// files at root (skills.toml, skills.lock, the update history,
+// .gitignore). A library may come from someone else (skd clone), and a
+// link there would have skd overwrite or append to any file it names:
+// skills.lock -> ../.codex/config.toml outside the library, or
+// skills.toml -> .git/config (the library's git settings) and
+// skills.history.jsonl -> private/.git/hooks/... inside it. So when p is
+// a symbolic link, skd writes through it only to a regular file directly
+// in the library root, not hidden (no ".git", ".gitattributes", ...) and
+// not another of skd's own files; anything else (outside the library,
+// deeper in it, nowhere, or a directory) is refused. Reading through it
+// is harmless.
+func CheckFile(root, p string) error {
+	st, err := os.Lstat(p)
+	if err != nil || st.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+	refuse := func(why string) error {
+		return i18n.Errorf("%s is a symbolic link %s; skd does not write through it (replace it with the file itself)", p, why)
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return refuse(i18n.T("that leads nowhere"))
+	}
+	if a, err := filepath.Abs(real); err == nil {
+		real = a
+	}
+	r, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	if rr, err := filepath.EvalSymlinks(r); err == nil {
+		r = rr
+	}
+	if !fsutil.Within(r, real) {
+		return refuse(i18n.Sprintf("to %s, outside the library", real))
+	}
+	base := filepath.Base(real)
+	if !fsutil.SameDir(filepath.Dir(real), r, false) {
+		return refuse(i18n.Sprintf("to %s, not a file directly in the library's folder", real))
+	}
+	if strings.HasPrefix(base, ".") || slices.Contains(ownFiles, base) {
+		return refuse(i18n.Sprintf("to %s, one of the library's hidden or own files", real))
+	}
+	if st, err := os.Stat(real); err != nil || !st.Mode().IsRegular() {
+		return refuse(i18n.Sprintf("to %s, which is not a file", real))
+	}
+	return nil
 }
 
 // Git runs git inside the library root.
@@ -185,15 +246,45 @@ func GitContext(ctx context.Context, dir string, args ...string) (string, error)
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), ctx.Err())
+			return "", i18n.Errorf("git %s: %w", strings.Join(args, " "), ctx.Err())
 		}
 		msg := strings.TrimSpace(errb.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		if strings.Contains(msg, "end-of-options") {
+			// git before 2.24. Without the marker git reads the arguments
+			// the same, as long as none of them up to "--" starts with "-"
+			// (commits from the lock are hex, checked when it is read).
+			if older, ok := withoutEndOfOptions(args); ok {
+				return GitContext(ctx, dir, older...)
+			}
+			if slices.Contains(args, "--end-of-options") {
+				msg += i18n.T("\n(skd needs git 2.24 or later: this git does not know --end-of-options)")
+			}
+		}
+		return "", i18n.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
 	return strings.TrimSpace(out.String()), nil
+}
+
+// withoutEndOfOptions is args without "--end-of-options", for a git that
+// does not know it; ok is false when it is not there or when an argument
+// after it (up to "--") starts with "-" and would be taken for an option.
+func withoutEndOfOptions(args []string) (out []string, ok bool) {
+	i := slices.Index(args, "--end-of-options")
+	if i < 0 {
+		return nil, false
+	}
+	for _, a := range args[i+1:] {
+		if a == "--" {
+			break
+		}
+		if strings.HasPrefix(a, "-") {
+			return nil, false
+		}
+	}
+	return append(append([]string{}, args[:i]...), args[i+1:]...), true
 }
 
 // IsGitRepo reports whether dir is the top of its own git work tree. A
@@ -216,8 +307,33 @@ func samePath(a, b string) bool {
 	return ra == rb
 }
 
+// ErrPrivateLink is returned by EnsurePrivateGit when the library's
+// private/ is reached through a symbolic link inside the library.
+var ErrPrivateLink = i18n.New("a symbolic link")
+
+// PrivateLink returns the symbolic link on the way from root to its
+// private/ (private/ itself, as a rule), or "" when there is none.
+func PrivateLink(root string) string {
+	return fsutil.LinkOnPath(root, filepath.Join(root, DirPrivate))
+}
+
+// EnsurePrivateGit makes the library's private/ a git repository of its
+// own (creating it if needed), unless private/ is reached through a
+// symbolic link inside the library: a library may come from someone
+// else (skd clone), and its private -> .. would have git init run in
+// whatever the link names, outside the library (a ~/.git that makes the
+// whole home folder a repository). Then nothing is created or changed
+// and the error wraps ErrPrivateLink.
+func EnsurePrivateGit(root string) error {
+	if l := PrivateLink(root); l != "" {
+		return i18n.Errorf("%s is %w; skd does not set up a git repository through it (make private/ a directory of its own)", l, ErrPrivateLink)
+	}
+	return EnsureGit(filepath.Join(root, DirPrivate))
+}
+
 // EnsureGit initialises dir as a git repository when it is not one,
-// creating dir first if needed.
+// creating dir first if needed. dir is trusted: for the library's
+// private/ use EnsurePrivateGit.
 func EnsureGit(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

@@ -10,10 +10,15 @@
 package app
 
 import (
-	"fmt"
+	"errors"
+	"io/fs"
+	"path/filepath"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
@@ -46,7 +51,10 @@ type Session struct {
 	// Log receives progress and warnings; nil discards them.
 	Log func(Level, string)
 
-	warned map[string]bool
+	warned  map[string]bool
+	notices []string
+	// claudeOff caches ClaudeDisabled for the session.
+	claudeOff map[string]bool
 }
 
 // Open loads the library at root and the target registry, including the
@@ -60,24 +68,102 @@ func Open(root string) (*Session, error) {
 	for n, c := range lib.Manifest.Targets.Custom {
 		custom[n] = struct{ Path, Mode string }{c.Path, c.Mode}
 	}
-	reg, err := targets.NewRegistry(custom)
+	reg, err := targets.NewRegistry(lib.Root, custom)
 	if err != nil {
 		return nil, err
 	}
 	engine.SetRegistry(reg)
-	return &Session{Lib: lib, Reg: reg}, nil
+	engine.SetPlacedFile(PlacedFile())
+	ses := &Session{Lib: lib, Reg: reg}
+	if engine.OlderSkd() && settingsLibrary(lib.Root) {
+		// The first time this skd opens the library the user's settings
+		// name, before any command changes skills.toml: record the app
+		// links an older skd made from it (see AdoptOlderAppLinks).
+		if entries, _, err := engine.Resolve(lib, reg); err == nil {
+			if _, err := engine.AdoptOlderAppLinks(lib, entries); err != nil {
+				var pe *fs.PathError
+				if errors.As(err, &pe) {
+					err = pe.Err
+				}
+				ses.notices = append(ses.notices, i18n.Sprintf("could not write %s: %v; the links an older skd made are taken for skd's in this run only, and looked for again next time", PlacedFile(), err))
+			}
+		}
+	}
+	return ses, nil
+}
+
+// Notices returns, once, what Open has to tell a person (a placed file
+// it could not write); the CLI prints them as warnings.
+func (s *Session) Notices() []string {
+	n := s.notices
+	s.notices = nil
+	return n
+}
+
+// settingsLibrary reports whether root is the library this user's
+// settings name: the one `skd init`, `skd use` and `skd clone` record
+// (an older skd recorded it the same way, so an older skd's user always
+// has one). None recorded is no library at all, not ~/.skilldots:
+// whatever is there may have been put there by anyone (git clone
+// someone's library into ~/.skilldots) on a machine where skd never
+// made a link. Not --library, $SKILLDOTS_LIBRARY or the current
+// directory either, which whoever runs skd (an agent too) chooses per
+// command.
+func settingsLibrary(root string) bool {
+	want := config.Get(config.Library)
+	if want == "" {
+		return false
+	}
+	return sameDir(root, want)
+}
+
+// UseLibrary records root as the library skd uses from now on (skd
+// init, use, and the setup menu's existing library). Unless it is the
+// library already recorded, an older skd's unrecorded links are no
+// longer looked for from then on (SealOlderSkd).
+func UseLibrary(root string) error {
+	// A settings file skd cannot read is reported before anything is
+	// sealed: once it is fixed, the library it names may still need the
+	// one look for an older skd's links.
+	if _, err := config.Load(); err != nil {
+		return err
+	}
+	if rec := config.Get(config.Library); rec == "" || !sameDir(root, rec) {
+		SealOlderSkd()
+	}
+	return library.Remember(root)
+}
+
+// SealOlderSkd stops skd from looking for the unrecorded links an older
+// skd made (engine.SealPlaced): they were made from the library it
+// used, never from one cloned, created or chosen now. skd clone calls
+// it before anything else.
+func SealOlderSkd() { engine.SealPlaced(PlacedFile()) }
+
+func sameDir(a, b string) bool {
+	a, err1 := filepath.Abs(filepath.FromSlash(a))
+	b, err2 := filepath.Abs(filepath.FromSlash(b))
+	return err1 == nil && err2 == nil && fsutil.SameDir(fsutil.Resolve(a), fsutil.Resolve(b), false)
 }
 
 func (s *Session) logf(l Level, format string, a ...any) {
 	if s.Log != nil {
-		s.Log(l, fmt.Sprintf(format, a...))
+		s.Log(l, i18n.Sprintf(format, a...))
 	}
 }
 
 // Resolve computes the library's entries. Per-entry problems go to Log as
-// Problem, each once per session.
+// Problem, each once per session. Entries Claude Code turned off are
+// marked (see ClaudeDisabled): by the name Claude sees, the link name,
+// and only when the entry is linked for Claude (LinksForClaude).
 func (s *Session) Resolve() ([]engine.Entry, error) {
 	entries, warnings, err := engine.Resolve(s.Lib, s.Reg)
+	if s.claudeOff == nil {
+		s.claudeOff = ClaudeDisabled()
+	}
+	for i := range entries {
+		entries[i].ClaudeDisabled = s.claudeOff[entries[i].LinkName] && LinksForClaude(entries[i])
+	}
 	for _, w := range warnings {
 		if s.warned == nil {
 			s.warned = map[string]bool{}
@@ -160,7 +246,7 @@ func (s *Session) mustEntry(entries []engine.Entry, r Ref) (*engine.Entry, error
 		return nil, err
 	}
 	if e == nil {
-		return nil, fmt.Errorf("no skill %q", r.String())
+		return nil, i18n.Errorf("no skill %q", r.String())
 	}
 	return e, nil
 }
@@ -175,4 +261,12 @@ func dedupe(in []string) []string {
 		}
 	}
 	return out
+}
+
+// PlacedFile is where skd records the links and copies it placed in agent
+// directories: beside the settings file (config.toml), per user and per
+// machine, never in a library. Only what it records (or a link into the
+// library) is ever removed outright; see engine.SetPlacedFile.
+func PlacedFile() string {
+	return filepath.Join(filepath.Dir(config.Path()), "placed.json")
 }

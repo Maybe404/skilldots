@@ -2,12 +2,12 @@ package tui
 
 import (
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/lucasb-eyer/go-colorful"
+
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // Theme is the palette the dashboard paints with. The CLI passes in the
@@ -104,39 +104,12 @@ func segWidth(segs []seg) (n int) {
 }
 
 // clean makes text from outside (upstream SKILL.md, file names, git and
-// engine messages) safe to print: whitespace controls become a space,
-// every other control character (ESC, BEL, C1…) and invalid UTF-8 is
-// dropped, so nothing can move the cursor or rewrite the terminal.
-func clean(s string) string {
-	ok := utf8.ValidString(s)
-	if ok {
-		for _, r := range s {
-			if unicode.IsControl(r) {
-				ok = false
-				break
-			}
-		}
-	}
-	if ok {
-		return s
-	}
-	var b strings.Builder
-	for i, r := range s {
-		switch {
-		case r == utf8.RuneError:
-			if _, n := utf8.DecodeRuneInString(s[i:]); n == 1 {
-				continue // an invalid byte, e.g. a lone 8-bit CSI
-			}
-			b.WriteRune(r)
-		case r == '\t' || r == '\n' || r == '\r' || r == '\v' || r == '\f':
-			b.WriteByte(' ')
-		case unicode.IsControl(r):
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
+// engine messages) safe to print: the same as everywhere else in skd
+// (safetext.Clean): whitespace controls become a space, every other
+// control character (ESC, BEL, C1…) and bidi control is dropped, invalid
+// UTF-8 becomes U+FFFD, so nothing can move the cursor, rewrite the
+// terminal or reorder the line.
+func clean(s string) string { return safetext.Clean(s, 0) }
 
 // paint renders segs on bg into exactly w cells, truncating with an
 // ellipsis or padding with bg. An empty bg means the terminal background.
@@ -207,7 +180,10 @@ func fit(s string, n int) string {
 	s = clean(s)
 	w := ansi.StringWidth(s)
 	if w > n {
-		return ansi.Truncate(s, n, "…")
+		// A double-width character that does not fit is left out whole:
+		// the text can come out a cell short, which padding makes up.
+		s = ansi.Truncate(s, n, "…")
+		w = ansi.StringWidth(s)
 	}
 	return s + strings.Repeat(" ", n-w)
 }

@@ -2,8 +2,11 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/charmbracelet/huh"
@@ -11,8 +14,11 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/targets"
 	"github.com/Maybe404/skilldots/internal/termbg"
 	"github.com/Maybe404/skilldots/internal/tui"
@@ -26,6 +32,7 @@ var flags struct {
 	json    bool
 	yes     bool
 	theme   string
+	lang    string
 }
 
 // ctx is everything a command needs once the library is open.
@@ -46,17 +53,33 @@ func (c *ctx) printf(format string, a ...any) { say(format, a...) }
 // say is printf for code that has no ctx yet (init, clone, use).
 func say(format string, a ...any) {
 	if flags.json {
-		fmt.Fprintf(os.Stderr, format, a...)
+		i18n.Fprintf(stderr, format, a...)
 		return
 	}
-	fmt.Fprintf(os.Stdout, format, a...)
+	i18n.Fprintf(stdout, format, a...)
+}
+
+// txt and errText are text from outside skd (upstream names and
+// directories, file names, library files, git's output) as it may be
+// printed: no control characters or bidi controls (safetext). Every
+// warning and error goes through them; so does anything else that
+// carries such text.
+func txt(s string) string      { return safetext.Clean(s, 0) }
+func errText(err error) string { return safetext.Lines(err.Error()) }
+func txts(s []string) []string {
+	out := make([]string, len(s))
+	for i, v := range s {
+		out[i] = txt(v)
+	}
+	return out
 }
 
 // logLine prints the progress messages of the shared app flows.
 func logLine(l app.Level, msg string) {
+	msg = safetext.Lines(msg)
 	switch l {
 	case app.Problem:
-		fmt.Fprintf(os.Stderr, "%s %s\n", warn("warning:"), msg)
+		fmt.Fprintln(stderr, tag(warn, i18n.T("warning:"), msg))
 	case app.Done:
 		say("%s %s\n", ok("✓"), msg)
 	case app.Warn:
@@ -78,10 +101,24 @@ func jsonOut(v any) bool {
 	if !flags.json {
 		return false
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.Encode(v)
+	writeJSON(os.Stdout, v)
 	return true
+}
+
+// writeJSON writes v as indented JSON. Beyond what encoding/json escapes
+// (U+0000 to U+001F, U+2028, U+2029), DEL, the C1 controls and the bidi
+// controls are written as \u escapes too (safetext.JSON): the document
+// decodes to the same values, and `skd … --json` shown on a terminal
+// (piped to less, printed by an agent) cannot reorder or drive it.
+func writeJSON(w io.Writer, v any) error {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return err
+	}
+	_, err := w.Write(safetext.JSON(b.Bytes()))
+	return err
 }
 
 func open() (*ctx, error) {
@@ -94,6 +131,9 @@ func open() (*ctx, error) {
 		return nil, err
 	}
 	s.Log = logLine
+	for _, n := range s.Notices() {
+		logLine(app.Problem, n)
+	}
 	return &ctx{Session: s, lib: s.Lib, reg: s.Reg}, nil
 }
 
@@ -103,29 +143,36 @@ func confirm(prompt string) bool {
 		return true
 	}
 	if !isTerminal() {
-		fmt.Fprintln(os.Stderr, "refusing to proceed without a terminal; pass --yes")
+		fmt.Fprintln(stderr, i18n.T("refusing to proceed without a terminal; pass --yes"))
 		return false
 	}
 	var yes bool
-	if err := ask(huh.NewConfirm().Title(prompt).Affirmative("Yes").Negative("No").Value(&yes)); err != nil {
+	if err := ask(huh.NewConfirm().Title(i18n.T(prompt)).Affirmative(i18n.T("Yes")).Negative(i18n.T("No")).Value(&yes)); err != nil {
 		return false
 	}
 	return yes
 }
 
-func isTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+// isTerminal reports whether skd can ask a person: stdin and stdout are
+// both terminals. With stdout piped (skd update | cat) a prompt would be
+// drawn where nobody sees it and wait forever, so such runs behave as
+// without a terminal: they do what --yes does, or refuse.
+func isTerminal() bool { return stdinIsTerminal() && stdoutIsTerminal() }
 
 // Root builds the command tree.
 func Root() *cobra.Command {
 	var simple bool
 	root := &cobra.Command{
 		Use:           "skd",
-		Short:         "skilldots — declarative skill management for AI agents",
-		Long:          "skd keeps every skill your agents use in one git-backed library and links them into each agent's skill directory.",
+		Short:         i18n.T("skilldots — declarative skill management for AI agents"),
+		Long:          i18n.T("skd keeps every skill your agents use in one git-backed library and links them into each agent's skill directory."),
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := setupLang(); err != nil {
+				return err
+			}
 			return setupTheme(flags.theme)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -145,23 +192,52 @@ func Root() *cobra.Command {
 			return runMenu()
 		},
 	}
-	root.Flags().BoolVar(&simple, "simple", false, "use the question-and-answer menu instead of the full-screen dashboard")
-	root.PersistentFlags().StringVar(&flags.library, "library", "", "library directory (default: $"+library.EnvLibrary+", nearest skills.toml, the one set by `skd use`, or ~/.skilldots)")
-	root.PersistentFlags().BoolVar(&flags.json, "json", false, "machine-readable output")
-	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, "answer yes to prompts")
-	root.PersistentFlags().StringVar(&flags.theme, "theme", "", "colours: light, dark or auto (default auto: ask the terminal; also $"+EnvTheme+")")
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	root.Args = rootArgs
+	root.SetFlagErrorFunc(flagError)
+	root.Flags().BoolVar(&simple, "simple", false, i18n.T("use the question-and-answer menu instead of the full-screen dashboard"))
+	root.PersistentFlags().StringVar(&flags.library, "library", "", i18n.Sprintf("library directory (default: $%s, nearest skills.toml, the one set by `skd use`, or ~/.skilldots)", library.EnvLibrary))
+	root.PersistentFlags().BoolVar(&flags.json, "json", false, i18n.T("machine-readable output"))
+	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, i18n.T("answer yes to prompts"))
+	root.PersistentFlags().StringVar(&flags.lang, "lang", "", i18n.Sprintf("language of skd's own text: en, zh or auto (default auto: the system's; also $%s, then the lang setting)", i18n.Env))
+	root.PersistentFlags().StringVar(&flags.theme, "theme", "", i18n.Sprintf("colours: light, dark or auto (default auto: ask the terminal; also $%s)", EnvTheme))
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), outdatedCmd(), enableCmd(), disableCmd(),
-		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd())
+		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd(), configCmd(), historyCmd(), editCmd())
+	localizeCobra(root)
 	return root
 }
 
 // Main runs the CLI and returns an exit code.
 func Main() int {
-	if err := Root().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+	// What the screen writers hold of a character split between writes
+	// is printed before exit (as U+FFFD: it will not be completed now).
+	defer flushOutput()
+	// The language is chosen before the command tree is built: its help
+	// texts are made with it. setupLang checks the flag again once cobra
+	// has parsed it.
+	applyLang(scanArgs(os.Args[1:]))
+	err := Root().Execute()
+	if w := settingsWarning(err); w != "" {
+		fmt.Fprintln(stderr, w)
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, label(i18n.T("error:"), errText(err)))
 		return 1
 	}
 	return 0
+}
+
+// settingsWarning is the one line that says the settings file could not
+// be read and its settings were not used, after a command that ran
+// without them; "" when the file is fine or when err already says it
+// (finding the library, init, config).
+func settingsWarning(err error) string {
+	var bad *config.InvalidError
+	if settingsErr == nil || errors.As(err, &bad) {
+		return ""
+	}
+	return label(i18n.T("warning:"), i18n.Sprintf("%s; none of its settings (editor, theme, …) were used", errText(settingsErr)))
 }
 
 // dashboardLibrary reports whether `skd` should open the full-screen

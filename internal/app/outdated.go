@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -109,7 +110,7 @@ func (s *Session) OutdatedContext(ctx context.Context, repos []string, each func
 	for _, r := range repos {
 		p := m.FindPack(r)
 		if p == nil {
-			return nil, fmt.Errorf("no pack %q", r)
+			return nil, i18n.Errorf("no pack %q", r)
 		}
 		packs = append(packs, p)
 	}
@@ -157,9 +158,9 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 	}
 	if len(upstream) == 0 {
 		if len(rejected) > 0 {
-			return nil, fmt.Errorf("%s: no usable SKILL.md (%s)", p.Repo, rejected[0])
+			return nil, i18n.Errorf("%s: no usable SKILL.md (%s)", p.Repo, rejected[0])
 		}
-		return nil, fmt.Errorf("%s: no SKILL.md found", p.Repo)
+		return nil, i18n.Errorf("%s: no SKILL.md found", p.Repo)
 	}
 	st := &PackStatus{Repo: p.Repo, Latest: commit, Checked: time.Now(),
 		Changed: []string{}, Moved: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
@@ -233,7 +234,7 @@ type stateFile struct {
 }
 
 // errCorrupt marks a state file that exists but cannot be parsed.
-var errCorrupt = errors.New("unreadable")
+var errCorrupt = i18n.New("unreadable")
 
 func readState() (*stateFile, error) {
 	st := &stateFile{Version: 1, Libraries: map[string]*Outdated{}}
@@ -439,11 +440,11 @@ func Ago(t, now time.Time) string {
 	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return i18n.T("just now")
 	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+		return i18n.Sprintf("%dm ago", int(d.Minutes()))
 	case d < 48*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
+		return i18n.Sprintf("%dh ago", int(d.Hours()))
 	}
-	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	return i18n.Sprintf("%dd ago", int(d.Hours()/24))
 }

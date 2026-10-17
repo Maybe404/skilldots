@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -9,8 +8,11 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // Minimum size the full layout needs; below it a notice is shown instead.
@@ -79,8 +81,16 @@ func (m Model) descLines() int {
 	return 2
 }
 
-// View renders the whole screen.
+// View renders the whole screen. Text from outside skd is cleaned where
+// it is drawn (paint, fit); as a last line of defence, anything that still
+// holds a control character or an escape sequence other than the
+// dashboard's own colours is cleaned on the way out (safetext.Screen).
+// Tests check view, so they see what the drawing code itself produces.
 func (m Model) View() string {
+	return safetext.Screen(m.view(), lipgloss.ColorProfile() != termenv.Ascii)
+}
+
+func (m Model) view() string {
 	if m.quitting || m.w == 0 || m.h == 0 {
 		return ""
 	}
@@ -90,7 +100,7 @@ func (m Model) View() string {
 		for i := 0; i < m.h; i++ {
 			out = append(out, paint(m.w, ""))
 		}
-		msg := fmt.Sprintf("window too small (%d×%d) · need %d×%d · q quits", m.w, m.h, minWidth, minHeight)
+		msg := i18n.Sprintf("window too small (%d×%d) · need %d×%d · q quits", m.w, m.h, minWidth, minHeight)
 		out[m.h/2] = paint(m.w, "", sg(" "+msg, t.Warn))
 		return strings.Join(out, "\n")
 	}
@@ -125,7 +135,25 @@ func (m Model) spliceOverlay(body []string) []string {
 			break
 		}
 		b := body[y]
-		body[y] = ansi.Truncate(b, x, "") + l + ansi.Cut(b, x+w, m.w)
+		// A double-width character the dialog's edge falls in the middle
+		// of is dropped by Truncate and Cut: the row keeps its width.
+		left := ansi.Truncate(b, x, "")
+		if gap := x - ansi.StringWidth(left); gap > 0 {
+			left += strings.Repeat(" ", gap)
+		}
+		// Cut keeps the whole of a double-width character the dialog's
+		// right edge falls in the middle of, one cell too many: drop it.
+		want := m.w - x - w
+		right := ansi.Cut(b, x+w, m.w)
+		// TruncateLeft keeps a double-width character it would split, so
+		// drop one cell more until the rest fits; the gap is padded below.
+		for n := ansi.StringWidth(right) - want; n > 0 && ansi.StringWidth(right) > want; n++ {
+			right = ansi.TruncateLeft(ansi.Cut(b, x+w, m.w), n, "")
+		}
+		if gap := want - ansi.StringWidth(right); gap > 0 {
+			right = strings.Repeat(" ", gap) + right
+		}
+		body[y] = left + l + right
 	}
 	return body
 }
@@ -165,20 +193,20 @@ func (m Model) upstreamState(compact bool) []seg {
 	var out []seg
 	switch m.check {
 	case checkFailed:
-		return []seg{sg("check failed", t.Warn)}
+		return []seg{sg(i18n.T("check failed"), t.Warn)}
 	case checkDone:
 		switch n := len(m.packsWithUpdates()); {
 		case n == 0:
-			out = []seg{sg("✓ no updates", t.Muted)}
+			out = []seg{sg(i18n.T("✓ no updates"), t.Muted)}
 		case compact:
-			out = []seg{sg(fmt.Sprintf("↑ %d to update", n), t.Accent)}
+			out = []seg{sg(i18n.Sprintf("↑ %d to update", n), t.Accent)}
 		case n == 1:
-			out = []seg{sg("↑ 1 pack has updates", t.Accent)}
+			out = []seg{sg(i18n.T("↑ 1 pack has updates"), t.Accent)}
 		default:
-			out = []seg{sg(fmt.Sprintf("↑ %d packs have updates", n), t.Accent)}
+			out = []seg{sg(i18n.Sprintf("↑ %d packs have updates", n), t.Accent)}
 		}
 		if n := len(m.checkFail); n > 0 && !compact {
-			out = append(out, sg(" · ", t.Muted), sg(fmt.Sprintf("%d check failed", n), t.Warn))
+			out = append(out, sg(" · ", t.Muted), sg(i18n.Sprintf("%d check failed", n), t.Warn))
 		}
 	}
 	return out
@@ -190,23 +218,23 @@ func (m Model) syncState() []seg {
 	t, s := m.theme, m.snap
 	var parts [][]seg
 	if s.Pending > 0 {
-		parts = append(parts, []seg{sg("○ ", t.Warn), sg(fmt.Sprintf("%d to apply", s.Pending), t.Warn)})
+		parts = append(parts, []seg{sg("○ ", t.Warn), sg(i18n.Sprintf("%d to apply", s.Pending), t.Warn)})
 	}
 	if s.Dirty {
-		parts = append(parts, []seg{sg("✎ uncommitted", t.Warn)})
+		parts = append(parts, []seg{sg(i18n.T("✎ uncommitted"), t.Warn)})
 	}
 	switch {
 	case !s.Remote:
-		parts = append(parts, []seg{sg("no remote", t.Muted)})
+		parts = append(parts, []seg{sg(i18n.T("no remote"), t.Muted)})
 	case !s.Tracked:
-		parts = append(parts, []seg{sg("↑ not pushed", t.Warn)})
+		parts = append(parts, []seg{sg(i18n.T("↑ not pushed"), t.Warn)})
 	case s.Ahead > 0:
-		parts = append(parts, []seg{sg(fmt.Sprintf("↑%d unpushed", s.Ahead), t.Warn)})
+		parts = append(parts, []seg{sg(i18n.Sprintf("↑%d unpushed", s.Ahead), t.Warn)})
 	}
 	if len(parts) == 0 || (len(parts) == 1 && !s.Remote && s.Pending == 0 && !s.Dirty) {
-		out := []seg{sg("● ", t.OK), sg("synced", t.OK)}
+		out := []seg{sg("● ", t.OK), sg(i18n.T("synced"), t.OK)}
 		if !s.Remote {
-			out = []seg{sg("● ", t.OK), sg("linked", t.OK), sg(" · no remote", t.Muted)}
+			out = []seg{sg("● ", t.OK), sg(i18n.T("linked"), t.OK), sg(i18n.T(" · no remote"), t.Muted)}
 		}
 		return out
 	}
@@ -231,7 +259,7 @@ func (m Model) filterLine(w int, f focus) string {
 		vw := ansi.StringWidth(v)
 		return paint(3, bg, sg(" / ", t.Accent)) + v + paint(w-3-vw, bg)
 	}
-	return paint(w, bg, sg(" / ", t.Accent), sg(m.filter[f], t.Text), sg("  esc clears", t.Faint))
+	return paint(w, bg, sg(" / ", t.Accent), sg(m.filter[f], t.Text), sg(i18n.T("  esc clears"), t.Faint))
 }
 
 func (m Model) viewLeft(w, h int) []string {
@@ -265,9 +293,9 @@ func (m Model) viewLeft(w, h int) []string {
 			out = append(out, paint(w, "", sg("   "+r.text, t.Faint)))
 		case rowPack:
 			p := m.snap.Packs[r.pack]
-			count := fmt.Sprintf("%d of %d", p.Selected, p.Total)
+			count := i18n.Sprintf("%d of %d", p.Selected, p.Total)
 			if p.UsesAll {
-				count = fmt.Sprintf("all %d", p.Selected)
+				count = i18n.Sprintf("all %d", p.Selected)
 			}
 			right := []seg{sg(count, t.Cyan), sg(" ", "")}
 			if m.hasUpdates(p.Repo) {
@@ -294,9 +322,11 @@ func (m Model) viewLeft(w, h int) []string {
 			var right []seg
 			switch {
 			case r.skill.Conflict != "":
-				dot, right = sg("! ", t.Warn), []seg{sg("conflict ", t.Warn)}
+				dot, right = sg("! ", t.Warn), []seg{sg(i18n.T("conflict "), t.Warn)}
 			case r.skill.Missing:
-				right = []seg{sg("missing ", t.Warn)}
+				right = []seg{sg(i18n.T("missing "), t.Warn)}
+			case r.skill.ClaudeOff:
+				right = []seg{sg(i18n.T("off in Claude "), t.Warn)}
 			}
 			left := []seg{mark, dot, name}
 			if sel {
@@ -328,47 +358,47 @@ func (m Model) packHeader(p Pack, w int) []string {
 	if p.Commit != "" {
 		meta = append(meta, sg(short(p.Commit), t.Cyan))
 	} else {
-		meta = append(meta, sg("not fetched", t.Warn))
+		meta = append(meta, sg(i18n.T("not fetched"), t.Warn))
 	}
 	if p.When != "" {
 		meta = append(meta, sg(" · "+p.When, t.Muted))
 	}
 	if p.NoLicense {
-		meta = append(meta, sg(" · ", t.Muted), sg("no license", t.Warn))
+		meta = append(meta, sg(" · ", t.Muted), sg(i18n.T("no license"), t.Warn))
 	} else if p.License != "" {
 		meta = append(meta, sg(" · "+p.License, t.Muted))
 	}
-	agents := "default (" + joinOr(m.snap.Defaults, "none") + ")"
+	agents := i18n.Sprintf("default (%s)", joinOr(m.snap.Defaults, "none"))
 	if p.Targets != nil {
 		agents = joinOr(p.Targets, "none (kept in library)")
 	}
-	sel := fmt.Sprintf("%d of %d selected", p.Selected, p.Total)
+	sel := i18n.Sprintf("%d of %d selected", p.Selected, p.Total)
 	if p.UsesAll {
-		sel = "follows everything upstream"
+		sel = i18n.T("follows everything upstream")
 	}
 	if !p.Upstream {
-		sel += " · upstream list unknown until u"
+		sel += i18n.T(" · upstream list unknown until u")
 	}
-	lines := append(m.problem(w), row(), row(title...), row(meta...), row(sg("agents ", t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint)))
+	lines := append(m.problem(w), row(), row(title...), row(meta...), row(sg(i18n.T("agents "), t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint)))
 	if st, ok := m.outdated[p.Repo]; ok && st.HasUpdates() {
 		var what []string
 		for _, c := range []struct {
-			n    int
-			word string
-		}{{len(st.Changed), "changed"}, {len(st.Moved), "moved"}, {len(st.New), "new"}, {len(st.Gone), "gone"}, {len(st.Pending), "to add"}} {
+			n      int
+			format string
+		}{{len(st.Changed), i18n.M("%d changed")}, {len(st.Moved), i18n.M("%d moved")}, {len(st.New), i18n.M("%d new")}, {len(st.Gone), i18n.M("%d gone")}, {len(st.Pending), i18n.M("%d to add")}} {
 			if c.n > 0 {
-				what = append(what, fmt.Sprintf("%d %s", c.n, c.word))
+				what = append(what, i18n.Sprintf(c.format, c.n))
 			}
 		}
-		lines = append(lines, row(sg("↑ upstream ", t.Accent), sg(short(st.Latest), t.Accent),
-			sg(" · "+strings.Join(what, " · ")+" · u updates", t.Faint)))
+		lines = append(lines, row(sg(i18n.T("↑ upstream "), t.Accent), sg(short(st.Latest), t.Accent),
+			sg(i18n.Sprintf(" · %s · u updates", strings.Join(what, " · ")), t.Faint)))
 	}
 	if rep := m.reports[p.Repo]; rep != nil {
 		lines = append(lines, row())
-		head := []seg{sgb("update ", t.Text)}
+		head := []seg{sgb(i18n.T("update "), t.Text)}
 		switch {
 		case rep.OldCommit == "" || rep.OldCommit == rep.NewCommit:
-			head = append(head, sg(short(rep.NewCommit)+" · up to date", t.Muted))
+			head = append(head, sg(i18n.Sprintf("%s · up to date", short(rep.NewCommit)), t.Muted))
 		default:
 			head = append(head, sg(short(rep.OldCommit)+" → ", t.Muted), sg(short(rep.NewCommit), t.Accent))
 		}
@@ -377,15 +407,15 @@ func (m Model) packHeader(p Pack, w int) []string {
 			label string
 			fg    lipgloss.Color
 			names []string
-		}{{"changed", t.Accent, rep.Changed}, {"added", t.OK, rep.Added}, {"upstream new", t.Cyan, rep.UpstreamNew},
-			{"upstream gone", t.Warn, rep.UpstreamGone}, {"dropped", t.Err, rep.Dropped}} {
+		}{{i18n.M("changed"), t.Accent, rep.Changed}, {i18n.M("added"), t.OK, rep.Added}, {i18n.M("upstream new"), t.Cyan, rep.UpstreamNew},
+			{i18n.M("upstream gone"), t.Warn, rep.UpstreamGone}, {i18n.M("dropped"), t.Err, rep.Dropped}} {
 			if len(r.names) == 0 {
 				if r.label == "changed" || r.label == "added" || r.label == "upstream new" {
-					lines = append(lines, row(sg(fit(r.label, 14), r.fg), sg("—", t.Faint)))
+					lines = append(lines, row(sg(fit(i18n.T(r.label), 14), r.fg), sg("—", t.Faint)))
 				}
 				continue
 			}
-			lines = append(lines, row(sg(fit(r.label, 14), r.fg), sg(strings.Join(r.names, ", "), t.Text)))
+			lines = append(lines, row(sg(fit(i18n.T(r.label), 14), r.fg), sg(strings.Join(r.names, ", "), t.Text)))
 		}
 	}
 	lines = append(lines, row())
@@ -403,10 +433,10 @@ func (m Model) problem(w int) []string {
 	t, bg := m.theme, m.surf.panel
 	text := tildifyAll(ws[0])
 	if len(ws) > 1 {
-		text = fmt.Sprintf("%d problems (skd apply -n lists them) · %s", len(ws), text)
+		text = i18n.Sprintf("%d problems (skd apply -n lists them) · %s", len(ws), text)
 	}
 	var out []string
-	for i, l := range wrap(text+" · r reloads after a fix", w-4, 3) {
+	for i, l := range wrap(text+i18n.T(" · r reloads after a fix"), w-4, 3) {
 		mark := "   "
 		if i == 0 {
 			mark = " ! "
@@ -426,12 +456,12 @@ func (m Model) viewRight(w, h int) []string {
 	}
 	switch {
 	case r == nil && len(m.snap.Packs) == 0 && len(m.snap.Mine)+len(m.snap.Private)+len(m.snap.Apps) == 0:
-		out = append(out, row(), row(sgb("Your library is empty", t.Text)), row(),
-			row(sg("Press ", t.Muted), sgb("a", t.Accent), sg(" to subscribe to a repository of skills,", t.Muted)),
-			row(sg("for example mattpocock/skills or anthropics/skills.", t.Muted)), row(),
-			row(sg("Skills you write go in "+tildify(m.snap.Root)+"/skills/.", t.Faint)))
+		out = append(out, row(), row(sgb(i18n.T("Your library is empty"), t.Text)), row(),
+			row(sg(i18n.T("Press "), t.Muted), sgb(i18n.T("a"), t.Accent), sg(i18n.T(" to subscribe to a repository of skills,"), t.Muted)),
+			row(sg(i18n.T("for example mattpocock/skills or anthropics/skills."), t.Muted)), row(),
+			row(sg(i18n.Sprintf("Skills you write go in %s/skills/.", tildify(m.snap.Root)), t.Faint)))
 	case r == nil:
-		out = append(out, row(), row(sg("nothing selected", t.Muted)))
+		out = append(out, row(), row(sg(i18n.T("nothing selected"), t.Muted)))
 	case r.kind == rowSkill:
 		out = append(out, m.skillDetail(r.skill, w)...)
 	default:
@@ -459,14 +489,14 @@ func (m Model) packView(p Pack, w, h int) []string {
 	}
 	nameW = min(nameW, max(14, (w-8)*2/5))
 	catW = min(catW, max(8, (w-8)/4))
-	out = append(out, row(sg("    "+fit("SKILL", nameW)+"  "+fit("CATEGORY", catW)+"  AGENTS", t.Faint)))
+	out = append(out, row(sg("    "+fit(i18n.T("SKILL"), nameW)+"  "+fit(i18n.T("CATEGORY"), catW)+"  "+i18n.T("AGENTS"), t.Faint)))
 	lh := m.rightListHeight()
 	l := m.right
 	l.clamp(len(rows), lh)
 	if len(rows) == 0 {
-		msg := "no skills vendored yet · u fetches upstream"
+		msg := i18n.T("no skills vendored yet · u fetches upstream")
 		if m.filter[focusRight] != "" {
-			msg = "no match"
+			msg = i18n.T("no match")
 		}
 		out = append(out, row(sg("   "+msg, t.Faint)))
 	}
@@ -488,29 +518,31 @@ func (m Model) packView(p Pack, w, h int) []string {
 		var agents seg
 		switch {
 		case !sk.Installed:
-			agents = sg("not installed", t.Faint)
+			agents = sg(i18n.T("not installed"), t.Faint)
 		case sk.Conflict != "":
-			icon, nameFg, agents = sg("! ", t.Warn), t.Text, sg("name conflict · not linked", t.Warn)
+			icon, nameFg, agents = sg("! ", t.Warn), t.Text, sg(i18n.T("name conflict · not linked"), t.Warn)
 		case sk.Missing:
-			icon, nameFg, agents = sg("◉ ", t.Warn), t.Text, sg("missing from vendor/ · u re-fetches", t.Warn)
+			icon, nameFg, agents = sg("◉ ", t.Warn), t.Text, sg(i18n.T("missing from vendor/ · u re-fetches"), t.Warn)
 		case sk.Enabled():
 			icon, nameFg, agents = sg("◉ ", t.OK), t.Text, sg(strings.Join(sk.Agents, " "), t.Cyan)
 		default:
-			icon, nameFg, agents = sg("◉ ", t.Muted), t.Text, sg("off · in library", t.Muted)
+			icon, nameFg, agents = sg("◉ ", t.Muted), t.Text, sg(i18n.T("off · in library"), t.Muted)
 		}
 		// What the upstream check found for this skill.
 		var note seg
 		switch {
 		case sk.Installed && in(st.Changed, sk.Name):
-			note = sg("  ↑ changed", t.Accent)
+			note = sg(i18n.T("  ↑ changed"), t.Accent)
 		case sk.Installed && in(st.Gone, sk.Name):
-			note = sg("  gone upstream", t.Warn)
+			note = sg(i18n.T("  gone upstream"), t.Warn)
 		case sk.Installed && in(st.Moved, sk.Name):
-			note = sg("  moved upstream (path only)", t.Muted)
+			note = sg(i18n.T("  moved upstream (path only)"), t.Muted)
 		case !sk.Installed && in(st.New, sk.Name):
-			agents = sg("new upstream", t.Cyan)
+			agents = sg(i18n.T("new upstream"), t.Cyan)
 		case !sk.Installed && in(st.Pending, sk.Name):
-			agents = sg("selected · u vendors it", t.Muted)
+			agents = sg(i18n.T("selected · u vendors it"), t.Muted)
+		case sk.ClaudeOff:
+			note = sg(i18n.T("  off in Claude Code"), t.Warn)
 		}
 		cat := sk.Category
 		if cat == "" {
@@ -533,15 +565,18 @@ func (m Model) packView(p Pack, w, h int) []string {
 	out = out[:min(len(out), want)]
 	scroll := ""
 	if len(rows) > lh {
-		scroll = ansiRange(l.off, lh, len(rows)) + " · / filter"
+		scroll = ansiRange(l.off, lh, len(rows)) + i18n.T(" · / filter")
 	}
 	out = append(out, spread(w, bg, nil, []seg{sg(scroll, t.Faint), sg(" ", "")}))
 	desc := ""
 	if m.right.cur < len(rows) && len(rows) > 0 {
 		sk := rows[m.right.cur]
 		desc = sk.Description
+		if sk.ClaudeOff {
+			desc = i18n.T(claudeOffHelp) + " · " + desc
+		}
 		if sk.LinkName != sk.Name {
-			desc = "linked as " + sk.LinkName + " (upstream " + sk.Name + ") · " + desc
+			desc = i18n.Sprintf("linked as %s (upstream %s) · %s", sk.LinkName, sk.Name, desc)
 		}
 	}
 	d := wrap(desc, w-2, m.descLines())
@@ -558,22 +593,27 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 	t, bg := m.theme, m.surf.panel
 	row := func(segs ...seg) string { return paint(w, bg, append([]seg{sg(" ", "")}, segs...)...) }
 	kind := map[engine.Kind]string{
-		engine.KindSkill:   "your skill · skills/, published with the library",
-		engine.KindPrivate: "private · this machine only, never pushed",
-		engine.KindApp:     "app · shipped with " + sk.Origin,
+		engine.KindSkill:   i18n.T("your skill · skills/, published with the library"),
+		engine.KindPrivate: i18n.T("private · this machine only, never pushed"),
+		engine.KindApp:     i18n.Sprintf("app · shipped with %s", sk.Origin),
 	}[sk.Kind]
-	agents := []seg{sg("agents ", t.Faint)}
+	agents := []seg{sg(i18n.T("agents "), t.Faint)}
 	if sk.Enabled() {
 		agents = append(agents, sg(strings.Join(sk.Agents, " "), t.Cyan))
 	} else {
-		agents = append(agents, sg("off · kept in library", t.Muted))
+		agents = append(agents, sg(i18n.T("off · kept in library"), t.Muted))
 	}
 	out := []string{row(), row(sgb(sk.LinkName, t.Text)), row(sg(kind, t.Muted)), row(sg(tildify(sk.Dir), t.Faint)), row(agents...)}
 	if sk.Missing {
-		out = append(out, row(sg("source directory is missing", t.Warn)))
+		out = append(out, row(sg(i18n.T("source directory is missing"), t.Warn)))
+	}
+	if sk.ClaudeOff {
+		for _, l := range wrap(i18n.T(claudeOffHelp), w-2, 3) {
+			out = append(out, row(sg(l, t.Warn)))
+		}
 	}
 	if sk.Conflict != "" {
-		for _, l := range wrap("not linked: "+tildifyAll(sk.Conflict), w-2, 3) {
+		for _, l := range wrap(i18n.Sprintf("not linked: %s", tildifyAll(sk.Conflict)), w-2, 3) {
 			out = append(out, row(sg(l, t.Warn)))
 		}
 	}
@@ -582,16 +622,16 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 		out = append(out, row(sg(l, t.Text)))
 	}
 	out = append(out, row())
-	hints := "space toggle · e agents · d unlink"
+	hints := i18n.T("space toggle · e agents · d unlink · o open in your editor")
 	if sk.Kind == engine.KindApp {
-		hints += " · f fork"
-	}
-	if sk.Kind != engine.KindApp {
-		hints += " · edit in " + tildify(sk.Dir)
+		hints += i18n.T(" · f fork")
 	}
 	out = append(out, row(sg(hints, t.Faint)))
 	return out
 }
+
+// claudeOffHelp explains a skill Claude Code turned off.
+var claudeOffHelp = i18n.M("off in Claude Code (its own skill settings); skd still links it · e and untick claude keeps it out of Claude entirely")
 
 // wrap word-wraps plain text to w cells, at most n lines.
 func wrap(s string, w, n int) []string {
@@ -613,7 +653,7 @@ func wrap(s string, w, n int) []string {
 func (m Model) viewStatus() string {
 	t := m.theme
 	if m.busy == "" && m.check == checkRunning {
-		segs := []seg{sg(" checking upstream…", t.Accent)}
+		segs := []seg{sg(i18n.T(" checking upstream…"), t.Accent)}
 		if m.status != "" {
 			segs = append(segs, sg(" · "+m.status, t.Muted))
 		}
@@ -622,7 +662,7 @@ func (m Model) viewStatus() string {
 	if m.busy != "" {
 		note := m.busyNote
 		if m.quitAfter {
-			note = "quitting when it finishes · ctrl+c again to stop it now"
+			note = i18n.T("quitting when it finishes · ctrl+c again to stop it now")
 		}
 		segs := []seg{sg(" "+m.busy+"…", t.Accent)}
 		if note != "" {
@@ -640,10 +680,10 @@ func (m Model) viewStatus() string {
 
 func (m Model) viewKeys() string {
 	t := m.theme
-	keys := [][2]string{{"a", "add"}, {"u", "update"}, {"space", "toggle"}, {"e", "agents"}, {"f", "fork"}, {"d", "remove"},
-		{"n", "new"}, {"S", "scan"}, {"t", "trash"}, {"s", "sync"}, {"/", "filter"}, {"?", "help"}, {"q", "quit"}}
+	keys := [][2]string{{"a", i18n.M("add")}, {"u", i18n.M("update")}, {"space", i18n.M("toggle")}, {"e", i18n.M("agents")}, {"f", i18n.M("fork")}, {"d", i18n.M("remove")},
+		{"n", i18n.M("new")}, {"S", i18n.M("scan")}, {"t", i18n.M("trash")}, {"s", i18n.M("sync")}, {"/", i18n.M("filter")}, {"?", i18n.M("help")}, {"q", i18n.M("quit")}}
 	if m.filtering {
-		keys = [][2]string{{"enter", "keep filter"}, {"esc", "clear"}, {"↑↓", "move"}}
+		keys = [][2]string{{"enter", i18n.M("keep filter")}, {"esc", i18n.M("clear")}, {"↑↓", i18n.M("move")}}
 	}
 	// Drop the least important keys until the bar fits; help and quit
 	// always stay.
@@ -651,7 +691,7 @@ func (m Model) viewKeys() string {
 	for {
 		segs := []seg{sg(" ", "")}
 		for _, k := range keys {
-			segs = append(segs, sgb(k[0], t.Accent), sg(" "+k[1]+"  ", t.Muted))
+			segs = append(segs, sgb(k[0], t.Accent), sg(" "+i18n.T(k[1])+"  ", t.Muted))
 		}
 		if segWidth(segs) <= m.w || len(drop) == 0 || len(keys) <= 3 {
 			return paint(m.w, m.surf.bar, segs...)

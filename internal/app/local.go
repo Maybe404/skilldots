@@ -7,6 +7,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/manifest"
 )
 
@@ -28,8 +29,11 @@ func (s *Session) New(name string, private bool) (*NewOutcome, error) {
 		base = s.Lib.PrivateDir()
 	}
 	dir := filepath.Join(base, name)
+	if err := s.writableInLibrary(dir); err != nil {
+		return nil, err
+	}
 	if fsutil.Lexists(dir) {
-		return nil, fmt.Errorf("%s already exists", dir)
+		return nil, i18n.Errorf("%s already exists", dir)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -52,4 +56,16 @@ func NewKind(private bool) engine.Kind {
 		return engine.KindPrivate
 	}
 	return engine.KindSkill
+}
+
+// writableInLibrary reports why skd must not create dir, a new skill
+// directory in the library (new, fork, adopt): a symbolic link inside
+// the library on the way to it. A cloned library's skills/ (or private/)
+// can be a link to anywhere, and what skd writes there, a fork of
+// someone's vendored files included, would land wherever it points.
+func (s *Session) writableInLibrary(dir string) error {
+	if l := fsutil.LinkOnPath(s.Lib.Root, dir); l != "" {
+		return i18n.Errorf("%s goes through %s, a symbolic link inside the library; skd writes nothing through it (make it a directory of its own)", dir, l)
+	}
+	return nil
 }

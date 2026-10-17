@@ -3,12 +3,17 @@
 package lock
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"regexp"
 	"sort"
 
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 const FileName = "skills.lock"
@@ -58,7 +63,10 @@ func Load(path string) (*Lock, error) {
 		return nil, err
 	}
 	if err := toml.Unmarshal(b, l); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := checkText(b); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if l.Packs == nil {
 		l.Packs = map[string]*Pack{}
@@ -66,13 +74,63 @@ func Load(path string) (*Lock, error) {
 	if l.Links == nil {
 		l.Links = map[string]*Link{}
 	}
+	for _, repo := range sortedKeys(l.Packs) {
+		if p := l.Packs[repo]; p != nil && p.Commit != "" && !commitRE.MatchString(p.Commit) {
+			return nil, i18n.Errorf("%s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line", path, repo, p.Commit, FileName)
+		}
+	}
 	return l, nil
+}
+
+// commitRE is a commit as skd writes it: a hash, 7 to 64 hex digits
+// (SHA-1 or SHA-256). The commit is passed to git, so anything else, an
+// option such as --output=<file> above all, is refused when the lock is
+// read.
+var commitRE = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// known are the places of the lock skd reads.
+var known = []string{
+	"packs.*", "packs.*.commit", "packs.*.ref", "packs.*.upstream",
+	"packs.*.skills.*", "packs.*.skills.*.category", "packs.*.skills.*.hash",
+	"links.*", "links.*.mode", "links.*.source", "links.*.hash", "links.*.path",
+}
+
+// checkText refuses a lock holding control characters, bidi controls or
+// invalid UTF-8 in a place skd reads (known: pack and skill names,
+// categories, link records and their paths): skd writes none, and every
+// one of them ends up printed or used as a path, so the file was written
+// to attack a terminal. Places this version does not know (a newer
+// skd's fields) are refused only for an escape, BEL, DEL, C1, a bidi
+// control or invalid UTF-8, like the manifest's. Each place is named,
+// quoted so it prints safely.
+func checkText(b []byte) error {
+	raw := map[string]any{}
+	if err := toml.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	var errs []error
+	for _, p := range safetext.DocSchema(raw, known) {
+		errs = append(errs, i18n.Errorf("%s has control characters; restore the file (git checkout -- %s) or remove the line", p, FileName))
+	}
+	return errors.Join(errs...)
 }
 
 func (l *Lock) Save(path string) error {
 	b, err := toml.Marshal(l)
 	if err != nil {
 		return err
+	}
+	if err := checkText(b); err != nil {
+		return i18n.Errorf("not saving %s: %w", FileName, err)
 	}
 	return fsutil.WriteAtomic(path, append([]byte("# Written by skilldots. Do not edit.\n"), b...))
 }

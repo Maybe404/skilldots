@@ -4,7 +4,6 @@ package fsutil
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // Skip lists directory names never copied or hashed.
@@ -64,7 +65,7 @@ func HashTree(dir string) (string, error) {
 // decide what happens to whatever was there.
 func CopyTree(src, dst string) error {
 	if Lexists(dst) {
-		return fmt.Errorf("copy %s: %s already exists", src, dst)
+		return i18n.Errorf("copy %s: %s already exists", src, dst)
 	}
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -94,7 +95,7 @@ func CopyTree(src, dst string) error {
 // about to remove src never loses data silently.
 func CopyAll(src, dst string) error {
 	if Lexists(dst) {
-		return fmt.Errorf("copy %s: %s already exists", src, dst)
+		return i18n.Errorf("copy %s: %s already exists", src, dst)
 	}
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -118,14 +119,14 @@ func CopyAll(src, dst string) error {
 		case info.Mode().IsRegular():
 			return copyFile(p, target)
 		}
-		return fmt.Errorf("copy %s: cannot copy special file %s", src, p)
+		return i18n.Errorf("copy %s: cannot copy special file %s", src, p)
 	})
 }
 
 // CopyFile copies one regular file to dst, replacing a regular file there.
 func CopyFile(src, dst string) error {
 	if st, err := os.Lstat(dst); err == nil && !st.Mode().IsRegular() {
-		return fmt.Errorf("copy %s: %s exists and is not a regular file", src, dst)
+		return i18n.Errorf("copy %s: %s exists and is not a regular file", src, dst)
 	}
 	return copyFile(src, dst)
 }
@@ -179,7 +180,7 @@ func copyFile(src, dst string) error {
 	if st, err := os.Lstat(src); err != nil {
 		return err
 	} else if !st.Mode().IsRegular() {
-		return fmt.Errorf("copy %s: not a regular file", src)
+		return i18n.Errorf("copy %s: not a regular file", src)
 	}
 	in, err := os.Open(src)
 	if err != nil {
@@ -317,4 +318,76 @@ func WriteAtomic(path string, data []byte) error {
 		os.Remove(tmp) // our own temporary file, never the user's
 	}
 	return err
+}
+
+// Resolve is p with every symbolic link resolved: of its longest part
+// that exists, with the rest appended as it is.
+func Resolve(p string) string {
+	var rest []string
+	for {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return filepath.Join(append([]string{r}, rest...)...)
+		}
+		d := filepath.Dir(p)
+		if d == p {
+			return filepath.Join(append([]string{p}, rest...)...)
+		}
+		rest = append([]string{filepath.Base(p)}, rest...)
+		p = d
+	}
+}
+
+// SameDir reports whether a and b are the same place: the same path, or
+// both exist and are the same file (two spellings of one directory on a
+// file system that ignores case or Unicode normalisation, as macOS and
+// Windows do by default). Loose also counts paths that differ only in
+// case: use it only to refuse, never to allow.
+func SameDir(a, b string, loose bool) bool {
+	if a == b || (loose && strings.EqualFold(a, b)) {
+		return true
+	}
+	sa, err1 := os.Stat(a)
+	sb, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
+}
+
+// Inside reports whether p is dir or inside it, comparing p and each of
+// its parents with dir by SameDir. Both should be clean, absolute and
+// have their links resolved (Resolve).
+func Inside(dir, p string, loose bool) bool {
+	for {
+		if SameDir(p, dir, loose) {
+			return true
+		}
+		d := filepath.Dir(p)
+		if d == p {
+			return false
+		}
+		p = d
+	}
+}
+
+// LinkOnPath returns the first symbolic link on the way from root (not
+// included: the root itself may be reached through links) down to p
+// (included), or "" when there is none. p must be inside root lexically;
+// when it is not, p itself is returned. Parts that do not exist end the
+// walk: nothing below them can be a link yet.
+func LinkOnPath(root, p string) string {
+	root, p = filepath.Clean(root), filepath.Clean(p)
+	if !Within(root, p) {
+		return p
+	}
+	rel, _ := filepath.Rel(root, p)
+	q := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		q = filepath.Join(q, part)
+		st, err := os.Lstat(q)
+		if err != nil {
+			return ""
+		}
+		if st.Mode()&os.ModeSymlink != 0 {
+			return q
+		}
+	}
+	return ""
 }

@@ -1,0 +1,19 @@
+来源可以是 owner/repo、GitHub URL 或任意 git URL（@ref 固定分支或 tag）、skills.sh 的 skill 页面、指向 skill 目录（/tree/<ref>/<dir>）或其 SKILL.md（/blob/<ref>/…/SKILL.md）的 GitHub 链接，或者整条粘贴进来的安装命令（要加引号）：`npx skills add owner/repo --skill name`（bunx、pnpm dlx、npx add-skill 也行）。链接或 --skill 指明的 skill 会被预先选中；这段文字只会被读取，绝不会被执行。GitHub 链接里的 ref 会被忽略：想固定版本请追加 @ref。在终端里不给来源时，skd 会问你。
+
+用法：
+  skd add <owner/repo | url | pasted install command>[@ref] [flags]
+
+选项：
+      --agent strings      这个 pack 的 target（默认：清单里的默认值）
+      --alias string       pack 的简短别名
+      --all                跟随所有 skill，包括上游以后新增的
+      --category strings   选择某个分类下的所有 skill
+  -h, --help               add 的帮助
+  -s, --skill strings      要选择的 skill 名称（可重复）
+
+全局选项：
+      --json              机器可读的输出
+      --lang string       skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
+      --library skd use   库目录（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的库，或 ~/.skilldots）
+      --theme string      配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
+  -y, --yes               对所有提问回答"是"

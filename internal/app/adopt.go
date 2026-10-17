@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
@@ -54,7 +54,7 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 		e, err := engine.Lookup(entries, it.Name)
 		if err != nil {
 			seen[it.Name] = true
-			out = append(out, Proposal{Item: it, Kind: "skip", Label: err.Error() + "; enable one with skd enable <name> --agent " + it.Target})
+			out = append(out, Proposal{Item: it, Kind: "skip", Label: i18n.Sprintf("%v; enable one with skd enable <name> --agent %s", err, it.Target)})
 			continue
 		}
 		if e != nil {
@@ -66,28 +66,31 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 			if enabled {
 				continue
 			}
-			out = append(out, Proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target + " (already in library)", Entry: engine.Qualified(*e)})
+			out = append(out, Proposal{Item: it, Kind: "enable", Label: i18n.Sprintf("enable for %s (already in library)", it.Target), Entry: engine.Qualified(*e)})
 			continue
 		}
 		p := Proposal{Item: it}
 		switch {
 		case it.State == scan.Broken:
-			p.Kind, p.Label = "drop", "broken link; remove"
+			p.Kind, p.Label = "drop", i18n.T("broken link; move to the trash")
+		case manifest.CheckName(it.Name) != nil:
+			// It would become a directory and a link of that name.
+			p.Kind, p.Label = "skip", i18n.T("not a valid skill name (letters, digits, '.', '_' and '-'); rename it first")
 		case it.Duplicate:
-			p.Kind, p.Label = "skip", "same name with different content in several agents; resolve by hand"
+			p.Kind, p.Label = "skip", i18n.T("same name with different content in several agents; resolve by hand")
 		case it.State == scan.AppLink:
-			p.Kind, p.Label = "app", "app → "+it.LinkTo
+			p.Kind, p.Label = "app", i18n.Sprintf("app → %s", it.LinkTo)
 		case it.Source != "":
 			p.Kind, p.Repo, p.Skill = "pack", it.Source, it.Name
-			p.Label = "subscribe to " + it.Source
+			p.Label = i18n.Sprintf("subscribe to %s", it.Source)
 		case it.State == scan.ExtLink:
 			if repo := gitRemote(it.LinkTo); repo != "" {
-				p.Kind, p.Repo, p.Skill, p.Label = "pack", repo, it.Name, "subscribe to "+repo+" (link target is a clone of it)"
+				p.Kind, p.Repo, p.Skill, p.Label = "pack", repo, it.Name, i18n.Sprintf("subscribe to %s (link target is a clone of it)", repo)
 			} else {
-				p.Kind, p.Label = "own", "copy into skills/ as your own"
+				p.Kind, p.Label = "own", i18n.T("copy into skills/ as your own")
 			}
 		default:
-			p.Kind, p.Label = "own", "copy into skills/ as your own (no known upstream)"
+			p.Kind, p.Label = "own", i18n.T("copy into skills/ as your own (no known upstream)")
 		}
 		seen[it.Name] = true
 		out = append(out, p)
@@ -96,7 +99,7 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 	for _, it := range rep.Unmanaged() {
 		for _, p := range out {
 			if p.Item.Name == it.Name && p.Item.Target != it.Target && (p.Kind == "own" || p.Kind == "pack" || p.Kind == "app") {
-				out = append(out, Proposal{Item: it, Kind: "enable", Label: "enable for " + it.Target, Via: p.Kind, Repo: p.Repo, Skill: p.Skill})
+				out = append(out, Proposal{Item: it, Kind: "enable", Label: i18n.Sprintf("enable for %s", it.Target), Via: p.Kind, Repo: p.Repo, Skill: p.Skill})
 				break
 			}
 		}
@@ -186,6 +189,9 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				renamed[p.Item.Name] = name
 			}
 			dest := filepath.Join(lib.SkillsDir(), name)
+			if err := s.writableInLibrary(dest); err != nil {
+				return nil, err
+			}
 			if !fsutil.Lexists(dest) {
 				if err := fsutil.CopyTree(src, dest); err != nil {
 					return nil, err
@@ -193,9 +199,14 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				s.logf(Done, "copied %s → %s", p.Item.Name, lib.Rel(dest))
 			}
 		case "drop":
-			// A dangling link holds no data. The path may have changed since
+			// A dangling link holds only where it pointed. The path may have changed since
 			// the scan (a dialog can stay open for a while): anything that is
-			// not a dangling link any more is left alone.
+			// not a dangling link any more is left alone, and so is one of
+			// a target that no longer leads where it did.
+			if t, err := s.Reg.Get(p.Item.Target); err != nil || filepath.Dir(p.Item.Path) != t.Path || t.Intact() != nil {
+				s.logf(Warn, "%s: not removed; it is no longer an entry of the %s target's directory", p.Item.Path, p.Item.Target)
+				continue
+			}
 			if fi, err := os.Lstat(p.Item.Path); err != nil {
 				if !os.IsNotExist(err) {
 					s.logf(Warn, "%s: %v; not removing it", p.Item.Path, err)
@@ -208,10 +219,13 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				s.logf(Warn, "%s is no longer a broken link (it points at something now); left in place", p.Item.Path)
 				continue
 			}
-			if err := os.Remove(p.Item.Path); err != nil {
+			// Not made by skd (it is unmanaged): moved to the trash, link
+			// and all, like anything else skd takes out of the way.
+			to, err := engine.Trash(lib, p.Item.Path)
+			if err != nil {
 				return nil, err
 			}
-			s.logf(Done, "removed broken link %s", p.Item.Path)
+			s.logf(Done, "moved broken link %s to %s", p.Item.Path, lib.Rel(to))
 		}
 	}
 	out := &AdoptOutcome{}
@@ -239,6 +253,9 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 					src = p.Item.LinkTo
 				}
 				dest := filepath.Join(lib.SkillsDir(), n)
+				if err := s.writableInLibrary(dest); err != nil {
+					return nil, err
+				}
 				if fsutil.Lexists(dest) {
 					s.logf(Warn, "%s already exists; leaving it as is", lib.Rel(dest))
 					break
@@ -354,20 +371,21 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		if err != nil || lib.Lock.Links[t.Name+"/"+n] == nil || !fsutil.Lexists(filepath.Join(t.Path, n)) || !fsutil.Lexists(p.Item.Path) {
 			continue
 		}
+		// Only an entry of the target itself, while it leads where it did.
+		if filepath.Dir(p.Item.Path) != t.Path || t.Intact() != nil {
+			s.logf(Warn, "%s: not moved aside; it is no longer an entry of the %s target's directory", p.Item.Path, t.Name)
+			continue
+		}
 		to, err := engine.Trash(lib, p.Item.Path)
 		if err != nil {
 			return nil, err
-		}
-		if to == "" {
-			s.logf(Detail, "removed link %s (adopted as %s)", p.Item.Path, n)
-			continue
 		}
 		// Reported with the apply's own backups (printed once, after the
 		// link changes), not logged here as well.
 		ap.Backups = append(ap.Backups, p.Item.Path+" → "+lib.Rel(to))
 	}
 	if out.Failed > 0 {
-		return out, fmt.Errorf("%d repositories could not be fetched", out.Failed)
+		return out, i18n.Errorf("%d repositories could not be fetched", out.Failed)
 	}
 	return out, nil
 }

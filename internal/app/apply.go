@@ -22,6 +22,10 @@ type ApplyOutcome struct {
 	Changes []engine.Change `json:"changes"`
 	Kept    int             `json:"kept"`
 	Backups []string        `json:"backups,omitempty"`
+	// Refused lists "<path>: <why>" for planned changes not made because
+	// their target no longer led to the directory found (or approved)
+	// when the library was opened.
+	Refused []string `json:"refused,omitempty"`
 	// Plan is what was (or, for a dry run, would be) done.
 	Plan engine.Plan `json:"-"`
 }
@@ -54,7 +58,15 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 	}
 	plan := engine.MakePlanForce(s.Lib, entries, func(key string) bool { return o.Force || o.ForceKeys[key] })
 	out := &ApplyOutcome{DryRun: o.DryRun, Changes: plan.ChangeList(), Kept: plan.Counts()["keep"], Plan: plan}
-	if !plan.Changes() || o.DryRun {
+	if o.DryRun {
+		return out, nil
+	}
+	if err := s.Lib.Writable(); err != nil {
+		return out, err
+	}
+	if !plan.Changes() {
+		engine.Remember(s.Lib, plan)
+		s.settleApplyErrors(plan.Unlinked())
 		return out, nil
 	}
 	res, err := engine.Apply(s.Lib, plan)
@@ -63,11 +75,13 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 	}
 	if res != nil {
 		out.Backups = res.Backups
+		out.Refused = res.Refused
 	}
 	if err != nil {
 		return out, err
 	}
 	out.Applied = true
+	s.settleApplyErrors(plan.Unlinked())
 	return out, nil
 }
 

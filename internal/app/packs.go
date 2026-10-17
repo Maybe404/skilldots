@@ -1,14 +1,17 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/skillmd"
@@ -34,7 +37,7 @@ func (s *Session) ParseAdd(arg, alias string) (pack.Source, error) {
 
 func (s *Session) checkAlias(alias, repo string) error {
 	if engine.ReservedQualifier(alias) {
-		return fmt.Errorf("--alias %q is reserved (it names your own skills in skills:<name>); pick another", alias)
+		return i18n.Errorf("--alias %q is reserved (it names your own skills in skills:<name>); pick another", alias)
 	}
 	return s.Lib.Manifest.CheckAlias(alias, repo)
 }
@@ -121,7 +124,7 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 	var names []string
 	for _, n := range sel.Skills {
 		if pack.Find(f.Skills, n) == nil {
-			return nil, fmt.Errorf("no skill %q in %s (try `skd add %s` without --skill to browse)", n, src.Repo, src.Repo)
+			return nil, i18n.Errorf("no skill %q in %s (try `skd add %s` without --skill to browse)", n, src.Repo, src.Repo)
 		}
 		names = append(names, n)
 	}
@@ -134,7 +137,7 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 			}
 		}
 		if n == 0 {
-			return nil, fmt.Errorf("no category %q in %s (categories: %s)", cat, src.Repo, strings.Join(nonEmpty(pack.Categories(f.Skills)), ", "))
+			return nil, i18n.Errorf("no category %q in %s (categories: %s)", cat, src.Repo, strings.Join(nonEmpty(pack.Categories(f.Skills)), ", "))
 		}
 	}
 	names = dedupe(names)
@@ -169,7 +172,7 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 		if u := pack.Find(f.Skills, n); u != nil && !p.Selected(u.Name, u.Category) {
 			// Only skip entries naming the skill itself are taken out; a
 			// wildcard also excludes other skills, so the user decides.
-			return nil, fmt.Errorf("%s is excluded by skip = [%q] of %s in skills.toml, which excludes other skills too; "+
+			return nil, i18n.Errorf("%s is excluded by skip = [%q] of %s in skills.toml, which excludes other skills too; "+
 				"edit skills.toml: remove %q from that skip (or replace it with the names to keep out), then run skd update %s",
 				n, p.SkipPattern(u.Name, u.Category), p.Repo, p.SkipPattern(u.Name, u.Category), p.Repo)
 		}
@@ -237,6 +240,9 @@ type UpdateOutcome struct {
 	Apply   *ApplyOutcome
 	// Changed is set when any pack's vendored content or names changed.
 	Changed bool
+	// History are the records written to the history file (HistoryFile),
+	// one per pack that moved to a new commit or changed.
+	History []UpdateRecord
 }
 
 // Update fetches the named packs (every pack when none) and re-vendors
@@ -251,12 +257,14 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 	for _, r := range repos {
 		p := m.FindPack(r)
 		if p == nil {
-			return nil, fmt.Errorf("no pack %q", r)
+			return nil, i18n.Errorf("no pack %q", r)
 		}
 		packs = append(packs, p)
 	}
-	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}}
+	out := &UpdateOutcome{Reports: []*engine.SyncReport{}, Failed: []Failure{}, History: []UpdateRecord{}}
 	updated := map[string]string{}
+	var recs []*UpdateRecord
+	now := time.Now()
 	for _, p := range packs {
 		unlock := pack.Hold(p.Repo)
 		known := s.knownUpstream(p.Repo)
@@ -275,10 +283,35 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 		out.Reports = append(out.Reports, rep)
 		out.Changed = out.Changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped) > 0 || len(rep.Renamed) > 0
 		updated[p.Repo] = rep.NewCommit
+		if r := newRecord(rep, now); r != nil {
+			unlock := pack.Hold(p.Repo)
+			fillCommits(context.Background(), r, p.Ref, rep.Upstream)
+			unlock()
+			r.sanitize()
+			recs = append(recs, r)
+		}
 	}
-	ap, err := s.saveAndApply()
-	out.Apply = ap
-	if err == nil {
+	// Once the lock is saved the update has happened, and it is recorded
+	// even when linking fails (the record says so; skd apply finishes
+	// it). When the lock cannot be saved nothing is recorded: the next
+	// update starts from the old commit again and records it then.
+	err := s.Lib.Save()
+	saved := err == nil
+	if saved {
+		out.Apply, err = s.Apply(ApplyOptions{})
+		if err != nil {
+			for _, r := range recs {
+				// The history is a file of the library: English, whatever language is in use.
+				r.ApplyError = CleanText(i18n.English(err), MaxSubject)
+			}
+		}
+		if herr := s.appendHistory(recs); herr != nil {
+			s.logf(Warn, "could not write the update history (%s): %v", HistoryFile, herr)
+		} else {
+			for _, r := range recs {
+				out.History = append(out.History, *r)
+			}
+		}
 		// The updated packs now match upstream: `list` and the menu stop
 		// counting them.
 		if rerr := s.refreshRecorded(updated); rerr != nil {
@@ -394,7 +427,7 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 		return nil, err
 	}
 	if e.Kind != engine.KindVendor {
-		return nil, fmt.Errorf("%q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it", r.String(), e.Kind)
+		return nil, i18n.Errorf("%q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it", r.String(), e.Kind)
 	}
 	out := &RemoveOutcome{Entry: *e}
 	p := s.Lib.Manifest.FindPack(e.Origin)
@@ -447,7 +480,7 @@ func (s *Session) PurgeLinks(repo string) []string {
 func (s *Session) Purge(repo string) (*PurgeOutcome, error) {
 	p := s.Lib.Manifest.FindPack(repo)
 	if p == nil {
-		return nil, fmt.Errorf("no pack %q", repo)
+		return nil, i18n.Errorf("no pack %q", repo)
 	}
 	return s.purge(p, s.PurgeLinks(p.Repo))
 }
@@ -495,20 +528,29 @@ func (s *Session) Fork(r Ref, private bool, name string) (*ForkOutcome, error) {
 		return nil, err
 	}
 	if e.Kind != engine.KindVendor && e.Kind != engine.KindApp {
-		return nil, fmt.Errorf("%q is already yours (%s)", e.LinkName, e.Dir)
+		return nil, i18n.Errorf("%q is already yours (%s)", e.LinkName, e.Dir)
+	}
+	if e.Refused != "" {
+		return nil, i18n.Errorf("%q: %s; skd does not copy it", e.LinkName, e.Refused)
+	}
+	if e.LinkedVia != "" {
+		return nil, i18n.Errorf("%q: its directory goes through %s, a symbolic link inside the library; skd does not copy it", e.LinkName, s.Lib.Rel(e.LinkedVia))
 	}
 	if name == "" {
 		name = e.LinkName
 	} else if err := manifest.CheckName(name); err != nil {
-		return nil, fmt.Errorf("--as: %w", err)
+		return nil, i18n.Errorf("--as: %w", err)
 	}
 	base := s.Lib.SkillsDir()
 	if private {
 		base = s.Lib.PrivateDir()
 	}
 	dest := filepath.Join(base, name)
+	if err := s.writableInLibrary(dest); err != nil {
+		return nil, err
+	}
 	if fsutil.Lexists(dest) {
-		return nil, fmt.Errorf("%s already exists", dest)
+		return nil, i18n.Errorf("%s already exists", dest)
 	}
 	if err := fsutil.CopyTree(e.Dir, dest); err != nil {
 		return nil, err

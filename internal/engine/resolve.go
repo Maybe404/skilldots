@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/skillmd"
@@ -47,9 +49,20 @@ type Entry struct {
 	UnknownTargets []string `json:",omitempty"`
 	// Missing is set when the source dir is absent (e.g. not vendored yet).
 	Missing bool
+	// LinkedVia is the symbolic link inside the library on the way to Dir,
+	// if any: skd neither links nor copies such a skill (its files are
+	// wherever the link points, outside the library).
+	LinkedVia string `json:",omitempty"`
+	// Refused says why skd neither links nor copies an app's skill
+	// (CheckAppDir), "" when it does.
+	Refused string `json:",omitempty"`
 	// Conflict is set when another entry wants the same LinkName. Neither
 	// is linked until the clash is resolved; existing links stay as they are.
 	Conflict string `json:",omitempty"`
+	// ClaudeDisabled is set when the skill is turned off inside Claude Code
+	// (skillOverrides in its settings); skd still links it. Filled in by
+	// app.Session.Resolve.
+	ClaudeDisabled bool
 }
 
 // Resolve computes every entry declared by the library. Problems confined
@@ -59,11 +72,25 @@ type Entry struct {
 func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, error) {
 	out, warnings := collect(lib)
 
-	unknown := map[string][]string{}
+	unknown, withheld, linked := map[string][]string{}, map[string][]string{}, map[string][]string{}
 	for i := range out {
 		e := &out[i]
-		if _, err := os.Stat(e.Dir); err != nil {
+		if e.Kind != KindApp {
+			if l := sourceLink(lib, e.Dir); l != "" {
+				e.LinkedVia = l
+				linked[l] = append(linked[l], e.LinkName)
+			}
+		}
+		if e.Kind == KindApp && !filepath.IsAbs(e.Dir) {
+			// Checked before anything is looked up: a relative path would
+			// be read from wherever skd runs.
+			e.Refused = CheckAppDir(e.Dir).Error()
+			warnings = append(warnings, i18n.Sprintf("[[app]] %s: %s; skipped", e.Name, e.Refused))
+		} else if _, err := os.Stat(e.Dir); err != nil {
 			e.Missing = true
+		} else if e.Kind == KindApp && CheckAppDir(e.Dir) != nil {
+			e.Refused = CheckAppDir(e.Dir).Error()
+			warnings = append(warnings, i18n.Sprintf("[[app]] %s: %s; skipped", e.Name, e.Refused))
 		} else if e.Description == "" {
 			if meta, err := skillmd.Read(e.Dir); err == nil {
 				e.Description = meta.Description
@@ -73,15 +100,34 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 			t, err := reg.Get(n)
 			if err != nil {
 				e.UnknownTargets = append(e.UnknownTargets, n)
-				unknown[n] = append(unknown[n], e.LinkName)
+				if _, held := reg.WithheldTarget(n); held {
+					withheld[n] = append(withheld[n], e.LinkName)
+				} else {
+					unknown[n] = append(unknown[n], e.LinkName)
+				}
 				continue
 			}
 			e.Targets = append(e.Targets, t)
 		}
 	}
+	for _, l := range sortedKeys(linked) {
+		warnings = append(warnings, i18n.Sprintf("%s in the library is a symbolic link; skd does not link or copy skills through it (skipped: %s); make it a directory of its own",
+			lib.Rel(l), strings.Join(linked[l], ", ")))
+	}
 	for _, n := range sortedKeys(unknown) {
-		warnings = append(warnings, fmt.Sprintf("unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name",
+		warnings = append(warnings, i18n.Sprintf("unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name",
 			n, strings.Join(unknown[n], ", ")))
+	}
+	// A custom target skd does not use (not approved here, in a place it
+	// never writes, or named like a built-in one) is said every time,
+	// used or not: it may be how someone else's library tried to write
+	// outside the agents' directories.
+	for _, w := range reg.Withheld() {
+		msg := i18n.Sprintf("custom target %q in skills.toml is not used: %s", w.Name, w.Problem)
+		if used := withheld[w.Name]; len(used) > 0 {
+			msg += i18n.Sprintf(" (skipped for %s)", strings.Join(used, ", "))
+		}
+		warnings = append(warnings, msg)
 	}
 
 	warnings = append(warnings, markConflicts(out)...)
@@ -97,7 +143,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 	var warnings []string
 	for _, l := range m.Locals {
 		if err := manifest.CheckName(l.Name); err != nil {
-			warnings = append(warnings, fmt.Sprintf("[[local]] %v; ignored", err))
+			warnings = append(warnings, i18n.Sprintf("[[local]] %v; ignored", err))
 		}
 	}
 
@@ -105,12 +151,12 @@ func collect(lib *library.Library) ([]Entry, []string) {
 		packTargets := inherit(m.Targets.Default, p.Targets)
 		dir, err := PackDir(lib, p.Repo)
 		if err != nil {
-			warnings = append(warnings, err.Error()+"; skipped")
+			warnings = append(warnings, i18n.Sprintf("%v; skipped", err))
 			continue
 		}
 		lp := lib.Lock.Packs[p.Repo]
 		if lp == nil {
-			warnings = append(warnings, fmt.Sprintf("pack %s is in skills.toml but has not been fetched; run `skd update %s`", p.Repo, p.Repo))
+			warnings = append(warnings, i18n.Sprintf("pack %s is in skills.toml but has not been fetched; run `skd update %s`", p.Repo, p.Repo))
 			continue
 		}
 		names := make([]string, 0, len(lp.Skills))
@@ -125,7 +171,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 			}
 			sd, err := skillDir(dir, ls.Category, name)
 			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("pack %s: skill %q in skills.lock: %v; skipped", p.Repo, name, err))
+				warnings = append(warnings, i18n.Sprintf("pack %s: skill %q in skills.lock: %v; skipped", p.Repo, name, err))
 				continue
 			}
 			e := Entry{Name: name, LinkName: name, Kind: KindVendor, Origin: p.Repo, Category: ls.Category,
@@ -133,7 +179,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 			if o := p.Override(name, false); o != nil {
 				if o.As != "" {
 					if err := manifest.CheckName(o.As); err != nil {
-						warnings = append(warnings, fmt.Sprintf("pack %s: as for %s: %v; skipped", p.Repo, name, err))
+						warnings = append(warnings, i18n.Sprintf("pack %s: as for %s: %v; skipped", p.Repo, name, err))
 						continue
 					}
 					e.LinkName = o.As
@@ -146,7 +192,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 
 	for _, a := range m.Apps {
 		if err := manifest.CheckName(a.Name); err != nil {
-			warnings = append(warnings, fmt.Sprintf("[[app]] %v; skipped", err))
+			warnings = append(warnings, i18n.Sprintf("[[app]] %v; skipped", err))
 			continue
 		}
 		home, _ := os.UserHomeDir()
@@ -169,7 +215,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 			}
 			meta, _ := skillmd.Read(d)
 			if err := manifest.CheckName(meta.Name); err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s: SKILL.md %v; skipped", lib.Rel(d), err))
+				warnings = append(warnings, i18n.Sprintf("%s: SKILL.md %v; skipped", lib.Rel(d), err))
 				continue
 			}
 			e := Entry{Name: meta.Name, LinkName: meta.Name, Kind: kind.kind, Dir: d, Description: meta.Description,
@@ -225,11 +271,11 @@ func markConflicts(entries []Entry) []string {
 		for _, i := range idx {
 			who = append(who, fmt.Sprintf("%s (%s)", Describe(entries[i]), entries[i].Dir))
 		}
-		msg := fmt.Sprintf("%q is provided by %s", entries[idx[0]].LinkName, strings.Join(who, " and "))
+		msg := i18n.Sprintf("%q is provided by %s", entries[idx[0]].LinkName, strings.Join(who, i18n.T(" and ")))
 		for _, i := range idx {
 			entries[i].Conflict = msg
 		}
-		warnings = append(warnings, msg+"; neither is linked until one is renamed (set `as` under [pack.skill.<name>] in skills.toml, or rename your own skill)")
+		warnings = append(warnings, i18n.Sprintf("%s; neither is linked until one is renamed (set `as` under [pack.skill.<name>] in skills.toml, or rename your own skill)", msg))
 	}
 	return warnings
 }
@@ -353,8 +399,48 @@ func Lookup(entries []Entry, key string) (*Entry, error) {
 			for _, e := range hits {
 				c = append(c, Qualified(*e))
 			}
-			return nil, fmt.Errorf("%q matches several skills; name one of: %s", key, strings.Join(c, ", "))
+			return nil, i18n.Errorf("%q matches several skills; name one of: %s", key, strings.Join(c, ", "))
 		}
 	}
 	return nil, nil
+}
+
+// CheckAppDir reports why skd does not link or copy the app skill at
+// dir. skills.toml names an app's directory and may come from someone
+// else (skd clone): an [[app]] path = "~/.ssh" would have skd link the
+// keys into every agent's directory, or copy them, 0600 files and all,
+// into a copy target. So the directory must hold SKILL.md as a regular
+// file (not a link: one could lead anywhere), as every skill does, and
+// must not be, be inside or hold a place of keys and credentials
+// (targets.SecretDirs). Links on the way are resolved first.
+//
+// The path must be absolute (after ~ is expanded): a relative one is
+// read from wherever skd runs, and a link to it would be read from the
+// agent's directory, so the checks and the link would not agree on
+// which directory it is.
+func CheckAppDir(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return i18n.New("its path is not absolute (write it in full, or starting with ~/)")
+	}
+	st, err := os.Lstat(filepath.Join(dir, "SKILL.md"))
+	switch {
+	case os.IsNotExist(err):
+		return i18n.Errorf("%s has no SKILL.md, so it is not a skill", dir)
+	case err != nil:
+		return err
+	case !st.Mode().IsRegular():
+		return i18n.Errorf("%s/SKILL.md is not a regular file", dir)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	real := fsutil.Resolve(dir)
+	for _, s := range targets.SecretDirs(home) {
+		s = fsutil.Resolve(s)
+		if fsutil.Inside(s, real, true) || fsutil.Inside(real, s, true) {
+			return i18n.Errorf("%s is, is inside or holds %s, a place of keys and credentials", dir, s)
+		}
+	}
+	return nil
 }

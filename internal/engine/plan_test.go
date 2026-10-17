@@ -8,7 +8,6 @@ import (
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/lock"
-	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // TestMakePlanTable covers the plan decision for every combination that
@@ -17,12 +16,13 @@ import (
 // each plan is applied, a directory holding user data must still exist,
 // either in place or in the trash.
 func TestMakePlanTable(t *testing.T) {
-	type paths struct{ src, oldSrc, movedSrc string }
+	type paths struct{ src, oldSrc, movedSrc, goneSrc string }
 	var (
 		absent  = func(paths, string) {}
 		toSrc   = func(p paths, d string) { os.Symlink(p.src, d) }
 		toOld   = func(p paths, d string) { os.Symlink(p.oldSrc, d) }
 		toMoved = func(p paths, d string) { os.Symlink(p.movedSrc, d) }
+		toGone  = func(p paths, d string) { os.Symlink(p.goneSrc, d) }
 		toElse  = func(p paths, d string) { os.Symlink("/elsewhere", d) }
 		userDir = func(p paths, d string) {
 			writeSkill(t, d, "s")
@@ -63,17 +63,29 @@ func TestMakePlanTable(t *testing.T) {
 		{"ours, replaced by dir", false, true, link("skills/s"), userDir, "skip", "replace", "modified"},
 		{"ours, gone", false, true, link("skills/s"), absent, "create", "create", ""},
 		{"library moved", false, true, link("skills/s"), toMoved, "replace", "replace", "previous library location"},
+		{"library moved, old location gone", false, true, link("skills/s"), toGone, "replace", "replace", "previous library location"},
 		{"copy, pristine", true, true, copyPrev, copyOf, "keep", "keep", ""},
 		{"copy, edited", true, true, copyPrev, edited, "skip", "replace", "modified"},
 		{"undesired, current", false, false, link("skills/s"), toSrc, "remove", "remove", ""},
 		{"undesired, gone", false, false, link("skills/s"), absent, "remove", "remove", "already gone"},
-		{"undesired, replaced by dir", false, false, link("skills/s"), userDir, "skip", "remove", "modified"},
-		{"undesired, library moved", false, false, link("skills/s"), toMoved, "remove", "remove", "previous library location"},
+		{"undesired, replaced by dir", false, false, link("skills/s"), userDir, "skip", "skip", "cannot tell it made it"},
+		{"undesired, relinked elsewhere", false, false, link("skills/s"), toElse, "skip", "skip", "cannot tell it made it"},
+		{"undesired, record escapes the library", false, false, link("../s"), userDir, "skip", "skip", "cannot tell it made it"},
+		// Not in skd's placed record: the record's hash may be forged.
+		{"undesired copy, pristine", true, false, copyPrev, copyOf, "skip", "skip", "cannot tell it made it"},
+		{"undesired copy, edited", true, false, copyPrev, edited, "skip", "skip", "cannot tell it made it"},
+		// Not in skd's placed record: source = 'dot' makes the user's own
+		// mine -> dot look like one; it is left alone, unless it leads
+		// nowhere (it then holds no data).
+		{"undesired, library moved", false, false, link("skills/s"), toMoved, "skip", "skip", "cannot tell it made it"},
+		{"undesired, library moved, old location gone", false, false, link("skills/s"), toGone, "remove", "remove", "previous library location"},
+		{"undesired, relative link to a gone location", false, false, link("skills/s"), func(p paths, d string) { os.Symlink("../../gone-library/skills/s", d) }, "skip", "skip", "cannot tell it made it"},
+		{"undesired, gone location, source outside the skill folders", false, false, link("x/s"), func(p paths, d string) { os.Symlink(filepath.Join(filepath.Dir(p.goneSrc), "..", "x", "s"), d) }, "skip", "skip", "cannot tell it made it"},
 	}
 	for _, tc := range cases {
 		for _, force := range []bool{false, true} {
 			lib, _, home := newTestLib(t)
-			reg, _ := targets.NewRegistry(map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
+			reg := customRegistry(t, map[string]struct{ Path, Mode string }{"box": {Path: filepath.Join(home, "box"), Mode: "copy"}})
 			SetRegistry(reg)
 			target, dir := "agents", filepath.Join(home, ".agents", "skills")
 			if tc.copy {
@@ -84,7 +96,7 @@ func TestMakePlanTable(t *testing.T) {
 				lib.Manifest.Targets.Default = []string{}
 			}
 			p := paths{src: filepath.Join(lib.Root, "skills", "s"), oldSrc: filepath.Join(lib.Root, "old", "s"),
-				movedSrc: filepath.Join(home, "previous-library", "skills", "s")}
+				movedSrc: filepath.Join(home, "previous-library", "skills", "s"), goneSrc: filepath.Join(home, "gone-library", "skills", "s")}
 			writeSkill(t, p.src, "s")
 			writeSkill(t, p.oldSrc, "s")
 			writeSkill(t, p.movedSrc, "s")

@@ -5,8 +5,8 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -15,7 +15,31 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Maybe404/skilldots/internal/i18n"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
+
+// termOut and termErr are what the dashboard prints on the terminal
+// outside its screen (after it closed: how a job ended, what skd waits
+// for). A job's label can name a trash entry or a pack, so this text is
+// cleaned like the screen is (View): no escape sequence, control
+// character or bidi control of its own reaches the terminal.
+var (
+	termOut io.Writer = cleanWriter{os.Stdout}
+	termErr io.Writer = cleanWriter{os.Stderr}
+)
+
+// cleanWriter writes each Write (one whole message) cleaned by
+// safetext.Screen, without colour: the messages have none.
+type cleanWriter struct{ w io.Writer }
+
+func (c cleanWriter) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(c.w, safetext.Screen(string(p), false)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
 
 // MinWidth is the narrowest terminal the dashboard is offered on; the CLI
 // falls back to the question-and-answer menu below it.
@@ -88,16 +112,16 @@ func runDashboard(p program, m Model, sigs, hup <-chan os.Signal, stop func() er
 	}()
 	final, err := p.Run()
 	close(ran)
-	label := "the running operation"
+	label := i18n.T("the running operation")
 	force := false
 	if <-hungUp {
-		err = errors.New("the terminal hung up")
+		err = i18n.New("the terminal hung up")
 		force = true
 	}
 	if fm, ok := final.(Model); ok {
 		if fm.quitAfter && fm.status != "" {
 			// ctrl+c during a job: say how it ended.
-			fmt.Println(statusText(fm.statusLvl, fm.status))
+			fmt.Fprintln(termOut, statusText(fm.statusLvl, fm.status))
 		}
 		if fm.busy != "" {
 			label = fm.busy
@@ -108,7 +132,7 @@ func runDashboard(p program, m Model, sigs, hup <-chan os.Signal, stop func() er
 	// wait for a slow network, and wait just long enough for its git to
 	// exit (it removes its lock files on the way out).
 	if !m.checks.stop(checkGrace) {
-		fmt.Fprintln(os.Stderr, "skd: the upstream check did not stop in time; its git may still be running")
+		fmt.Fprintln(termErr, i18n.T("skd: the upstream check did not stop in time; its git may still be running"))
 	}
 	if werr := waitJobs(m.jobs, label, sigs, force, stop); werr != nil {
 		return werr
@@ -172,22 +196,22 @@ drain: // signals delivered while the dashboard ran already made it quit
 	default:
 	}
 	if !force {
-		fmt.Fprintf(os.Stderr, "skd: waiting for %s to finish… (ctrl+c again to stop it now)\n", label)
+		i18n.Fprintf(termErr, "skd: waiting for %s to finish… (ctrl+c again to stop it now)\n", label)
 		select {
 		case <-idle:
 			return nil
 		case <-sigs:
 		}
 	}
-	fmt.Fprintf(os.Stderr, "skd: stopping %s…\n", label)
+	i18n.Fprintf(termErr, "skd: stopping %s…\n", label)
 	if err := stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "skd: could not stop its processes: %v\n", err)
+		i18n.Fprintf(termErr, "skd: could not stop its processes: %v\n", err)
 	}
 	select {
 	case <-idle:
 	case <-time.After(stopGrace):
 	}
-	return fmt.Errorf("stopped %s before it finished; run `skd` again to check the library (`git status` in it shows what was left half-way)", label)
+	return i18n.Errorf("stopped %s before it finished; run `skd` again to check the library (`git status` in it shows what was left half-way)", label)
 }
 
 func statusText(l level, s string) string {

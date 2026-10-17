@@ -4,7 +4,6 @@ package pack
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,8 +14,10 @@ import (
 	"time"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/skillmd"
 )
 
@@ -36,6 +37,14 @@ var ghShort = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 func ParseSource(s string) (Source, error) {
 	src := Source{}
 	s = strings.TrimSpace(s)
+	// It becomes the pack's name, printed by every command.
+	if safetext.Has(s) {
+		return src, i18n.Errorf("source %q has control characters: not a repository", s)
+	}
+	// git would take a leading "-" as an option (--upload-pack=…).
+	if strings.HasPrefix(s, "-") {
+		return src, i18n.Errorf("source %q starts with \"-\": not a repository", s)
+	}
 	if i := strings.LastIndex(s, "@"); i > 0 && !strings.Contains(s[i:], "/") && !strings.HasPrefix(s, "git@") {
 		src.Ref = s[i+1:]
 		s = s[:i]
@@ -44,6 +53,9 @@ func ParseSource(s string) (Source, error) {
 			src.Ref = s[i+1:]
 			s = s[:i]
 		}
+	}
+	if strings.HasPrefix(src.Ref, "-") {
+		return src, i18n.Errorf("ref %q starts with \"-\": not a branch or tag", src.Ref)
 	}
 	s = strings.TrimPrefix(s, "github:")
 	s = strings.TrimSuffix(s, "/")
@@ -55,7 +67,7 @@ func ParseSource(s string) (Source, error) {
 		p := strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
 		parts := strings.Split(strings.TrimPrefix(p, "github.com/"), "/")
 		if len(parts) < 2 {
-			return src, fmt.Errorf("cannot parse GitHub URL %q", s)
+			return src, i18n.Errorf("cannot parse GitHub URL %q", s)
 		}
 		src.Repo = parts[0] + "/" + strings.TrimSuffix(parts[1], ".git")
 		src.URL = "https://github.com/" + src.Repo + ".git"
@@ -71,7 +83,7 @@ func ParseSource(s string) (Source, error) {
 		}
 		p = strings.TrimSuffix(strings.ReplaceAll(p, ":", "/"), ".git")
 		if !strings.Contains(p, "/") {
-			return src, fmt.Errorf("unrecognised source %q", s)
+			return src, i18n.Errorf("unrecognised source %q", s)
 		}
 		src.Repo = p
 		src.URL = s
@@ -80,8 +92,23 @@ func ParseSource(s string) (Source, error) {
 }
 
 // CachePath is the clone location for a repo key.
+// The repo key comes from skills.toml and may be anything: both
+// separators become "__", so the clone is always one entry of the cache
+// directory (a failed clone is removed, and must never be anything else).
 func CachePath(repo string) string {
-	return filepath.Join(library.CacheDir(), strings.ReplaceAll(repo, "/", "__"))
+	return filepath.Join(library.CacheDir(), cacheName(repo))
+}
+
+// cacheName is the name of repo's entry in the cache directory: no
+// separator of any system ("/", and "\" which only Windows takes for
+// one, so a test on another system checks the name, not the path), and
+// never "" or a dot entry.
+func cacheName(repo string) string {
+	name := strings.NewReplacer("/", "__", `\`, "__").Replace(repo)
+	if name == "" || name == "." || name == ".." {
+		name = "_" + name
+	}
+	return name
 }
 
 var (
@@ -180,13 +207,14 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 			return "", "", err
 		}
-		args := []string{"clone", "-q", "--depth", "1"}
-		if src.Ref != "" {
-			args = append(args, "--branch", src.Ref)
-		}
-		args = append(args, src.URL, dir)
-		if _, err := library.GitContext(ctx, "", args...); err != nil {
-			os.RemoveAll(dir)
+		if _, err := library.GitContext(ctx, "", cloneArgs(src, dir)...); err != nil {
+			// CachePath already keeps dir one entry of the cache; this is
+			// a second guard (no test can reach it while CachePath holds)
+			// so a future change there cannot turn a failed clone into
+			// removing anything else.
+			if fsutil.Within(library.CacheDir(), dir) {
+				os.RemoveAll(dir) // a clone git left half done, in skd's cache
+			}
 			return "", "", err
 		}
 	} else {
@@ -195,7 +223,7 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			ref = "HEAD"
 		}
 		update := func() error {
-			if _, err := library.GitContext(ctx, dir, "fetch", "-q", "--depth", "1", "origin", ref); err != nil {
+			if _, err := library.GitContext(ctx, dir, fetchArgs(ref)...); err != nil {
 				return err
 			}
 			_, err := library.GitContext(ctx, dir, "reset", "-q", "--hard", "FETCH_HEAD")
@@ -218,6 +246,20 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 	}
 	commit, err = library.GitContext(ctx, dir, "rev-parse", "HEAD")
 	return dir, commit, err
+}
+
+// cloneArgs and fetchArgs are the git arguments of Fetch. "--" ends the
+// options: nothing after it is one, whatever the URL or ref says.
+func cloneArgs(src Source, dir string) []string {
+	args := []string{"clone", "-q", "--depth", "1"}
+	if src.Ref != "" {
+		args = append(args, "--branch", src.Ref)
+	}
+	return append(args, "--", src.URL, dir)
+}
+
+func fetchArgs(ref string) []string {
+	return []string{"fetch", "-q", "--depth", "1", "--", "origin", ref}
 }
 
 // staleAge is how old a git lock file must be to count as left behind: git
@@ -329,7 +371,9 @@ type Rejected struct {
 	Reason string `json:"reason"`
 }
 
-func (r Rejected) String() string { return r.Dir + ": " + r.Reason }
+// String is r for a person: the directory is upstream's and may hold
+// anything, so it is cleaned (safetext) like the rest.
+func (r Rejected) String() string { return safetext.Clean(r.Dir+": "+r.Reason, 0) }
 
 // testDirs are never scanned: fixtures routinely contain throwaway skills.
 var testDirs = map[string]bool{"test": true, "tests": true, "testdata": true, "fixtures": true, "__fixtures__": true, "__tests__": true}
@@ -372,16 +416,16 @@ func Scan(root string) (skills []Skill, rejected []Rejected, err error) {
 		}
 		rel, _ := filepath.Rel(root, d)
 		if meta.EmptyName {
-			rejected = append(rejected, Rejected{Name: "", Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter name is empty"})
+			rejected = append(rejected, Rejected{Name: "", Dir: filepath.ToSlash(rel), Reason: i18n.T("skipped: frontmatter name is empty")})
 			continue
 		}
 		if err := manifest.CheckName(meta.Name); err != nil {
-			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: frontmatter " + err.Error()})
+			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: i18n.Sprintf("skipped: frontmatter %v", err)})
 			continue
 		}
 		cat := Category(filepath.ToSlash(rel))
 		if err := manifest.CheckCategory(cat); err != nil {
-			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: "skipped: " + err.Error()})
+			rejected = append(rejected, Rejected{Name: meta.Name, Dir: filepath.ToSlash(rel), Reason: i18n.Sprintf("skipped: %v", err)})
 			continue
 		}
 		if _, ok := byName[meta.Name]; !ok {
@@ -448,7 +492,7 @@ func dropNested(root string, skills []Skill, rejected []Rejected) ([]Skill, []Re
 		}
 		rel, _ := filepath.Rel(root, s.Dir)
 		rejected = append(rejected, Rejected{Name: s.Name, Dir: filepath.ToSlash(rel),
-			Reason: fmt.Sprintf("skipped: its category %q would place it inside the directory of skill %q", s.Category, clash)})
+			Reason: i18n.Sprintf("skipped: its category %q would place it inside the directory of skill %q", s.Category, clash)})
 	}
 	return out, rejected
 }
@@ -472,7 +516,7 @@ func dropCaseClashes(root string, skills []Skill, rejected []Rejected) ([]Skill,
 		}
 		rel, _ := filepath.Rel(root, s.Dir)
 		rejected = append(rejected, Rejected{Name: s.Name, Dir: filepath.ToSlash(rel),
-			Reason: fmt.Sprintf("skipped: name differs only in case from %q (they would overwrite each other on case-insensitive file systems)", out[i].Name)})
+			Reason: i18n.Sprintf("skipped: name differs only in case from %q (they would overwrite each other on case-insensitive file systems)", out[i].Name)})
 	}
 	return out, rejected
 }

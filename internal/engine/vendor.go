@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -48,9 +49,20 @@ type SyncReport struct {
 func PackDir(lib *library.Library, repo string) (string, error) {
 	d := lib.PackDir(repo)
 	if !fsutil.Within(lib.VendorDir(), d) {
-		return "", fmt.Errorf("pack %q would be vendored at %s, outside %s", repo, d, lib.VendorDir())
+		return "", i18n.Errorf("pack %q would be vendored at %s, outside %s", repo, d, lib.VendorDir())
 	}
 	return d, nil
+}
+
+// throughLink is an error when p, a place in the library's vendor/, is
+// reached through a symbolic link inside the library (vendor/ itself, a
+// pack's directory, a category): skd would write, move or remove
+// wherever that link points. The library root itself may be a link.
+func throughLink(lib *library.Library, p string) error {
+	if l := fsutil.LinkOnPath(lib.Root, p); l != "" {
+		return i18n.Errorf("%s goes through %s, a symbolic link inside the library; skd does not follow it (make it a directory of its own)", lib.Rel(p), lib.Rel(l))
+	}
+	return nil
 }
 
 // skillDir is where one vendored skill lives, validated to stay inside packDir.
@@ -63,7 +75,7 @@ func skillDir(packDir, category, name string) (string, error) {
 	}
 	d := filepath.Join(packDir, filepath.FromSlash(category), name)
 	if !fsutil.Within(packDir, d) {
-		return "", fmt.Errorf("%s is outside %s", d, packDir)
+		return "", i18n.Errorf("%s is outside %s", d, packDir)
 	}
 	return d, nil
 }
@@ -74,6 +86,20 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	packDir, err := PackDir(lib, p.Repo)
 	if err != nil {
 		return nil, err
+	}
+	// Nothing below is written, moved or removed through a link inside
+	// the library (vendor/, the pack's directory, a category): not in the
+	// directory of any skill the lock records (renamed, replaced or
+	// dropped below), nor in that of any skill vendored (checked as it
+	// comes).
+	if lp := lib.Lock.Packs[p.Repo]; lp != nil {
+		for _, n := range sortedKeys(lp.Skills) {
+			if d, err := skillDir(packDir, lp.Skills[n].Category, n); err == nil {
+				if err := throughLink(lib, d); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 	src, err := pack.ParseSource(p.Repo)
 	if err != nil {
@@ -91,9 +117,9 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	}
 	if len(upstream) == 0 {
 		if len(rejected) > 0 {
-			return nil, fmt.Errorf("%s: no usable SKILL.md (%s)", p.Repo, rejected[0])
+			return nil, i18n.Errorf("%s: no usable SKILL.md (%s)", p.Repo, rejected[0])
 		}
-		return nil, fmt.Errorf("%s: no SKILL.md found", p.Repo)
+		return nil, i18n.Errorf("%s: no SKILL.md found", p.Repo)
 	}
 
 	rep := &SyncReport{Repo: p.Repo, NewCommit: commit, Upstream: upstream, Rejected: rejected}
@@ -126,7 +152,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			if err := renameCase(lib, p, lp, packDir, k, s.Name); err != nil {
 				return nil, err
 			}
-			rep.Moved = append(rep.Moved, fmt.Sprintf("%s: renamed from %s upstream", s.Name, k))
+			rep.Moved = append(rep.Moved, i18n.Sprintf("%s: renamed from %s upstream", s.Name, k))
 			break
 		}
 	}
@@ -143,7 +169,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 		to, err := Trash(lib, dest)
 		if err != nil {
-			return fmt.Errorf("moving %s to trash: %w", dest, err)
+			return i18n.Errorf("moving %s to trash: %w", dest, err)
 		}
 		if to != "" {
 			rep.Backups = append(rep.Backups, lib.Rel(dest)+" → "+lib.Rel(to))
@@ -170,7 +196,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 
 	repoLicense := fsutil.FindLicense(clone)
 	for _, n := range fsutil.LicenseLinks(clone) {
-		rep.Warnings = append(rep.Warnings, n+" is a symlink, not a file; it was not copied into vendor/")
+		rep.Warnings = append(rep.Warnings, i18n.Sprintf("%s is a symlink, not a file; it was not copied into vendor/", n))
 	}
 	wanted := map[string]bool{}
 	for _, s := range upstream {
@@ -184,6 +210,9 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		dest, err := skillDir(packDir, s.Category, s.Name)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", s.Name, err)
+		}
+		if err := throughLink(lib, dest); err != nil {
+			return nil, err
 		}
 		newHash, err := fsutil.HashTree(s.Dir)
 		if err != nil {
@@ -302,20 +331,21 @@ func renameCase(lib *library.Library, p *manifest.Pack, lp *lock.Pack, packDir, 
 	if err != nil {
 		return err
 	}
+
 	if fsutil.Lexists(oldDir) {
 		fail := func(err error) error {
-			return fmt.Errorf("upstream renamed %s to %s, but renaming %s failed: %w; nothing was changed", old, new, lib.Rel(oldDir), err)
+			return i18n.Errorf("upstream renamed %s to %s, but renaming %s failed: %w; nothing was changed", old, new, lib.Rel(oldDir), err)
 		}
 		// Two steps, so a case-only rename also works where the file
 		// system folds case. Nothing is overwritten, and a failed second
 		// step is rolled back before the lock or manifest are touched.
 		tmp := oldDir + ".skd-rename"
 		if fsutil.Lexists(tmp) {
-			return fail(fmt.Errorf("%s already exists", lib.Rel(tmp)))
+			return fail(i18n.Errorf("%s already exists", lib.Rel(tmp)))
 		}
 		if a, err := os.Lstat(oldDir); err == nil {
 			if b, err := os.Lstat(newDir); err == nil && !os.SameFile(a, b) {
-				return fail(fmt.Errorf("%s already exists", lib.Rel(newDir)))
+				return fail(i18n.Errorf("%s already exists", lib.Rel(newDir)))
 			}
 		}
 		if err := rename(oldDir, tmp); err != nil {
@@ -323,7 +353,7 @@ func renameCase(lib *library.Library, p *manifest.Pack, lp *lock.Pack, packDir, 
 		}
 		if err := rename(tmp, newDir); err != nil {
 			if rerr := rename(tmp, oldDir); rerr != nil {
-				return fmt.Errorf("upstream renamed %s to %s; renaming failed (%v) and restoring %s failed too (%v): move %s back by hand",
+				return i18n.Errorf("upstream renamed %s to %s; renaming failed (%v) and restoring %s failed too (%v): move %s back by hand",
 					old, new, err, lib.Rel(oldDir), rerr, lib.Rel(tmp))
 			}
 			return fail(err)
@@ -383,6 +413,9 @@ func renameCase(lib *library.Library, p *manifest.Pack, lp *lock.Pack, packDir, 
 func RemovePack(lib *library.Library, repo string) error {
 	dir, err := PackDir(lib, repo)
 	if err != nil {
+		return err
+	}
+	if err := throughLink(lib, dir); err != nil {
 		return err
 	}
 	if fsutil.Lexists(dir) {

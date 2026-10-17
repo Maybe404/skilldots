@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -237,6 +239,57 @@ func TestLockPaths(t *testing.T) {
 			if got[i] != c.want[i] {
 				t.Errorf("%q: got %v, want %v", c.msg, got, c.want)
 			}
+		}
+	}
+}
+
+// A URL or ref that looks like an option never reaches git as one: the
+// parser refuses it, and Fetch puts "--" before the URL anyway (a
+// hand-edited skills.toml goes straight to Fetch).
+func TestFetchNeverTakesOptions(t *testing.T) {
+	_, up := fetchEnv(t)
+	marker := filepath.Join(t.TempDir(), "pwned")
+	for _, s := range []string{"--upload-pack=touch " + marker, "-u/x", "o/r@--upload-pack=x"} {
+		if src, err := ParseSource(s); err == nil {
+			t.Errorf("ParseSource(%q) = %+v", s, src)
+		}
+	}
+	if _, _, err := Fetch(Source{Repo: "evil/x", URL: "--upload-pack=touch " + marker + ";" + up}); err == nil {
+		t.Error("fetched an option")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("git ran the option")
+	}
+	if a := cloneArgs(Source{URL: "-x", Ref: "r"}, "d"); !slices.Equal(a[len(a)-3:], []string{"--", "-x", "d"}) {
+		t.Errorf("git %v: the URL is not after --", a)
+	}
+	if a := fetchArgs("-r"); !slices.Equal(a[len(a)-3:], []string{"--", "origin", "-r"}) {
+		t.Errorf("git %v: the ref is not after --", a)
+	}
+}
+
+// Whatever the repo key (it comes from skills.toml), its clone is one
+// entry of the cache directory: a failed clone is removed, and that must
+// never reach anything else.
+func TestCachePathStaysInTheCache(t *testing.T) {
+	t.Setenv("SKILLDOTS_CACHE", filepath.Join(t.TempDir(), "cache"))
+	for _, repo := range []string{"a/b", `a/..\..\..\Documents`, `..\..\x/y`, "../../x", "a/../../b", ".."} {
+		p := CachePath(repo)
+		if filepath.Dir(p) != filepath.Clean(os.Getenv("SKILLDOTS_CACHE")) || filepath.Base(p) == ".." {
+			t.Errorf("CachePath(%q) = %s", repo, p)
+		}
+	}
+}
+
+// The entry's name holds no separator of any system: on Windows "\" is
+// one, so a repo key with `\..\` would otherwise lead out of the cache
+// there (this test runs on every system, where filepath.Join alone
+// would not show it).
+func TestCacheNameHasNoSeparator(t *testing.T) {
+	for _, repo := range []string{"a/b", `a\b`, `a/..\..\..\Documents`, `..\..\x/y`, "../../x", "a/../../b", "..", ".", "", `\`} {
+		n := cacheName(repo)
+		if strings.ContainsAny(n, `/\`) || n == "" || n == "." || n == ".." {
+			t.Errorf("cacheName(%q) = %q", repo, n)
 		}
 	}
 }

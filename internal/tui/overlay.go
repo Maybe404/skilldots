@@ -7,6 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 type ovKind int
@@ -27,6 +29,9 @@ type pickItem struct {
 	// header marks a group heading; space on it toggles the whole group.
 	header bool
 	group  string
+	// info rows only describe the item above them: never selectable,
+	// never a value.
+	info bool
 }
 
 // step is what a key in an overlay leads to: another overlay, a job, or
@@ -87,10 +92,10 @@ func inputOverlay(title, desc, placeholder, value string, t Theme, s surfaces, o
 	in.PlaceholderStyle = bg.Foreground(t.Muted)
 	in.Cursor.Style = lipgloss.NewStyle().Foreground(t.Accent)
 	in.Cursor.TextStyle = bg.Foreground(t.Text)
-	in.SetValue(value)
+	in.SetValue(clean(value)) // a setting from the file may hold anything
 	in.CursorEnd()
 	in.Focus()
-	return &overlay{kind: ovInput, title: title, desc: desc, input: in, verb: "next", onInput: onInput}
+	return &overlay{kind: ovInput, title: title, desc: desc, input: in, verb: i18n.M("next"), onInput: onInput}
 }
 
 func pickOverlay(title, desc string, items []pickItem, allowAll bool, onPick func([]string, bool) step) *overlay {
@@ -117,45 +122,58 @@ func jobChoice(key, label string, j job) choice {
 // helpKeys lists every key of the dashboard. TestHelpListsEveryKey keeps it
 // in step with updateKey.
 var helpKeys = [][2]string{
-	{"↑↓ j k", "move"},
-	{"pgup pgdn ^u ^d", "page up / down"},
-	{"g G home end", "top / end"},
-	{"tab ← → h l", "switch column"},
-	{"enter", "open the pack under the cursor"},
-	{"/", "filter this column (esc clears)"},
-	{"space", "enable / disable the skill (installs an upstream one)"},
-	{"a", "add a repository: pick skills or categories, alias, agents"},
-	{"u / U", "update this pack / every pack with upstream changes"},
-	{"c", "check upstream for changes again (runs at start; skd outdated)"},
-	{"e", "choose agents for the skill or pack"},
-	{"f", "fork a vendored or app skill into your library (rename it there)"},
-	{"d", "remove skill (to trash) · unlink yours · purge pack"},
-	{"n", "new skill of your own in skills/ or private/"},
-	{"S", "scan agent directories and adopt what skd does not manage"},
-	{"t", "trash: restore what skd set aside, or empty it"},
-	{"s", "back up: commit and push the library"},
-	{"A", "apply pending link changes"},
-	{"r", "reload"},
-	{"?", "this help"},
-	{"q esc", "quit (esc clears a filter first)"},
-	{"ctrl+c", "quit · while busy: quit when done, twice: stop now"},
+	{"↑↓ j k", i18n.M("move")},
+	{"pgup pgdn ^u ^d", i18n.M("page up / down")},
+	{"g G home end", i18n.M("top / end")},
+	{"tab ← → l", i18n.M("switch column")},
+	{"enter", i18n.M("open the pack under the cursor")},
+	{"/", i18n.M("filter this column (esc clears)")},
+	{"space", i18n.M("enable / disable the skill (installs an upstream one)")},
+	{"a", i18n.M("add a repository: pick skills or categories, alias, agents")},
+	{"u / U", i18n.M("update this pack / every pack with upstream changes")},
+	{"h", i18n.M("update history: what each update changed, with upstream's commit messages")},
+	{"c", i18n.M("check upstream for changes again (runs at start; skd outdated)")},
+	{"e", i18n.M("choose agents for the skill or pack")},
+	{"f", i18n.M("fork a vendored or app skill into your library (rename it there)")},
+	{"o", i18n.M("open the skill in your editor (asks to fork a vendored one first)")},
+	{"d", i18n.M("remove skill (to trash) · unlink yours · purge pack")},
+	{"n", i18n.M("new skill of your own in skills/ or private/")},
+	{"S", i18n.M("scan agent directories and adopt what skd does not manage")},
+	{"t", i18n.M("trash: restore what skd set aside, or empty it")},
+	{"T", i18n.M("agent targets: approve a custom target of skills.toml (skd targets trust)")},
+	{"s", i18n.M("back up: commit and push the library")},
+	{"A", i18n.M("apply pending link changes")},
+	{"r", i18n.M("reload")},
+	{",", i18n.M("settings: editor, theme, language (skd config)")},
+	{"?", i18n.M("this help")},
+	{"q esc", i18n.M("quit (esc clears a filter first)")},
+	{"ctrl+c", i18n.M("quit · while busy: quit when done, twice: stop now")},
+}
+
+// textOverlay shows lines to read; any key but ↑↓ closes it.
+func textOverlay(title string, lines []string) *overlay {
+	return &overlay{kind: ovHelp, title: title, lines: lines}
 }
 
 func helpOverlay() *overlay {
 	var lines []string
 	for _, k := range helpKeys {
-		lines = append(lines, fit(k[0], 16)+"  "+k[1])
+		lines = append(lines, fit(k[0], 16)+"  "+i18n.T(k[1]))
 	}
 	lines = append(lines, "",
-		"Nothing is deleted outright: removed files go to <library>/.trash;",
-		"t lists them and restores them. Emptying the trash asks twice.")
-	return &overlay{kind: ovHelp, title: "Keys", lines: lines}
+		i18n.T("Nothing is deleted outright: removed files go to <library>/.trash;"),
+		i18n.T("t lists them and restores them. Emptying the trash asks twice."),
+		"",
+		i18n.T("\"off in Claude\" marks a skill turned off inside Claude Code (its own"),
+		i18n.T("settings); skd still links it. To keep it out of Claude entirely, press e"),
+		i18n.T("and untick claude."))
+	return &overlay{kind: ovHelp, title: i18n.T("Keys"), lines: lines}
 }
 
 func (o *overlay) values() []string {
 	var out []string
 	for _, it := range o.items {
-		if it.on && !it.header {
+		if it.on && !it.header && !it.info {
 			out = append(out, it.value)
 		}
 	}
@@ -164,6 +182,9 @@ func (o *overlay) values() []string {
 
 func (o *overlay) selectable(i int) bool {
 	it := o.items[i]
+	if it.info {
+		return false
+	}
 	if o.kind == ovList {
 		return !it.header
 	}
@@ -219,13 +240,13 @@ func (o *overlay) toggle() {
 	}
 	all := true
 	for _, x := range o.items {
-		if !x.header && x.group == it.group && !x.locked && !x.on {
+		if !x.header && !x.info && x.group == it.group && !x.locked && !x.on {
 			all = false
 		}
 	}
 	for i := range o.items {
 		x := &o.items[i]
-		if !x.header && x.group == it.group && !x.locked {
+		if !x.header && !x.info && x.group == it.group && !x.locked {
 			x.on = !all
 		}
 	}
@@ -318,23 +339,31 @@ func (o *overlay) update(k tea.KeyMsg) (*overlay, *job, tea.Cmd) {
 	return o, nil, nil
 }
 
-// render draws the modal at width w with at most h rows.
+// render draws the modal at width w with at most h rows. On a short
+// terminal the description goes first, then the body is cut: the key
+// hints (what each key does) always stay, since a dialog whose choices
+// cannot be seen still takes them.
 func (o *overlay) render(w, h int, t Theme, s surfaces) []string {
 	if w < 8 || h < 1 {
 		return nil
 	}
-	lines := o.renderDesc(w, h, t, s, o.desc)
+	lines, tail := o.renderDesc(w, h, t, s, o.desc)
 	if len(lines) > h && o.desc != "" {
-		// Short terminal: the key hints matter more than the description.
-		lines = o.renderDesc(w, h, t, s, "")
+		lines, tail = o.renderDesc(w, h, t, s, "")
 	}
 	if len(lines) > h {
-		lines = append(lines[:max(0, h-1)], lines[len(lines)-1])
+		foot := lines[len(lines)-tail:]
+		if h <= tail {
+			return foot[:h]
+		}
+		lines = append(lines[:h-tail:h-tail], foot...)
 	}
 	return lines
 }
 
-func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []string {
+// renderDesc draws the modal and returns its lines and how many of them
+// at the end are the key hints and the bottom margin.
+func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]string, int) {
 	bg := s.modal
 	row := func(segs ...seg) string {
 		return paint(w, bg, append([]seg{sg("  ", "")}, segs...)...)
@@ -345,34 +374,58 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 		lines = append(lines, row(sg(d, t.Muted)))
 	}
 	lines = append(lines, row())
-	var foot []seg
-	key := func(k, label string) []seg { return []seg{sgb(k, t.Accent), sg(" "+label+"   ", t.Text)} }
+	// The key hints, one group per key, laid out over as many rows as
+	// the width needs.
+	var groups [][]seg
+	key := func(k, label string) []seg { return []seg{sgb(k, t.Accent), sg(" "+i18n.T(label)+"   ", t.Text)} }
+	footRows := func() []string {
+		var rows []string
+		var cur []seg
+		used := 0
+		for _, g := range groups {
+			gw := 0
+			for _, x := range g {
+				gw += ansi.StringWidth(x.s)
+			}
+			if used > 0 && used+gw > inner {
+				rows = append(rows, row(cur...))
+				cur, used = nil, 0
+			}
+			cur = append(cur, g...)
+			used += gw
+		}
+		return append(rows, row(cur...))
+	}
 	switch o.kind {
 	case ovHelp:
-		avail := max(1, h-len(lines)-4)
+		scrollGroups := func(off, avail int) {
+			groups = nil
+			if len(o.lines) > avail {
+				groups = append(groups, key("↑↓", "scroll"), []seg{sg(ansiRange(off, avail, len(o.lines))+"   ", t.Muted)})
+			}
+			groups = append(groups, []seg{sg(i18n.T("any other key closes"), t.Muted)})
+		}
+		scrollGroups(0, max(1, h-len(lines)-4))
+		avail := max(1, h-len(lines)-3-len(footRows()))
 		off := min(o.off, max(0, len(o.lines)-avail))
 		for i := off; i < len(o.lines) && i < off+avail; i++ {
 			lines = append(lines, row(sg(o.lines[i], t.Text)))
 		}
-		if len(o.lines) > avail {
-			foot = append(foot, key("↑↓", "scroll")...)
-			foot = append(foot, sg(ansiRange(off, avail, len(o.lines))+"   ", t.Muted))
-		}
-		foot = append(foot, sg("any other key closes", t.Muted))
+		scrollGroups(off, avail)
 	case ovConfirm:
-		for _, l := range o.lines {
-			lines = append(lines, row(sg(l, t.Text)))
-		}
-		lines = append(lines, row())
 		for i, c := range o.choices {
 			k := c.key
 			if i == 0 && !o.noEnter {
 				k += "/enter"
 			}
-			foot = append(foot, key(k, c.label)...)
+			groups = append(groups, key(k, c.label))
 		}
-		foot = append(foot, key("esc", "cancel")...)
+		groups = append(groups, key("esc", "cancel"))
+		for _, l := range o.lines {
+			lines = append(lines, row(sg(l, t.Text)))
+		}
 	case ovInput:
+		groups = append(groups, key("enter", o.verb), key("esc", "cancel"))
 		v := o.input.View()
 		vw := ansi.StringWidth(v)
 		if vw > inner {
@@ -383,9 +436,24 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 		if o.err != "" {
 			lines = append(lines, row(sg("✗ "+o.err, t.Err)))
 		}
-		foot = append(key("enter", o.verb), key("esc", "cancel")...)
 	case ovPick, ovList:
-		avail := h - len(lines) - 4
+		if o.kind == ovPick {
+			groups = append(groups, key("space", "toggle"))
+			if o.allowAll {
+				groups = append(groups, key("*", "all"))
+			}
+			groups = append(groups, key("enter", "confirm"))
+		} else {
+			for i, a := range o.actions {
+				k := a.key
+				if i == 0 {
+					k += "/enter"
+				}
+				groups = append(groups, key(k, a.label))
+			}
+		}
+		groups = append(groups, key("esc", "cancel"))
+		avail := h - len(lines) - 3 - len(footRows())
 		if o.allowAll {
 			avail--
 		}
@@ -396,7 +464,7 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 		}
 		labelW := 0
 		for _, it := range o.items {
-			if !it.header {
+			if !it.header && !it.info {
 				labelW = max(labelW, ansi.StringWidth(it.label))
 			}
 		}
@@ -411,6 +479,11 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 			if i == o.cur {
 				rbg = s.sel
 				mark = sgb("❯ ", t.Accent)
+			}
+			if it.info {
+				segs := []seg{sg("    ", ""), sg(fit(it.label, labelW)+"  ", t.Muted), sg(it.detail, t.Text)}
+				lines = append(lines, paint(2, bg)+paint(w-2, bg, segs...))
+				continue
 			}
 			if it.header {
 				segs := []seg{mark}
@@ -450,27 +523,14 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) []strin
 			if o.all {
 				mark = sg("◉ ", t.OK)
 			}
-			lines = append(lines, row(mark, sg("follow everything, including skills added upstream later", t.Text)))
+			lines = append(lines, row(mark, sg(i18n.T("follow everything, including skills added upstream later"), t.Text)))
 		}
-		if o.kind == ovPick {
-			foot = key("space", "toggle")
-			if o.allowAll {
-				foot = append(foot, key("*", "all")...)
-			}
-			foot = append(foot, key("enter", "confirm")...)
-		} else {
-			for i, a := range o.actions {
-				k := a.key
-				if i == 0 {
-					k += "/enter"
-				}
-				foot = append(foot, key(k, a.label)...)
-			}
-		}
-		foot = append(foot, key("esc", "cancel")...)
 	}
-	lines = append(lines, row(), row(foot...), row())
-	return lines
+	foot := footRows()
+	lines = append(lines, row())
+	lines = append(lines, foot...)
+	lines = append(lines, row())
+	return lines, len(foot) + 1
 }
 
 // box is the tick mark of pick row i; a heading shows its group's state.
@@ -479,7 +539,7 @@ func (o *overlay) box(i int, t Theme) seg {
 	if it.header {
 		n, on := 0, 0
 		for _, x := range o.items {
-			if !x.header && x.group == it.group && !x.locked {
+			if !x.header && !x.info && x.group == it.group && !x.locked {
 				n++
 				if x.on || o.all {
 					on++
@@ -506,5 +566,5 @@ func (o *overlay) box(i int, t Theme) seg {
 // ansiRange describes a scroll window, e.g. "4–15 of 38".
 func ansiRange(off, h, n int) string {
 	end := min(off+h, n)
-	return itoa(off+1) + "–" + itoa(end) + " of " + itoa(n)
+	return i18n.Sprintf("%d–%d of %d", off+1, end, n)
 }

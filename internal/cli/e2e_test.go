@@ -12,16 +12,27 @@ import (
 	"testing"
 )
 
-var skdBin string
+// skdBin is built with the rawoutput tag, skdGuarded as people get it.
+var skdBin, skdGuarded string
 
 func TestMain(m *testing.M) {
+	// The tests read English: the language of the machine they run on
+	// must not decide (the language tests choose theirs).
+	os.Setenv("SKILLDOTS_LANG", "en")
 	dir, err := os.MkdirTemp("", "skd-e2e")
 	if err != nil {
 		panic(err)
 	}
 	skdBin = filepath.Join(dir, "skd")
-	out, err := exec.Command("go", "build", "-o", skdBin, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput()
+	// rawoutput: without the screen writer that cleans whatever reaches
+	// the terminal, so the tests see what each command itself prints
+	// (TestHostileLibraryPrintsClean).
+	out, err := exec.Command("go", "build", "-tags", "rawoutput", "-o", skdBin, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput()
 	if err != nil {
+		panic(string(out))
+	}
+	skdGuarded = filepath.Join(dir, "skd-guarded")
+	if out, err := exec.Command("go", "build", "-o", skdGuarded, "github.com/Maybe404/skilldots/cmd/skd").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
 	code := m.Run()
@@ -33,6 +44,11 @@ type env struct {
 	t    *testing.T
 	home string
 	vars []string
+	// lang is the language skd runs in: SKILLDOTS_LANG in vars ("en").
+	lang string
+	// before[i], when set, runs before the i-th keys of an interactive
+	// run are typed.
+	before []func()
 }
 
 func newEnv(t *testing.T) *env {
@@ -41,16 +57,48 @@ func newEnv(t *testing.T) *env {
 	if r, err := filepath.EvalSymlinks(home); err == nil {
 		home = r
 	}
-	e := &env{t: t, home: home}
+	e := &env{t: t, home: home, lang: "en"}
 	e.vars = []string{
 		"HOME=" + home,
 		"PATH=" + os.Getenv("PATH"),
 		"SKILLDOTS_CACHE=" + filepath.Join(home, "cache"),
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "NO_COLOR=1", "TERM=dumb",
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "NO_COLOR=1", "TERM=dumb", "SKILLDOTS_LANG=en",
 	}
 	return e
+}
+
+// setenv sets one variable of the environment skd runs in; "" removes it.
+func (e *env) setenv(name, value string) {
+	e.t.Helper()
+	var vars []string
+	for _, v := range e.vars {
+		if !strings.HasPrefix(v, name+"=") {
+			vars = append(vars, v)
+		}
+	}
+	if value != "" {
+		vars = append(vars, name+"="+value)
+	}
+	e.vars = vars
+}
+
+// setLang makes skd run in language l ("en" or "zh") through
+// $SKILLDOTS_LANG, the way the tests choose it.
+func (e *env) setLang(l string) {
+	e.t.Helper()
+	e.lang = l
+	e.setenv("SKILLDOTS_LANG", l)
+}
+
+// noLang takes away everything that chooses a language, so the settings
+// and the locale variables decide.
+func (e *env) noLang() {
+	e.t.Helper()
+	for _, k := range []string{"SKILLDOTS_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
+		e.setenv(k, "")
+	}
 }
 
 func (e *env) p(rel string) string { return filepath.Join(e.home, filepath.FromSlash(rel)) }
@@ -58,10 +106,16 @@ func (e *env) p(rel string) string { return filepath.Join(e.home, filepath.FromS
 // skd runs the binary in dir (home when ""), with stdin not a terminal.
 func (e *env) skd(dir string, args ...string) (stdout, stderr string, code int) {
 	e.t.Helper()
+	return e.run(skdBin, dir, args...)
+}
+
+// run runs the skd binary bin like skd does.
+func (e *env) run(bin, dir string, args ...string) (stdout, stderr string, code int) {
+	e.t.Helper()
 	if dir == "" {
 		dir = e.home
 	}
-	cmd := exec.Command(skdBin, args...)
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Env = e.vars
 	var o, er bytes.Buffer
@@ -154,6 +208,23 @@ func TestCloneFromBareRepo(t *testing.T) {
 		t.Fatalf("private/ is not its own repository (toplevel %s)", top)
 	}
 	isLink(t, e.p(".agents/skills/mine"), e.p("lib2"))
+}
+
+// The URL given to skd clone is a repository to git even when it starts
+// with "-" (a relative path here): never an option.
+func TestCloneURLIsNeverAnOption(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.git(lib, "add", "-A")
+	e.git(lib, "commit", "-qm", "x")
+	e.git(e.home, "clone", "-q", "--bare", "--", lib, "-backup.git")
+	if out, errOut, code := e.skd("", "clone", "--", "-backup.git", e.p("lib2")); code != 0 {
+		t.Fatalf("clone -backup.git: exit %d\n%s\n%s", code, out, errOut)
+	}
+	if _, err := os.Stat(e.p("lib2/skills.toml")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestInitInsideOuterRepoAndOtherLibrary(t *testing.T) {

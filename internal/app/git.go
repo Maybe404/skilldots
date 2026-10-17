@@ -4,7 +4,9 @@ import (
 	"path/filepath"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 // commitPaths is what a library commit takes: everything under the root
@@ -52,12 +54,16 @@ const DefaultBackupMessage = "chore: update skills library"
 // when set, becomes origin first.
 func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 	lib := s.Lib
+	if safetext.Has(remote) {
+		return nil, i18n.Errorf("remote %q has control characters: not a git URL", remote)
+	}
 	if remote != "" {
 		if _, err := lib.Git("remote", "get-url", "origin"); err == nil {
-			if _, err := lib.Git("remote", "set-url", "origin", remote); err != nil {
+			// "--": a remote starting with "-" is a URL, never an option.
+			if _, err := lib.Git("remote", "set-url", "--", "origin", remote); err != nil {
 				return nil, err
 			}
-		} else if _, err := lib.Git("remote", "add", "origin", remote); err != nil {
+		} else if _, err := lib.Git("remote", "add", "--", "origin", remote); err != nil {
 			return nil, err
 		}
 	}
@@ -81,7 +87,9 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 		}
 		out.Pushed = true
 	}
-	if fsutil.Exists(filepath.Join(lib.PrivateDir(), ".git")) {
+	// Not through a link inside the library: git status refreshes the
+	// index of whatever repository it names.
+	if library.PrivateLink(lib.Root) == "" && fsutil.Exists(filepath.Join(lib.PrivateDir(), ".git")) {
 		if st, _ := library.Git(lib.PrivateDir(), "status", "--short"); st != "" {
 			out.PrivateUncommitted = true
 		}

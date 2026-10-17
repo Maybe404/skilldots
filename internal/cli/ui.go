@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -10,6 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"golang.org/x/term"
 
+	"github.com/Maybe404/skilldots/internal/config"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/termbg"
 )
 
@@ -76,14 +79,35 @@ func usePalette(p palette) {
 // EnvTheme overrides the theme when --theme is not given.
 const EnvTheme = "SKILLDOTS_THEME"
 
-// setupTheme picks the palette: --theme, else $SKILLDOTS_THEME, else auto.
+// setupTheme picks the palette: --theme, else $SKILLDOTS_THEME, else the
+// theme setting (skd config set theme), else auto.
 // auto asks the terminal for its background (termbg.Timeout at most) and
 // assumes dark when it cannot tell. Nothing is asked when no colour would
 // be printed anyway: --json, NO_COLOR, TERM=dumb, or stdout not a terminal.
 func setupTheme(flag string) error {
+	// A settings file that does not parse would otherwise be ignored
+	// without a word (editor, theme). Main says so once the command has
+	// run, unless the command failed on it and said so itself.
+	if _, err := config.Load(); err != nil {
+		settingsErr = err
+	}
 	mode := strings.ToLower(strings.TrimSpace(flag))
+	src := "--theme"
 	if mode == "" {
-		mode = strings.ToLower(strings.TrimSpace(os.Getenv(EnvTheme)))
+		mode, src = strings.ToLower(strings.TrimSpace(os.Getenv(EnvTheme))), "$"+EnvTheme
+	}
+	if mode == "" {
+		mode, src = strings.ToLower(strings.TrimSpace(config.Get(config.Theme))), i18n.M("the theme setting (skd config set theme)")
+		// A bad setting must not stop every command, `skd config set
+		// theme` included: it falls back to auto, with a warning on
+		// stderr (never stdout, which may carry JSON).
+		if k, _ := config.Lookup(config.Theme); k.Check(mode) != nil {
+			if !themeWarned {
+				themeWarned = true
+				i18n.Fprintf(stderr, "warning: the theme setting %q is not light, dark or auto; using auto (skd config set theme auto fixes it)\n", mode)
+			}
+			mode = "auto"
+		}
 	}
 	// The menu runs commands in-process; ask the terminal once.
 	if mode == themeDone {
@@ -104,11 +128,7 @@ func setupTheme(flag string) error {
 	case "light":
 		usePalette(lightPalette)
 	default:
-		src := "--theme"
-		if flag == "" {
-			src = "$" + EnvTheme
-		}
-		return fmt.Errorf("%s %q: use light, dark or auto", src, mode)
+		return i18n.Errorf("%s %q: use light, dark or auto", i18n.T(src), mode)
 	}
 	themeDone = mode
 	return nil
@@ -117,9 +137,17 @@ func setupTheme(flag string) error {
 // themeDone is the mode setupTheme last settled.
 var themeDone = "-"
 
-// detectBackground and stdoutIsTerminal are replaceable in tests.
+// themeWarned is set once a bad theme setting was reported.
+var themeWarned bool
+
+// settingsErr is why the settings file could not be read, for Main.
+var settingsErr error
+
+// detectBackground, stdinIsTerminal and stdoutIsTerminal are replaceable
+// in tests.
 var (
 	detectBackground = termbg.Detect
+	stdinIsTerminal  = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 	stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 )
 
@@ -155,7 +183,7 @@ func theme() *huh.Theme {
 
 // ask runs one or more prompts as a themed form.
 func ask(fields ...huh.Field) error {
-	return huh.NewForm(huh.NewGroup(fields...)).WithTheme(theme()).WithShowHelp(true).Run()
+	return huh.NewForm(huh.NewGroup(fields...)).WithTheme(theme()).WithKeyMap(keyMap()).WithShowHelp(true).Run()
 }
 
 // card renders the branded header block.
@@ -181,6 +209,10 @@ func bold(s string) string   { return sTitle.Render(s) }
 
 // newTable builds a borderless table with a dimmed header row.
 func newTable(headers ...string) *table.Table {
+	headers = slices.Clone(headers)
+	for i, h := range headers {
+		headers[i] = i18n.T(h)
+	}
 	return table.New().
 		Border(lipgloss.HiddenBorder()).
 		BorderTop(false).BorderBottom(false).BorderLeft(false).BorderRight(false).
@@ -194,17 +226,25 @@ func newTable(headers ...string) *table.Table {
 		})
 }
 
-// truncate shortens s to n runes with an ellipsis.
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
+// truncate shortens s to n terminal columns (a Chinese character takes
+// two) with an ellipsis.
+func truncate(s string, n int) string { return i18n.Truncate(s, n) }
+
+// plurals are the nouns plural counts, as the formats i18n.Count takes.
+var plurals = map[string][2]string{
+	"pack":  {i18n.M("%d pack"), i18n.M("%d packs")},
+	"skill": {i18n.M("%d skill"), i18n.M("%d skills")},
+	// (sic: "directorys" is what plural has always printed.)
+	"parked directory": {i18n.M("%d parked directory"), i18n.M("%d parked directorys")},
+	"link":             {i18n.M("%d link"), i18n.M("%d links")},
+	"custom target":    {i18n.M("%d custom target"), i18n.M("%d custom targets")},
 }
 
 // plural returns "1 skill" / "3 skills".
 func plural(n int, word string) string {
+	if f, ok := plurals[word]; ok {
+		return i18n.Count(n, f[0], f[1])
+	}
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, word)
 	}
@@ -214,7 +254,7 @@ func plural(n int, word string) string {
 // joinOr renders a list or a placeholder when empty.
 func joinOr(items []string, empty string) string {
 	if len(items) == 0 {
-		return dim(empty)
+		return dim(i18n.T(empty))
 	}
 	return strings.Join(items, ", ")
 }

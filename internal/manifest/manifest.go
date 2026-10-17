@@ -13,6 +13,8 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
+	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
 const FileName = "skills.toml"
@@ -82,12 +84,46 @@ func Load(path string) (*Manifest, error) {
 	}
 	m := &Manifest{}
 	if err := toml.Unmarshal(b, m); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, i18n.Errorf("parse %s: %w", path, err)
 	}
 	if m.Targets.Custom == nil {
 		m.Targets.Custom = map[string]CustomTarget{}
 	}
+	if err := checkText(b); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return m, nil
+}
+
+// known are the places of the manifest skd reads: names, paths and
+// settings that commands print or pass on.
+var known = []string{
+	"targets.default", "targets.custom.*", "targets.custom.*.path", "targets.custom.*.mode",
+	"pack.repo", "pack.ref", "pack.alias", "pack.use", "pack.skip", "pack.targets",
+	"pack.skill.*", "pack.skill.*.as", "pack.skill.*.targets",
+	"app.name", "app.path", "app.targets", "local.name", "local.targets",
+}
+
+// checkText refuses a manifest that holds control characters, bidi
+// controls or invalid UTF-8 in a place skd reads (known: repo, ref,
+// alias, use, skip, targets, skill overrides and their as, app and
+// local entries, custom targets with their path and mode, and the keys
+// naming them). Nothing skd writes has them there, so the file was
+// written to attack a terminal. Tables and keys this version does not
+// know are refused only for what could never be meant as text (an
+// escape, BEL, DEL, C1, a bidi control, invalid UTF-8): a multi-line
+// string with tabs is someone's note, not an attack. The error names
+// each place, quoted so it prints safely.
+func checkText(b []byte) error {
+	raw := map[string]any{}
+	if err := toml.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	var errs []error
+	for _, p := range safetext.DocSchema(raw, known) {
+		errs = append(errs, i18n.Errorf("%s has control characters; fix it by hand", p))
+	}
+	return errors.Join(errs...)
 }
 
 // New returns a manifest with sensible defaults.
@@ -103,6 +139,12 @@ func (m *Manifest) Save(path string) error {
 	b, err := toml.Marshal(m)
 	if err != nil {
 		return err
+	}
+	// Never write a file Load would refuse: a name with control
+	// characters that came in some other way (an option, an old file)
+	// is an error now, not a library that no longer opens.
+	if err := checkText(b); err != nil {
+		return i18n.Errorf("not saving %s: %w", FileName, err)
 	}
 	header := "# skilldots manifest — edit by hand or with `skd`.\n# Docs: https://github.com/Maybe404/skilldots\n\n"
 	return fsutil.WriteAtomic(path, []byte(header+string(b)))
@@ -132,15 +174,18 @@ func (m *Manifest) CheckAlias(alias, self string) error {
 	if alias == "" {
 		return nil
 	}
+	if safetext.Has(alias) {
+		return i18n.Errorf("--alias %q has control characters; pick a short name such as \"acme\"", alias)
+	}
 	if strings.ContainsAny(alias, `/\:`) {
-		return fmt.Errorf(`--alias %q may not contain "/", "\" or ":"; pick a short name such as "acme"`, alias)
+		return i18n.Errorf(`--alias %q may not contain "/", "\" or ":"; pick a short name such as "acme"`, alias)
 	}
 	for _, p := range m.Packs {
 		if strings.EqualFold(p.Repo, alias) {
-			return fmt.Errorf("--alias %q is the repository of a subscribed pack; pick another", alias)
+			return i18n.Errorf("--alias %q is the repository of a subscribed pack; pick another", alias)
 		}
 		if p.Repo != self && p.Alias != "" && strings.EqualFold(p.Alias, alias) {
-			return fmt.Errorf("--alias %q is already the alias of %s; pick another", alias, p.Repo)
+			return i18n.Errorf("--alias %q is already the alias of %s; pick another", alias, p.Repo)
 		}
 	}
 	return nil
@@ -248,4 +293,4 @@ func matchSkip(pat, name, category string) bool {
 }
 
 // ErrNotFound is returned by lookups that miss.
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = i18n.New("not found")

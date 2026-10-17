@@ -1,0 +1,20 @@
+显示 skills.toml 里的某个自定义 target 指向哪里，经你同意后，让 skd
+在这台机器上往那里写入 skill。批准记录包含 target 的名字、它的
+目录（符号链接已解析）和模式（link 或 copy）；之后 skills.toml 若把该
+target 指向别处或改了模式，就需要重新批准。目录名不是 skills 的，
+只有输入 target 的名字才能批准。批准记录保存在设置文件旁边，
+绝不会放进库里。只有终端前的本人才能批准：没有终端，
+或加了 --yes、--json 时，skd 会拒绝。
+
+用法：
+  skd targets trust <name> [flags]
+
+选项：
+  -h, --help   trust 的帮助
+
+全局选项：
+      --json              机器可读的输出
+      --lang string       skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
+      --library skd use   库目录（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的库，或 ~/.skilldots）
+      --theme string      配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
+  -y, --yes               对所有提问回答"是"

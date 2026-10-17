@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -69,6 +72,10 @@ type fakeOps struct {
 	// check is what Check returns; checkErr fails it.
 	check    *app.Outdated
 	checkErr error
+	history  []app.UpdateRecord
+	targets  []TargetRow
+	// foreground is what Edit returns to run in the foreground.
+	foreground *exec.Cmd
 }
 
 func (f *fakeOps) rec(s string) {
@@ -116,6 +123,29 @@ func (f *fakeOps) Update(r []string) ([]*engine.SyncReport, string, error) {
 	f.rec("update " + strings.Join(r, ","))
 	return []*engine.SyncReport{{Repo: "mattpocock/skills", OldCommit: "1111111", NewCommit: "2222222",
 		Changed: []string{"tdd"}, UpstreamNew: []string{"fresh"}}}, "updated", nil
+}
+func (f *fakeOps) PlanUpdate(repos []string) (*app.UpdatePlan, error) {
+	f.rec("plan " + strings.Join(repos, ","))
+	f.mu.Lock()
+	o := f.check
+	f.mu.Unlock()
+	if o == nil {
+		// Every pack has a change: tdd in the first.
+		o = &app.Outdated{}
+		for _, p := range f.snap.Packs {
+			o.Packs = append(o.Packs, app.PackStatus{Repo: p.Repo, Commit: p.Commit, Latest: "2222222", Changed: []string{"tdd"}})
+		}
+	}
+	plan := &app.UpdatePlan{Outdated: o}
+	for _, st := range o.Packs {
+		if len(repos) > 0 && !slices.Contains(repos, st.Repo) {
+			continue
+		}
+		if st.HasUpdates() || (len(repos) > 0 && st.Commit != st.Latest) {
+			plan.Updates = append(plan.Updates, st)
+		}
+	}
+	return plan, nil
 }
 func (f *fakeOps) Check(ctx context.Context) (*app.Outdated, error) {
 	f.rec("check")
@@ -170,6 +200,34 @@ func (f *fakeOps) Adopt(props []app.Proposal) (string, error) {
 func (f *fakeOps) TrashList() ([]engine.TrashEntry, error) { f.rec("trash-list"); return f.trash, nil }
 func (f *fakeOps) Restore(id string) (string, error)       { f.rec("restore " + id); return "ok", nil }
 func (f *fakeOps) EmptyTrash() (string, error)             { f.rec("empty"); return "ok", nil }
+func (f *fakeOps) History(p string) ([]app.UpdateRecord, error) {
+	f.rec("history " + p)
+	return f.history, nil
+}
+func (f *fakeOps) Edit(s Skill, o app.EditOptions) (string, *exec.Cmd, error) {
+	f.rec(fmt.Sprintf("edit %s fork=%v private=%v force=%v", s.LinkName, o.Fork, o.Private, o.Force))
+	return "opened", f.foreground, nil
+}
+func (f *fakeOps) Settings() ([]Setting, error) {
+	f.rec("settings")
+	var out []Setting
+	for _, k := range config.Keys {
+		out = append(out, Setting{Key: k})
+	}
+	return out, nil
+}
+func (f *fakeOps) Targets() ([]TargetRow, error) {
+	f.rec("targets-list")
+	return append([]TargetRow{}, f.targets...), nil
+}
+func (f *fakeOps) TrustTarget(r TargetRow, typed string) (string, error) {
+	f.rec("trust " + r.Name + " " + r.Path + " " + r.Mode + " typed=" + typed)
+	return "ok", nil
+}
+func (f *fakeOps) SetSetting(k, v string) (string, error) {
+	f.rec("set " + k + "=" + v)
+	return "ok", nil
+}
 
 func newModel(t *testing.T, s *Snapshot, w, h int) (Model, *fakeOps) {
 	t.Helper()
@@ -500,8 +558,11 @@ func TestActions(t *testing.T) {
 	m, _ = press(t, m, "f", "enter")
 	m, cmd = press(t, m, "p")
 	m = drain(t, m, cmd)
-	// u updates this pack; the report shows in the right column.
+	// u shows what would change, y updates this pack; the report shows in
+	// the right column.
 	m, cmd = press(t, m, "u")
+	m = drain(t, m, cmd)
+	m, cmd = press(t, m, "y")
 	m = drain(t, m, cmd)
 	v := ansi.Strip(m.View())
 	for _, want := range []string{"1111111 → 2222222", "changed", "tdd", "upstream new", "fresh", "✓ updated"} {
@@ -540,6 +601,7 @@ func TestActions(t *testing.T) {
 		"targets tdd agents,claude",
 		"trash tdd",
 		"fork tdd true",
+		"plan mattpocock/skills",
 		"update mattpocock/skills",
 		"purge mattpocock/skills",
 		"sync",
@@ -600,7 +662,7 @@ func TestViewStripsControlCharacters(t *testing.T) {
 	sgr := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	check := func(name string, m Model) {
 		t.Helper()
-		v := m.View()
+		v := m.view() // before the last line of defence in View
 		rest := sgr.ReplaceAllString(v, "")
 		for i := 0; i < len(rest); i++ {
 			if c := rest[i]; (c < 0x20 && c != '\n') || c == 0x7f {
@@ -635,7 +697,26 @@ func TestViewStripsControlCharacters(t *testing.T) {
 			Skills: []pack.Skill{{Name: "evil", Category: "c" + evil, Description: evil + "描述"}}}}})
 		check("browse", nm.(Model))
 	}
-	if got := clean("a\x1b[2Jb\tc\u009bd\xffe 中文 👍🏽"); got != "a[2Jb cde 中文 👍🏽" {
+	// The same cleaning as the CLI and the history (safetext.Clean): bidi
+	// controls go too, an invalid byte shows as U+FFFD.
+	if got := clean("a\x1b[2Jb\tc\u009bd\xffe \u202E中文 👍🏽"); got != "a[2Jb cd\uFFFDe 中文 👍🏽" {
 		t.Errorf("clean: %q", got)
+	}
+}
+
+func TestClaudeOffShown(t *testing.T) {
+	s := sampleSnapshot()
+	s.Packs[0].Skills[1].ClaudeOff = true // tdd
+	s.Mine[0].ClaudeOff = true            // subagent
+	m, _ := newModel(t, s, 120, 40)
+	if !strings.Contains(screen(m), "tdd") || !strings.Contains(rightRow(t, m, "tdd"), "off in Claude Code") {
+		t.Fatalf("tdd row:\n%s", screen(m))
+	}
+	for m.currentLeft() == nil || m.currentLeft().kind != rowSkill {
+		m, _ = press(t, m, "down")
+	}
+	v := screen(m)
+	if !strings.Contains(v, "off in Claude") || !strings.Contains(v, "untick claude") {
+		t.Fatalf("own skill:\n%s", v)
 	}
 }
