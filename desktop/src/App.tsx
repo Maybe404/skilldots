@@ -1,5 +1,6 @@
 import * as React from "react"
 import { MotionConfig } from "motion/react"
+import { isMyGo } from "mygo-runtime"
 
 import { AppProvider, useApp } from "@/lib/app-state"
 import { CommandPalette } from "@/components/app/command-palette"
@@ -36,10 +37,10 @@ export default function App() {
 
 function Root() {
   const { ready, status, loadError, t } = useApp()
-  if (loadError) return <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-8"><h1>{t("loadFailed")}</h1><p role="alert">{loadError}</p><Button onClick={() => window.location.reload()}>{t("retry")}</Button></main>
-  if (!ready) return null
+  if (loadError) return <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-8"><h1>{t("loadFailed")}</h1><p className="max-w-prose text-center text-sm text-muted-foreground" role="alert">{loadError}</p><Button onClick={() => window.location.reload()}>{t("retry")}</Button></main>
+  if (!ready) return <main className="flex min-h-svh items-center justify-center p-8"><div className="w-full max-w-xl space-y-4" role="status" aria-live="polite"><div className="h-8 w-40 animate-pulse rounded-md bg-muted motion-reduce:animate-none" /><div className="h-24 animate-pulse rounded-xl border bg-muted/50 motion-reduce:animate-none" /><p className="text-sm text-muted-foreground">{t("loadingLibrary")}</p></div></main>
   if (!status?.root) return <Onboarding />
-  return <Shell />
+  return <>{!isMyGo() && <div className="border-b bg-muted/70 px-8 py-1.5 text-[0.78rem] text-muted-foreground" role="status">{t("exampleMode")}</div>}<Shell /></>
 }
 
 function Shell() {

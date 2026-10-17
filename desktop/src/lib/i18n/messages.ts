@@ -286,6 +286,8 @@ export const zh = {
 
   // Trash
   loadFailed: "无法读取技能库",
+  loadingLibrary: "正在读取技能库…",
+  exampleMode: "当前为浏览器示例模式，数据不会写入真实技能库。",
   retry: "重试",
   trashTitle: "回收站",
   trashHint: "这里保留移走的内容。永久清空请在终端运行 skd trash empty。",
@@ -684,6 +686,8 @@ export const en: Record<MessageKey, string> = {
   adoptNote: "Replaced folders go to the Trash.",
 
   loadFailed: "Could not load the library",
+  loadingLibrary: "Reading the library…",
+  exampleMode: "Browser example mode: changes do not affect a real library.",
   retry: "Retry",
   trashTitle: "Trash",
   trashHint: "Moved items remain here. To permanently empty the trash, run skd trash empty in a terminal.",
