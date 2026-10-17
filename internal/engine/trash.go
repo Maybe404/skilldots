@@ -54,7 +54,7 @@ func unsafeName(n int) string {
 	if n <= 1 {
 		return UnsafeName
 	}
-	return i18n.Sprintf("(unsafe name %d)", n)
+	return fmt.Sprintf("(unsafe name %d)", n) // an id: the same in every language
 }
 
 // finderFile is what macOS Finder leaves in a folder it shows; it is never

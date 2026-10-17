@@ -135,9 +135,6 @@
 @ %s is, is inside or holds %s, a place of keys and credentials
 = %s 就是、位于或包含 %s，那是存放密钥和凭据的地方
 
-@ (unsafe name %d)
-= （不安全的名称 %d）
-
 @ the trash %s is reached through the symbolic link %s; skd moves nothing there (make it a directory of its own)
 = 回收站 %s 要经过符号链接 %s 才能到达；skd 不会往那里移动任何东西（请把它改成独立的目录）
 
