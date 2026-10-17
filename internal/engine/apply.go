@@ -215,9 +215,11 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				// makes them: most likely left there when the target went
 				// out of use. The record is kept, so every apply and `skd
 				// scan` say so until the link is gone; it is still not
-				// touched.
+				// touched. The path comes from the lock: nothing here
+				// suggests removing it (a forged record can name a link of
+				// the user's that happens to look like this).
 				plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: tname}, Name: name, Dest: prev.Path,
-					Reason: fmt.Sprintf("target %q %s; %s is a link into the library it had; skd no longer manages it: remove it yourself if it is no longer wanted", tname, state, prev.Path)})
+					Reason: fmt.Sprintf("target %q %s; %s is a link into this library; skd no longer manages it and leaves it in place: it may be the user's own", tname, state, prev.Path)})
 				continue
 			}
 			// The record's path is not shown: it says nothing skd checked,

@@ -252,6 +252,11 @@ func TestLinksOfARemovedTargetAreListedUntilGone(t *testing.T) {
 		if !strings.Contains(out, left) || !strings.Contains(out, "no longer manages it") {
 			t.Fatalf("apply %d does not name the left link:\n%s", i, out)
 		}
+		// The path comes from the lock: nothing suggests removing it
+		// (the test's own directory, named after it, is left out).
+		if low := strings.ToLower(strings.ReplaceAll(out, e.home, "~")); strings.Contains(low, "remove") || strings.Contains(low, "yourself") || strings.Contains(low, "delete") {
+			t.Fatalf("apply %d suggests removing it:\n%s", i, out)
+		}
 		if _, err := os.Readlink(left); err != nil {
 			t.Fatalf("the left link was removed: %v", err)
 		}
@@ -259,6 +264,9 @@ func TestLinksOfARemovedTargetAreListedUntilGone(t *testing.T) {
 	scan := e.ok(lib, "scan")
 	if !strings.Contains(scan, "left") || !strings.Contains(scan, "tdd") || strings.Contains(scan, "Documents") {
 		t.Fatalf("scan:\n%s", scan)
+	}
+	if low := strings.ToLower(strings.ReplaceAll(scan, e.home, "~")); strings.Contains(low, "remove") || strings.Contains(low, "yourself") || strings.Contains(low, "delete") {
+		t.Fatalf("scan suggests removing it:\n%s", scan)
 	}
 	js := e.ok(lib, "scan", "--json")
 	if !strings.Contains(js, `"state": "left"`) || !strings.Contains(js, left) {

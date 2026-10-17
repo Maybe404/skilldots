@@ -73,7 +73,7 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 		c.printf("%s\n", dim("take these over with: skd adopt"))
 	}
 	if counts[scan.Left] > 0 {
-		c.printf("%s\n", dim("links skd made for targets no longer in use stay until you remove them"))
+		c.printf("%s\n", dim("left: links into the library, recorded for targets no longer in use; skd leaves them in place (they may be the user's own)"))
 	}
 }
 
@@ -101,7 +101,7 @@ func scanRow(c *ctx, it scan.Item) (mark, state, detail string) {
 	case scan.Broken:
 		return bad("✗"), "broken", dim(short(it.LinkTo))
 	case scan.Left:
-		return warn("○"), "left", dim(short(it.Path) + " → " + short(it.LinkTo) + "; target not in use, skd no longer manages it")
+		return warn("○"), "left", dim(short(it.Path) + " → " + short(it.LinkTo) + "; target not in use, skd no longer manages it and leaves it in place")
 	}
 	return dim("·"), string(it.State), ""
 }
