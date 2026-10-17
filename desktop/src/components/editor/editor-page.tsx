@@ -43,7 +43,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
   const [buffers, setBuffers] = React.useState<Record<string, Buffer>>({})
   const [active, setActive] = React.useState("SKILL.md")
   const [preview, setPreview] = React.useState(true)
-  const [metadataOpen, setMetadataOpen] = React.useState(true)
+  const [metadataOpen, setMetadataOpen] = React.useState(false)
   const [cursor, setCursor] = React.useState({ line: 1, col: 1 })
   const [saving, setSaving] = React.useState(false)
   const needsAck = skill?.kind === "vendor" || skill?.kind === "app"
