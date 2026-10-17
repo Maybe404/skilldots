@@ -308,8 +308,33 @@ func samePath(a, b string) bool {
 	return ra == rb
 }
 
+// ErrPrivateLink is returned by EnsurePrivateGit when the library's
+// private/ is reached through a symbolic link inside the library.
+var ErrPrivateLink = errors.New("a symbolic link")
+
+// PrivateLink returns the symbolic link on the way from root to its
+// private/ (private/ itself, as a rule), or "" when there is none.
+func PrivateLink(root string) string {
+	return fsutil.LinkOnPath(root, filepath.Join(root, DirPrivate))
+}
+
+// EnsurePrivateGit makes the library's private/ a git repository of its
+// own (creating it if needed), unless private/ is reached through a
+// symbolic link inside the library: a library may come from someone
+// else (skd clone), and its private -> .. would have git init run in
+// whatever the link names, outside the library (a ~/.git that makes the
+// whole home folder a repository). Then nothing is created or changed
+// and the error wraps ErrPrivateLink.
+func EnsurePrivateGit(root string) error {
+	if l := PrivateLink(root); l != "" {
+		return fmt.Errorf("%s is %w; skd does not set up a git repository through it (make private/ a directory of its own)", l, ErrPrivateLink)
+	}
+	return EnsureGit(filepath.Join(root, DirPrivate))
+}
+
 // EnsureGit initialises dir as a git repository when it is not one,
-// creating dir first if needed.
+// creating dir first if needed. dir is trusted: for the library's
+// private/ use EnsurePrivateGit.
 func EnsureGit(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

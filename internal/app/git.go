@@ -87,7 +87,9 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 		}
 		out.Pushed = true
 	}
-	if fsutil.Exists(filepath.Join(lib.PrivateDir(), ".git")) {
+	// Not through a link inside the library: git status refreshes the
+	// index of whatever repository it names.
+	if library.PrivateLink(lib.Root) == "" && fsutil.Exists(filepath.Join(lib.PrivateDir(), ".git")) {
 		if st, _ := library.Git(lib.PrivateDir(), "status", "--short"); st != "" {
 			out.PrivateUncommitted = true
 		}

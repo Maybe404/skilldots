@@ -312,10 +312,14 @@ func cloneCmd() *cobra.Command {
 			if _, err := library.Git("", "clone", "-q", "--", args[0], dir); err != nil {
 				return err
 			}
-			if err := library.EnsureGit(filepath.Join(dir, library.DirPrivate)); err != nil {
+			say("%s cloned into %s\n", ok("✓"), dir)
+			if err := library.EnsurePrivateGit(dir); errors.Is(err, library.ErrPrivateLink) {
+				// Someone else's library: nothing is set up through the
+				// link, and the skills under it are not linked (Resolve).
+				say("%s %v; nothing was set up there, and skills under it are skipped\n", warn("!"), err)
+			} else if err != nil {
 				return err
 			}
-			say("%s cloned into %s\n", ok("✓"), dir)
 			if err := library.Remember(dir); err != nil {
 				return err
 			}

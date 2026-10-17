@@ -80,7 +80,7 @@ Prebuilt binaries will follow. skd runs `git` for everything it fetches and comm
 | `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own, enable per agent |
 | `skd trash [restore <id> \| empty]` | what skd set aside; restore it; or (interactively) delete for good |
 | `skd targets [trust <name> \| untrust <name>]` | known agent directories, which exist on this machine, and the custom targets of `skills.toml` that are not used, with why; `trust` approves a custom target (a person at a terminal only), `untrust` withdraws that |
-| `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere; lists its custom targets first and, at a terminal, asks whether to approve each |
+| `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere; lists its custom targets first and, at a terminal, asks whether to approve each. A `private` that is a symbolic link in the cloned library is left as it is (no git repository is set up through it, and the skills under it are skipped); `skd init --from` refuses one |
 | `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
 | `skd use <dir>` | point skd at an existing library from any directory |
 | `skd [--simple]` | with no arguments: the full-screen dashboard (below); `--simple`, a narrow terminal or `TERM=dumb` give a question-and-answer menu instead |

@@ -3,6 +3,7 @@
 package library
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,5 +35,31 @@ func TestOldGit(t *testing.T) {
 	_, err = Git(dir, "merge-base", "--is-ancestor", "--end-of-options", "--output=/x", "b")
 	if err == nil || !strings.Contains(err.Error(), "git 2.24 or later") {
 		t.Fatalf("an option after the marker: err = %v", err)
+	}
+}
+
+// private/ becomes a git repository of its own, never through a link
+// inside the library: a cloned library's private -> .. would otherwise
+// have git init run in the directory it is in.
+func TestEnsurePrivateGitNotThroughALink(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "lib")
+	os.MkdirAll(root, 0o755)
+	if err := os.Symlink("..", filepath.Join(root, DirPrivate)); err != nil {
+		t.Fatal(err)
+	}
+	err := EnsurePrivateGit(root)
+	if !errors.Is(err, ErrPrivateLink) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(base, ".git")); err == nil {
+		t.Fatal("git init ran through the link")
+	}
+	os.Remove(filepath.Join(root, DirPrivate))
+	if err := EnsurePrivateGit(root); err != nil {
+		t.Fatal(err)
+	}
+	if !IsGitRepo(filepath.Join(root, DirPrivate)) {
+		t.Fatal("private/ is not a repository")
 	}
 }

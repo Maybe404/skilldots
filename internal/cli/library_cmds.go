@@ -58,6 +58,11 @@ func initCmd() *cobra.Command {
 			if _, err := config.Load(); err != nil {
 				return fmt.Errorf("%w; init records the library there, so fix or remove it first (nothing was created)", err)
 			}
+			// private/ becomes a git repository of its own: never through
+			// a link (init --from a directory that has one).
+			if l := library.PrivateLink(root); l != "" {
+				return fmt.Errorf("%s is a symbolic link; skd does not set up private/ through it (make it a directory of its own; nothing was created)", l)
+			}
 			for _, d := range []string{"", library.DirSkills, library.DirVendor, library.DirPrivate} {
 				if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 					return err
@@ -94,8 +99,7 @@ func initCmd() *cobra.Command {
 			if err := library.EnsureGit(root); err != nil {
 				return err
 			}
-			priv := filepath.Join(root, library.DirPrivate)
-			if err := library.EnsureGit(priv); err != nil {
+			if err := library.EnsurePrivateGit(root); err != nil {
 				return err
 			}
 			if err := library.Remember(root); err != nil {
