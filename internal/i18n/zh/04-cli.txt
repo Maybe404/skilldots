@@ -723,8 +723,8 @@
 @ targets to remove (default: all)
 = 要移除的 target（默认：全部）
 
-@ Deselect a vendored skill: unlink everywhere and drop it from vendor/
-= 取消选择一个引入的 skill：到处取消链接，并从 vendor/ 中丢弃
+@ Move a library skill to the trash and unlink it from every agent
+= 将库中的 skill 移入回收站，并从所有 agent 取消链接
 
 @ Delete a pack entirely: manifest, lock, vendor/ and every link
 = 彻底清除一个 pack：清单、锁、vendor/ 和所有链接

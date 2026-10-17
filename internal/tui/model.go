@@ -924,10 +924,10 @@ func (m Model) trash() (tea.Model, tea.Cmd) {
 	switch {
 	case s != nil && !s.Installed:
 		return m.hint(i18n.Sprintf("%s is not installed; nothing to remove", s.Name))
-	case s != nil && s.Kind == engine.KindVendor:
+	case s != nil && s.Kind != engine.KindApp:
 		sk := *s
 		m.ov = confirmOverlay(i18n.Sprintf("Remove %s", sk.LinkName), []string{
-			i18n.T("Unlink it from every agent and drop it from vendor/."),
+			i18n.T("Unlink it from every agent and move its library directory to the trash."),
 			i18n.T("The files move to the library trash: t restores them."),
 		}, jobChoice("y", i18n.T("remove"), job{label: i18n.Sprintf("removing %s", sk.LinkName), run: func(o Ops) result {
 			msg, err := o.Trash(sk)

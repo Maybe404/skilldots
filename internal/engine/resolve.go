@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -97,6 +98,9 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 			}
 		}
 		for _, n := range e.TargetNames {
+			if slices.Contains(lib.Manifest.Targets.Disabled, n) {
+				continue
+			}
 			t, err := reg.Get(n)
 			if err != nil {
 				e.UnknownTargets = append(e.UnknownTargets, n)

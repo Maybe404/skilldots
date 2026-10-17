@@ -31,6 +31,8 @@ type Manifest struct {
 type Targets struct {
 	// Default is the target set used when nothing more specific is given.
 	Default []string `toml:"default"`
+	// Disabled suspends distribution while preserving target selections.
+	Disabled []string `toml:"disabled,omitempty"`
 	// Custom adds user-defined targets on top of the built-in registry.
 	Custom map[string]CustomTarget `toml:"custom,omitempty"`
 }
@@ -98,7 +100,7 @@ func Load(path string) (*Manifest, error) {
 // known are the places of the manifest skd reads: names, paths and
 // settings that commands print or pass on.
 var known = []string{
-	"targets.default", "targets.custom.*", "targets.custom.*.path", "targets.custom.*.mode",
+	"targets.default", "targets.disabled", "targets.custom.*", "targets.custom.*.path", "targets.custom.*.mode",
 	"pack.repo", "pack.ref", "pack.alias", "pack.use", "pack.skip", "pack.targets",
 	"pack.skill.*", "pack.skill.*.as", "pack.skill.*.targets",
 	"app.name", "app.path", "app.targets", "local.name", "local.targets",
