@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useReducedMotion } from "motion/react"
-import { ArrowLeft, FileCode2, FileText, FolderOpen, Loader2, PanelRightClose, PanelRightOpen, Save } from "lucide-react"
+import { ArrowLeft, ChevronDown, FileCode2, FileText, FolderOpen, Loader2, PanelRightClose, PanelRightOpen, Save } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { PLACEHOLDER_DESC, kindLabel, useApp } from "@/lib/app-state"
@@ -43,6 +43,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
   const [buffers, setBuffers] = React.useState<Record<string, Buffer>>({})
   const [active, setActive] = React.useState("SKILL.md")
   const [preview, setPreview] = React.useState(true)
+  const [metadataOpen, setMetadataOpen] = React.useState(true)
   const [cursor, setCursor] = React.useState({ line: 1, col: 1 })
   const [saving, setSaving] = React.useState(false)
   const needsAck = skill?.kind === "vendor" || skill?.kind === "app"
@@ -200,9 +201,17 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
           {tree ? <FileTree nodes={tree} active={active} dirty={dirtySet} onOpen={open} /> : <p className="px-4 text-sm text-muted-foreground">{t("loading")}</p>}
         </nav>
 
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section className="flex min-w-0 flex-1 flex-col lg:min-w-[30rem]">
           {doc && doc.hasFrontmatter && (
-            <FrontmatterForm skill={skill} name={doc.name} description={doc.description} onDescription={onDescription} readOnly={readOnly} />
+            <FrontmatterForm
+              skill={skill}
+              name={doc.name}
+              description={doc.description}
+              onDescription={onDescription}
+              readOnly={readOnly}
+              open={metadataOpen}
+              onOpenChange={setMetadataOpen}
+            />
           )}
           <div className="min-h-0 flex-1">
             {buf ? (
@@ -228,7 +237,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
         </section>
 
         {preview && (
-          <aside aria-label={t("preview")} className="w-[40%] max-w-[36rem] min-w-[18rem] shrink-0 overflow-y-auto border-l px-7 py-6">
+          <aside aria-label={t("preview")} className="w-[36%] max-w-[38rem] min-w-[20rem] shrink-0 overflow-y-auto border-l px-7 py-6">
             {md && buf ? (
               <>
                 {doc?.hasFrontmatter && (
@@ -321,44 +330,64 @@ function FrontmatterForm({
   description,
   onDescription,
   readOnly,
+  open,
+  onOpenChange,
 }: {
   skill: Skill
   name: string
   description: string
   onDescription: (v: string) => void
   readOnly: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
   const { t } = useApp()
   const placeholder = description.trim() === PLACEHOLDER_DESC
   const len = [...description].length
   return (
-    <div className="grid shrink-0 gap-3 border-b px-5 py-4 lg:grid-cols-[14rem_1fr]">
-      <Field>
-        <FieldLabel htmlFor="fm-name">{t("nameLabel")}</FieldLabel>
-        <Input id="fm-name" value={name || skill.name} readOnly className="bg-muted/50 font-mono text-[0.82rem]" aria-describedby="fm-name-hint" />
-        <FieldDescription id="fm-name-hint" className="text-[0.75rem]">
-          {t("nameReadonlyHint")}
-        </FieldDescription>
-      </Field>
-      <Field data-invalid={placeholder || len > 1024 || undefined}>
-        <div className="flex items-baseline justify-between">
-          <FieldLabel htmlFor="fm-desc">{t("descLabel")}</FieldLabel>
-          <span className={cn("text-[0.72rem] tabular-nums", len > 1024 ? "font-semibold text-foreground" : "text-muted-foreground")}>{t("descCounter", { n: len })}</span>
+    <div className="shrink-0 border-b bg-muted/20">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left hover:bg-muted/50"
+        aria-expanded={open}
+        onClick={() => onOpenChange(!open)}
+      >
+        <span className="min-w-0">
+          <span className="block text-[0.72rem] font-medium uppercase tracking-[0.08em] text-muted-foreground">{t("frontmatter")}</span>
+          <span className="mt-0.5 block truncate text-[0.82rem]">{name || skill.name}</span>
+        </span>
+        <ChevronDown className={cn("size-4 shrink-0 transition-transform motion-reduce:transition-none", open && "rotate-180")} aria-hidden />
+      </button>
+      {open && (
+        <div className="grid gap-3 border-t px-5 py-4 lg:grid-cols-[14rem_1fr]">
+          <Field>
+            <FieldLabel htmlFor="fm-name">{t("nameLabel")}</FieldLabel>
+            <Input id="fm-name" value={name || skill.name} readOnly className="bg-muted/50 font-mono text-[0.82rem]" aria-describedby="fm-name-hint" />
+            <FieldDescription id="fm-name-hint" className="text-[0.75rem]">
+              {t("nameReadonlyHint")}
+            </FieldDescription>
+          </Field>
+          <Field data-invalid={placeholder || len > 1024 || undefined}>
+            <div className="flex items-baseline justify-between">
+              <FieldLabel htmlFor="fm-desc">{t("descLabel")}</FieldLabel>
+              <span className={cn("text-[0.72rem] tabular-nums", len > 1024 ? "font-semibold text-foreground" : "text-muted-foreground")}>{t("descCounter", { n: len })}</span>
+            </div>
+            <Textarea
+              id="fm-desc"
+              value={description}
+              onChange={(e) => onDescription(e.target.value)}
+              readOnly={readOnly}
+              rows={3}
+              placeholder={t("descPlaceholder")}
+              className="min-h-[4.5rem] resize-y text-[0.85rem]"
+              aria-describedby="fm-desc-hint"
+            />
+            <FieldDescription id="fm-desc-hint" className="text-[0.75rem]">
+              {placeholder ? t("placeholderWarn", { name: skill.name }) : len > 1024 ? t("descTooLong") : t("descHint")}
+            </FieldDescription>
+          </Field>
         </div>
-        <Textarea
-          id="fm-desc"
-          value={description}
-          onChange={(e) => onDescription(e.target.value)}
-          readOnly={readOnly}
-          rows={3}
-          placeholder={t("descPlaceholder")}
-          className="min-h-[4.5rem] resize-y text-[0.85rem]"
-          aria-describedby="fm-desc-hint"
-        />
-        <FieldDescription id="fm-desc-hint" className="text-[0.75rem]">
-          {placeholder ? t("placeholderWarn", { name: skill.name }) : len > 1024 ? t("descTooLong") : t("descHint")}
-        </FieldDescription>
-      </Field>
+      )}
     </div>
   )
 }
