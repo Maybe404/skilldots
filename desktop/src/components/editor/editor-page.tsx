@@ -190,13 +190,13 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
       </header>
 
       {needsAck && acked && (
-        <div className="border-b bg-muted/60 px-5 py-1.5 text-[0.8rem]" role="note">
+        <div className="sticky top-0 z-10 border-b bg-muted/90 px-5 py-1.5 text-[0.8rem] backdrop-blur" role="note">
           {t("vendorBanner")}
         </div>
       )}
 
       <div className="flex min-h-0 flex-1">
-        <nav aria-label={t("files")} className="w-56 shrink-0 overflow-y-auto border-r bg-muted/30 py-2">
+        <nav aria-label={t("files")} className="w-52 shrink-0 overflow-y-auto border-r bg-muted/30 py-2 sm:w-56 lg:w-64">
           <p className="px-4 pt-1 pb-1 text-[0.72rem] font-medium text-muted-foreground">{t("files")}</p>
           {tree ? <FileTree nodes={tree} active={active} dirty={dirtySet} onOpen={open} /> : <p className="px-4 text-sm text-muted-foreground">{t("loading")}</p>}
         </nav>
@@ -417,9 +417,9 @@ function FileTree({ nodes, active, dirty, onOpen }: { nodes: FileNode[]; active:
           aria-current={active === n.path ? "true" : undefined}
           className={cn("block w-full rounded-lg text-left", active === n.path && "bg-foreground/[0.07] font-medium")}
         >
-          <FileItem icon={isMarkdown(n.path) ? FileText : FileCode2}>
+          <FileItem icon={isMarkdown(n.path) ? FileText : FileCode2} title={n.name}>
             {n.name}
-            {dirty.has(n.path) && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-foreground align-middle" aria-label={t("unsaved")} />}
+            {dirty.has(n.path) && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-foreground align-middle" aria-label={t("unsaved")} title={t("unsaved")} />}
           </FileItem>
         </button>
       ),
