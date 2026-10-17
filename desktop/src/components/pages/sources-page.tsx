@@ -88,7 +88,7 @@ export function SourcesPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    {upd && (
+                    {(upd || movedOnly) && (
                       <Button size="sm" onClick={() => openDialog({ kind: "update", repos: [p.repo] })}>
                         {t("update")}
                       </Button>
