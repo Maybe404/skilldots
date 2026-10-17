@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/safetext"
 	"github.com/Maybe404/skilldots/internal/targets"
 )
@@ -435,8 +436,10 @@ func TestTrashShowsNoRecordedText(t *testing.T) {
 // not as skd names what it sets aside is listed as data: its ID, name
 // and path show only "(unsafe name)" in place of that text, it is
 // marked unsafe and not restorable, and Restore refuses it by its real
-// ID too. Entries named as skd names them, a "-<n>" suffix included,
-// are listed and restored by the ID shown.
+// ID too, and by the one shown. Each such entry is listed under an ID of
+// its own ("(unsafe name 2)" and on). Entries named as skd names them, a
+// "-<n>" suffix included, are listed and restored by the ID shown. What
+// Finder leaves (.DS_Store) is not an entry.
 func TestTrashShowsNoUnsafeNames(t *testing.T) {
 	lib, reg, home := restoreLib(t)
 	agents := filepath.Join(home, ".agents", "skills")
@@ -451,14 +454,23 @@ func TestTrashShowsNoUnsafeNames(t *testing.T) {
 	park(t, ok, "mine", filepath.Join(agents, "mine"))
 	park(t, ok, "mine-2", filepath.Join(agents, "mine2"))
 	park(t, ok, long+"-2", filepath.Join(agents, long))
+	os.WriteFile(filepath.Join(ok, ".DS_Store"), []byte("finder"), 0o644)
+	os.WriteFile(filepath.Join(trash, ".DS_Store"), []byte("finder"), 0o644)
+	os.MkdirAll(filepath.Join(trash, "20260102-000000", ".DS_Store"), 0o755)
+	os.WriteFile(filepath.Join(trash, "20260102-000000", ".DS_Store.origin"), []byte(filepath.Join(agents, "x")+"\n"), 0o644)
 	items, err := ListTrash(lib, reg)
 	if err != nil || len(items) != 6 {
 		t.Fatalf("%+v %v", items, err)
 	}
 	unsafe := 0
+	ids := map[string]bool{}
 	for _, it := range items {
 		b, _ := json.Marshal(it)
-		if strings.Contains(string(b), "SYSTEM") || strings.Contains(string(b), "ATTENTION") || strings.Contains(string(b), ".ssh") {
+		if ids[it.ID] {
+			t.Errorf("ID %q listed twice", it.ID)
+		}
+		ids[it.ID] = true
+		if strings.Contains(string(b), "SYSTEM") || strings.Contains(string(b), "ATTENTION") || strings.Contains(string(b), ".ssh") || strings.Contains(string(b), "DS_Store") {
 			t.Errorf("shows the name: %s", b)
 		}
 		if !it.Unsafe {
@@ -468,8 +480,11 @@ func TestTrashShowsNoUnsafeNames(t *testing.T) {
 			continue
 		}
 		unsafe++
-		if it.Restorable || it.Name != UnsafeName || !strings.HasSuffix(it.ID, "/"+UnsafeName) || it.Origin != "" || !strings.Contains(string(b), `"unsafe":true`) {
+		if it.Restorable || !strings.HasPrefix(it.Name, "(unsafe name") || !strings.HasSuffix(it.ID, "/"+it.Name) || it.Origin != "" || !strings.Contains(string(b), `"unsafe":true`) {
 			t.Errorf("unsafe entry: %s", b)
+		}
+		if _, err := Restore(lib, reg, it.ID); err == nil || strings.Contains(err.Error(), "SYSTEM") || strings.Contains(err.Error(), "ATTENTION") {
+			t.Errorf("restore %q: %v", it.ID, err)
 		}
 	}
 	if unsafe != 3 {
@@ -483,6 +498,68 @@ func TestTrashShowsNoUnsafeNames(t *testing.T) {
 	for _, id := range []string{"20260101-000000/mine", "20260101-000000/mine-2", "20260101-000000/" + long + "-2"} {
 		if _, err := Restore(lib, reg, id); err != nil {
 			t.Errorf("%s: %v", id, err)
+		}
+	}
+}
+
+// What skd moves to the trash is named so that `skd trash` shows it and
+// restores it by the ID it shows, whatever it was called: the vendored
+// directory of the pack owner/.github (skd remove of its last skill) is
+// listed as "github", and restored to vendor/owner/.github; other names
+// a skill may not have are made into one.
+func TestTrashNamesWhatItMovesAsItShowsThem(t *testing.T) {
+	lib, reg, _ := restoreLib(t)
+	trashBatch = ""
+	t.Cleanup(func() { trashBatch = "" })
+	pack := filepath.Join(lib.VendorDir(), "owner", ".github")
+	writeSkill(t, filepath.Join(pack, "x"), "x")
+	if err := RemovePack(lib, "owner/.github"); err != nil {
+		t.Fatal(err)
+	}
+	odd := map[string]string{}
+	for _, n := range []string{".hidden", "My Skill", "..", "a..b", "\u00e9t\u00e9", strings.Repeat("y", 200) + " z"} {
+		src := filepath.Join(lib.VendorDir(), "o", "r", "cat", n)
+		if n == ".." {
+			src = filepath.Join(lib.VendorDir(), "o", "r", "cat", "...")
+		}
+		writeSkill(t, src, "s")
+		to, err := Trash(lib, src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		odd[filepath.Base(to)] = src
+	}
+	items, err := ListTrash(lib, reg)
+	if err != nil || len(items) != 7 {
+		t.Fatalf("%+v %v", items, err)
+	}
+	for _, it := range items {
+		if it.Unsafe || !it.Restorable {
+			t.Errorf("%s: %+v", it.ID, it)
+		}
+	}
+	id := ""
+	for _, it := range items {
+		if it.Name == "github" {
+			id = it.ID
+		}
+	}
+	if id == "" {
+		t.Fatalf("no github entry: %+v", items)
+	}
+	to, err := Restore(lib, reg, id)
+	if err != nil || to != pack {
+		t.Fatalf("%q %v", to, err)
+	}
+	if _, err := os.Stat(filepath.Join(pack, "x", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range odd {
+		if manifest.CheckName(name) != nil {
+			t.Errorf("%q named %q", src, name)
+		}
+		if to, err := Restore(lib, reg, batch()+"/"+name); err != nil || to != src {
+			t.Errorf("%q: %q %v", name, to, err)
 		}
 	}
 }

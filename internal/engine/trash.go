@@ -43,7 +43,22 @@ type TrashEntry struct {
 }
 
 // UnsafeName stands for a trash batch or entry name that is not shown.
+// Entries listed under it are told apart by a number: "(unsafe name 2)".
 const UnsafeName = "(unsafe name)"
+
+// unsafeName is how ListTrash shows the n-th entry (from 1) whose name it
+// does not show: UnsafeName, numbered from the second on, so every ID it
+// lists is different and none holds the name's text.
+func unsafeName(n int) string {
+	if n <= 1 {
+		return UnsafeName
+	}
+	return fmt.Sprintf("(unsafe name %d)", n)
+}
+
+// finderFile is what macOS Finder leaves in a folder it shows; it is never
+// an entry of the trash.
+const finderFile = ".DS_Store"
 
 // batchRE is how batch() names a batch.
 var batchRE = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}$`)
@@ -64,6 +79,37 @@ func trashName(batch, name string) bool {
 	}
 	m := suffixRE.FindStringSubmatch(name)
 	return m != nil && manifest.CheckName(m[1]) == nil
+}
+
+// entryName is the name Trash gives what it moves from src, named base:
+// base itself when it is named like a skill (trashName accepts it), else
+// a name that is (".github", a pack directory of the repository
+// owner/.github, as "github"): the characters a skill's name may not
+// have become "-", leading dots go, ".." becomes ".", and it is cut to
+// leave room for Trash's "-<n>". The entry's record keeps where it came
+// from, so restoring it puts it back under its own name.
+func entryName(base string) string {
+	if manifest.CheckName(base) == nil {
+		return base
+	}
+	b := []byte(base)
+	for i, c := range b {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			b[i] = '-'
+		}
+	}
+	name := string(b)
+	for strings.Contains(name, "..") {
+		name = strings.ReplaceAll(name, "..", ".")
+	}
+	name = strings.TrimLeft(name, ".")
+	if len(name) > 100 {
+		name = name[:100]
+	}
+	if manifest.CheckName(name) != nil {
+		return "entry"
+	}
+	return name
 }
 
 // trashBatch is the per-run folder so one command's moves stay together.
@@ -100,7 +146,9 @@ func Trash(lib *library.Library, src string) (string, error) {
 	if abs, err := filepath.Abs(src); err == nil {
 		src = abs
 	}
-	name := filepath.Base(src)
+	// Named as skd names what it sets aside, so `skd trash` shows it and
+	// restores it by the ID it shows.
+	name := entryName(filepath.Base(src))
 	// Neither the entry nor its record may be there already, in any
 	// form: a batch directory of a cloned library's trash is someone
 	// else's to fill, and a "<name>.origin" there that is a link to a
@@ -162,6 +210,7 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 		return nil, err
 	}
 	var out []TrashEntry
+	unsafe := 0
 	for _, b := range batches {
 		// DirEntry types come from the directory itself: a symbolic link
 		// to a directory is not a directory here, and is left out.
@@ -170,6 +219,9 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 		}
 		items, _ := os.ReadDir(filepath.Join(root, b.Name()))
 		for _, it := range items {
+			if it.Name() == finderFile {
+				continue
+			}
 			link := it.Type()&os.ModeSymlink != 0
 			if !it.IsDir() && !(link && fsutil.Lexists(filepath.Join(root, b.Name(), it.Name())+".origin")) {
 				continue
@@ -184,7 +236,9 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 				if batchRE.MatchString(b.Name()) {
 					batch, at = b.Name(), filepath.Join(root, b.Name())
 				}
-				out = append(out, TrashEntry{ID: batch + "/" + UnsafeName, Name: UnsafeName, Path: at, When: when, Unsafe: true,
+				unsafe++
+				name := unsafeName(unsafe)
+				out = append(out, TrashEntry{ID: batch + "/" + name, Name: name, Path: at, When: when, Unsafe: true,
 					Problem: "its name is not one skd gives what it sets aside, so it is not shown and skd does not restore it; look at it by hand in the library's " + TrashDir})
 				continue
 			}
