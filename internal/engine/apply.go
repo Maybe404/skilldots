@@ -100,6 +100,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 	var plan Plan
 	desired := map[string]bool{}
 	placed := loadPlaced()
+	olds := oldLibs{}
 	conflictShown := map[string]bool{}
 	for i := range entries {
 		e := &entries[i]
@@ -244,6 +245,8 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			op.Action, op.Reason = "remove", "the app's link to "+prev.Source
 		case staleDangling(dest, prev, lib) != "":
 			op.Action, op.Reason = "remove", "a link to the previous library location "+staleDangling(dest, prev, lib)+", where nothing is any more"
+		case staleKnown(dest, key, prev, lib, olds) != "":
+			op.Action, op.Reason = "remove", "a link to the previous library location "+staleKnown(dest, key, prev, lib, olds)+", whose skills.lock records it"
 		default:
 			op.Action, op.Reason = "skip", "no longer wanted, but skd cannot tell it made it (changed since, made by an older skd, or not made by skd); left in place: it may be the user's own"
 		}
@@ -283,6 +286,7 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 	placedMu.Lock()
 	defer placedMu.Unlock()
 	placed := loadPlaced()
+	olds := oldLibs{}
 	dirty := false
 	defer func() {
 		if dirty {
@@ -293,14 +297,16 @@ func Apply(lib *library.Library, plan Plan) (*Result, error) {
 		if !fsutil.Lexists(op.Dest) {
 			return nil
 		}
+		key := op.Target.Name + "/" + op.Name
 		if ownLink(op.Dest, prev, lib) || confirms(placed, op.Dest) || staleDangling(op.Dest, prev, lib) != "" ||
-			(op.Action == "remove" && appLink(op.Dest, prev, lib)) {
+			staleKnown(op.Dest, key, prev, lib, olds) != "" || (op.Action == "remove" && appLink(op.Dest, prev, lib)) {
 			// A link skd made holds no data, and a copy exactly as skd
 			// wrote it is reproducible from the library; a link to where
-			// the library was, leading nowhere now, holds only that path
-			// (said in the plan); an app's link that nothing wants any
-			// more holds only the app's directory (appLink). RemoveAll
-			// does not follow a link: it removes the link itself.
+			// the library was, leading nowhere now or recorded by the
+			// library still there, holds only that path (said in the
+			// plan); an app's link that nothing wants any more holds only
+			// the app's directory (appLink). RemoveAll does not follow a
+			// link: it removes the link itself.
 			if err := os.RemoveAll(op.Dest); err != nil {
 				return err
 			}
@@ -634,6 +640,78 @@ func staleDangling(dest string, prev *lock.Link, lib *library.Library) string {
 		return ""
 	}
 	if st, err := os.Stat(filepath.Dir(old)); err != nil || !st.IsDir() {
+		return ""
+	}
+	return old
+}
+
+// oldLibs caches the locks of previous library locations read by
+// staleKnown during one plan or apply, by root ("" when there is none).
+type oldLibs map[string]*lock.Lock
+
+// load is the lock of the library at root, nil when root holds no
+// library of its own: skills.toml and skills.lock must be regular
+// files there (not links, which could make any file look like one).
+func (o oldLibs) load(root string) *lock.Lock {
+	if l, ok := o[root]; ok {
+		return l
+	}
+	o[root] = nil
+	for _, f := range []string{manifest.FileName, lock.FileName} {
+		if st, err := os.Lstat(filepath.Join(root, f)); err != nil || !st.Mode().IsRegular() {
+			return nil
+		}
+	}
+	l, err := lock.Load(filepath.Join(root, lock.FileName))
+	if err != nil {
+		return nil
+	}
+	o[root] = l
+	return l
+}
+
+// staleKnown returns the previous library root when dest is a link skd
+// made from a library that is still there (copied: cp -R lib lib2, then
+// skd use lib2), else "". It must be exactly what skd writes, an
+// absolute link to the old root joined with the recorded source (a
+// clean path inside the library under skills/, private/ or vendor/),
+// that source must exist in the old library, and the old library's own
+// skills.lock must record the same link: the same key, mode, source and
+// path. Such a link holds no data, only a path into a library that
+// still has the skill, so it is removed outright even when skd's placed
+// record does not know it (made before there was one).
+//
+// The current library's lock may be forged; the old library's is not
+// part of it. A forged record can claim a link of the user's only when
+// it leads into another skd library on this machine whose lock records
+// that very link: losing it loses no data, and the path is in the
+// output.
+func staleKnown(dest, key string, prev *lock.Link, lib *library.Library, olds oldLibs) string {
+	if prev == nil || prev.Mode != "link" || libSource(prev.Source, lib) == "" {
+		return ""
+	}
+	if top, _, _ := strings.Cut(filepath.ToSlash(prev.Source), "/"); top != library.DirSkills && top != library.DirPrivate && top != library.DirVendor {
+		return ""
+	}
+	old := staleRoot(dest, prev, lib)
+	if old == "" || fsutil.Within(lib.Root, old) {
+		// A "previous library" inside this one would be this library's
+		// own files, which come with it.
+		return ""
+	}
+	got, err := os.Readlink(dest)
+	if err != nil || got != filepath.Join(old, filepath.FromSlash(prev.Source)) {
+		return ""
+	}
+	if st, err := os.Stat(got); err != nil || !st.IsDir() || fsutil.LinkOnPath(old, got) != "" {
+		return ""
+	}
+	ol := olds.load(old)
+	if ol == nil {
+		return ""
+	}
+	rec := ol.Links[key]
+	if rec == nil || rec.Mode != "link" || rec.Source != prev.Source || rec.Path == "" || placedKey(rec.Path) != placedKey(dest) {
 		return ""
 	}
 	return old

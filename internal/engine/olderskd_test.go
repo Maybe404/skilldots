@@ -203,6 +203,88 @@ func TestStaleDanglingOnlyWhenTheLibraryMoved(t *testing.T) {
 	}
 }
 
+// cp -R lib lib2, then skd use lib2: the links an older skd made from
+// lib (with no placed record) are relinked and removed outright, as
+// that skd did, while lib's own skills.lock records them and lib still
+// has the skill. Without that, they go to the trash (wanted) or stay
+// (not wanted): the current lock may be forged, the old library's is
+// not part of it.
+func TestLinksOfACopiedLibrary(t *testing.T) {
+	for _, c := range []string{"recorded", "not recorded", "another path", "another source", "lock is a link", "no skills.toml", "inside this library"} {
+		for _, wanted := range []bool{true, false} {
+			lib, reg, home := newTestLib(t)
+			writeSkill(t, filepath.Join(lib.Root, "skills", "s"), "s")
+			if !wanted {
+				lib.Manifest.Targets.Default = []string{}
+			}
+			old := filepath.Join(home, "old-lib")
+			if c == "inside this library" {
+				// Its lock comes with this library: no evidence.
+				old = filepath.Join(lib.Root, "nested")
+			}
+			writeSkill(t, filepath.Join(old, "skills", "s"), "s")
+			writeSkill(t, filepath.Join(old, "skills", "t"), "t")
+			agents := filepath.Join(home, ".agents", "skills")
+			os.MkdirAll(agents, 0o755)
+			dest := filepath.Join(agents, "s")
+			os.Symlink(filepath.Join(old, "skills", "s"), dest)
+			rec := &lock.Link{Mode: "link", Source: "skills/s", Path: dest}
+			lib.Lock.Links["agents/s"] = rec
+			oldRec := *rec
+			switch c {
+			case "another path":
+				oldRec.Path = filepath.Join(home, ".claude", "skills", "s")
+			case "another source":
+				oldRec.Source = "skills/t"
+			}
+			ol := &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{"agents/s": &oldRec}}
+			if c == "not recorded" {
+				ol.Links = map[string]*lock.Link{}
+			}
+			lockAt := filepath.Join(old, lock.FileName)
+			if c == "lock is a link" {
+				lockAt = filepath.Join(home, "elsewhere.lock")
+				os.Symlink(lockAt, filepath.Join(old, lock.FileName))
+			}
+			if err := ol.Save(lockAt); err != nil {
+				t.Fatal(err)
+			}
+			if c != "no skills.toml" {
+				os.WriteFile(filepath.Join(old, manifest.FileName), []byte("[targets]\n"), 0o644)
+			}
+			entries, _, _ := Resolve(lib, reg)
+			plan, op := planFor(t, func() Plan { return MakePlan(lib, entries, false) }, "agents", "s")
+			res, err := Apply(lib, plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			label := c
+			if wanted {
+				label += ", wanted"
+			}
+			switch {
+			case c == "recorded":
+				if len(res.Backups) != 0 {
+					t.Fatalf("%s: trashed %v", label, res.Backups)
+				}
+				if wanted != isLinkTo(dest, filepath.Join(lib.Root, "skills", "s")) || (!wanted && fsutil.Lexists(dest)) {
+					t.Fatalf("%s: %+v", label, op)
+				}
+			case wanted:
+				if op.Action != "replace" || len(res.Backups) != 1 {
+					t.Fatalf("%s: %+v %v", label, op, res.Backups)
+				}
+			default:
+				if op.Action != "skip" || !isLinkTo(dest, filepath.Join(old, "skills", "s")) {
+					t.Fatalf("%s: %+v", label, op)
+				}
+			}
+			if !fileExists(filepath.Join(old, "skills", "s", "SKILL.md")) {
+				t.Fatalf("%s: the old library's skill went", label)
+			}
+		}
+	}
+}
 
 // A link nothing in skills.lock can confirm is moved to the trash when a
 // wanted skill takes its place with --force, even when it looks exactly
