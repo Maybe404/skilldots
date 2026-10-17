@@ -257,7 +257,7 @@ export function SkillsPage() {
                     tabIndex={0}
                     aria-selected={selected === row.id}
                     data-state={selected === row.id ? "selected" : undefined}
-                    className="cursor-default focus-visible:-outline-offset-2 data-[state=selected]:bg-muted"
+                    className="group/row cursor-default focus-visible:-outline-offset-2 hover:bg-muted/50 data-[state=selected]:bg-muted"
                     onClick={() => select(row.id)}
                     onKeyDown={(e) => {
                       if (e.target !== e.currentTarget) return
@@ -279,8 +279,8 @@ export function SkillsPage() {
                         className={cn(
                           "py-2",
                           cell.column.id.startsWith("agent:") && "text-center",
-                          index === 0 && "sticky left-0 z-[1] bg-background",
-                          index === 1 && "sticky left-[22rem] z-[1] bg-background shadow-[1px_0_0_var(--border)]",
+                          index === 0 && "sticky left-0 z-[1] bg-background group-hover/row:bg-muted/50 group-data-[state=selected]/row:bg-muted",
+                          index === 1 && "sticky left-[22rem] z-[1] bg-background shadow-[1px_0_0_var(--border)] group-hover/row:bg-muted/50 group-data-[state=selected]/row:bg-muted",
                         )}
                       >
                         <table.FlexRender cell={cell} />
@@ -363,8 +363,8 @@ function AgentCell({
             <Check className="size-3" strokeWidth={3} />
           </span>
         ) : (
-          <span className="inline-flex size-4 items-center justify-center rounded-[5px] border border-transparent group-hover/cell:border-foreground/45 group-focus-visible/cell:border-foreground/45">
-            <span className="size-1.5 rounded-full border border-muted-foreground/45 bg-transparent group-hover/cell:border-foreground/70 group-focus-visible/cell:border-foreground/70" />
+          <span className="inline-flex size-5 items-center justify-center rounded-[5px] border border-transparent group-hover/cell:border-foreground/45 group-focus-visible/cell:border-foreground/45">
+            <span className="size-2 rounded-full border-2 border-muted-foreground/45 bg-transparent group-hover/cell:border-foreground/70 group-focus-visible/cell:border-foreground/70" />
           </span>
         )}
         {off && <OffRing className="absolute -top-0.5 -right-0.5 size-2 bg-background" label={t("claudeOffMarker")} />}

@@ -52,7 +52,7 @@ export function SourcesPage() {
               const upd = st ? hasUpdates(st) : false
               const movedOnly = st && !upd && st.moved.length > 0
               return (
-                <li key={p.repo} className="flex items-start gap-4 px-4 py-3.5">
+                <li key={p.repo} className="grid gap-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                       <span className="font-medium">{p.repo}</span>
@@ -87,7 +87,7 @@ export function SourcesPage() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 sm:max-w-[23rem]">
                     {(upd || movedOnly) && (
                       <Button size="sm" onClick={() => openDialog({ kind: "update", repos: [p.repo] })}>
                         {t("update")}

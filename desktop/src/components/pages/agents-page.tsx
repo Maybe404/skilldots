@@ -40,13 +40,13 @@ export function AgentsPage() {
             const n = count(a)
             const id = `default-${a.name}`
             return (
-              <li key={a.name} className="grid grid-cols-[1fr_auto_auto] items-center gap-5 px-4 py-3">
+              <li key={a.name} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-5">
                 <div className="min-w-0">
                   <div className="font-medium">{a.label}</div>
                   <Mono className="text-muted-foreground">{a.path}</Mono>
                 </div>
-                <span className="text-[0.8rem] text-muted-foreground tabular-nums">{t("skillsInAgent", { n })}</span>
-                <div className="flex items-center gap-4">
+                <span className="text-[0.8rem] text-muted-foreground tabular-nums sm:col-start-2 sm:row-start-1">{t("skillsInAgent", { n })}</span>
+                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 sm:col-start-2 sm:row-start-2">
                   <label htmlFor={id} className="flex items-center gap-2 text-[0.82rem]">
                     <Checkbox id={id} checked={a.isDefault} onCheckedChange={(v) => setDefault(a, !!v)} disabled={a.isDefault && agents.filter((x) => x.isDefault).length === 1} />
                     {t("defaultInstall")}
@@ -56,7 +56,7 @@ export function AgentsPage() {
                   }}>
                     {t(a.hidden ? "showAgentColumn" : "hideAgentColumn")}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setEnabled(a, false)}>
+                  <Button variant="ghost" size="sm" disabled={n > 0} title={n > 0 ? t("disableAgentBlocked", { n }) : undefined} onClick={() => setEnabled(a, false)}>
 
                     {t("disableAgent")}
                   </Button>

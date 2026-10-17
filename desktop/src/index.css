@@ -13,7 +13,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
   --color-window: var(--window);
   --color-faint: var(--faint);
