@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/lock"
 )
 
 // The lock comes with the library, and a library may come from someone
@@ -119,4 +121,124 @@ func confirms(m map[string]placedEntry, dest string) bool {
 		return st.IsDir() && fsutil.Pristine(dest, e.Hash)
 	}
 	return false
+}
+
+// OlderSkd reports whether skd on this machine has kept no placed file
+// yet: the links an skd older than the record left in agent
+// directories may still be there unrecorded. The first library opened
+// with this skd's own settings ends that (AdoptOlderAppLinks writes the
+// file, recording what it can), as does pointing skd at another library
+// (SealPlaced): from then on every link skd makes is recorded as it is
+// made, and nothing outside the library is taken for skd's on what
+// skills.toml and skills.lock say.
+func OlderSkd() bool {
+	p := placedFile()
+	if p == "" {
+		return false
+	}
+	_, err := os.Lstat(p)
+	return os.IsNotExist(err)
+}
+
+// SealPlaced writes an empty placed file at p when there is none, so
+// that OlderSkd is false from now on. skd clone, init and use call it
+// before they point skd at a library: a library cloned from someone
+// else is never the one an older skd made links from.
+func SealPlaced(p string) {
+	if p == "" {
+		return
+	}
+	placedMu.Lock()
+	defer placedMu.Unlock()
+	if _, err := os.Lstat(p); !os.IsNotExist(err) {
+		return
+	}
+	b, _ := json.MarshalIndent(placedDoc{Version: 1, Placed: map[string]placedEntry{}}, "", "  ")
+	if os.MkdirAll(filepath.Dir(p), 0o755) == nil {
+		fsutil.WriteAtomic(p, append(b, '\n'))
+	}
+}
+
+// AdoptOlderAppLinks records in the placed file the links of the
+// library's apps an older skd made, which kept no record of them, and
+// writes the file even when there is none (OlderSkd is false after it).
+// It returns how many it recorded. Only while OlderSkd, and only for
+// entries as skills.toml has them now, before a command changes it, so
+// that disabling the app or taking it out of skills.toml later removes
+// them outright, as that skd did. The caller makes sure lib is the
+// library this user's settings name (app.Open): see docs/design.md for
+// why that, and not skills.toml and skills.lock, is the evidence.
+//
+// A link is recorded only when it is exactly what skd makes for an
+// app's skill this library wants in that target (olderAppLink).
+func AdoptOlderAppLinks(lib *library.Library, entries []Entry) int {
+	placedMu.Lock()
+	defer placedMu.Unlock()
+	if !OlderSkd() {
+		return 0
+	}
+	placed := loadPlaced()
+	n := 0
+	for i := range entries {
+		e := &entries[i]
+		if e.Kind != KindApp || e.Refused != "" || e.Missing || e.Conflict != "" {
+			continue
+		}
+		for _, t := range e.Targets {
+			dest := filepath.Join(t.Path, e.LinkName)
+			if _, ok := placed[placedKey(dest)]; ok {
+				continue
+			}
+			if olderAppLink(dest, lib.Lock.Links[t.Name+"/"+e.LinkName], e.Dir, lib) {
+				placed[placedKey(dest)] = placedEntry{Link: e.Dir}
+				n++
+			}
+		}
+	}
+	savePlaced(placed)
+	return n
+}
+
+// olderAppLink reports whether dest is exactly the link skd makes for
+// the app's skill at src: a symbolic link whose target is src as
+// written, which the lock records as that link's source, src being an
+// absolute, clean directory of its own (not itself a link) with a
+// regular SKILL.md, not a place of keys (CheckAppDir), and neither src
+// nor where it really is lies inside the library or in any agent's
+// skill directory (where a link of the user's from one agent to
+// another, or to skd's own link, leads; an app's skill is never there).
+func olderAppLink(dest string, prev *lock.Link, src string, lib *library.Library) bool {
+	if prev == nil || prev.Mode != "link" || prev.Source != src || !filepath.IsAbs(src) || filepath.Clean(src) != src {
+		return false
+	}
+	if st, err := os.Lstat(src); err != nil || !st.IsDir() {
+		return false
+	}
+	if st, err := os.Lstat(dest); err != nil || st.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	if got, err := os.Readlink(dest); err != nil || got != src {
+		return false
+	}
+	if CheckAppDir(src) != nil {
+		return false
+	}
+	real := fsutil.Resolve(src)
+	places := []string{lib.Root}
+	if reg := registryPtr.Load(); reg != nil {
+		for _, t := range reg.All() {
+			places = append(places, t.Path)
+		}
+	} else {
+		return false
+	}
+	for _, d := range places {
+		d = filepath.Clean(d)
+		for _, p := range []string{src, real} {
+			if fsutil.Inside(d, p, true) || fsutil.Inside(fsutil.Resolve(d), p, true) {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -274,7 +274,7 @@ func setupMenu() (bool, error) {
 		if !fsutil.Exists(filepath.Join(dir, manifest.FileName)) {
 			return false, fmt.Errorf("%s has no %s", dir, manifest.FileName)
 		}
-		if err := library.Remember(dir); err != nil {
+		if err := app.UseLibrary(dir); err != nil {
 			return false, err
 		}
 		fmt.Fprintf(stdout, "%s skd now uses %s\n", ok("✓"), dir)
@@ -309,6 +309,10 @@ func cloneCmd() *cobra.Command {
 			if _, err := config.Load(); err != nil {
 				return fmt.Errorf("%w; clone records the library there, so fix or remove it first (nothing was cloned)", err)
 			}
+			// Someone else's library is never one an older skd made links
+			// from: no link outside it is taken for skd's on what its
+			// skills.toml and skills.lock say.
+			app.SealOlderSkd()
 			if _, err := library.Git("", "clone", "-q", "--", args[0], dir); err != nil {
 				return err
 			}
@@ -320,7 +324,7 @@ func cloneCmd() *cobra.Command {
 			} else if err != nil {
 				return err
 			}
-			if err := library.Remember(dir); err != nil {
+			if err := app.UseLibrary(dir); err != nil {
 				return err
 			}
 			flags.library = dir

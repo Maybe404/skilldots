@@ -15,9 +15,9 @@ import (
 // git repository), a vendored pack and one app shipped in an
 // application bundle outside the home directory, no symbolic link
 // inside the library. After the upgrade nothing changes on disk: every
-// entry is kept, nothing is skipped, warned about or trashed; the next
-// apply records every link, and disabling the app then removes its
-// link outright.
+// entry is kept, nothing is skipped, warned about or trashed; the first
+// command (app.Open) records the app's links and the next apply every
+// other link, and disabling the app then removes its links outright.
 func TestUpgradeOfATypicalLibraryChangesNothing(t *testing.T) {
 	lib, reg, home := newTestLib(t)
 	all := []string{"agents", "claude", "codex", "gemini", "grok"}
@@ -52,6 +52,15 @@ func TestUpgradeOfATypicalLibraryChangesNothing(t *testing.T) {
 	}
 
 	entries, warnings, _ = Resolve(lib, reg)
+	if !OlderSkd() {
+		t.Fatal("no placed file, yet not taken for an older skd's")
+	}
+	if n := AdoptOlderAppLinks(lib, entries); n != len(all) {
+		t.Fatalf("adopted %d app links", n)
+	}
+	if OlderSkd() {
+		t.Fatal("still looking for an older skd's links")
+	}
 	plan := MakePlan(lib, entries, false)
 	if len(warnings) != 0 || plan.Changes() {
 		t.Fatalf("after upgrade: %v %+v", warnings, plan.ChangeList())

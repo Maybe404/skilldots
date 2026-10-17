@@ -25,12 +25,15 @@ func planFor(t *testing.T, lib0 func() Plan, target, name string) (Plan, Op) {
 }
 
 // The first command after upgrading from an skd that kept no placed
-// record may disable an app (all agents, or one), or the [[app]] may be
-// gone from skills.toml by hand: its links, exactly as the older skd
-// made them, are removed outright as it did, not left behind or moved
-// to the trash. The app's files are not touched.
+// record (app.Open runs AdoptOlderAppLinks before the command changes
+// skills.toml) may disable an app (all agents, or one): its links,
+// exactly as the older skd made them, are removed outright as it did,
+// not left behind or moved to the trash. So is an [[app]] taken out of
+// skills.toml by hand after skd ran once since the upgrade; taken out
+// before, nothing names the app any more and its links are left in
+// place. The app's files are not touched.
 func TestOlderAppLinksRemovedOnFirstDisable(t *testing.T) {
-	for _, how := range []string{"app removed", "disabled", "disabled for one agent"} {
+	for _, how := range []string{"app removed after a command", "app removed before any command", "disabled", "disabled for one agent"} {
 		lib, reg, home := newTestLib(t)
 		app := filepath.Join(home, "Applications", "X.app", "Skills", "x")
 		writeSkill(t, app, "x")
@@ -42,8 +45,17 @@ func TestOlderAppLinksRemovedOnFirstDisable(t *testing.T) {
 			os.Symlink(app, filepath.Join(dir, "x"))
 			lib.Lock.Links[tn+"/x"] = &lock.Link{Mode: "link", Source: app, Path: filepath.Join(dir, "x")}
 		}
+		lib.Manifest.Apps = []*manifest.App{{Name: "x", Path: app}}
+		if how != "app removed before any command" {
+			entries, _, _ := Resolve(lib, reg)
+			if n := AdoptOlderAppLinks(lib, entries); n != 2 {
+				t.Fatalf("%s: adopted %d", how, n)
+			}
+		}
 		gone := []string{"agents", "claude"}
 		switch how {
+		case "app removed after a command", "app removed before any command":
+			lib.Manifest.Apps = nil
 		case "disabled":
 			lib.Manifest.Apps = []*manifest.App{{Name: "x", Path: app, Targets: &[]string{}}}
 		case "disabled for one agent":
@@ -51,10 +63,17 @@ func TestOlderAppLinksRemovedOnFirstDisable(t *testing.T) {
 			gone = []string{"claude"}
 		}
 		entries, _, _ := Resolve(lib, reg)
+		if how == "app removed before any command" {
+			AdoptOlderAppLinks(lib, entries)
+		}
 		plan := MakePlan(lib, entries, false)
 		for _, tn := range gone {
 			_, op := planFor(t, func() Plan { return plan }, tn, "x")
-			if op.Action != "remove" || !strings.Contains(op.Reason, app) {
+			want := "remove"
+			if how == "app removed before any command" {
+				want = "skip"
+			}
+			if op.Action != want || strings.Contains(op.Reason, "app") {
 				t.Fatalf("%s: %s: %+v", how, tn, op)
 			}
 		}
@@ -63,8 +82,8 @@ func TestOlderAppLinksRemovedOnFirstDisable(t *testing.T) {
 			t.Fatalf("%s: %v %v", how, res.Backups, err)
 		}
 		for _, tn := range gone {
-			if fsutil.Lexists(filepath.Join(home, "."+tn, "skills", "x")) {
-				t.Fatalf("%s: the link in %s is still there", how, tn)
+			if fsutil.Lexists(filepath.Join(home, "."+tn, "skills", "x")) != (how == "app removed before any command") {
+				t.Fatalf("%s: the link in %s", how, tn)
 			}
 		}
 		if how == "disabled for one agent" && !isLinkTo(filepath.Join(home, ".agents", "skills", "x"), app) {
@@ -76,14 +95,88 @@ func TestOlderAppLinksRemovedOnFirstDisable(t *testing.T) {
 	}
 }
 
-// A forged lock record of a link nothing wants can have skd remove a
-// link of the user's only when it is exactly an app's link: an
-// absolute link, spelled exactly as the record's source, to a directory
-// with a regular SKILL.md that is not a place of keys and not in an
-// agent's skill directory. Everything else stays where it is, with
-// --force too.
+// A forged lock record of an app's link no [[app]] names (the library
+// is someone else's, cloned and applied by an agent): the user's own
+// link it names, `ln -s ~/projects/my-skill ~/.claude/skills/my-skill`,
+// a directory with a SKILL.md, is left exactly as it is, never removed
+// or moved to the trash, and the plan does not call it skd's or an
+// app's.
+func TestForgedAppRecordLeavesTheUsersLink(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		lib, reg, home := newTestLib(t)
+		lib.Manifest.Targets.Default = []string{}
+		mine := filepath.Join(home, "projects", "my-skill")
+		writeSkill(t, mine, "my-skill")
+		claude := filepath.Join(home, ".claude", "skills")
+		os.MkdirAll(claude, 0o755)
+		dest := filepath.Join(claude, "my-skill")
+		os.Symlink(mine, dest)
+		lib.Lock.Links["claude/my-skill"] = &lock.Link{Mode: "link", Source: mine}
+		entries, _, _ := Resolve(lib, reg)
+		if n := AdoptOlderAppLinks(lib, entries); n != 0 {
+			t.Fatalf("adopted %d", n)
+		}
+		plan, op := planFor(t, func() Plan { return MakePlan(lib, entries, force) }, "claude", "my-skill")
+		if op.Action != "skip" || strings.Contains(op.Reason, "app") || !strings.Contains(op.Reason, "may be the user's own") {
+			t.Fatalf("force %v: %+v", force, op)
+		}
+		if res, err := Apply(lib, plan); err != nil || len(res.Backups) != 0 {
+			t.Fatalf("%v %v", res, err)
+		}
+		if got, err := os.Readlink(dest); err != nil || got != mine {
+			t.Fatalf("force %v: the user's link changed: %q %v", force, got, err)
+		}
+	}
+}
+
+// The user's link from one agent's directory to another's entry, which
+// is skd's own link into the library (~/.claude/skills/mine ->
+// ~/.agents/skills/mine): a forged record naming the latter as an
+// app's source, with or without an [[app]] naming it too, never has
+// skd take the user's link for an app's. The source is itself a link
+// and is in an agent's directory.
+func TestForgedAppRecordThroughAnAgentLink(t *testing.T) {
+	for _, declared := range []bool{false, true} {
+		lib, reg, home := newTestLib(t)
+		writeSkill(t, filepath.Join(lib.Root, "skills", "mine"), "mine")
+		entries, _, _ := Resolve(lib, reg)
+		if _, err := Apply(lib, MakePlan(lib, entries, false)); err != nil {
+			t.Fatal(err)
+		}
+		os.Remove(filepath.Join(home, "placed.json"))
+		via := filepath.Join(home, ".agents", "skills", "mine")
+		claude := filepath.Join(home, ".claude", "skills")
+		os.MkdirAll(claude, 0o755)
+		dest := filepath.Join(claude, "mine")
+		os.Symlink(via, dest)
+		lib.Lock.Links["claude/mine"] = &lock.Link{Mode: "link", Source: via}
+		if declared {
+			lib.Manifest.Apps = []*manifest.App{{Name: "mine", Path: via, Targets: &[]string{"claude"}}}
+		}
+		entries, _, _ = Resolve(lib, reg)
+		if n := AdoptOlderAppLinks(lib, entries); n != 0 {
+			t.Fatalf("declared %v: adopted %d", declared, n)
+		}
+		lib.Manifest.Apps = nil
+		entries, _, _ = Resolve(lib, reg)
+		plan, op := planFor(t, func() Plan { return MakePlan(lib, entries, true) }, "claude", "mine")
+		if op.Action != "skip" {
+			t.Fatalf("declared %v: %+v", declared, op)
+		}
+		if res, err := Apply(lib, plan); err != nil || len(res.Backups) != 0 {
+			t.Fatalf("%v %v", res, err)
+		}
+		if got, err := os.Readlink(dest); err != nil || got != via {
+			t.Fatalf("declared %v: the user's link changed: %q %v", declared, got, err)
+		}
+	}
+}
+
+// A forged lock record of a link nothing wants never has skd remove a
+// link of the user's or anything else, whatever it is: everything
+// stays where it is, with --force too.
 func TestForgedAppRecordLeavesOtherLinks(t *testing.T) {
-	for _, c := range []string{"relative link", "into an agent's directory", "no SKILL.md", "SKILL.md is a link", "keys", "spelled differently", "copy record", "a directory"} {
+	for _, c := range []string{"exactly an app's link", "relative link", "into an agent's directory", "no SKILL.md", "SKILL.md is a link", "keys", "spelled differently", "copy record", "a directory"} {
 		for _, force := range []bool{false, true} {
 			lib, reg, home := newTestLib(t)
 			lib.Manifest.Targets.Default = []string{}
@@ -288,8 +381,8 @@ func TestLinksOfACopiedLibrary(t *testing.T) {
 
 // A link nothing in skills.lock can confirm is moved to the trash when a
 // wanted skill takes its place with --force, even when it looks exactly
-// like an app's link (appLink is only for links nothing wants): a
-// forged record must not turn the user's link into one skd removes.
+// like an app's link: a forged record must not turn the user's link
+// into one skd removes.
 func TestForcedReplaceOfAnAppLikeLinkGoesToTheTrash(t *testing.T) {
 	lib, reg, home := newTestLib(t)
 	writeSkill(t, filepath.Join(lib.Root, "skills", "mine"), "mine")

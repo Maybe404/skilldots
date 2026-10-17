@@ -83,14 +83,14 @@ func TestPlacedConfirmsOnlyWhatWasPlaced(t *testing.T) {
 
 // An app's link (its source outside the library) skd made is removed
 // outright when the app is disabled. One made by an older skd, with no
-// record, is recorded by the next apply (one with nothing to change
-// too) while it is exactly the link skd would make; disabled before
-// that (the first command after the upgrade), it is removed outright
-// too while it is exactly that link (appLink), as the older skd did.
-// Links into the library made by an older skd are recorded the same
-// way, so they stay known as skd's when the library moves.
+// record, is recorded only by the first command after the upgrade
+// (AdoptOlderAppLinks, run by app.Open before anything changes
+// skills.toml), never by a later apply: skills.toml and skills.lock
+// come with the library and could name any link of the user's. Links
+// into the library made by an older skd are recorded by the next apply,
+// so they stay known as skd's when the library moves.
 func TestAppLinksAndOlderLinks(t *testing.T) {
-	for _, mode := range []string{"recorded", "upgraded, applied", "upgraded"} {
+	for _, mode := range []string{"recorded", "upgraded, first command", "upgraded, applied", "upgraded, edited by hand"} {
 		lib, reg, home := newTestLib(t)
 		app := filepath.Join(home, "Applications", "X.app", "skills", "x")
 		writeSkill(t, app, "x")
@@ -111,9 +111,15 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 		if mode != "recorded" {
 			os.Remove(filepath.Join(home, "placed.json"))
 		}
-		if mode == "upgraded, applied" {
-			// The next apply has nothing to change; both links are
-			// recorded.
+		switch mode {
+		case "upgraded, first command":
+			entries, _, _ = Resolve(lib, reg)
+			if n := AdoptOlderAppLinks(lib, entries); n != 1 {
+				t.Fatalf("adopted %d", n)
+			}
+		case "upgraded, applied":
+			// An apply with nothing to change records the library's link,
+			// not the app's.
 			entries, _, _ = Resolve(lib, reg)
 			plan := MakePlan(lib, entries, false)
 			if plan.Changes() {
@@ -124,12 +130,19 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 			if e, ok := m[filepath.Join(home, ".agents", "skills", "s")]; !ok || e.Link == "" {
 				t.Fatalf("library link not recorded: %v", m)
 			}
-			if e, ok := m[dest]; !ok || e.Link != app || len(m) != 2 {
-				t.Fatalf("app link not recorded: %v", m)
+			if _, ok := m[dest]; ok || len(m) != 1 {
+				t.Fatalf("app link recorded by an apply: %v", m)
 			}
 		}
 		lib.Manifest.Apps = nil
 		entries, _, _ = Resolve(lib, reg)
+		if mode == "upgraded, edited by hand" {
+			// [[app]] taken out of skills.toml before skd ran: nothing
+			// names the app any more, so nothing is adopted.
+			if n := AdoptOlderAppLinks(lib, entries); n != 0 {
+				t.Fatalf("adopted %d", n)
+			}
+		}
 		plan := MakePlan(lib, entries, true)
 		var op Op
 		for _, o := range plan.Ops {
@@ -137,14 +150,19 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 				op = o
 			}
 		}
-		if op.Action != "remove" {
-			t.Fatalf("%s: %+v", mode, op)
-		}
 		if _, err := Apply(lib, plan); err != nil {
 			t.Fatal(err)
 		}
-		if fsutil.Lexists(dest) {
-			t.Fatalf("%s: the app's link is still there", mode)
+		switch mode {
+		case "recorded", "upgraded, first command":
+			if op.Action != "remove" || fsutil.Lexists(dest) {
+				t.Fatalf("%s: %+v", mode, op)
+			}
+		default:
+			// Left in place, said in the plan; nothing calls it the app's.
+			if op.Action != "skip" || !isLinkTo(dest, app) || strings.Contains(op.Reason, "app") {
+				t.Fatalf("%s: %+v", mode, op)
+			}
 		}
 		if items, _ := ListTrash(lib, reg); len(items) != 0 {
 			t.Fatalf("trashed %+v", items)
@@ -155,38 +173,63 @@ func TestAppLinksAndOlderLinks(t *testing.T) {
 	}
 }
 
-// An app's link is recorded only while it is exactly what skd would
-// make: a forged record (and an [[app]] naming the user's directory)
-// cannot claim the user's own link to something else, nor a link to an
-// app directory that is not a skill.
+// An app's link is adopted only while it is exactly what skd would
+// make, for an app skills.toml wants in that target, and only while
+// skd has kept no placed file yet: a forged record (and an [[app]]
+// naming the user's directory) cannot claim the user's own link to
+// something else, a link to an app directory that is not a skill, a
+// link to a link, or anything in an agent's skill directory or the
+// library.
 func TestAppLinkRecordedOnlyWhenExact(t *testing.T) {
-	for _, tc := range []string{"relative link", "record names another source", "not a skill"} {
+	for _, tc := range []string{"relative link", "record names another source", "not a skill", "not wanted there",
+		"placed file exists", "source is a link", "source through a link into an agent's directory", "source in the library", "exact"} {
 		lib, reg, home := newTestLib(t)
 		app := filepath.Join(home, "Apps", "X.app", "x")
 		writeSkill(t, app, "x")
 		agents := filepath.Join(home, ".agents", "skills")
 		os.MkdirAll(agents, 0o755)
 		dest := filepath.Join(agents, "x")
-		prev := &lock.Link{Mode: "link", Source: app}
+		src := app
 		target := app
+		prev := &lock.Link{Mode: "link", Source: app}
+		var targets *[]string
 		switch tc {
 		case "relative link":
 			target, _ = filepath.Rel(agents, app)
 		case "record names another source":
 			prev.Source = filepath.Join(home, "elsewhere")
+		case "not a skill":
+			os.Remove(filepath.Join(app, "SKILL.md"))
+		case "not wanted there":
+			targets = &[]string{"claude"}
+		case "placed file exists":
+			os.WriteFile(filepath.Join(home, "placed.json"), []byte(`{"version":1,"placed":{}}`), 0o644)
+		case "source is a link":
+			src = filepath.Join(home, "Apps", "link")
+			os.Symlink(app, src)
+		case "source through a link into an agent's directory":
+			real := filepath.Join(home, ".claude", "skills", "real")
+			writeSkill(t, real, "real")
+			os.Symlink(filepath.Join(home, ".claude", "skills"), filepath.Join(home, "Apps", "via"))
+			src = filepath.Join(home, "Apps", "via", "real")
+		case "source in the library":
+			src = filepath.Join(lib.Root, "skills", "x")
+			writeSkill(t, src, "x")
+		}
+		if src != app {
+			prev.Source, target = src, src
 		}
 		os.Symlink(target, dest)
 		lib.Lock.Links["agents/x"] = prev
-		lib.Manifest.Apps = append(lib.Manifest.Apps, &manifest.App{Name: "x", Path: app})
+		lib.Manifest.Apps = append(lib.Manifest.Apps, &manifest.App{Name: "x", Path: src, Targets: targets})
 		entries, _, _ := Resolve(lib, reg)
-		plan := MakePlan(lib, entries, false)
-		if tc == "not a skill" {
-			// Planned while a skill; not one any more when recorded.
-			os.Remove(filepath.Join(app, "SKILL.md"))
+		n := AdoptOlderAppLinks(lib, entries)
+		_, ok := loadPlaced()[dest]
+		if want := tc == "exact"; ok != want || (n == 1) != want {
+			t.Fatalf("%s: recorded %v (%d)", tc, ok, n)
 		}
-		Remember(lib, plan)
-		if _, ok := loadPlaced()[dest]; ok {
-			t.Fatalf("%s: recorded (plan %+v)", tc, plan.Ops)
+		if tc != "placed file exists" && OlderSkd() {
+			t.Fatalf("%s: placed file not written", tc)
 		}
 	}
 }

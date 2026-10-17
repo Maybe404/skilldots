@@ -102,7 +102,7 @@ func initCmd() *cobra.Command {
 			if err := library.EnsurePrivateGit(root); err != nil {
 				return err
 			}
-			if err := library.Remember(root); err != nil {
+			if err := app.UseLibrary(root); err != nil {
 				return err
 			}
 			say("%s initialised library at %s\n  %s\n", ok("✓"), root, dim("default targets: "+strings.Join(defaults, ", ")+"  (skd enable <skill> --agent claude to add more)"))
@@ -501,7 +501,7 @@ func useCmd() *cobra.Command {
 			if !fsutil.Exists(filepath.Join(root, manifest.FileName)) {
 				return fmt.Errorf("%s has no %s", root, manifest.FileName)
 			}
-			if err := library.Remember(root); err != nil {
+			if err := app.UseLibrary(root); err != nil {
 				return err
 			}
 			say("%s skd now uses %s %s\n", ok("✓"), root, dim("("+library.ConfigPath()+")"))
