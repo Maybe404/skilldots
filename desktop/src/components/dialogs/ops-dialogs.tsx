@@ -141,6 +141,8 @@ function PackUpdate({
           ))}
         </ul>
       )}
+      {pack.commitsUnknown && <p className="mt-2.5 ml-6.5 text-[0.78rem] text-muted-foreground">{t("historyCommitsUnknown")}</p>}
+      {pack.moreCommits && <p className="mt-1 ml-6.5 text-[0.78rem] text-muted-foreground">{t("historyMoreCommits")}</p>}
     </div>
   )
 }

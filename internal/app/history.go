@@ -87,6 +87,8 @@ type UpdateRecord struct {
 	// Omitted is how many skill names were left out of the lists above to
 	// keep the record within maxRecord (an update of thousands of skills).
 	Omitted int `json:"omitted,omitempty"`
+	// Backups are user files moved to the Trash before this update was linked.
+	Backups []string `json:"backups,omitempty"`
 }
 
 // UpstreamCommit is one upstream commit.
@@ -132,6 +134,9 @@ func (r *UpdateRecord) sanitize() {
 		r.Commits[i].Subject = CleanText(r.Commits[i].Subject, MaxSubject)
 	}
 	r.ApplyError = CleanText(r.ApplyError, MaxSubject)
+	for i := range r.Backups {
+		r.Backups[i] = CleanText(r.Backups[i], MaxName)
+	}
 }
 
 // CleanText is s fit to print on one terminal line: tabs and line breaks

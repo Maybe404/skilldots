@@ -81,6 +81,8 @@ export interface PackStatus {
   checked: string
   /** Upstream commit titles between commit and latest (newest first). */
   commits: { id: string; title: string }[]
+  moreCommits?: boolean
+  commitsUnknown?: boolean
 }
 
 /** app.Outdated */
@@ -101,7 +103,13 @@ export interface HistoryEntry {
   added: string[]
   gone: string[]
   moved: string[]
+  dropped?: string[]
+  new?: string[]
   commits: { id: string; title: string }[]
+  moreCommits?: boolean
+  commitsUnknown?: boolean
+  applyError?: string
+  omitted?: number
   /** Files the user had changed, moved to the trash before replacing. */
   backups: string[]
   /** Fictional sample shown by the mock. */

@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/Maybe404/skilldots/internal/app"
 )
 
 func invoke(t *testing.T, s *Service, name string, args ...any) any {
@@ -137,5 +140,54 @@ func TestHiddenAgentDoesNotChangeDistribution(t *testing.T) {
 	v, present := p.HiddenAgents["claude"]
 	if err != nil || !present || v {
 		t.Fatal("explicit visibility not persisted", err)
+	}
+}
+
+func TestDesktopHistoryAndOutdatedKeepDetails(t *testing.T) {
+	now := time.Now().UTC()
+	o := outdated(&app.Outdated{Checked: now, Packs: []app.PackStatus{{
+		Repo: "example/skills", Commit: "old", Latest: "new",
+		Changed: []string{"changed"}, Moved: []string{"moved"}, New: []string{"new-skill"},
+		Gone: []string{"gone"}, Pending: []string{"pending"}, Checked: now,
+		Commits: []app.UpstreamCommit{{Hash: "abc", Subject: "update skill"}}, MoreCommits: true, CommitsUnknown: true,
+	}}})
+	b, err := json.Marshal(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Packs []struct {
+			Commits                     []struct{ ID, Title string }
+			MoreCommits, CommitsUnknown bool
+		} `json:"packs"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Packs) != 1 || len(got.Packs[0].Commits) != 1 || got.Packs[0].Commits[0].ID != "abc" || !got.Packs[0].MoreCommits || !got.Packs[0].CommitsUnknown {
+		t.Fatalf("outdated details lost: %s", b)
+	}
+
+	rows := historyWithBackups([]app.UpdateRecord{{
+		Time: now, Repo: "example/skills", From: "old", To: "new",
+		Dropped: []string{"dropped"}, New: []string{"upstream-new"},
+		MoreCommits: true, CommitsUnknown: true, ApplyError: "apply failed", Omitted: 2,
+		Commits: []app.UpstreamCommit{{Hash: "def", Subject: "another update"}},
+	}}, []string{"skill/SKILL.md"})
+	b, err = json.Marshal(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var historyRows []struct {
+		Dropped, New, Backups       []string
+		MoreCommits, CommitsUnknown bool
+		ApplyError                  string
+		Omitted                     int
+	}
+	if err := json.Unmarshal(b, &historyRows); err != nil {
+		t.Fatal(err)
+	}
+	if len(historyRows) != 1 || len(historyRows[0].Dropped) != 1 || len(historyRows[0].New) != 1 || len(historyRows[0].Backups) != 1 || !historyRows[0].MoreCommits || !historyRows[0].CommitsUnknown || historyRows[0].ApplyError == "" || historyRows[0].Omitted != 2 {
+		t.Fatalf("history details lost: %s", b)
 	}
 }

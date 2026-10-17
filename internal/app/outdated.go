@@ -46,8 +46,13 @@ type PackStatus struct {
 	// no longer has; `update` keeps them.
 	Gone []string `json:"gone"`
 	// Pending are selected skills not vendored yet: `update` vendors them.
-	Pending []string  `json:"pending"`
-	Checked time.Time `json:"checked"`
+	Pending []string `json:"pending"`
+	// Commits are the upstream commits affecting the selected skills since
+	// the vendored commit. They are bounded like update history.
+	Commits        []UpstreamCommit `json:"commits,omitempty"`
+	MoreCommits    bool             `json:"moreCommits,omitempty"`
+	CommitsUnknown bool             `json:"commitsUnknown,omitempty"`
+	Checked        time.Time        `json:"checked"`
 }
 
 // HasUpdates reports whether `skd update` would change or report
@@ -163,7 +168,7 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 		return nil, i18n.Errorf("%s: no SKILL.md found", p.Repo)
 	}
 	st := &PackStatus{Repo: p.Repo, Latest: commit, Checked: time.Now(),
-		Changed: []string{}, Moved: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
+		Changed: []string{}, Moved: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}, Commits: []UpstreamCommit{}}
 	lp := s.Lib.Lock.Packs[p.Repo]
 	vendored := map[string]*lock.Skill{}
 	// The baseline for "new" is the lock's record of the last update only:
@@ -210,6 +215,11 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 	}
 	for _, l := range [][]string{st.Changed, st.Moved, st.New, st.Gone, st.Pending} {
 		sort.Strings(l)
+	}
+	if st.Commit != "" && st.Commit != st.Latest {
+		r := &UpdateRecord{Repo: st.Repo, From: st.Commit, To: st.Latest, Changed: st.Changed, Added: st.Pending, Moved: st.Moved, Gone: st.Gone, Commits: []UpstreamCommit{}}
+		fillCommits(ctx, r, p.Ref, upstream)
+		st.Commits, st.MoreCommits, st.CommitsUnknown = r.Commits, r.MoreCommits, r.CommitsUnknown
 	}
 	return st, nil
 }

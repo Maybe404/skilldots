@@ -699,7 +699,7 @@ func outdatedCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !c.jsonOut(map[string]any{"checked": out.Checked, "packs": out.Packs, "failed": out.Failed, "updates": out.Updates()}) {
+			if !c.jsonOut(outdatedJSON(out)) {
 				switch n := out.Updates(); {
 				case n == 1:
 					c.printf("\n%s · %s\n", accent(i18n.T("1 pack has updates")), dim(i18n.T("skd update")))
@@ -715,6 +715,21 @@ func outdatedCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// outdatedJSON preserves the established CLI JSON contract. Desktop has a
+// richer bridge contract, but adding its commit detail here would break
+// agents that compare the CLI shape.
+func outdatedJSON(out *app.Outdated) map[string]any {
+	packs := []map[string]any{}
+	for _, p := range out.Packs {
+		packs = append(packs, map[string]any{
+			"repo": p.Repo, "commit": p.Commit, "latest": p.Latest,
+			"changed": p.Changed, "moved": p.Moved, "new": p.New,
+			"gone": p.Gone, "pending": p.Pending, "checked": p.Checked,
+		})
+	}
+	return map[string]any{"checked": out.Checked, "packs": packs, "failed": out.Failed, "updates": out.Updates()}
 }
 
 // printStatus is one pack of `skd outdated`: a block when it has updates,
