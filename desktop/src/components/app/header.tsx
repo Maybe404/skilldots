@@ -1,9 +1,15 @@
 import { isMyGo } from "mygo-runtime"
+import { Plus, Search } from "lucide-react"
 
 import { useApp, type Style, type View } from "@/lib/app-state"
 import type { MessageKey } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { Highlight, HighlightItem } from "@/components/animate-ui/primitives/effects/highlight"
+import { Button } from "@/components/ui/button"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { Kbd } from "@/components/ui/kbd"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { toggleThumb } from "@/components/ui/toggle"
 import { Tag } from "@/components/app/bits"
 
 export const searchInputId = "skd-search"
@@ -22,11 +28,11 @@ const NAV: [View, MessageKey][] = [
 export function StyleSwitch({ className, itemClassName }: { className?: string; itemClassName?: string }) {
   const { t, style, setStyle } = useApp()
   return (
-    <ToggleGroup aria-label={t("styleLabel")} value={[style]} onValueChange={(v) => v[0] && setStyle(v[0] as Style)} className={cn("skd-seg items-start", className)} spacing={2}>
-      <ToggleGroupItem value="clean" variant="seg" size="none" className={itemClassName}>
+    <ToggleGroup aria-label={t("styleLabel")} variant="seg" size="none" value={[style]} onValueChange={(v) => v[0] && setStyle(v[0] as Style)} className={cn("skd-seg", className)} spacing={2}>
+      <ToggleGroupItem value="clean" className={itemClassName}>
         {t("styleClean")}
       </ToggleGroupItem>
-      <ToggleGroupItem value="doodle" variant="seg" size="none" className={itemClassName}>
+      <ToggleGroupItem value="doodle" className={itemClassName}>
         {t("styleDoodle")}
       </ToggleGroupItem>
     </ToggleGroup>
@@ -36,13 +42,18 @@ export function StyleSwitch({ className, itemClassName }: { className?: string; 
 /**
  * Top bar from the design: brand and library, page navigation as a segmented
  * control, the style switch, skill search (⌘F) with the palette shortcut, and
- * 添加. Page links are buttons with aria-current; they switch views, not tabs.
+ * 添加. Page links are buttons with aria-current; they switch views, not tabs,
+ * and Animate UI's highlight slides the raised thumb to the current page.
+ *
+ * In the native window this is also the title bar (.skd-titlebar): it drags
+ * the window and leaves room for the traffic lights on its left.
  */
 export function Header() {
   const { t, view, navigate, query, setQuery, status, openDialog, updatablePacks, setPaletteOpen } = useApp()
   const libName = status?.root?.split("/").filter(Boolean).pop() ?? ""
+  const current = view === "editor" ? "skills" : view
   return (
-    <header className="relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd px-6 max-[760px]:px-3" data-drag-region>
+    <header className="skd-titlebar relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd pr-6 max-[760px]:pr-3 max-[760px]:[--bar-pad:12px]">
       <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
       <span className="ml-1 truncate font-mono fs-meta text-mut max-[1180px]:hidden" title={status?.root ?? ""}>
         {libName}
@@ -55,27 +66,29 @@ export function Header() {
       )}
       <span className="flex-1" />
       <nav aria-label={t("mainNav")} className="skd-seg h-8 min-w-0 font-body fs-body">
-        {NAV.map(([v, key]) => (
-          <button
-            key={v}
-            type="button"
-            aria-current={view === v || (v === "skills" && view === "editor") ? "page" : undefined}
-            onClick={() => navigate(v)}
-            className="skd-seg-item h-[26px] px-[11px] max-[900px]:px-2"
-          >
-            {t(key)}
-            {v === "sources" && updatablePacks.length > 0 && <span role="img" aria-label={t("updatesAvailable", { n: updatablePacks.length })} className="size-1.5 rounded-full bg-ac" />}
-          </button>
-        ))}
+        <Highlight controlledItems value={current} click={false} exitDelay={0} className={toggleThumb.seg} style={{ inset: 0 }} transition={{ type: "spring", stiffness: 420, damping: 36 }}>
+          {NAV.map(([v, key]) => (
+            <HighlightItem key={v} value={v} className="flex rounded-seg">
+              <button
+                type="button"
+                aria-current={current === v ? "page" : undefined}
+                onClick={() => navigate(v)}
+                className="skd-seg-item h-[26px] px-[11px] max-[900px]:px-2"
+              >
+                {t(key)}
+                {v === "sources" && updatablePacks.length > 0 && <span role="img" aria-label={t("updatesAvailable", { n: updatablePacks.length })} className="size-1.5 rounded-full bg-ac" />}
+              </button>
+            </HighlightItem>
+          ))}
+        </Highlight>
       </nav>
       <span className="flex-1" />
       <StyleSwitch className="h-8 max-[1060px]:hidden" itemClassName="h-[26px]" />
-      <label className="flex h-8 w-[246px] items-center gap-2 rounded-btn border-in bg-in px-3 font-body fs-body text-mut has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-ring max-[1240px]:w-[190px] max-[980px]:w-[150px]">
-        <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="shrink-0">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
-        <input
+      <InputGroup variant="search" className="w-[246px] font-body fs-body max-[1240px]:w-[190px] max-[980px]:w-[150px]">
+        <InputGroupAddon className="pl-3">
+          <Search aria-hidden className="size-3.5" strokeWidth={1.8} />
+        </InputGroupAddon>
+        <InputGroupInput
           id={searchInputId}
           value={query}
           onChange={(e) => {
@@ -95,30 +108,20 @@ export function Header() {
           }}
           placeholder={t("searchPlaceholder")}
           aria-label={t("search")}
-          className="min-w-0 flex-1 border-none bg-transparent text-ink outline-none placeholder:text-mut"
+          className="h-full px-0 focus-visible:outline-none"
           spellCheck={false}
           autoComplete="off"
         />
-        <button
-          type="button"
-          onClick={() => setPaletteOpen(true)}
-          aria-label={`${t("commandPalette")} ⌘K`}
-          title={t("commandPalette")}
-          className="shrink-0 rounded-seg px-0.5 font-mono text-[10.5px] text-mut hover:text-ink"
-        >
-          ⌘K
-        </button>
-      </label>
-      <button
-        type="button"
-        onClick={() => openDialog({ kind: "add" })}
-        className="flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-pri pr-3.5 pl-[11px] font-body fs-body font-semibold whitespace-nowrap text-pri-fg hover:opacity-90"
-      >
-        <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+        <InputGroupAddon align="inline-end" className="pr-1.5">
+          <InputGroupButton onClick={() => setPaletteOpen(true)} aria-label={`${t("commandPalette")} ⌘K`} title={t("commandPalette")} className="rounded-seg px-1 hover:bg-transparent">
+            <Kbd>⌘K</Kbd>
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+      <Button size="pill" onClick={() => openDialog({ kind: "add" })}>
+        <Plus aria-hidden className="size-3.5" strokeWidth={2.4} />
         {t("add")}
-      </button>
+      </Button>
     </header>
   )
 }
