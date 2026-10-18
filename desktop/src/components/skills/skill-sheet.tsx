@@ -1,3 +1,4 @@
+import * as React from "react"
 import { Copy, FolderOpen, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
 
 import { PLACEHOLDER_DESC, isMine, kindLabel, useApp, useColumnAgents } from "@/lib/app-state"
@@ -16,19 +17,25 @@ import { Switch } from "@/components/ui/switch"
  * actions that used to live in the old detail panel. Agent switches add
  * pending changes like everything else on the Skill page.
  */
-export function SkillSheet() {
+export function SkillSheet({ returnFocus }: { returnFocus: () => HTMLElement | null }) {
   const { t, detail, closeDetail, skills } = useApp()
   const skill = skills.find((s) => s.ref.key === detail) ?? null
+  const start = React.useRef<HTMLDivElement>(null)
   return (
     <Sheet open={!!skill} onOpenChange={(o) => !o && closeDetail()}>
-      <SheetContent side="right" className="w-[400px]" closeLabel={t("close")}>
-        {skill && <Body skill={skill} />}
+      {/*
+        Focus lands on the panel body, not on its first switch: the key that
+        opened the panel (Space) would otherwise toggle that switch on keyup.
+        Closing returns focus to the skill's row.
+      */}
+      <SheetContent side="right" className="w-[400px]" closeLabel={t("close")} initialFocus={start} finalFocus={() => returnFocus() ?? true}>
+        {skill && <Body skill={skill} start={start} />}
       </SheetContent>
     </Sheet>
   )
 }
 
-function Body({ skill }: { skill: Skill }) {
+function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivElement | null> }) {
   const { t, overrides, outdated, updatable, packs, openEditor, openDialog, pending, togglePending, pendingCount, applyPending, showSource, operation } = useApp()
   const columns = useColumnAgents()
   const { reveal, openInEditor } = useSkillActions()
@@ -49,7 +56,7 @@ function Body({ skill }: { skill: Skill }) {
         <SheetDescription className="truncate font-mono">{kindLabel(t, skill)}</SheetDescription>
       </SheetHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+      <div ref={start} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 outline-none">
         {skill.description === PLACEHOLDER_DESC ? (
           <div className="rounded-ctl border-[1.5px] border-dashed border-ac p-3 fs-body leading-relaxed">
             <p>{t("placeholderWarn", { name: skill.name })}</p>

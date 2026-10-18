@@ -44,15 +44,15 @@ export function Header() {
   return (
     <header className="relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd px-6 max-[760px]:px-3" data-drag-region>
       <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
-      <span className="relative ml-1 font-mono fs-meta whitespace-nowrap text-mut max-[1180px]:hidden" title={status?.root ?? ""}>
+      <span className="ml-1 truncate font-mono fs-meta text-mut max-[1180px]:hidden" title={status?.root ?? ""}>
         {libName}
-        {/* Out of the flow so the centred navigation sits where the design puts it. */}
-        {!isMyGo() && (
-          <span title={t("exampleMode")} className="absolute top-1/2 left-full ml-2 -translate-y-1/2">
-            <Tag>{t("sampleNotice")}</Tag>
-          </span>
-        )}
       </span>
+      {/* Browser preview only; the native window has no such tag. */}
+      {!isMyGo() && (
+        <span title={t("exampleMode")} className="shrink-0 max-[1180px]:hidden">
+          <Tag>{t("sampleNotice")}</Tag>
+        </span>
+      )}
       <span className="flex-1" />
       <nav aria-label={t("mainNav")} className="skd-seg h-9 min-w-0 font-body fs-body">
         {NAV.map(([v, key]) => (

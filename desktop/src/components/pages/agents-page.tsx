@@ -10,7 +10,7 @@ import { AgentMono, Page, TableHead, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 
-const COLS = "40px minmax(0,1fr) 220px 70px 100px 110px 120px"
+const COLS = "var(--cols)"
 
 /** Agents: default install, Skill-page column, pause / resume distribution. */
 export function AgentsPage() {
@@ -23,7 +23,7 @@ export function AgentsPage() {
 
   return (
     <Page title={t("agentsTitle")} summary={t("agentsSummary", { n: main.length, list: defaults.join(t("listSep")) || t("none") })}>
-      <div role="table" aria-label={t("agentsTitle")}>
+      <div role="table" aria-label={t("agentsTitle")} className="skd-cols-agents">
         <TableHead style={{ gridTemplateColumns: COLS }}>
           <div role="columnheader" />
           <div role="columnheader">Agent</div>
@@ -54,7 +54,7 @@ export function AgentsPage() {
             {t("otherAgents", { n: others.length })}
           </button>
           {showOthers && (
-            <div role="table" aria-label={t("otherAgents", { n: others.length })} className="[border-top:var(--tblHd)]">
+            <div role="table" aria-label={t("otherAgents", { n: others.length })} className="skd-cols-agents [border-top:var(--tblHd)]">
               {others.map((a) => (
                 <AgentRow key={a.name} agent={a} count={count(a)} />
               ))}
@@ -98,7 +98,7 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
       <div role="cell">
         <AgentMono agent={a} size={28} />
       </div>
-      <div role="cell" className="flex min-w-0 items-center gap-2 font-heading fs-name font-semibold text-ink">
+      <div role="cell" className="flex min-w-0 items-center gap-2 pr-3 font-heading fs-name font-semibold text-ink">
         <span className="truncate">{label}</span>
         {!a.enabled && <Tag tone="accent">{t("pausedLong")}</Tag>}
         {!a.detected && <Tag>{t("notOnMachine")}</Tag>}

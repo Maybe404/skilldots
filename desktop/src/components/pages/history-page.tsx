@@ -7,7 +7,7 @@ import { EmptyNote, ExampleTag, Mono, Page, PageError, TableHead, UpdateDot } fr
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
-const COLS = "130px 230px 150px minmax(0,1fr)"
+const COLS = "var(--cols)"
 
 /** Update history kept in the library (design: one row per update). */
 export function HistoryPage() {
@@ -39,7 +39,7 @@ export function HistoryPage() {
       ) : items.length === 0 ? (
         <EmptyNote title={t("historyEmpty")}>{t("historyEmptyBody")}</EmptyNote>
       ) : (
-        <div role="table" aria-label={t("historyTitle")}>
+        <div role="table" aria-label={t("historyTitle")} className="skd-cols-history">
           <TableHead style={{ gridTemplateColumns: COLS }}>
             <div role="columnheader">{t("colTime")}</div>
             <div role="columnheader">{t("colSource")}</div>

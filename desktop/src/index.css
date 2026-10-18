@@ -170,6 +170,40 @@
 }
 
 @layer components {
+  /* Column sets of the page tables (design widths; narrower below 1000px). */
+  .skd-cols-sources {
+    --cols: minmax(0, 1fr) 80px 190px 110px 150px 140px;
+  }
+  .skd-cols-agents {
+    --cols: 40px minmax(0, 1fr) 220px 70px 100px 110px 120px;
+  }
+  .skd-cols-history {
+    --cols: 130px 230px 150px minmax(0, 1fr);
+  }
+  .skd-cols-adopt {
+    --cols: 28px minmax(0, 1fr) 110px minmax(0, 380px);
+  }
+  .skd-cols-trash {
+    --cols: 200px minmax(0, 1fr) 110px 220px 120px;
+  }
+  @media (max-width: 1000px) {
+    .skd-cols-sources {
+      --cols: minmax(0, 1fr) 72px 64px 92px 132px 128px;
+    }
+    .skd-cols-agents {
+      --cols: 36px minmax(0, 1fr) 150px 44px 104px 104px 96px;
+    }
+    .skd-cols-history {
+      --cols: 104px 170px 130px minmax(0, 1fr);
+    }
+    .skd-cols-adopt {
+      --cols: 28px minmax(0, 1fr) 88px minmax(0, 260px);
+    }
+    .skd-cols-trash {
+      --cols: 130px minmax(0, 1fr) 72px 150px 100px;
+    }
+  }
+
   /* Segmented control (top navigation, style switch, view switch). */
   .skd-seg {
     display: flex;

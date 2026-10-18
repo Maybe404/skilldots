@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 
-const COLS = "28px minmax(0,1fr) 110px minmax(0,380px)"
+const COLS = "var(--cols)"
 
 const STATE: Record<ScanItem["state"], MessageKey> = {
   copy: "stateCopy",
@@ -150,7 +150,7 @@ export function ScanPage() {
       ) : items.length === 0 ? (
         <EmptyNote title={t("scanEmpty")}>{t("scanEmptyBody")}</EmptyNote>
       ) : (
-        <div role="table" aria-label={t("scanTitle")} aria-busy={scanning}>
+        <div role="table" aria-label={t("scanTitle")} aria-busy={scanning} className="skd-cols-adopt">
           <TableHead style={{ gridTemplateColumns: COLS }}>
             <div role="columnheader">
               <Checkbox
@@ -198,9 +198,9 @@ export function ScanPage() {
                         </div>
                       </div>
                       <div role="cell" className={cn("fs-meta", it.state === "broken" ? "font-semibold text-ac" : "text-mut")}>
-                        {t(STATE[it.state])}
+                        {it.proposal === "enable" ? t("stateInLibrary") : t(STATE[it.state])}
                       </div>
-                      <div role="cell" className="min-w-0 truncate fs-body text-ink" title={proposal(it)}>
+                      <div role="cell" className="line-clamp-2 min-w-0 fs-body leading-snug text-ink" title={proposal(it)}>
                         {proposal(it)}
                       </div>
                     </div>

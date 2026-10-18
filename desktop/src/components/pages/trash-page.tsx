@@ -8,7 +8,7 @@ import { EmptyNote, ExampleTag, Page, PageError, TableHead } from "@/components/
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
-const COLS = "200px minmax(0,1fr) 110px 220px 120px"
+const COLS = "var(--cols)"
 
 const REASON: Record<NonNullable<TrashEntry["reason"]>, MessageKey> = {
   removed: "reasonRemoved",
@@ -69,7 +69,7 @@ export function TrashPage() {
       ) : items.length === 0 ? (
         <EmptyNote title={t("trashEmpty")}>{t("trashEmptyBody")}</EmptyNote>
       ) : (
-        <div role="table" aria-label={t("trashTitle")}>
+        <div role="table" aria-label={t("trashTitle")} className="skd-cols-trash">
           <TableHead style={{ gridTemplateColumns: COLS }}>
             <div role="columnheader">{t("colName")}</div>
             <div role="columnheader">{t("from")}</div>

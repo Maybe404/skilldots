@@ -224,7 +224,7 @@ export function SkillsPage() {
       </div>
 
       <StatusBar />
-      <SkillSheet />
+      <SkillSheet returnFocus={() => (selected ? document.getElementById(rowId(selected)) : null)} />
     </div>
   )
 }

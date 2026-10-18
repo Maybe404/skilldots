@@ -23,8 +23,8 @@ export function wireGeometry(width: number) {
   let listW = 400
   let agentsW = 360
   const gap = width - 2 * padX - listW - agentsW
-  if (gap < 160) {
-    const avail = Math.max(420, width - 2 * padX - 140)
+  if (gap < 180) {
+    const avail = Math.max(420, width - 2 * padX - 180)
     listW = Math.round(avail * 0.52)
     agentsW = avail - listW
   }
@@ -33,8 +33,11 @@ export function wireGeometry(width: number) {
   return { padX, listW, agentsW, x1, x2, width: Math.max(width, x2 + agentsW + padX) }
 }
 
-const curve = (x1: number, y1: number, x2: number, y2: number, bend = 190) =>
-  `M${x1} ${y1} C${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
+// The design bends each curve by 190px; narrower windows bend less so curves never loop.
+const curve = (x1: number, y1: number, x2: number, y2: number) => {
+  const bend = Math.min(190, (x2 - x1) * 0.43)
+  return `M${x1} ${y1} C${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
+}
 
 interface Wire {
   d: string

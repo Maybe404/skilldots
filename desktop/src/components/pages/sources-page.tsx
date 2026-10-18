@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
-const COLS = "minmax(0,1fr) 80px 190px 110px 150px 140px"
+const COLS = "var(--cols)"
 
 /** Sources (subscribed repositories): the design's table with an inline update review. */
 export function SourcesPage() {
@@ -60,7 +60,7 @@ export function SourcesPage() {
           {t("noSourcesBody")}
         </EmptyNote>
       ) : (
-        <div role="table" aria-label={t("sourcesTitle")}>
+        <div role="table" aria-label={t("sourcesTitle")} className="skd-cols-sources">
           <TableHead style={{ gridTemplateColumns: COLS }}>
             <div role="columnheader">{t("colSourceSkills")}</div>
             <div role="columnheader">{t("colVersion")}</div>
@@ -76,7 +76,7 @@ export function SourcesPage() {
       )}
 
       {(own.length > 0 || apps.length > 0) && (
-        <div role="table" aria-label={t("localTitle")} className="mt-8">
+        <div role="table" aria-label={t("localTitle")} className="skd-cols-sources mt-8">
           <TableHead style={{ gridTemplateColumns: COLS }}>
             <div role="columnheader">{t("localTitle")}</div>
             <div role="columnheader" />
@@ -141,7 +141,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
           {p.commit}
         </div>
         <div role="cell" className="flex items-center gap-2.5">
-          <span aria-hidden className="h-1 w-[70px] flex-none overflow-hidden rounded-[2px] bg-ln">
+          <span aria-hidden className="h-1 w-[70px] flex-none overflow-hidden rounded-[2px] bg-ln max-[1000px]:hidden">
             <span className="block h-full rounded-[2px] bg-hue" style={{ width: `${Math.max(4, Math.round((100 * used.length) / total))}%` }} />
           </span>
           <span className="font-mono fs-meta text-ink">
@@ -194,7 +194,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
 
 /** The expanded update review of one source (design: commits on the left, impact and actions on the right). */
 function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus; used: Skill[]; onClose: () => void }) {
-  const { t, runTask, reload, navigate } = useApp()
+  const { t, runTask, reload, navigate, operation } = useApp()
   const [addNew, setAddNew] = React.useState<string[]>([])
   const usedNames = new Set(used.map((s) => s.name))
   const affected = [...st.changed, ...st.pending].filter((n) => usedNames.has(n))
@@ -264,7 +264,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
             ))}
         </dl>
         <div className="mt-3.5 flex flex-wrap gap-2">
-          <Button onClick={go} className="px-3">
+          <Button onClick={go} disabled={!!operation} className="px-3">
             {t("updateTo")} <span className="font-mono font-medium">{st.latest}</span>
           </Button>
           <Button variant="ghost" onClick={onClose}>
