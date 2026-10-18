@@ -47,15 +47,21 @@ export function StyleSwitch({ className, itemClassName }: { className?: string; 
  *
  * In the native window this is also the title bar (.skd-titlebar): it drags
  * the window and leaves room for the traffic lights on its left.
+ *
+ * Narrow windows (the native left padding is 94px, English labels are wide):
+ * the nav never shrinks, it only trims its item padding; the search box
+ * gives way first (down to 132px), the library name truncates last, the
+ * library name hides below 1180px and the style switch below 1060px (both
+ * are also in Settings), and 添加 / Add becomes the + icon at 900px or less.
  */
 export function Header() {
   const { t, view, navigate, query, setQuery, status, openDialog, updatablePacks, setPaletteOpen } = useApp()
   const libName = status?.root?.split("/").filter(Boolean).pop() ?? ""
   const current = view === "editor" ? "skills" : view
   return (
-    <header className="skd-titlebar relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd pr-6 max-[760px]:pr-3 max-[760px]:[--bar-pad:12px]">
-      <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
-      <span className="ml-1 truncate font-mono fs-meta text-mut max-[1180px]:hidden" title={status?.root ?? ""}>
+    <header className="skd-titlebar relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd max-[900px]:gap-2 pr-6 max-[760px]:pr-3 max-[760px]:[--bar-pad:12px]">
+      <span className="shrink-0 font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
+      <span className="ml-1 min-w-0 max-w-[180px] shrink-[0.001] truncate font-mono fs-meta text-mut max-[1180px]:hidden" title={status?.root ?? ""}>
         {libName}
       </span>
       {/* Browser preview only; the native window has no such tag. */}
@@ -65,7 +71,7 @@ export function Header() {
         </span>
       )}
       <span className="flex-1" />
-      <nav aria-label={t("mainNav")} className="skd-seg h-8 min-w-0 font-body fs-body">
+      <nav aria-label={t("mainNav")} className="skd-seg h-8 shrink-0 font-body fs-body">
         <Highlight controlledItems value={current} click={false} exitDelay={0} className={toggleThumb.seg} style={{ inset: 0 }} transition={{ type: "spring", stiffness: 420, damping: 36 }}>
           {NAV.map(([v, key]) => (
             <HighlightItem key={v} value={v} className="flex rounded-seg">
@@ -73,7 +79,7 @@ export function Header() {
                 type="button"
                 aria-current={current === v ? "page" : undefined}
                 onClick={() => navigate(v)}
-                className="skd-seg-item h-[26px] px-[11px] max-[900px]:px-2"
+                className="skd-seg-item h-[26px] px-[11px] max-[1240px]:px-[9px] max-[1000px]:px-2 max-[900px]:px-[7px]"
               >
                 {t(key)}
                 {v === "sources" && updatablePacks.length > 0 && <span role="img" aria-label={t("updatesAvailable", { n: updatablePacks.length })} className="size-1.5 rounded-full bg-ac" />}
@@ -83,8 +89,8 @@ export function Header() {
         </Highlight>
       </nav>
       <span className="flex-1" />
-      <StyleSwitch className="h-8 max-[1060px]:hidden" itemClassName="h-[26px]" />
-      <InputGroup variant="search" className="w-[246px] font-body fs-body max-[1240px]:w-[190px] max-[980px]:w-[150px]">
+      <StyleSwitch className="h-8 shrink-0 max-[1060px]:hidden" itemClassName="h-[26px]" />
+      <InputGroup variant="search" className="w-[246px] min-w-[132px] shrink font-body fs-body">
         <InputGroupAddon className="pl-3">
           <Search aria-hidden className="size-3.5" strokeWidth={1.8} />
         </InputGroupAddon>
@@ -112,15 +118,15 @@ export function Header() {
           spellCheck={false}
           autoComplete="off"
         />
-        <InputGroupAddon align="inline-end" className="pr-1.5">
+        <InputGroupAddon align="inline-end" className="pr-px has-[>button]:mr-0">
           <InputGroupButton onClick={() => setPaletteOpen(true)} aria-label={`${t("commandPalette")} ⌘K`} title={t("commandPalette")} className="rounded-seg px-1 hover:bg-transparent">
             <Kbd>⌘K</Kbd>
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
-      <Button size="pill" onClick={() => openDialog({ kind: "add" })}>
+      <Button size="pill" className="shrink-0 max-[900px]:px-[9px]" aria-label={t("add")} onClick={() => openDialog({ kind: "add" })}>
         <Plus aria-hidden className="size-3.5" strokeWidth={2.4} />
-        {t("add")}
+        <span className="max-[900px]:sr-only">{t("add")}</span>
       </Button>
     </header>
   )
