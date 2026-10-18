@@ -16,6 +16,7 @@ const buttonVariants = cva(
         default: "bg-pri font-semibold text-pri-fg hover:opacity-90",
         accent: "bg-ac font-semibold text-ac-ink hover:opacity-90",
         ink: "bg-ink font-semibold text-bg hover:opacity-90",
+        hue: "bg-hue text-bg hover:opacity-90",
         outline: "box-content border-line text-ink hover:bg-nav aria-expanded:bg-nav",
         secondary: "bg-nav text-ink hover:text-ink",
         ghost: "text-mut hover:bg-nav hover:text-ink aria-expanded:bg-nav aria-expanded:text-ink",

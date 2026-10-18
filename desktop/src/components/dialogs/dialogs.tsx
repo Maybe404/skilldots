@@ -1,12 +1,29 @@
-import { useApp } from "@/lib/app-state"
+import * as React from "react"
+
+import { useApp, type DialogState } from "@/lib/app-state"
+import { DialogClosing } from "@/lib/dialog-presence"
 import { AddDialog } from "./add-dialog"
 import { ApplyDialog, LibraryDialog, SyncDialog, UpdateDialog } from "./ops-dialogs"
 import { ConfirmBox, ConfirmDialog, ForkDialog, NewSkillDialog } from "./skill-dialogs"
 
-/** Renders whichever dialog the app state asks for. */
+/**
+ * Renders whichever dialog the app state asks for. When the state closes it,
+ * the last dialog stays mounted, told to close (DialogClosing), so its exit
+ * animation can play; the next dialog replaces it.
+ */
 export function Dialogs() {
-  const { dialog: d, closeDialog } = useApp()
-  if (!d) return null
+  const { dialog, closeDialog } = useApp()
+  const [shown, setShown] = React.useState<{ d: NonNullable<DialogState>; n: number } | null>(null)
+  if (dialog && dialog !== shown?.d) setShown({ d: dialog, n: (shown?.n ?? 0) + 1 })
+  if (!shown) return null
+  return (
+    <DialogClosing.Provider value={!dialog}>
+      <React.Fragment key={shown.n}>{render(shown.d, closeDialog)}</React.Fragment>
+    </DialogClosing.Provider>
+  )
+}
+
+function render(d: NonNullable<DialogState>, closeDialog: () => void) {
   switch (d.kind) {
     case "add":
       return <AddDialog initial={d.initial} onClose={closeDialog} />

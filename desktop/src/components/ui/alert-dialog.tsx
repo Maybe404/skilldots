@@ -2,56 +2,61 @@ import * as React from "react"
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog"
 import { cn } from "cn"
 
+import {
+  AlertDialog as AlertDialogAnimated,
+  AlertDialogBackdrop as AlertDialogBackdropAnimated,
+  AlertDialogPopup as AlertDialogPopupAnimated,
+  AlertDialogPortal as AlertDialogPortalAnimated,
+  AlertDialogTrigger as AlertDialogTriggerAnimated,
+  type AlertDialogBackdropProps,
+  type AlertDialogPopupProps,
+  type AlertDialogPortalProps,
+  type AlertDialogProps,
+  type AlertDialogTriggerProps,
+} from "@/components/animate-ui/primitives/base/alert-dialog"
+import { DialogClosing } from "@/lib/dialog-presence"
 import { Button } from "@/components/ui/button"
 
-function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+/*
+ * shadcn's alert dialog API on Animate UI's Base UI alert dialog
+ * (components-base-alert-dialog), with the same entrance as ui/dialog: Base
+ * UI keeps the focus trap and focus return, Animate UI the tip-in and blur,
+ * and the exit plays before the box unmounts. Reduced motion: fade only.
+ */
+function AlertDialog(props: AlertDialogProps) {
+  const closing = React.useContext(DialogClosing)
+  return <AlertDialogAnimated {...props} {...(closing && { open: false })} />
 }
 
-function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
-  return (
-    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
-  )
+function AlertDialogTrigger(props: AlertDialogTriggerProps) {
+  return <AlertDialogTriggerAnimated {...props} />
 }
 
-function AlertDialogPortal({ ...props }: AlertDialogPrimitive.Portal.Props) {
-  return (
-    <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />
-  )
+function AlertDialogPortal(props: AlertDialogPortalProps) {
+  return <AlertDialogPortalAnimated {...props} />
 }
 
-function AlertDialogOverlay({
-  className,
-  ...props
-}: AlertDialogPrimitive.Backdrop.Props) {
-  return (
-    <AlertDialogPrimitive.Backdrop
-      data-slot="alert-dialog-overlay"
-      className={cn(
-        "fixed inset-0 isolate z-50 bg-[var(--scrim)] backdrop-blur-[3px] duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-        className
-      )}
-      {...props}
-    />
-  )
+function AlertDialogOverlay({ className, ...props }: AlertDialogBackdropProps) {
+  return <AlertDialogBackdropAnimated data-slot="alert-dialog-overlay" className={cn("fixed inset-0 isolate z-50 bg-[var(--scrim)] backdrop-blur-[3px]", className)} {...props} />
 }
 
 function AlertDialogContent({
   className,
   size = "default",
   ...props
-}: AlertDialogPrimitive.Popup.Props & {
+}: AlertDialogPopupProps & {
   size?: "default" | "sm"
 }) {
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
-      <AlertDialogPrimitive.Popup
+      <AlertDialogPopupAnimated
         data-slot="alert-dialog-content"
         data-size={size}
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100svh-2rem)] w-[490px] max-w-[calc(100%-2rem)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 gap-0 rounded-card border-card bg-dialog px-6 py-[22px] font-body fs-body text-ink shadow-pop duration-150 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[0.98] data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.98]",
-          className
+          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100svh-2rem)] w-[490px] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-0 overflow-y-auto rounded-card border-card bg-dialog px-6 py-[22px] font-body fs-body text-ink shadow-pop outline-none",
+          className,
         )}
         {...props}
       />

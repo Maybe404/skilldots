@@ -206,6 +206,31 @@
     }
   }
 
+  /*
+   * The top bar doubles as the window's title bar: the native window has no
+   * system title bar (main.go, TitleBarHidden). It drags the window (mygo's
+   * --app-region; a double click zooms, as the system setting says), and its
+   * left padding keeps clear of the traffic lights. mygo sets
+   * --mygo-titlebar-inset-left to the right edge of the zoom button; it is 0
+   * in full screen, where the buttons hide, and unset in the browser preview.
+   * Buttons, fields and labels never drag (mygo skips them); the groups of
+   * controls opt out too, so a click in the gap between two items is a miss,
+   * not a window drag.
+   */
+  .skd-titlebar {
+    --app-region: drag;
+    padding-left: max(var(--bar-pad, 24px), calc(var(--mygo-titlebar-inset-left, 0px) + 14px));
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .skd-titlebar :is(nav, label, [role="group"], [data-no-drag]) {
+    --app-region: no-drag;
+  }
+  .skd-titlebar input {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   /* Segmented control (top navigation, style switch, view switch). */
   .skd-seg {
     display: flex;
@@ -229,11 +254,11 @@
   .skd-seg-item:hover {
     color: var(--ink);
   }
+  /* The raised thumb (var(--navOn), var(--navSh)) is a separate layer that
+     slides to the current item (Animate UI highlight, see toggle.tsx). */
   .skd-seg-item[aria-pressed="true"],
   .skd-seg-item[aria-current="page"],
   .skd-seg-item[data-pressed] {
-    background: var(--navOn);
-    box-shadow: var(--navSh);
     color: var(--ink);
     font-weight: 500;
   }
@@ -250,14 +275,14 @@
     border: 1.5px solid var(--ln);
     color: var(--mut);
     white-space: nowrap;
-    transition: color 150ms, background-color 150ms;
+    transition: color 180ms, border-color 180ms;
   }
   .skd-chip:hover {
     color: var(--ink);
   }
+  /* The ink fill is the highlight layer behind the chip (toggle.tsx). */
   .skd-chip[aria-pressed="true"],
   .skd-chip[data-pressed] {
-    background: var(--ink);
     border-color: var(--ink);
     color: var(--bg);
   }
@@ -343,6 +368,11 @@
     background: var(--hue);
     border-color: var(--hue);
     color: #fff;
+  }
+
+  /* Digits of the rolling numbers (Animate UI sliding number, patched to keep them out of the text). */
+  [data-slot="sliding-number-display"]::before {
+    content: attr(data-digit);
   }
 
   /* Rendered Markdown (preview) */
@@ -431,15 +461,6 @@
   .prose-skill input[type="checkbox"] {
     margin-right: 0.4em;
   }
-}
-
-@keyframes skd-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.skd-spin {
-  animation: skd-spin 0.9s linear infinite;
 }
 
 /* Reduced motion: keep state changes, drop movement and animated transitions. */

@@ -1,34 +1,34 @@
-import { Radio as RadioPrimitive } from "@base-ui/react/radio"
-import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group"
 import { cn } from "cn"
 
-function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
-  return (
-    <RadioGroupPrimitive
-      data-slot="radio-group"
-      className={cn("grid w-full gap-2", className)}
-      {...props}
-    />
-  )
+import {
+  Radio as RadioPrimitive,
+  RadioGroup as RadioGroupPrimitive,
+  RadioIndicator as RadioIndicatorPrimitive,
+  type RadioGroupProps,
+  type RadioProps,
+} from "@/components/animate-ui/primitives/base/radio"
+
+/*
+ * Animate UI's Base UI radio group (components-base-radio): Base UI keeps the
+ * radiogroup semantics and arrow keys; Animate UI pops the dot in on a spring
+ * (fade only with reduced motion). Drawn as the design's 16px ring that fills
+ * with the install hue.
+ */
+function RadioGroup({ className, ...props }: RadioGroupProps) {
+  return <RadioGroupPrimitive className={cn("grid w-full gap-2", className)} {...props} />
 }
 
-function RadioGroupItem({ className, ...props }: RadioPrimitive.Root.Props) {
+function RadioGroupItem({ className, ...props }: RadioProps) {
   return (
-    <RadioPrimitive.Root
-      data-slot="radio-group-item"
+    <RadioPrimitive
       className={cn(
-        "group/radio-group-item peer relative flex aspect-square size-4 shrink-0 rounded-full border-[1.5px] border-ln focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-hue data-checked:bg-hue data-checked:text-primary-foreground group-has-[:focus-visible]/field-label:data-checked:border-primary dark:data-checked:bg-primary",
-        className
+        "peer relative flex aspect-square size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] border-ln transition-colors after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50 data-checked:border-hue data-checked:bg-hue",
+        className,
       )}
       {...props}
     >
-      <RadioPrimitive.Indicator
-        data-slot="radio-group-indicator"
-        className="flex size-4 items-center justify-center"
-      >
-        <span className="absolute top-1/2 left-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
-      </RadioPrimitive.Indicator>
-    </RadioPrimitive.Root>
+      <RadioIndicatorPrimitive data-slot="radio-group-indicator" className="size-1.5 rounded-full bg-knob" />
+    </RadioPrimitive>
   )
 }
 

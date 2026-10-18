@@ -3,7 +3,11 @@ import { cn, shortSha } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
 import { agentMono } from "@/lib/agents"
 import type { Agent } from "@/lib/backend"
+import { RotateCwIcon } from "lucide-react"
+import { useReducedMotion } from "motion/react"
+import { SlidingNumber } from "@/components/animate-ui/primitives/texts/sliding-number"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -84,22 +88,35 @@ export function Hint({ label, children }: { label: string; children: React.React
   )
 }
 
-/** Circular-arrow icon from the design; spins while `spinning`. */
-export function RefreshIcon({ spinning, className }: { spinning?: boolean; className?: string }) {
+const SLOT = "\u0000"
+
+/**
+ * A message whose number rolls to its new value (Animate UI sliding number),
+ * e.g. "3 处改动待应用" or "12 秒". `message` gets a placeholder for the number
+ * and returns the translated text. Screen readers get the plain number; with
+ * reduced motion the number just changes.
+ */
+export function RollingText({ message, value, className }: { message: (slot: string) => string; value: number; className?: string }) {
+  const reduce = useReducedMotion()
+  const [before, after = ""] = message(SLOT).split(SLOT)
   return (
-    <svg
-      aria-hidden
-      className={cn("size-[13px] shrink-0", spinning && "skd-spin", className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6" />
-    </svg>
+    <span className={className}>
+      {before}
+      <span className="sr-only">{value}</span>
+      {reduce ? <span aria-hidden>{value}</span> : <SlidingNumber aria-hidden number={value} className="tabular-nums" />}
+      {after}
+    </span>
   )
+}
+
+/**
+ * The design's circular arrow (Lucide rotate-cw): the shadcn spinner while
+ * `spinning`, a still icon otherwise. Always next to a text label, so hidden
+ * from assistive technology.
+ */
+export function RefreshIcon({ spinning, className }: { spinning?: boolean; className?: string }) {
+  if (spinning) return <Spinner aria-hidden role={undefined} aria-label={undefined} className={className} />
+  return <RotateCwIcon aria-hidden strokeWidth={1.8} className={cn("size-[13px] shrink-0", className)} />
 }
 
 /**

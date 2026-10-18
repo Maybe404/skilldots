@@ -1,20 +1,30 @@
-import { Toggle as TogglePrimitive } from "@base-ui/react/toggle"
+import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
+import {
+  Toggle as TogglePrimitive,
+  ToggleHighlight as ToggleHighlightPrimitive,
+  ToggleItem as ToggleItemPrimitive,
+  type ToggleProps as TogglePrimitiveProps,
+} from "@/components/animate-ui/primitives/base/toggle"
+
 /*
- * shadcn toggle (Base UI). Two extra looks from the design: "seg" is an item
- * of a segmented control (.skd-seg-item: style switch, view switch, light and
- * dark), "chip" a pill in the filter bar (.skd-chip). Base UI keeps
- * aria-pressed and the roving focus of the group.
+ * Animate UI's Base UI toggle (components-base-toggle): Base UI keeps
+ * aria-pressed and the roving focus of a group; Animate UI adds the press
+ * scale and fades the pressed background in and out. Two extra looks from the
+ * design: "seg" is an item of a segmented control (.skd-seg-item: style
+ * switch, view switch, light and dark), "chip" a pill in the filter bar
+ * (.skd-chip). The pressed background is the highlight (toggleThumb), so the
+ * item itself only changes its text.
  */
 const toggleVariants = cva(
   "group/toggle inline-flex items-center justify-center gap-1.5 font-body whitespace-nowrap disabled:pointer-events-none disabled:opacity-45 aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[13px]",
   {
     variants: {
       variant: {
-        default: "rounded-ctl text-mut hover:bg-nav hover:text-ink aria-pressed:bg-nav aria-pressed:text-ink",
-        outline: "rounded-ctl border-line text-mut hover:bg-nav hover:text-ink aria-pressed:bg-nav aria-pressed:text-ink",
+        default: "rounded-ctl text-mut hover:text-ink data-pressed:text-ink",
+        outline: "rounded-ctl border-line text-mut hover:text-ink data-pressed:text-ink",
         seg: "skd-seg-item",
         chip: "skd-chip",
       },
@@ -31,13 +41,40 @@ const toggleVariants = cva(
   },
 )
 
-function Toggle({
-  className,
-  variant = "default",
-  size = "default",
-  ...props
-}: TogglePrimitive.Props & VariantProps<typeof toggleVariants>) {
-  return <TogglePrimitive data-slot="toggle" className={cn(toggleVariants({ variant, size, className }))} {...props} />
+type Variant = NonNullable<VariantProps<typeof toggleVariants>["variant"]>
+
+/** Corner of each look: the pressed background and the focus ring follow it. */
+const toggleRadius: Record<Variant, string> = {
+  default: "rounded-ctl",
+  outline: "rounded-ctl",
+  seg: "rounded-seg",
+  chip: "rounded-[13px]",
 }
 
-export { Toggle, toggleVariants }
+/** The pressed background of each look (in a group it slides between the items). */
+const toggleThumb: Record<Variant, string> = {
+  default: "rounded-ctl bg-nav",
+  outline: "rounded-ctl bg-nav",
+  seg: "rounded-seg bg-nav-on shadow-seg",
+  chip: "rounded-[13px] bg-ink",
+}
+
+type ToggleProps = Omit<TogglePrimitiveProps, "children"> &
+  VariantProps<typeof toggleVariants> & {
+    children?: React.ReactNode
+  }
+
+function Toggle({ className, variant = "default", size = "default", children, ...props }: ToggleProps) {
+  const v = variant ?? "default"
+  return (
+    <TogglePrimitive data-slot="toggle" className={cn("relative inline-flex", toggleRadius[v])} {...props}>
+      {/* aria-pressed belongs to the button (Base UI), not to these two layers. */}
+      <ToggleHighlightPrimitive aria-pressed={undefined} className={toggleThumb[v]} transition={{ duration: 0.15 }} />
+      <ToggleItemPrimitive aria-pressed={undefined} className={cn(toggleVariants({ variant, size }), className)}>
+        {children}
+      </ToggleItemPrimitive>
+    </TogglePrimitive>
+  )
+}
+
+export { Toggle, toggleRadius, toggleThumb, toggleVariants }

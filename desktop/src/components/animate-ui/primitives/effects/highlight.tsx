@@ -481,9 +481,11 @@ function HighlightItem<T extends React.ElementType>({
 
   if (!React.isValidElement(children)) return children;
 
+  // skilldots: upstream also sets aria-selected here. The items are toggle
+  // buttons (aria-pressed) and page links (aria-current), where aria-selected
+  // is not allowed, so it is left out; data-active carries the state.
   const dataAttributes = {
     'data-active': isActive ? 'true' : 'false',
-    'aria-selected': isActive,
     'data-disabled': isDisabled,
     'data-value': childValue,
     'data-highlight': true,
