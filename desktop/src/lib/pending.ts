@@ -2,8 +2,8 @@ import type { Skill } from "@/lib/backend"
 
 /*
  * Link changes the user has made but not applied yet (the design's "待应用").
- * The backend saves and applies every enable/disable/setTargets call at once,
- * so the desktop collects the wanted state here and calls setTargets per skill
+ * The backend saves and applies every enable/disable call at once, so the
+ * desktop collects the wanted state here and calls enable / disable per skill
  * when the user presses 应用.
  *
  * Keyed by skill ref key and agent name; the value is the wanted state.
@@ -54,23 +54,38 @@ export function prune(pending: Pending, skills: Skill[]): Pending {
 
 export interface SkillChange {
   skill: Skill
-  targets: string[]
-  keys: string[]
+  /** Agents to add to the skill's targets. */
+  enable: string[]
+  /** Agents to remove from the skill's targets. */
+  disable: string[]
+  /** Pending keys per direction, so a partial failure can tell what went through. */
+  enableKeys: string[]
+  disableKeys: string[]
 }
 
-/** One setTargets call per skill with pending changes, in list order. */
+/**
+ * Per skill, the agents to add and the agents to remove, in list order.
+ * The desktop sends these as enable / disable instead of one setTargets with
+ * the whole list: the backend then edits the latest targets on disk, so a
+ * change the CLI or another agent made to the same skill while this window
+ * was open is not rolled back.
+ */
 export function changes(pending: Pending, skills: Skill[]): SkillChange[] {
   const out: SkillChange[] = []
   for (const s of skills) {
-    const keys = Object.keys(pending).filter((k) => splitKey(k)[0] === s.ref.key)
-    if (!keys.length) continue
-    const targets = new Set(s.targets)
-    for (const k of keys) {
-      const agent = splitKey(k)[1]
-      if (pending[k]) targets.add(agent)
-      else targets.delete(agent)
+    const c: SkillChange = { skill: s, enable: [], disable: [], enableKeys: [], disableKeys: [] }
+    for (const [k, want] of Object.entries(pending)) {
+      const [key, agent] = splitKey(k)
+      if (key !== s.ref.key) continue
+      if (want) {
+        c.enable.push(agent)
+        c.enableKeys.push(k)
+      } else {
+        c.disable.push(agent)
+        c.disableKeys.push(k)
+      }
     }
-    out.push({ skill: s, targets: [...targets], keys })
+    if (c.enable.length || c.disable.length) out.push(c)
   }
   return out
 }

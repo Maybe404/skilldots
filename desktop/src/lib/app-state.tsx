@@ -129,12 +129,16 @@ interface AppContextValue {
   // Link changes waiting for 应用
   pending: Pending
   pendingCount: number
+  /** True while applyPending is writing links (the status bar shows progress). */
+  applying: boolean
   togglePending: (skill: Skill, agent: string) => void
   revertPending: () => void
   applyPending: () => Promise<void>
 
-  /** Runs a backend call, toasting its error. */
+  /** Runs a backend call, toasting its error. Refused while another operation runs. */
   run: <R>(fn: () => Promise<R>) => Promise<Result<R>>
+  /** Runs a read-only backend call, toasting its error. Not blocked by a running operation. */
+  read: <R>(fn: () => Promise<R>) => Promise<Result<R>>
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null)
@@ -199,6 +203,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tableSort, setTableSort] = React.useState<TableSort>(null)
   const [sourceFocus, setSourceFocus] = React.useState<string | null>(null)
   const [pending, setPending] = React.useState<Pending>({})
+  const [applying, setApplying] = React.useState(false)
+  const applyingRef = React.useRef(false)
   const guard = React.useRef<((go: () => void) => boolean) | null>(null)
 
   const t = React.useMemo(() => translator(config.lang), [config.lang])
@@ -245,6 +251,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [execute, operation, t],
   )
+
+  const read = execute
 
   const beginOperation = React.useCallback((label: string) => {
     const op = { id: ++operationId.current, label, startedAt: Date.now() }
@@ -417,18 +425,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const applyPending = React.useCallback(async () => {
     const list = changes(pending, skills)
     if (!list.length) return
-    if (operation) {
+    if (operation || applyingRef.current) {
       toast(t("operationWait"))
       return
     }
-    const n = list.reduce((sum, c) => sum + c.keys.length, 0)
-    const r = await runTask(t("applyingN", { n }), async () => {
-      for (const c of list) await backend.setTargets(c.skill.ref, c.targets)
-      return n
-    })
-    // Applied skills drop out of `pending` once the reload shows their new targets.
-    await reload().catch(() => undefined)
-    if (r.ok) toast(t("appliedN", { n }))
+    const n = list.reduce((sum, c) => sum + c.enableKeys.length + c.disableKeys.length, 0)
+    applyingRef.current = true
+    setApplying(true)
+    try {
+      // One enable / disable per skill (see changes()); it stops at the first skill that fails.
+      const r = await runTask(t("applyingN", { n }), async () => {
+        let done = 0
+        for (const c of list) {
+          try {
+            if (c.enable.length) {
+              await backend.enable(c.skill.ref, c.enable)
+              done += c.enableKeys.length
+            }
+            if (c.disable.length) {
+              await backend.disable(c.skill.ref, c.disable)
+              done += c.disableKeys.length
+            }
+          } catch (error) {
+            return { done, failed: { name: c.skill.name, error } }
+          }
+        }
+        return { done, failed: undefined }
+      })
+      // Applied links drop out of `pending` once the reload shows their new targets;
+      // whatever failed or was not reached stays.
+      await reload().catch(() => undefined)
+      if (!r.ok) return
+      const { done, failed } = r.value
+      if (failed) toast.error(t("applyFailedAt", { name: failed.name, done, rest: n - done }), { description: errorText(t, failed.error) })
+      else toast(t("appliedN", { n }))
+    } finally {
+      applyingRef.current = false
+      setApplying(false)
+    }
   }, [pending, skills, operation, runTask, reload, t])
 
   const revertPending = React.useCallback(() => setPending({}), [])
@@ -528,10 +562,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []),
     pending,
     pendingCount,
+    applying,
     togglePending,
     revertPending,
     applyPending,
     run,
+    read,
     runTask,
   }
 

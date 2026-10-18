@@ -19,16 +19,16 @@ const REASON: Record<NonNullable<TrashEntry["reason"]>, MessageKey> = {
 
 /** Trash: restore only. Emptying it is a terminal command (skd trash empty). */
 export function TrashPage() {
-  const { t, run, reload, trashCount, status } = useApp()
+  const { t, run, read, reload, trashCount, status } = useApp()
   const [items, setItems] = React.useState<TrashEntry[] | null>(null)
   const [failed, setFailed] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setFailed(false)
-    const r = await run(() => backend.trash())
+    const r = await read(() => backend.trash())
     if (r.ok) setItems(r.value)
     else setFailed(true)
-  }, [run])
+  }, [read])
   React.useEffect(() => {
     void load()
   }, [load, trashCount])

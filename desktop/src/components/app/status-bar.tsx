@@ -27,13 +27,22 @@ export function useElapsed(startedAt: number | undefined) {
  * library's state, and the keyboard hints on the right.
  */
 export function StatusBar() {
-  const { t, pendingCount, applyPending, revertPending, operation, outdated, checking, updatablePacks, status, plan, openDialog, navigate } = useApp()
+  const { t, pendingCount, applying, applyPending, revertPending, operation, outdated, checking, updatablePacks, status, plan, openDialog, navigate } = useApp()
   const columns = useColumnAgents()
   const elapsed = useElapsed(operation?.startedAt)
   const keys = Math.min(9, columns.length)
 
   let left: React.ReactNode
-  if (pendingCount > 0) {
+  if (applying && operation) {
+    // The pending changes are being written: show progress instead of the count and a greyed button.
+    left = (
+      <span className="flex items-center gap-2 text-ink" role="status" aria-live="polite">
+        <RefreshIcon spinning />
+        {operation.label}
+        <span className="text-mut">{t("elapsed", { s: elapsed })}</span>
+      </span>
+    )
+  } else if (pendingCount > 0) {
     left = (
       <>
         <span className="flex items-center gap-2 text-ink" role="status">

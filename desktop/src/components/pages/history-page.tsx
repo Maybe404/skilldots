@@ -11,16 +11,16 @@ const COLS = "var(--cols)"
 
 /** Update history kept in the library (design: one row per update). */
 export function HistoryPage() {
-  const { t, run, skills } = useApp()
+  const { t, read, skills } = useApp()
   const [items, setItems] = React.useState<HistoryEntry[] | null>(null)
   const [failed, setFailed] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setFailed(false)
-    const r = await run(() => backend.history())
+    const r = await read(() => backend.history())
     if (r.ok) setItems(r.value)
     else setFailed(true)
-  }, [run])
+  }, [read])
 
   // Reload whenever the library changes (skills is a cheap proxy).
   React.useEffect(() => {
