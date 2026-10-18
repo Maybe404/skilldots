@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
 import { StyleSwitch } from "@/components/app/header"
 import { LibraryForm } from "@/components/dialogs/ops-dialogs"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 type Mode = "init" | "clone" | "use"
 
@@ -20,11 +21,10 @@ export function Onboarding() {
     ["clone", t("obImport"), t("obImportHint")],
     ["use", t("obUse"), t("obUseHint")],
   ]
-  const refs = React.useRef<(HTMLButtonElement | null)[]>([])
 
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="flex h-[54px] shrink-0 items-center gap-2.5 border-b-hd px-6" data-drag-region>
+      <header className="skd-titlebar flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd pr-6">
         <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
         <span className="flex-1" />
         <StyleSwitch className="h-[26px] p-0.5" />
@@ -33,37 +33,20 @@ export function Onboarding() {
         <h1 className="font-heading fs-h1 leading-tight font-semibold tracking-[-0.01em] text-ink">{t("welcome")}</h1>
         <p className="mt-3 fs-body leading-relaxed text-pretty text-mut">{t("welcomeBody")}</p>
 
-        <div role="radiogroup" aria-label={t("librarySection")} className="mt-7 [border-top:var(--tblHd)]">
-          {options.map(([m, title, hint], i) => (
-            <button
+        <RadioGroup value={mode} onValueChange={(v) => setMode(v as Mode)} aria-label={t("librarySection")} className="mt-7 gap-0 [border-top:var(--tblHd)]">
+          {options.map(([m, title, hint]) => (
+            <label
               key={m}
-              ref={(el) => {
-                refs.current[i] = el
-              }}
-              type="button"
-              role="radio"
-              aria-checked={mode === m}
-              tabIndex={mode === m ? 0 : -1}
-              onClick={() => setMode(m)}
-              onKeyDown={(e) => {
-                if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
-                e.preventDefault()
-                const j = (i + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length
-                setMode(options[j][0])
-                refs.current[j]?.focus()
-              }}
-              className={cn("flex w-full items-center gap-3.5 border-b-row px-2.5 py-3.5 text-left hover:bg-row-hv", mode === m && "bg-row-on shadow-row")}
+              className={cn("flex w-full cursor-pointer items-center gap-3.5 border-b-row px-2.5 py-3.5 text-left hover:bg-row-hv", mode === m && "bg-row-on shadow-row")}
             >
-              <span aria-hidden className={cn("grid size-4 flex-none place-items-center rounded-full border-[1.5px]", mode === m ? "border-hue bg-hue" : "border-ln")}>
-                {mode === m && <span className="size-1.5 rounded-full bg-white" />}
-              </span>
+              <RadioGroupItem value={m} />
               <span className="min-w-0">
                 <span className="block font-heading fs-name font-semibold text-ink">{title}</span>
                 <span className="mt-0.5 block fs-meta text-mut">{hint}</span>
               </span>
-            </button>
+            </label>
           ))}
-        </div>
+        </RadioGroup>
 
         <div className="mt-6">
           <LibraryForm key={mode} mode={mode} autoFocus={false} onDone={() => navigate(mode === "init" ? "scan" : "skills")} />

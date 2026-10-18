@@ -5,7 +5,9 @@ import { isMine, kindLabel, useApp, type TableSort } from "@/lib/app-state"
 import { agentLabel, agentMono } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
-import { AgentMono, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { Button } from "@/components/ui/button"
+import { DisclosureChevron } from "@/components/ui/collapsible"
 import type { ListItem, useSkillList } from "./model"
 
 /*
@@ -38,10 +40,10 @@ export function TableView({
     const next: TableSort = dir === null ? { by, dir: "asc" } : dir === "asc" ? { by, dir: "desc" } : null
     return (
       <div role="columnheader" aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}>
-        <button type="button" onClick={() => setTableSort(next)} className="-ml-1 inline-flex items-center gap-1 rounded-seg px-1 py-0.5 hover:text-ink">
+        <Button variant="ghost" size="xs" onClick={() => setTableSort(next)} className="-ml-1 gap-1 rounded-seg px-1 font-normal text-[length:inherit] text-mut hover:bg-transparent">
           {label}
           {dir === "asc" ? <ArrowUp className="size-3" /> : dir === "desc" ? <ArrowDown className="size-3" /> : null}
-        </button>
+        </Button>
       </div>
     )
   }
@@ -57,21 +59,22 @@ export function TableView({
         {sortButton("source", t("colSource"))}
         {columns.map((a) => (
           <div role="columnheader" key={a.name} className="grid place-items-center">
-            <button
-              type="button"
-              aria-pressed={agentFocus === a.name}
-              aria-label={t("agentFocusHint", { agent: agentLabel(a) })}
-              title={agentLabel(a)}
-              onClick={() => setAgentFocus(agentFocus === a.name ? null : a.name)}
-              className={cn(
-                "flex h-9 w-full flex-col items-center justify-center gap-0.5 rounded-ctl",
-                agentFocus === a.name && "bg-row-on shadow-[inset_0_-2px_0_var(--hue)]",
-                !a.enabled && "opacity-50",
-              )}
-            >
-              <AgentMono agent={a} size={[26, 22]} className="rounded-[6px]" />
-              <span className="font-mono text-[10px] text-mut">{skills.filter((s) => isOn(s, a.name, pending)).length}</span>
-            </button>
+            <Hint label={agentLabel(a)}>
+              <button
+                type="button"
+                aria-pressed={agentFocus === a.name}
+                aria-label={t("agentFocusHint", { agent: agentLabel(a) })}
+                onClick={() => setAgentFocus(agentFocus === a.name ? null : a.name)}
+                className={cn(
+                  "flex h-9 w-full flex-col items-center justify-center gap-0.5 rounded-ctl",
+                  agentFocus === a.name && "bg-row-on shadow-[inset_0_-2px_0_var(--hue)]",
+                  !a.enabled && "opacity-50",
+                )}
+              >
+                <AgentMono agent={a} size={[26, 22]} className="rounded-[6px]" />
+                <span className="font-mono text-[10px] text-mut">{skills.filter((s) => isOn(s, a.name, pending)).length}</span>
+              </button>
+            </Hint>
           </div>
         ))}
       </div>
@@ -109,9 +112,7 @@ function GroupRow({ item, onToggle }: { item: Extract<ListItem, { type: "group" 
     <div role="row" className="border-b-row">
       <div role="cell">
         <button type="button" aria-expanded={!item.collapsed} onClick={onToggle} className="flex h-[34px] w-full items-center gap-2 px-3.5 text-left">
-          <span aria-hidden className={cn("inline-block w-3 text-sm leading-none text-mut transition-transform", !item.collapsed && "rotate-90")}>
-            ›
-          </span>
+          <DisclosureChevron open={!item.collapsed} />
           <span className="font-mono fs-meta text-ink">{item.name}</span>
           <span className="font-body fs-meta text-mut">{t("groupCount", { n: item.skills.length })}</span>
         </button>
@@ -195,22 +196,23 @@ function Row({
           st === "on" ? t("cellOn", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : t("cellOff", { agent: label })
         return (
           <div role="cell" key={a.name} className="relative grid place-items-center">
-            <button
-              type="button"
-              tabIndex={selected ? 0 : -1}
-              aria-pressed={on}
-              aria-label={`${skill.linkName} · ${label} (${a.name}) · ${title}`}
-              title={title}
-              data-state={st}
-              onClick={(e) => {
-                e.stopPropagation()
-                onSelect()
-                onToggle(a.name)
-              }}
-              className={cn("skd-cell", !a.enabled && "opacity-45")}
-            >
-              {agentMono(a)}
-            </button>
+            <Hint label={title}>
+              <button
+                type="button"
+                tabIndex={selected ? 0 : -1}
+                aria-pressed={on}
+                aria-label={`${skill.linkName} · ${label} (${a.name}) · ${title}`}
+                data-state={st}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelect()
+                  onToggle(a.name)
+                }}
+                className={cn("skd-cell", !a.enabled && "opacity-45")}
+              >
+                {agentMono(a)}
+              </button>
+            </Hint>
             {claudeOff && a.name === "claude" && <OffRing className="pointer-events-none absolute top-1 right-2" />}
           </div>
         )

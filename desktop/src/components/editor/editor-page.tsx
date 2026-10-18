@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
@@ -351,20 +352,15 @@ function FrontmatterForm({
   const placeholder = description.trim() === PLACEHOLDER_DESC
   const len = [...description].length
   return (
-    <div className="shrink-0 border-b-row">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left hover:bg-row-hv"
-        aria-expanded={open}
-        onClick={() => onOpenChange(!open)}
-      >
+    <Collapsible open={open} onOpenChange={onOpenChange} className="shrink-0 border-b-row">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left hover:bg-row-hv">
         <span className="min-w-0">
           <span className="block fs-meta text-mut">{t("frontmatter")}</span>
           <span className="mt-0.5 block truncate font-mono fs-body text-ink">{name || skill.name}</span>
         </span>
         <ChevronDown className={cn("size-4 shrink-0 transition-transform motion-reduce:transition-none", open && "rotate-180")} aria-hidden />
-      </button>
-      {open && (
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
         <div className="grid gap-3 [border-top:var(--tblRow)] px-5 py-4 lg:grid-cols-[14rem_1fr]">
           <Field>
             <FieldLabel htmlFor="fm-name">{t("nameLabel")}</FieldLabel>
@@ -393,8 +389,8 @@ function FrontmatterForm({
             </FieldDescription>
           </Field>
         </div>
-      )}
-    </div>
+      </CollapsiblePanel>
+    </Collapsible>
   )
 }
 

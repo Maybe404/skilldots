@@ -1,5 +1,6 @@
 import * as React from "react"
 import { toast } from "sonner"
+import { Undo2 } from "lucide-react"
 
 import { useApp } from "@/lib/app-state"
 import { backend, type TrashEntry } from "@/lib/backend"
@@ -94,10 +95,7 @@ export function TrashPage() {
               </div>
               <div role="cell" className="flex justify-end">
                 <Button variant="outline" size="sm" disabled={e.restorable === false} title={e.problem} onClick={() => restore(e)} aria-label={`${t("restore")} ${e.name}`}>
-                  <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 14 4 9l5-5" />
-                    <path d="M4 9h11a5 5 0 0 1 0 10h-3" />
-                  </svg>
+                  <Undo2 aria-hidden strokeWidth={1.8} />
                   {t("restore")}
                 </Button>
               </div>

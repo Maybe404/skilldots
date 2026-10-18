@@ -102,16 +102,17 @@ function SkillLinks({ list }: { list: Skill[] }) {
       {list.map((s, i) => (
         <React.Fragment key={s.ref.key}>
           {i > 0 && ", "}
-          <button
-            type="button"
-            className="rounded-seg hover:text-ink hover:underline hover:underline-offset-[3px]"
+          <Button
+            variant="quiet"
+            size="inline"
+            className="inline rounded-seg whitespace-normal no-underline hover:underline"
             onClick={() => {
               navigate("skills")
               openDetail(s.ref.key)
             }}
           >
             {s.linkName}
-          </button>
+          </Button>
         </React.Fragment>
       ))}
     </span>
@@ -153,10 +154,10 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
         </div>
         <div role="cell" className={cn("flex items-center fs-meta", reviewable ? "font-semibold text-ink" : "text-mut")}>
           {reviewable ? (
-            <button type="button" aria-expanded={open} onClick={onToggle} className="flex items-center gap-1.5 whitespace-nowrap underline decoration-ln underline-offset-[3px]">
+            <Button variant={null} size="inline" aria-expanded={open} onClick={onToggle} className="rounded-seg underline decoration-ln underline-offset-[3px] hover:decoration-current">
               {upd && <UpdateDot decorative />}
               {statusText}
-            </button>
+            </Button>
           ) : (
             <span title={failed}>{statusText}</span>
           )}

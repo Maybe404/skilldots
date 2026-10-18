@@ -1,5 +1,6 @@
 import * as React from "react"
 import { toast } from "sonner"
+import { CloudUpload } from "lucide-react"
 
 import { useApp } from "@/lib/app-state"
 import { backend, type Config, type Theme } from "@/lib/backend"
@@ -9,6 +10,7 @@ import { StyleSwitch } from "@/components/app/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
@@ -60,8 +62,6 @@ export function SettingsPage() {
     toast(r.value.committed ? t("syncedToast", { remote: r.value.remote }) : t("nothingToSync"))
   }
 
-  const link = "text-hue-ink underline decoration-ln underline-offset-[3px] whitespace-nowrap hover:decoration-current"
-
   return (
     <Page title={t("settingsTitle")} summary={t("settingsShared")}>
       <div className="grid grid-cols-2 items-start gap-x-12 max-[900px]:grid-cols-1">
@@ -73,6 +73,8 @@ export function SettingsPage() {
             <Row label={t("mode")} hint={config.theme === "dark" ? t("darkPending") : undefined}>
               <ToggleGroup
                 aria-label={t("mode")}
+                variant="seg"
+                size="none"
                 value={[config.theme]}
                 onValueChange={(v) => {
                   const next = v[0] as Theme | undefined
@@ -86,13 +88,9 @@ export function SettingsPage() {
                 className="skd-seg h-[34px] items-start"
                 spacing={2}
               >
-                <ToggleGroupItem value="system" variant="seg" size="none">
-                  {t("themeSystem")}
-                </ToggleGroupItem>
-                <ToggleGroupItem value="light" variant="seg" size="none">
-                  {t("themeLight")}
-                </ToggleGroupItem>
-                <ToggleGroupItem value="dark" variant="seg" size="none" aria-disabled title={t("darkPending")}>
+                <ToggleGroupItem value="system">{t("themeSystem")}</ToggleGroupItem>
+                <ToggleGroupItem value="light">{t("themeLight")}</ToggleGroupItem>
+                <ToggleGroupItem value="dark" aria-disabled title={t("darkPending")}>
                   {t("themeDark")}
                 </ToggleGroupItem>
               </ToggleGroup>
@@ -153,18 +151,18 @@ export function SettingsPage() {
               <div className="fs-meta text-mut">{t("libraryPath")}</div>
               <div className="mt-[3px] font-mono fs-meta break-all text-ink">{status?.root}</div>
               <div className="mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1.5 fs-meta">
-                <button type="button" className={link} onClick={async () => (await run(() => backend.revealLibrary())).ok && toast(t("revealed"))}>
+                <Button variant="link" size="inline" onClick={async () => (await run(() => backend.revealLibrary())).ok && toast(t("revealed"))}>
                   {t("revealInFinder")}
-                </button>
-                <button type="button" className={link} onClick={() => openDialog({ kind: "library", mode: "use" })}>
+                </Button>
+                <Button variant="link" size="inline" onClick={() => openDialog({ kind: "library", mode: "use" })}>
                   {t("switchLibrary")}
-                </button>
-                <button type="button" className={link} onClick={() => openDialog({ kind: "library", mode: "clone" })}>
+                </Button>
+                <Button variant="link" size="inline" onClick={() => openDialog({ kind: "library", mode: "clone" })}>
                   {t("importLibrary")}
-                </button>
-                <button type="button" className={link} onClick={() => openDialog({ kind: "library", mode: "init" })}>
+                </Button>
+                <Button variant="link" size="inline" onClick={() => openDialog({ kind: "library", mode: "init" })}>
                   {t("newLibrary")}
-                </button>
+                </Button>
               </div>
             </div>
           </Section>
@@ -183,18 +181,15 @@ export function SettingsPage() {
                 </div>
               </div>
               <Button onClick={() => void backup()} disabled={syncing} variant={status?.changes || !status?.remote ? "default" : "secondary"} className="px-3">
-                <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 12a3.5 3.5 0 0 1 0 6" />
-                  <path d="M12 12v9M9 15l3-3 3 3" />
-                </svg>
+                {syncing ? <Spinner /> : <CloudUpload aria-hidden strokeWidth={1.8} />}
                 {syncing ? t("syncing") : status?.changes || !status?.remote ? t("syncNow") : t("backedUp")}
               </Button>
             </div>
             <p className="py-3 fs-meta text-mut">
               {t("backupNote2")}{" "}
-              <button type="button" className={link} onClick={() => openDialog({ kind: "sync" })}>
+              <Button variant="link" size="inline" onClick={() => openDialog({ kind: "sync" })}>
                 {t("backupWithMessage")}
-              </button>
+              </Button>
             </p>
           </Section>
         </div>

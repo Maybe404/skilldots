@@ -9,6 +9,7 @@ import { isOn, pendingOnAgent } from "@/lib/pending"
 import { AgentMono, Page, TableHead, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
 
 const COLS = "var(--cols)"
 
@@ -46,21 +47,19 @@ export function AgentsPage() {
       <p className="mt-4 max-w-[640px] fs-meta text-pretty text-mut">{t("agentsFootnote")}</p>
 
       {others.length > 0 && (
-        <div className="mt-8">
-          <button type="button" aria-expanded={showOthers} onClick={() => setShowOthers((v) => !v)} className="flex h-[30px] items-center gap-2 fs-meta text-mut hover:text-ink">
-            <span aria-hidden className={cn("inline-block w-3 text-sm leading-none transition-transform", showOthers && "rotate-90")}>
-              ›
-            </span>
+        <Collapsible open={showOthers} onOpenChange={setShowOthers} className="mt-8">
+          <CollapsibleTrigger className="flex h-[30px] items-center gap-2 rounded-seg fs-meta text-mut hover:text-ink">
+            <DisclosureChevron open={showOthers} />
             {t("otherAgents", { n: others.length })}
-          </button>
-          {showOthers && (
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
             <div role="table" aria-label={t("otherAgents", { n: others.length })} className="skd-cols-agents [border-top:var(--tblHd)]">
               {others.map((a) => (
                 <AgentRow key={a.name} agent={a} count={count(a)} />
               ))}
             </div>
-          )}
-        </div>
+          </CollapsiblePanel>
+        </Collapsible>
       )}
     </Page>
   )

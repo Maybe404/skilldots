@@ -1,6 +1,6 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { X } from "lucide-react"
+import { ListTree, Table, X } from "lucide-react"
 
 import { useApp, type SkillFilter } from "@/lib/app-state"
 import { agentLabel } from "@/lib/agents"
@@ -122,12 +122,14 @@ export function SkillsPage() {
       <div className="flex h-[46px] shrink-0 items-center gap-2 px-10 font-body fs-body max-[760px]:px-5">
         <ToggleGroup
           aria-label={t("filterLabel")}
+          variant="chip"
+          size="none"
           value={filter === "vendor" ? [] : [filter]}
           onValueChange={(v) => v[0] && setFilter(v[0] as SkillFilter)}
           spacing={8}
         >
           {filters.map(([value, label]) => (
-            <ToggleGroupItem key={value} value={value} variant="chip" size="none">
+            <ToggleGroupItem key={value} value={value}>
               {label}
               <span className="font-mono fs-meta opacity-70">{skills.filter((s) => matchesFilter(s, value, updatable)).length}</span>
             </ToggleGroupItem>
@@ -140,37 +142,33 @@ export function SkillsPage() {
         )}
         <span aria-hidden className="mx-1 h-4 w-px bg-ln" />
         <Toggle variant="chip" size="none" pressed={grouped} onPressedChange={setGrouped}>
-          <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M4 6h16M4 12h10M4 18h16" />
-          </svg>
+          <ListTree aria-hidden strokeWidth={2} />
           {t("groupBySource")}
         </Toggle>
         {focusAgent && (
-          <button
-            type="button"
+          <Button
+            variant="hue"
             onClick={() => setAgentFocus(null)}
             aria-label={t("clearAgentFocus", { agent: agentLabel(focusAgent) })}
-            className="flex h-[26px] items-center gap-2 rounded-[13px] bg-hue pr-1.5 pl-2.5 whitespace-nowrap text-white"
+            className="h-[26px] gap-2 rounded-[13px] pr-1.5 pl-2.5"
           >
             {t("agentFocusChip", { agent: agentLabel(focusAgent), n: skills.filter((s) => isOn(s, focusAgent.name, pending)).length })}
-            <span aria-hidden className="grid size-4 place-items-center rounded-full bg-white/90 text-[11px] leading-none text-hue">
-              ×
+            <span aria-hidden className="grid size-4 place-items-center rounded-full bg-bg/90 text-hue">
+              <X className="size-2.5" strokeWidth={3} />
             </span>
-          </button>
+          </Button>
         )}
         <span className="flex-1" />
-        <ToggleGroup aria-label={t("viewLabel")} value={[skillView]} onValueChange={(v) => v[0] && setSkillView(v[0] as "wire" | "table")} className="skd-seg h-[34px] items-start" spacing={2}>
-          <ToggleGroupItem value="wire" variant="seg" size="none">
+        <ToggleGroup aria-label={t("viewLabel")} variant="seg" size="none" value={[skillView]} onValueChange={(v) => v[0] && setSkillView(v[0] as "wire" | "table")} className="skd-seg h-[34px] items-start" spacing={2}>
+          <ToggleGroupItem value="wire">
+            {/* The design's own wire glyph (two crossing curves); Lucide has none like it. */}
             <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6c8 0 8 12 16 12M4 18c8 0 8-12 16-12" />
             </svg>
             {t("viewWire")}
           </ToggleGroupItem>
-          <ToggleGroupItem value="table" variant="seg" size="none">
-            <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <rect x="4" y="5" width="16" height="14" rx="1" />
-              <path d="M4 10h16M4 14h16M10 5v14M15 5v14" />
-            </svg>
+          <ToggleGroupItem value="table">
+            <Table aria-hidden strokeWidth={2} />
             {t("viewTable")}
           </ToggleGroupItem>
         </ToggleGroup>

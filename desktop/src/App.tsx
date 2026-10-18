@@ -1,12 +1,13 @@
 import * as React from "react"
-import { MotionConfig } from "motion/react"
+import { AnimatePresence, MotionConfig } from "motion/react"
 
 import { AppProvider, useApp } from "@/lib/app-state"
+import { Effect } from "@/components/animate-ui/primitives/effects/effect"
 import { CommandPalette } from "@/components/app/command-palette"
 import { DoodleDefs, Doodles } from "@/components/app/doodles"
 import { Header, searchInputId } from "@/components/app/header"
 import { RefreshIcon } from "@/components/app/bits"
-import { useElapsed } from "@/components/app/status-bar"
+import { OperationText } from "@/components/app/status-bar"
 import { Dialogs } from "@/components/dialogs/dialogs"
 import { AgentsPage } from "@/components/pages/agents-page"
 import { HistoryPage } from "@/components/pages/history-page"
@@ -44,6 +45,8 @@ function Root() {
     const stageLabel = loadError.stage === "config" ? t("loadingConfig") : loadError.stage === "checking" ? t("loadingCheck") : t("loadingLibrary")
     return (
       <main className="flex min-h-svh items-center justify-center p-8">
+        {/* No top bar here: a strip as tall as the window's title bar still drags the window. */}
+        <div aria-hidden className="skd-titlebar fixed inset-x-0 top-0 h-[var(--mygo-titlebar-height,0px)]" />
         <div className="w-full max-w-xl rounded-card border-card bg-dialog px-6 py-[22px] shadow-pop" role="alert">
           <h1 className="font-heading fs-h3 font-bold text-ink">{t("loadFailed")}</h1>
           <p className="mt-1 fs-meta text-mut">{stageLabel}</p>
@@ -65,7 +68,7 @@ function Root() {
     const message = loadStage === "config" ? t("loadingConfig") : loadStage === "checking" ? t("loadingCheck") : t("loadingLibrary")
     return (
       <main className="flex min-h-svh flex-col">
-        <div className="flex h-[54px] items-center gap-2.5 px-6">
+        <div className="skd-titlebar flex h-[54px] items-center gap-2.5 pr-6">
           <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
         </div>
         <div className="px-10 pt-[26px]" role="status" aria-live="polite">
@@ -86,21 +89,34 @@ function Root() {
   return <Shell />
 }
 
-/** Shows a long operation on pages without the Skill page's status bar. */
+/**
+ * Shows a long operation on pages without the Skill page's status bar. It
+ * pops up from the bottom and sinks away when the operation ends (Animate UI
+ * effect under AnimatePresence; fade only with reduced motion).
+ */
 function OperationPill() {
-  const { t, operation, view } = useApp()
-  const elapsed = useElapsed(operation?.startedAt)
-  if (!operation || view === "skills") return null
+  const { operation: current, view } = useApp()
+  // The pill keeps the last label while it sinks away after the operation ended.
+  const [operation, setOperation] = React.useState(current)
+  if (current && current !== operation) setOperation(current)
+  const show = !!current && view !== "skills"
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed bottom-4 left-1/2 z-30 flex h-9 -translate-x-1/2 items-center gap-2.5 rounded-[18px] bg-ink px-4 font-body fs-body whitespace-nowrap text-bg shadow-toast"
-    >
-      <RefreshIcon spinning />
-      {operation.label}
-      <span className="text-bg/70">{t("elapsed", { s: elapsed })}</span>
-    </div>
+    <AnimatePresence>
+      {show && operation && (
+        <Effect
+          key="operation"
+          role="status"
+          aria-live="polite"
+          fade
+          zoom={{ initialScale: 0.92 }}
+          slide={{ direction: "up", offset: 14 }}
+          transition={{ type: "spring", stiffness: 420, damping: 32 }}
+          className="fixed bottom-4 left-1/2 z-30 flex h-9 -translate-x-1/2 items-center gap-2.5 rounded-[18px] bg-ink px-4 font-body fs-body whitespace-nowrap text-bg shadow-toast"
+        >
+          <OperationText label={operation.label} startedAt={operation.startedAt} mutedClassName="text-bg/70" />
+        </Effect>
+      )}
+    </AnimatePresence>
   )
 }
 

@@ -5,7 +5,9 @@ import { isMine, kindLabel, useApp } from "@/lib/app-state"
 import { agentLabel, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
-import { AgentMono, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { Button } from "@/components/ui/button"
+import { DisclosureChevron } from "@/components/ui/collapsible"
 import { AGENT_H, AGENTS_TOP, GROUP_H, LIST_TOP, ROW_H, type ListItem, type useSkillList } from "./model"
 
 /*
@@ -262,34 +264,37 @@ function AgentRow({ agent: a, skill, dragging, claudeOff }: { agent: Agent; skil
         style={{ background: on || selA ? "var(--ac)" : "var(--hue)", boxShadow: dragging ? "0 0 0 4px var(--acSoft)" : "none" }}
       />
       <AgentMono agent={a} size={34} />
-      <button
-        type="button"
-        aria-pressed={selA}
-        title={t("agentFocusHint", { agent: label })}
-        onClick={() => setAgentFocus(selA ? null : a.name)}
-        className="min-w-0 flex-1 rounded-ctl text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:rounded-ctl focus-visible:after:outline-2 focus-visible:after:outline-ring"
-      >
-        <span className="flex items-center gap-1.5 font-heading fs-name leading-[1.1] font-semibold whitespace-nowrap text-ink">
-          <span className="truncate">{label}</span>
-          {!a.enabled && <Tag>{t("pausedTag")}</Tag>}
-          {claudeOff && <OffRing />}
-        </span>
-        <span className="mt-[3px] block truncate font-mono fs-meta text-mut">{tildify(a.path)}</span>
-      </button>
-      {skill && (
+      <Hint label={t("agentFocusHint", { agent: label })}>
         <button
           type="button"
+          aria-pressed={selA}
+          onClick={() => setAgentFocus(selA ? null : a.name)}
+          className="min-w-0 flex-1 rounded-ctl text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:rounded-ctl focus-visible:after:outline-2 focus-visible:after:outline-ring"
+        >
+          <span className="flex items-center gap-1.5 font-heading fs-name leading-[1.1] font-semibold whitespace-nowrap text-ink">
+            <span className="truncate">{label}</span>
+            {!a.enabled && <Tag>{t("pausedTag")}</Tag>}
+            {claudeOff && <OffRing />}
+          </span>
+          <span className="mt-[3px] block truncate font-mono fs-meta text-mut">{tildify(a.path)}</span>
+        </button>
+      </Hint>
+      {skill && (
+        // shadcn button without a fill: the design draws 已装 / 装上 / 待装上 / 待卸下 with its own borders.
+        <Button
+          variant={null}
+          size="default"
           aria-pressed={on}
           aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
           onClick={() => togglePending(skill, a.name)}
           className={cn(
-            "relative z-[1] flex h-[26px] shrink-0 items-center rounded-ctl px-2.5 font-body fs-body whitespace-nowrap",
+            "relative z-[1] h-[26px]",
             on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
             pend ? "border-ac text-ac" : !on && "border-mut text-ink",
           )}
         >
           {btnText}
-        </button>
+        </Button>
       )}
       <span className="min-w-[30px] flex-none text-right font-mono text-[18px] leading-none font-medium text-hue-ink">{count}</span>
     </div>
@@ -306,9 +311,7 @@ function GroupRow({ item, onToggle }: { item: Extract<ListItem, { type: "group" 
         onClick={onToggle}
         className="relative flex size-full items-center gap-2 rounded-ctl px-4 text-left"
       >
-        <span aria-hidden className={cn("inline-block w-3 text-sm leading-none text-mut transition-transform", !item.collapsed && "rotate-90")}>
-          ›
-        </span>
+        <DisclosureChevron open={!item.collapsed} />
         <span className="font-mono fs-meta text-ink">{item.name}</span>
         <span className="font-body fs-meta text-mut">{t("groupCount", { n: item.skills.length })}</span>
         {item.collapsed && <span aria-hidden className="absolute top-1/2 -right-1.5 -mt-1.5 size-3 rounded-full bg-[var(--wire)]" />}
@@ -376,16 +379,19 @@ function SkillRow({
           </span>
           <span className="mt-0.5 block truncate font-mono fs-meta text-mut">{sourceText}</span>
         </span>
-        <span className="font-mono fs-meta whitespace-nowrap text-hue-ink" title={t("installedOfTotal")}>
-          {count}/{total}
-        </span>
-        <span
-          aria-hidden
-          title={t("dragToInstall")}
-          onPointerDown={onPortDown}
-          className="absolute top-1/2 -right-1.5 -mt-1.5 box-border size-3 cursor-grab rounded-full border-2"
-          style={{ background: focused ? "var(--ac)" : "var(--bg)", borderColor: focused ? "var(--ac)" : "var(--hue)" }}
-        />
+        <Hint label={t("installedOfTotal")}>
+          <span className="font-mono fs-meta whitespace-nowrap text-hue-ink">
+            {count}/{total}
+          </span>
+        </Hint>
+        <Hint label={t("dragToInstall")}>
+          <span
+            aria-hidden
+            onPointerDown={onPortDown}
+            className="absolute top-1/2 -right-1.5 -mt-1.5 box-border size-3 cursor-grab rounded-full border-2"
+            style={{ background: focused ? "var(--ac)" : "var(--bg)", borderColor: focused ? "var(--ac)" : "var(--hue)" }}
+          />
+        </Hint>
       </button>
     </div>
   )
