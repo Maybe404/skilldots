@@ -98,7 +98,7 @@ export function SourcesPage() {
 function SkillLinks({ list }: { list: Skill[] }) {
   const { navigate, openDetail } = useApp()
   return (
-    <span className="block truncate font-mono fs-meta text-mut">
+    <span className="block font-mono fs-meta text-mut">
       {list.map((s, i) => (
         <React.Fragment key={s.ref.key}>
           {i > 0 && ", "}
