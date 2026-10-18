@@ -82,7 +82,6 @@
   /* wires (the wire view's curves) */
   --wireOp: 0.12;
   --wireW: 1.2;
-  --wireFilter: none;
 }
 
 :root[data-style="doodle"] {
@@ -148,7 +147,6 @@
   --tblRow: 1.1px dashed rgba(62, 57, 53, 0.35);
   --wireOp: 0.3;
   --wireW: 1.5;
-  --wireFilter: url(#skd-wob);
 }
 
 /*

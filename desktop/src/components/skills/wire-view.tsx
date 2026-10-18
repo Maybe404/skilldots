@@ -8,6 +8,7 @@ import { cellState, isOn } from "@/lib/pending"
 import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
+import { cubicPath } from "./wobble"
 import { AGENT_H, AGENTS_TOP, GROUP_H, LIST_TOP, ROW_H, type ListItem, type useSkillList } from "./model"
 
 /*
@@ -36,9 +37,9 @@ export function wireGeometry(width: number) {
 }
 
 // The design bends each curve by 190px; narrower windows bend less so curves never loop.
-const curve = (x1: number, y1: number, x2: number, y2: number) => {
+const curve = (wobble: boolean, x1: number, y1: number, x2: number, y2: number) => {
   const bend = Math.min(190, (x2 - x1) * 0.43)
-  return `M${x1} ${y1} C${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
+  return cubicPath(wobble, x1, y1, x1 + bend, y1, x2 - bend, y2, x2, y2)
 }
 
 interface Wire {
@@ -65,9 +66,10 @@ export function WireView({
   setHover: (key: string | null) => void
   rowId: (key: string) => string
 }) {
-  const { t, skills, selected, select, openDetail, pending, togglePending, agentFocus, toggleCollapsed, updatable, overrides } = useApp()
+  const { t, style, skills, selected, select, openDetail, pending, togglePending, agentFocus, toggleCollapsed, updatable, overrides } = useApp()
   const { items, columns, count, listHeight } = list
   const g = wireGeometry(width)
+  const wobble = style === "doodle"
   const contentRef = React.useRef<HTMLDivElement>(null)
   const [drag, setDrag] = React.useState<{ key: string; x: number; y: number } | null>(null)
 
@@ -111,7 +113,7 @@ export function WireView({
       const y1 = it.y + LIST_TOP + ROW_H / 2
       columns.forEach((a, k) => {
         const st = cellState(s, a.name, pending)
-        const d = curve(g.x1, y1, g.x2, ay(k))
+        const d = curve(wobble, g.x1, y1, g.x2, ay(k))
         if (st === "on" || st === "adding") {
           const pend = st === "adding"
           const f = s.ref.key === focusKey
@@ -134,7 +136,7 @@ export function WireView({
         const n = it.skills.filter((s) => isOn(s, a.name, pending)).length
         if (!n) return
         const y2 = ay(k)
-        wires.push({ d: curve(g.x1, y1, g.x2, y2), stroke: "var(--wire)", width: 1 + n * 0.9, opacity: agentFocus && agentFocus !== a.name ? 0.08 : 0.4, z: 0 })
+        wires.push({ d: curve(wobble, g.x1, y1, g.x2, y2), stroke: "var(--wire)", width: 1 + n * 0.9, opacity: agentFocus && agentFocus !== a.name ? 0.08 : 0.4, z: 0 })
         labels.push({ x: g.x1 + 60, y: y1 - 6 + (y2 - y1) * 0.08, text: n })
       })
     }
@@ -146,7 +148,7 @@ export function WireView({
     const it = items.find((x) => x.type === "skill" && x.skill.ref.key === drag.key)
     if (it) {
       const y1 = it.y + LIST_TOP + ROW_H / 2
-      dragPath = `M${g.x1} ${y1} C${g.x1 + 120} ${y1}, ${drag.x - 120} ${drag.y}, ${drag.x} ${drag.y}`
+      dragPath = cubicPath(wobble, g.x1, y1, g.x1 + 120, y1, drag.x - 120, drag.y, drag.x, drag.y)
     }
   }
 
@@ -173,7 +175,7 @@ export function WireView({
         ))}
       </section>
 
-      <svg aria-hidden className="pointer-events-none absolute top-0 left-0" width={g.width} height={contentH} fill="none" style={{ filter: "var(--wireFilter)" }}>
+      <svg aria-hidden className="pointer-events-none absolute top-0 left-0" width={g.width} height={contentH} fill="none">
         {wires.map((w, i) => (
           <path
             key={i}
@@ -183,6 +185,7 @@ export function WireView({
             strokeOpacity={w.opacity < 0 ? "var(--wireOp)" : w.opacity}
             strokeDasharray={w.dash}
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
         ))}
         {labels.map((l, i) => (
@@ -190,7 +193,7 @@ export function WireView({
             {l.text}
           </text>
         ))}
-        {dragPath && <path d={dragPath} stroke="var(--ac)" strokeWidth={2.2} strokeDasharray="6 5" strokeLinecap="round" />}
+        {dragPath && <path d={dragPath} stroke="var(--ac)" strokeWidth={2.2} strokeDasharray="6 5" strokeLinecap="round" strokeLinejoin="round" />}
       </svg>
 
       <section aria-label="Skill" className="absolute top-0" style={{ left: g.padX, width: g.listW }}>
