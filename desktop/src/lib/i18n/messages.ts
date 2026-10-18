@@ -1010,7 +1010,7 @@ export const en: Record<MessageKey, string> = {
   agentResumed: "Resumed {agent}; {n} links are back",
   columnHidden: "Hid the {agent} column on the Skills page",
   hidePendingTitle: "Hide the {agent} column?",
-  hidePendingBody: "This column has {n} changes waiting to be applied. Hiding it discards them, so nothing is applied out of sight. Cancel to keep them, then hide it after applying.",
+  hidePendingBody: "This column has unapplied changes ({n}). Hiding it discards them, so nothing is applied out of sight. Cancel to keep them, then hide it after applying.",
   hidePendingAction: "Discard changes and hide",
   columnShown: "Showing the {agent} column on the Skills page",
   otherAgents: "Other supported agents ({n})",
