@@ -42,16 +42,25 @@ in `docs/screenshots/` (1280×820 window, 1.5× scale, sample data).
   the window needs no network. Chinese falls back to PingFang SC.
 - **Pending link changes.** Toggling a skill for an agent (wire view, table
   view, detail sheet, number keys, drag) only records the wanted state. The
-  status bar shows the count with Apply and Undo; Apply calls `setTargets`
-  once per changed skill. Closing the window with pending changes asks first.
+  status bar shows the count with Apply and Undo; while applying it shows a
+  spinner and the elapsed time. Apply sends one `enable` (agents added) and
+  one `disable` (agents removed) per changed skill instead of overwriting the
+  whole target list, so links changed elsewhere meanwhile are kept; it stops
+  at the first skill that fails and says which one and how many changes went
+  through. Closing the window with pending changes asks first. Hiding an
+  agent column that has pending changes asks first and discards them; pending
+  changes of hidden columns are never applied.
 - **Keyboard.** ↑↓ select a skill, 1–9 toggle the agent columns, ⏎ applies
   pending changes (or opens details), Space opens details, V switches view,
-  Esc clears the agent focus and then the pending changes. ⌘K opens the
+  Esc clears the agent focus and then the pending changes (Esc inside the
+  search field only leaves the search). ⌘K opens the
   command palette, ⌘F the search, ⌘N a new skill, ⌘, Settings.
 
 ## Behavior
 
-- Hiding an agent column only changes desktop preferences.
+- Hiding an agent column only changes desktop preferences: it also clears the
+  agent focus, and the "install to" lists of new and added skills still show
+  every enabled agent.
 - Pausing an agent persists in `targets.disabled`, removes managed links on
   apply, and preserves skill selections so resuming restores distribution.
 - Library skills, including private and self-authored skills, move to the
@@ -68,11 +77,9 @@ in `docs/screenshots/` (1280×820 window, 1.5× scale, sample data).
 
 Go API tests use isolated temporary libraries. The native smoke harness
 (`cmd/smoke`, build tag `desktop_smoke`) launches a real WKWebView, clicks
-agent toggles, checks the resulting links, reads and writes a skill, checks
-an empty apply plan, and records font/blur support plus a screenshot.
-Since the redesign an agent toggle only records a pending change, so the
-harness's toggle step also has to press Apply before it checks the links;
-the harness has not been updated yet.
+agent toggles and presses Apply (a toggle only records a pending change),
+checks the resulting links, reads and writes a skill, checks an empty apply
+plan, and records font/blur support plus a screenshot.
 Build the harness from the repository root:
 
 ```sh

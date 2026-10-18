@@ -48,13 +48,22 @@ func main() {
      const waitFor = async fn => { for (let i=0;i<150;i++) { const v=await fn(); if(v) return v; await delay(100); } throw new Error("timeout: "+document.body.innerText); };
      await waitFor(() => document.body.innerText.includes("native-smoke"));
      const button = () => [...document.querySelectorAll("button[aria-pressed]")].find(b => b.getAttribute("aria-label")?.includes("native-smoke") && b.getAttribute("aria-label")?.includes("claude"));
-     const toggle = await waitFor(button);
-     toggle.click();
-     await waitFor(async () => !(await invoke("skills"))[0].targets.includes("claude"));
-     await waitFor(() => button() && !button().disabled && button().getAttribute("aria-pressed") === "false");
-     button().click();
-     await waitFor(async () => (await invoke("skills"))[0].targets.includes("claude"));
-     await waitFor(() => button()?.getAttribute("aria-pressed") === "true");
+     const footer = () => document.querySelector("footer")?.innerText ?? "";
+     const applyButton = () => [...document.querySelectorAll("footer button")].find(b => b.textContent.trim() === "应用");
+     const claudeLinked = async () => (await invoke("skills"))[0].targets.includes("claude");
+     // A toggle only records a pending change; the links change when 应用 is pressed.
+     const flip = async wantOn => {
+       const toggle = await waitFor(button);
+       toggle.click();
+       await waitFor(() => button()?.getAttribute("aria-pressed") === String(wantOn) && footer().includes("1 处改动待应用"));
+       if ((await claudeLinked()) === wantOn) throw new Error("toggle changed the links before Apply");
+       (await waitFor(applyButton)).click();
+       await waitFor(async () => (await claudeLinked()) === wantOn);
+       await waitFor(() => button() && !button().disabled && button().getAttribute("aria-pressed") === String(wantOn) && !footer().includes("待应用"));
+     };
+     await waitFor(button);
+     await flip(false);
+     await flip(true);
      const ref = {key:"skills:native-smoke"};
      const text = await invoke("readFile",ref,"SKILL.md");
      await invoke("writeFile",ref,"SKILL.md",text+"\nNative bridge edit.\n");
