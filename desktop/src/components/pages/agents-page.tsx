@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
 import { agentLabel, tildify } from "@/lib/agents"
 import { backend, type Agent } from "@/lib/backend"
-import { isOn } from "@/lib/pending"
+import { isOn, pendingOnAgent } from "@/lib/pending"
 import { AgentMono, Page, TableHead, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -67,7 +67,7 @@ export function AgentsPage() {
 }
 
 function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
-  const { t, agents, run, reload, confirm } = useApp()
+  const { t, agents, run, reload, confirm, pending } = useApp()
   const label = agentLabel(a)
   const defaults = agents.filter((x) => x.isDefault)
   const lastDefault = a.isDefault && defaults.length === 1
@@ -85,6 +85,18 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
       await reload()
       toast(hidden ? t("columnHidden", { agent: label }) : t("columnShown", { agent: label }))
     }
+  }
+  // Pending changes in a hidden column would be applied unseen: ask first, and
+  // drop them with the column (app-state prunes pending entries of hidden agents).
+  const hide = (hidden: boolean) => {
+    const n = hidden ? pendingOnAgent(pending, a.name) : 0
+    if (!n) return void setHidden(hidden)
+    confirm({
+      title: t("hidePendingTitle", { agent: label }),
+      body: t("hidePendingBody", { agent: label, n }),
+      action: t("hidePendingAction"),
+      run: () => setHidden(true),
+    })
   }
   const setEnabled = async (on: boolean) => {
     if ((await run(() => backend.setAgentEnabled(a.name, on))).ok) {
@@ -116,7 +128,7 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
         </label>
       </div>
       <div role="cell">
-        <Button variant={a.hidden ? "link" : "quiet"} size="inline" className="fs-meta" onClick={() => void setHidden(!a.hidden)} aria-label={`${label} · ${a.hidden ? t("showAgentColumn") : t("hideAgentColumn")}`}>
+        <Button variant={a.hidden ? "link" : "quiet"} size="inline" className="fs-meta" onClick={() => hide(!a.hidden)} aria-label={`${label} · ${a.hidden ? t("showAgentColumn") : t("hideAgentColumn")}`}>
           {a.hidden ? t("hiddenShow") : t("hideAgentColumn")}
         </Button>
       </div>

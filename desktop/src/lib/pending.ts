@@ -1,4 +1,4 @@
-import type { Skill } from "@/lib/backend"
+import type { Agent, Skill } from "@/lib/backend"
 
 /*
  * Link changes the user has made but not applied yet (the design's "待应用").
@@ -38,18 +38,28 @@ export function toggle(pending: Pending, skill: Skill, agent: string): Pending {
   return next
 }
 
-/** Drops entries for skills that are gone or already in the wanted state. */
-export function prune(pending: Pending, skills: Skill[]): Pending {
+/**
+ * Drops entries for skills that are gone or already in the wanted state, and
+ * for agents whose Skill-page column is hidden (or gone): a change nobody can
+ * see must not be applied.
+ */
+export function prune(pending: Pending, skills: Skill[], agents: Agent[]): Pending {
   const byKey = new Map(skills.map((s) => [s.ref.key, s]))
+  const shown = new Set(agents.filter((a) => !a.hidden).map((a) => a.name))
   const next: Pending = {}
   let changed = false
   for (const [k, want] of Object.entries(pending)) {
     const [key, agent] = splitKey(k)
     const s = byKey.get(key)
-    if (s && s.targets.includes(agent) !== want) next[k] = want
+    if (s && shown.has(agent) && s.targets.includes(agent) !== want) next[k] = want
     else changed = true
   }
   return changed ? next : pending
+}
+
+/** Pending changes on one agent's column. */
+export function pendingOnAgent(pending: Pending, agent: string): number {
+  return Object.keys(pending).filter((k) => splitKey(k)[1] === agent).length
 }
 
 export interface SkillChange {

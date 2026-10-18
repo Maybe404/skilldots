@@ -295,16 +295,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSkills(s)
     setPacks(p)
     setAgents(a)
+    // Focusing an agent only makes sense while its column is on the page.
+    setAgentFocus((f) => (f && a.find((x) => x.name === f && !x.hidden) ? f : null))
     setOverrides(new Set(o))
     setOutdated(out)
     setPlan(pl)
     setTrashCount(tr.length)
   }, [])
 
-  // Pending changes that the backend now matches (or whose skill is gone) are done.
+  // Pending changes that the backend now matches (or whose skill or column is gone) are done.
   React.useEffect(() => {
-    setPending((p) => prune(p, skills))
-  }, [skills])
+    setPending((p) => prune(p, skills, agents))
+  }, [skills, agents])
 
   const check = React.useCallback(
     async (repos?: string[]) => {
@@ -580,10 +582,13 @@ export function useColumnAgents() {
   return React.useMemo(() => agents.filter((a) => !a.hidden), [agents])
 }
 
-/** Agents a new skill can be installed to. */
+/**
+ * Agents a new skill can be installed to: every enabled one. A hidden column
+ * only affects the Skill page; the defaults that pre-check a box still apply.
+ */
 export function useEnabledAgents() {
   const { agents } = useApp()
-  return React.useMemo(() => agents.filter((a) => a.enabled && !a.hidden), [agents])
+  return React.useMemo(() => agents.filter((a) => a.enabled), [agents])
 }
 
 export function kindLabel(t: T, s: Skill): string {
