@@ -1,12 +1,18 @@
 import { useApp } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 
-/** The wobble filter used by wires and drawings in the doodle style. Always mounted. */
+/**
+ * The wobble filter of the two drawings in the doodle style. Always mounted.
+ * Its region only covers those drawings (viewBoxes 90x90 and 150x90): WebKit
+ * draws nothing for a filter whose region needs a buffer over about 4096x4096
+ * device pixels, so never make it larger than what it filters. The wires do
+ * not use it, see skills/wobble.ts.
+ */
 export function DoodleDefs() {
   return (
     <svg aria-hidden width="0" height="0" className="absolute">
       <defs>
-        <filter id="skd-wob" filterUnits="userSpaceOnUse" x="-40" y="-40" width="2200" height="2200">
+        <filter id="skd-wob" filterUnits="userSpaceOnUse" x="-10" y="-10" width="170" height="110">
           <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="11" />
           <feDisplacementMap in="SourceGraphic" scale="2.8" xChannelSelector="R" yChannelSelector="G" />
         </filter>
