@@ -177,4 +177,7 @@
   /* focus ring: the install hue, which reads at >= 3:1 on both backgrounds */
   --ring: var(--hue);
   --radius: 0.5rem;
+  /* shared shadows: the switch knob (design) and menus / select popups */
+  --knobSh: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --menuSh: 0 12px 32px rgba(0, 0, 0, 0.16);
 }
