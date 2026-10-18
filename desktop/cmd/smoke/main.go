@@ -150,6 +150,9 @@ func nativeShots(win *mygo.Window, dir string) error {
 	win.Focus()
 	time.Sleep(700 * time.Millisecond)
 	capture := func(name string) error {
+		if os.Getenv("SKILLDOTS_SMOKE_CAPTURE") == "page" {
+			return nil // only the <name>.page.png taken inside the webview
+		}
 		b := win.Bounds()
 		rect := fmt.Sprintf("%d,%d,%d,%d", b.X, b.Y, b.Width, b.Height)
 		png := filepath.Join(dir, name+".png")
@@ -193,7 +196,20 @@ func nativeShots(win *mygo.Window, dir string) error {
 			fmt.Fprintln(os.Stderr, "warning:", err)
 		}
 	}
-	states := []struct{ name, style, lang string }{{"native-clean-zh", "clean", "zh"}, {"native-doodle-zh", "doodle", "zh"}, {"native-clean-en", "clean", "en"}}
+	// A second skill, linked to one agent only, so the wire view has an "adding" wire to show.
+	if _, err := win.Page().Eval(`await window.mygo.call("Service.Invoke", "newSkill", [{name: "partial-skill", description: "linked to one agent", agents: ["agents"]}]); return true;`); err != nil {
+		return err
+	}
+	states := []struct{ name, style, lang, js string }{
+		{"native-clean-zh", "clean", "zh", ""}, {"native-doodle-zh", "doodle", "zh", ""}, {"native-clean-en", "clean", "en", ""},
+		// Wire view in every state: hover (focus) on one skill, a pending removal and a pending addition.
+		{"native-clean-wires", "clean", "zh", wireStates}, {"native-doodle-wires", "doodle", "zh", wireStates},
+		{"native-clean-table", "clean", "zh", tableState}, {"native-doodle-table", "doodle", "zh", tableState},
+		// The rest of the doodle style: other pages, a dialog and the detail sheet.
+		{"native-doodle-sources", "doodle", "zh", pageState("来源")}, {"native-doodle-agents", "doodle", "zh", pageState("Agent")},
+		{"native-doodle-settings", "doodle", "zh", pageState("设置")}, {"native-doodle-add", "doodle", "zh", addDialogState},
+		{"native-doodle-detail", "doodle", "zh", detailState},
+	}
 	for _, st := range states {
 		if _, err := win.Page().Eval(fmt.Sprintf(`localStorage.setItem("skilldots.desktop.style", %q);
      await window.mygo.call("Service.Invoke", "setConfig", [{lang: %q}]);
@@ -202,11 +218,21 @@ func nativeShots(win *mygo.Window, dir string) error {
 			return err
 		}
 		time.Sleep(1500 * time.Millisecond)
-		m, err := measure()
-		if err != nil {
+		if st.js == "" {
+			m, err := measure()
+			if err != nil {
+				return fmt.Errorf("%s: %w", st.name, err)
+			}
+			metrics[st.name] = m
+		} else if _, err := win.Page().Eval(`for (let i = 0; i < 100 && !document.querySelector("header nav"); i++) await new Promise(r => setTimeout(r, 100)); await new Promise(r => setTimeout(r, 600)); return true;`); err != nil {
 			return fmt.Errorf("%s: %w", st.name, err)
 		}
-		metrics[st.name] = m
+		if st.js != "" {
+			if _, err := win.Page().Eval(st.js); err != nil {
+				return fmt.Errorf("%s: %w", st.name, err)
+			}
+			time.Sleep(900 * time.Millisecond)
+		}
 		shot(st.name)
 	}
 	// A double click on the bar does what the system setting says (zoom by default).
@@ -237,3 +263,40 @@ func nativeShots(win *mygo.Window, dir string) error {
 	b, _ := json.MarshalIndent(metrics, "", "  ")
 	return os.WriteFile(filepath.Join(dir, "titlebar.json"), b, 0o600)
 }
+
+const uiHelpers = `
+     const delay = ms => new Promise(r => setTimeout(r, ms));
+     const byText = (sel, text) => [...document.querySelectorAll(sel)].find(b => b.textContent.trim() === text);
+     const row = name => [...document.querySelectorAll("[id^=skill-row-]")].find(b => b.getAttribute("aria-label")?.startsWith(name));
+     const toggle = agent => document.querySelector("button[aria-pressed][aria-label*='(" + agent + ")']");
+`
+
+// wireStates: native-smoke is hovered (its wires turn orange and thick), its
+// link to claude is pending removal (grey dots), partial-skill gets a pending
+// link to claude (orange dashes) and is the selected skill.
+const wireStates = uiHelpers + `
+     row("native-smoke").click(); await delay(150);
+     toggle("claude").click(); await delay(150);
+     row("partial-skill").click(); await delay(150);
+     toggle("claude").click(); await delay(150);
+     row("native-smoke").parentElement.dispatchEvent(new MouseEvent("mouseover", {bubbles: true}));
+     await delay(300);
+     return true;`
+
+const tableState = uiHelpers + `
+     byText("button", "表格").click(); await delay(500);
+     return true;`
+
+func pageState(label string) string {
+	return uiHelpers + `
+     byText("header nav button", "` + label + `").click(); await delay(700);
+     return true;`
+}
+
+const addDialogState = uiHelpers + `
+     [...document.querySelectorAll("header button")].at(-1).click(); await delay(900);
+     return true;`
+
+const detailState = uiHelpers + `
+     row("native-smoke").dispatchEvent(new MouseEvent("dblclick", {bubbles: true})); await delay(1000);
+     return true;`
