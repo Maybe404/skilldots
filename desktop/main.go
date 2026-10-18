@@ -23,11 +23,15 @@ func main() {
 	mygo.Bind(service)
 	mygo.App.WhenReady(func() {
 		mygo.NewWindow(mygo.WindowOptions{
-			Title:    "skilldots",
-			URL:      "/",
-			Width:    1280,
-			Height:   820,
-			Vibrancy: mygo.VibrancyUnderWindow,
+			Title:  "skilldots",
+			URL:    "/",
+			Width:  1280,
+			Height: 820,
+			// Below this the top bar no longer fits (English labels, with the
+			// traffic lights' inset); dialogs still fit at this height.
+			MinWidth:  860,
+			MinHeight: 560,
+			Vibrancy:  mygo.VibrancyUnderWindow,
 			// No native title bar: the app's top bar is the only row at the
 			// top. The traffic lights sit at its left end, centred on the line
 			// of its controls (54px bar, 14px buttons: 20px above and below).

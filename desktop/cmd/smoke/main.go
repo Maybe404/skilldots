@@ -42,7 +42,7 @@ func main() {
 		// The window options of desktop/main.go: no native title bar, traffic lights over the top bar.
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title: "skilldots integration test", URL: "/", Width: 1280, Height: 820, Vibrancy: mygo.VibrancyUnderWindow,
-			TitleBarStyle: mygo.TitleBarHidden, TrafficLightPosition: &mygo.Point{X: 20, Y: 20},
+			TitleBarStyle: mygo.TitleBarHidden, TrafficLightPosition: &mygo.Point{X: 20, Y: 20}, MinWidth: 860, MinHeight: 560,
 		})
 		go func() {
 			defer mygo.App.Quit()
