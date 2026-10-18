@@ -1,0 +1,180 @@
+/*
+ * The two interface styles from the approved design ("skilldots 主界面",
+ * THEMES.clean and THEMES.doodle). Token names follow the design file so a
+ * value can be traced back to it; components never hard-code these values.
+ *
+ * <html data-style="clean|doodle"> picks the set. Only light mode exists for
+ * now: the dark variant is still being designed.
+ */
+
+:root,
+:root[data-style="clean"] {
+  /* surfaces */
+  --bg: #ffffff;
+  --bgImg: none;
+  --sf: #f7f7f5;
+  --dialogBg: #ffffff;
+  --scrim: rgba(20, 18, 16, 0.35);
+  /* text */
+  --ink: #1a1a1a;
+  --mut: #8a8a85;
+  /* the three hues: accent (pending, updates), hue (installed, links), ink */
+  --ac: #e8622f;
+  --acInk: #ffffff;
+  --acSoft: rgba(232, 98, 47, 0.25);
+  --hue: #1a1a1a;
+  --hueSoft: #efefec;
+  --hueInk: #1a1a1a;
+  --pri: #1a1a1a;
+  --priFg: #ffffff;
+  --ln: rgba(0, 0, 0, 0.1);
+  --wire: #1a1a1a;
+  --sage: #8fae8b;
+  --knob: #ffffff;
+  /* inputs */
+  --inBg: #f3f3f1;
+  --inBd: 1px solid transparent;
+  --btnRad: 999px;
+  /* type */
+  --fh: "Geist", -apple-system, "PingFang SC", sans-serif;
+  --fb: "Geist", -apple-system, "PingFang SC", sans-serif;
+  --fm: "JetBrains Mono", "PingFang SC", monospace;
+  /* code in the editor stays monospaced in both styles */
+  --fmCode: "JetBrains Mono", ui-monospace, monospace;
+  --fsSm: 12px;
+  --fs: 13.5px;
+  --fsName: 15px;
+  --fsH3: 16px;
+  --fsH1: 28px;
+  --fsBrand: 15px;
+  --fsMono: 10.5px;
+  /* shape */
+  --rad: 12px;
+  --rad2: 8px;
+  --cardBd: 1px solid rgba(0, 0, 0, 0.06);
+  --cardSh: none;
+  --popSh: 0 24px 60px rgba(0, 0, 0, 0.25);
+  --toastSh: 0 8px 24px rgba(0, 0, 0, 0.18);
+  /* agent monogram, installed / not installed cells */
+  --agBg: #f1f1ef;
+  --agBd: 1px solid rgba(0, 0, 0, 0.08);
+  --agFg: #1a1a1a;
+  --onBg: #ecece9;
+  --onBd: 1px solid rgba(0, 0, 0, 0.05);
+  --onFg: #1a1a1a;
+  --onRad: 8px;
+  --onRot: none;
+  --offBd: 1px dashed rgba(0, 0, 0, 0.14);
+  /* rows */
+  --rowOn: #f4f4f2;
+  --rowHv: #fafaf8;
+  --rowSh: none;
+  /* segmented controls */
+  --navBg: #f1f1ef;
+  --navOn: #ffffff;
+  --navSh: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --navRad: 9px;
+  --navRad2: 6px;
+  /* rules */
+  --hdBd: 1px solid transparent;
+  --tblHd: 1px solid rgba(0, 0, 0, 0.12);
+  --tblRow: 1px solid rgba(0, 0, 0, 0.06);
+  /* wires (the wire view's curves) */
+  --wireOp: 0.12;
+  --wireW: 1.2;
+  --wireFilter: none;
+}
+
+:root[data-style="doodle"] {
+  --bg: #f4f0e6;
+  --bgImg: radial-gradient(ellipse at 50% 40%, rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0) 70%),
+    repeating-linear-gradient(0deg, rgba(120, 100, 70, 0.025) 0 1px, transparent 1px 3px);
+  --sf: rgba(255, 255, 255, 0.6);
+  --dialogBg: #fbf8f0;
+  --scrim: rgba(20, 18, 16, 0.35);
+  --ink: #3e3935;
+  --mut: #8a837a;
+  --ac: #d88a3f;
+  --acInk: #2a1c08;
+  --acSoft: rgba(216, 138, 63, 0.3);
+  --hue: #4c58a4;
+  --hueSoft: repeating-linear-gradient(-48deg, rgba(76, 88, 164, 0.35) 0 1.6px, rgba(76, 88, 164, 0.04) 1.6px 4.6px);
+  --hueInk: #2e3a7e;
+  --pri: #d88a3f;
+  --priFg: #2a1c08;
+  --ln: rgba(62, 57, 53, 0.3);
+  --wire: #4c58a4;
+  --sage: #8fae8b;
+  --knob: #fbf8f0;
+  --inBg: transparent;
+  --inBd: 1.5px solid rgba(62, 57, 53, 0.3);
+  --btnRad: 9px 7px 11px 8px;
+  --fh: "Gaegu", "Long Cang", "PingFang SC", cursive;
+  --fb: "Long Cang", "Gaegu", "PingFang SC", cursive;
+  --fm: "Gaegu", "Long Cang", cursive;
+  --fmCode: "JetBrains Mono", ui-monospace, monospace;
+  --fsSm: 13.5px;
+  --fs: 16px;
+  --fsName: 19px;
+  --fsH3: 21px;
+  --fsH1: 34px;
+  --fsBrand: 24px;
+  --fsMono: 12px;
+  --rad: 12px 9px 13px 8px;
+  --rad2: 9px 7px 11px 8px;
+  --cardBd: 1.6px solid #3e3935;
+  --cardSh: none;
+  --popSh: 0 24px 60px rgba(0, 0, 0, 0.25);
+  --toastSh: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --agBg: repeating-linear-gradient(-48deg, rgba(76, 88, 164, 0.55) 0 1.8px, rgba(76, 88, 164, 0.05) 1.8px 4.6px);
+  --agBd: 1.6px solid #4c58a4;
+  --agFg: #2e3a7e;
+  --onBg: repeating-linear-gradient(-48deg, rgba(76, 88, 164, 0.55) 0 1.8px, rgba(76, 88, 164, 0.05) 1.8px 4.6px);
+  --onBd: 1.6px solid #4c58a4;
+  --onFg: #2e3a7e;
+  --onRad: 8px 10px 7px 11px;
+  --onRot: rotate(-2deg);
+  --offBd: 1.4px dashed rgba(138, 131, 122, 0.6);
+  --rowOn: repeating-linear-gradient(-45deg, rgba(143, 174, 139, 0.45) 0 2px, rgba(143, 174, 139, 0.04) 2px 7px);
+  --rowHv: rgba(143, 174, 139, 0.14);
+  --rowSh: inset 0 0 0 1.6px #3e3935;
+  --navBg: rgba(62, 57, 53, 0.07);
+  --navOn: rgba(216, 138, 63, 0.25);
+  --navSh: inset 0 0 0 1.4px #3e3935;
+  --navRad: 10px 8px 12px 9px;
+  --navRad2: 8px 6px 9px 7px;
+  --hdBd: 1.5px dashed rgba(62, 57, 53, 0.3);
+  --tblHd: 1.8px solid #3e3935;
+  --tblRow: 1.1px dashed rgba(62, 57, 53, 0.35);
+  --wireOp: 0.3;
+  --wireW: 1.5;
+  --wireFilter: url(#skd-wob);
+}
+
+/*
+ * shadcn component variables, mapped onto the design tokens so the Base UI
+ * primitives (menus, selects, dialogs, the command palette) share one look.
+ */
+:root {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--dialogBg);
+  --card-foreground: var(--ink);
+  --popover: var(--dialogBg);
+  --popover-foreground: var(--ink);
+  --primary: var(--pri);
+  --primary-foreground: var(--priFg);
+  --secondary: var(--navBg);
+  --secondary-foreground: var(--ink);
+  --muted: var(--navBg);
+  --muted-foreground: var(--mut);
+  --faint: var(--mut);
+  --accent: var(--navBg);
+  --accent-foreground: var(--ink);
+  --destructive: var(--ac);
+  --border: var(--ln);
+  --input: var(--ln);
+  /* focus ring: the install hue, which reads at >= 3:1 on both backgrounds */
+  --ring: var(--hue);
+  --radius: 0.5rem;
+}
