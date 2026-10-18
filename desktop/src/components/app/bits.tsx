@@ -1,20 +1,18 @@
 import * as React from "react"
-import { AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { kindLabel, useApp } from "@/lib/app-state"
-import type { Skill } from "@/lib/backend"
-import { Badge } from "@/components/ui/badge"
+import { useApp } from "@/lib/app-state"
+import { agentMono } from "@/lib/agents"
+import type { Agent } from "@/lib/backend"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-/** Filled dot: an update is available. Shape, not colour. */
+/** Accent dot: an update is available, or something waits for you. */
 export function UpdateDot({ className, label, decorative }: { className?: string; label?: string; decorative?: boolean }) {
   const { t } = useApp()
-  if (decorative) return <span aria-hidden className={cn("inline-block size-2 shrink-0 rounded-full bg-foreground/80 ring-2 ring-foreground/10", className)} />
-  return (
-    <span role="img" aria-label={label ?? t("updateMarker")} title={label ?? t("updateMarker")} className={cn("inline-block size-2 shrink-0 rounded-full bg-foreground/80 ring-2 ring-foreground/10", className)} />
-  )
+  const cls = cn("inline-block size-1.5 shrink-0 rounded-full bg-ac", className)
+  if (decorative) return <span aria-hidden className={cls} />
+  return <span role="img" aria-label={label ?? t("updateMarker")} title={label ?? t("updateMarker")} className={cls} />
 }
 
 /** Hollow ring: turned off inside Claude Code (read-only). */
@@ -25,47 +23,46 @@ export function OffRing({ className, label }: { className?: string; label?: stri
       role="img"
       aria-label={label ?? t("claudeOffMarker")}
       title={label ?? t("claudeOffMarker")}
-      className={cn("inline-block size-2 shrink-0 rounded-full border-[1.5px] border-foreground/70", className)}
+      className={cn("inline-block size-[7px] shrink-0 rounded-full border-[1.5px] border-ac bg-bg", className)}
     />
   )
 }
 
-export function KindBadge({ skill, className }: { skill: Skill; className?: string }) {
-  const { t } = useApp()
-  if (skill.kind === "vendor") return <span className={cn("truncate text-muted-foreground", className)}>{skill.origin}</span>
-  return (
-    <Badge variant={skill.kind === "skills" ? "secondary" : "outline"} className={cn("font-normal", className)}>
-      {kindLabel(t, skill)}
-    </Badge>
-  )
+/** Small tag next to a name ("我的", "已暂停", "示例"). */
+export function Tag({ children, className, tone }: { children: React.ReactNode; className?: string; tone?: "accent" }) {
+  return <span className={cn("skd-tag", tone === "accent" && "bg-ac text-ac-ink", className)}>{children}</span>
 }
 
-export function Mono({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={cn("font-mono text-[0.8rem] tracking-tight", className)}>{children}</span>
-}
-
-/** Small "示例" tag for fictional sample entries. */
 export function ExampleTag() {
   const { t } = useApp()
+  return <Tag>{t("example")}</Tag>
+}
+
+/** Agent monogram tile ("CC"). */
+export function AgentMono({
+  agent,
+  size = 34,
+  className,
+}: {
+  agent: Pick<Agent, "name">
+  /** Square size, or [width, height]. */
+  size?: number | [number, number]
+  className?: string
+}) {
+  const [w, h] = Array.isArray(size) ? size : [size, size]
+  const font = h >= 34 ? 11.5 : h >= 28 ? 11 : h >= 22 ? 10.5 : 9.5
   return (
-    <Badge variant="outline" className="h-4.5 px-1.5 text-[0.7rem] font-normal text-muted-foreground">
-      {t("example")}
-    </Badge>
+    <span aria-hidden className={cn("skd-mono", className)} style={{ width: w, height: h, fontSize: font }}>
+      {agentMono(agent)}
+    </span>
   )
 }
 
-export function PageError({ onRetry }: { onRetry: () => void }) {
-  const { t } = useApp()
+export function Mono({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <Empty className="border border-dashed">
-      <EmptyHeader>
-        <EmptyMedia variant="icon"><AlertCircle /></EmptyMedia>
-        <EmptyTitle>{t("pageLoadFailed")}</EmptyTitle>
-      </EmptyHeader>
-      <EmptyContent>
-        <Button variant="outline" size="sm" onClick={onRetry}>{t("retry")}</Button>
-      </EmptyContent>
-    </Empty>
+    <span className={cn("font-mono fs-meta", className)} title={title}>
+      {children}
+    </span>
   )
 }
 
@@ -78,27 +75,88 @@ export function Hint({ label, children }: { label: string; children: React.React
   )
 }
 
-/** Page header inside the content panel. */
-export function PageHeader({ title, hint, actions }: { title: string; hint?: string; actions?: React.ReactNode }) {
+/** Circular-arrow icon from the design; spins while `spinning`. */
+export function RefreshIcon({ spinning, className }: { spinning?: boolean; className?: string }) {
   return (
-    <div className="flex items-end justify-between gap-6 px-8 pt-7 pb-5">
-      <div className="min-w-0">
-        <h1 className="text-[1.35rem] leading-tight font-semibold tracking-tight">{title}</h1>
-        {hint && <p className="mt-1.5 max-w-prose text-sm text-muted-foreground">{hint}</p>}
-      </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    <svg
+      aria-hidden
+      className={cn("size-[13px] shrink-0", spinning && "skd-spin", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6" />
+    </svg>
+  )
+}
+
+/**
+ * Page frame below the top bar: big title, a one-line summary and actions on
+ * the right (the design's sources / agent / history / trash / settings pages).
+ */
+export function Page({
+  title,
+  summary,
+  actions,
+  children,
+  footer,
+  className,
+}: {
+  title: string
+  summary?: React.ReactNode
+  actions?: React.ReactNode
+  children: React.ReactNode
+  footer?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <main className={cn("min-h-0 flex-1 overflow-y-auto px-10 pt-[26px] pb-10 max-[760px]:px-5", className)} aria-label={title}>
+        <div className="mb-[18px] flex flex-wrap items-end gap-x-3.5 gap-y-2">
+          <h1 className="m-0 font-heading fs-h1 leading-none font-semibold tracking-[-0.01em] text-ink">{title}</h1>
+          {summary && <div className="flex min-w-0 items-center gap-1.5 pb-0.5 fs-body text-mut">{summary}</div>}
+          {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
+        </div>
+        {children}
+      </main>
+      {footer}
     </div>
   )
 }
 
-export function Section({ title, hint, children, className }: { title: string; hint?: string; children: React.ReactNode; className?: string }) {
+/** Header row of a page table: 30px, strong rule, small muted labels. */
+export function TableHead({ className, children, style }: { className?: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <section className={cn("px-8 pb-8", className)}>
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {hint && <p className="mt-0.5 text-[0.8rem] text-muted-foreground">{hint}</p>}
-      </div>
+    <div role="row" className={cn("grid h-[31px] items-center border-b-head px-2.5 fs-meta text-mut", className)} style={style}>
       {children}
-    </section>
+    </div>
+  )
+}
+
+export function PageError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useApp()
+  return (
+    <div role="alert" className="py-10 fs-body text-mut">
+      <p className="mb-1 font-heading fs-h3 text-ink">{t("pageLoadFailed")}</p>
+      <Button variant="outline" onClick={onRetry} className="mt-3">
+        {t("retry")}
+      </Button>
+    </div>
+  )
+}
+
+/** The design's empty state (shadcn Empty, restyled): a title in the heading font and one line of help. */
+export function EmptyNote({ title, children, action }: { title: string; children?: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <Empty>
+      <EmptyHeader>
+        <EmptyTitle>{title}</EmptyTitle>
+        {children && <EmptyDescription>{children}</EmptyDescription>}
+      </EmptyHeader>
+      {action && <EmptyContent>{action}</EmptyContent>}
+    </Empty>
   )
 }

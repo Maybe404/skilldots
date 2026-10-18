@@ -1,30 +1,14 @@
 import { toast } from "sonner"
 import { useApp } from "@/lib/app-state"
-import { backend, type Ref, type Skill } from "@/lib/backend"
+import { agentLabel } from "@/lib/agents"
+import { backend, type Ref } from "@/lib/backend"
 
-/** Skill operations shared by the table, the detail panel and the palette. */
+/** Skill operations shared by the Skill page, the detail panel and the palette. */
 export function useSkillActions() {
-  const { t, agents, run, reload, navigate } = useApp()
-  const label = (name: string) => agents.find((a) => a.name === name)?.label ?? name
-
-  const setAgent = async (skill: Skill, agent: string, on: boolean) => {
-    if (on) {
-      if (!(await run(() => backend.enable(skill.ref, [agent]))).ok) return
-      await reload()
-      toast(t("enabledIn", { skill: skill.linkName, agent: label(agent) }))
-    } else {
-      if (!(await run(() => backend.disable(skill.ref, [agent]))).ok) return
-      await reload()
-      toast(t("disabledIn", { skill: skill.linkName, agent: label(agent) }), {
-        action: {
-          label: t("undo"),
-          onClick: async () => {
-            await run(() => backend.enable(skill.ref, [agent]))
-            await reload()
-          },
-        },
-      })
-    }
+  const { t, agents, run, navigate } = useApp()
+  const label = (name: string) => {
+    const a = agents.find((x) => x.name === name)
+    return a ? agentLabel(a) : name
   }
 
   const reveal = async (ref: Ref) => {
@@ -36,5 +20,5 @@ export function useSkillActions() {
   const trashToast = (name: string) =>
     toast(t("movedToTrash", { name }), { action: { label: t("openTrash"), onClick: () => navigate("trash") } })
 
-  return { setAgent, reveal, openInEditor, trashToast, agentLabel: label }
+  return { reveal, openInEditor, trashToast, agentLabel: label }
 }

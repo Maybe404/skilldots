@@ -1,0 +1,59 @@
+import { useApp } from "@/lib/app-state"
+
+/** The wobble filter used by wires and drawings in the doodle style. Always mounted. */
+export function DoodleDefs() {
+  return (
+    <svg aria-hidden width="0" height="0" className="absolute">
+      <defs>
+        <filter id="skd-wob" filterUnits="userSpaceOnUse" x="-40" y="-40" width="2200" height="2200">
+          <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="11" />
+          <feDisplacementMap in="SourceGraphic" scale="2.8" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+  )
+}
+
+/** Two small drawings from the design (moon and sprouts); doodle style only, decorative. */
+export function Doodles() {
+  const { style } = useApp()
+  if (style !== "doodle") return null
+  return (
+    <>
+      <svg
+        aria-hidden
+        className="pointer-events-none fixed top-14 right-[146px] z-[1] max-[1060px]:hidden"
+        width="64"
+        height="64"
+        viewBox="0 0 90 90"
+        fill="none"
+        stroke="var(--hue)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        filter="url(#skd-wob)"
+      >
+        <path d="M58 14c-20 4-30 26-18 44 8 12 24 16 36 10-16 0-28-10-30-26-1-12 4-22 12-28z" fill="var(--hue)" fillOpacity={0.14} />
+        <path d="M26 40l1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5z" fill="var(--ac)" fillOpacity={0.4} stroke="var(--ac)" />
+        <path d="M44 50c1 2 4 2 5 0" stroke="var(--ink)" />
+      </svg>
+      <svg
+        aria-hidden
+        className="pointer-events-none fixed right-[30px] bottom-0 z-[5] opacity-90"
+        width="110"
+        height="48"
+        viewBox="0 0 150 90"
+        fill="none"
+        stroke="var(--sage)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        filter="url(#skd-wob)"
+      >
+        <path d="M6 80c40-6 90-6 140 0" />
+        <path d="M30 80c-2-20 6-36 16-44M46 36c-8 2-16 10-16 20M46 36c8 2 14 10 14 20" />
+        <path d="M90 80c0-14 4-26 12-34M102 46c-6 0-12 6-12 14M102 46c6 0 12 6 12 14" stroke="var(--ac)" />
+        <circle cx="46" cy="30" r="5" fill="var(--ac)" fillOpacity={0.3} stroke="var(--ac)" />
+        <circle cx="102" cy="40" r="4" fill="var(--hue)" fillOpacity={0.3} stroke="var(--hue)" />
+      </svg>
+    </>
+  )
+}

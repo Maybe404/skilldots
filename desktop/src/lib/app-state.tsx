@@ -14,8 +14,12 @@ import {
   type Skill,
 } from "@/lib/backend"
 import { translator, type T } from "@/lib/i18n"
+import { changes, prune, toggle as togglePendingCell, type Pending } from "@/lib/pending"
 
 export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
+/** The two interface styles of the design ("简洁" and "涂鸦"). */
+export type Style = "clean" | "doodle"
+export type SkillView = "wire" | "table"
 
 export type Result<R> = { ok: true; value: R } | { ok: false }
 export type LoadStage = "config" | "library" | "checking" | "ready"
@@ -30,6 +34,15 @@ export interface ActiveOperation {
 }
 
 export type SkillFilter = "all" | "mine" | "vendor" | "updates"
+export type TableSort = { by: "name" | "source"; dir: "asc" | "desc" } | null
+
+export interface ConfirmRequest {
+  title: string
+  body: string
+  action: string
+  /** Runs when confirmed; resolve false to keep the dialog open. */
+  run: () => Promise<boolean | void> | boolean | void
+}
 
 export type DialogState =
   | { kind: "add"; initial?: string }
@@ -42,6 +55,7 @@ export type DialogState =
   | { kind: "remove"; ref: Ref }
   | { kind: "unlink"; ref: Ref }
   | { kind: "purge"; repo: string }
+  | ({ kind: "confirm" } & ConfirmRequest)
   | null
 
 /** A pack counts as updatable like app.PackStatus.HasUpdates (moves alone do not count). */
@@ -53,7 +67,8 @@ interface AppContextValue {
   t: T
   config: Config
   setConfig: (patch: Partial<Config>) => Promise<void>
-  resolvedTheme: "light" | "dark"
+  style: Style
+  setStyle: (s: Style) => void
 
   loadError: LoadError | null
   loadStage: LoadStage
@@ -82,17 +97,41 @@ interface AppContextValue {
   openEditor: (ref: Ref) => void
   selected: string | null
   select: (key: string | null) => void
+  detail: string | null
+  openDetail: (key: string) => void
+  closeDetail: () => void
   dialog: DialogState
   openDialog: (d: DialogState) => void
   closeDialog: () => void
+  confirm: (req: ConfirmRequest) => void
   query: string
   setQuery: (q: string) => void
   filter: SkillFilter
   setFilter: (f: SkillFilter) => void
+  skillView: SkillView
+  setSkillView: (v: SkillView) => void
+  grouped: boolean
+  setGrouped: (g: boolean) => void
+  collapsed: Set<string>
+  toggleCollapsed: (group: string) => void
+  agentFocus: string | null
+  setAgentFocus: (agent: string | null) => void
+  tableSort: TableSort
+  setTableSort: (s: TableSort) => void
+  /** Source row to open on the sources page (from a skill's update notice). */
+  sourceFocus: string | null
+  showSource: (repo: string | null) => void
   paletteOpen: boolean
   setPaletteOpen: (open: boolean) => void
   /** The editor registers a guard; navigation asks it before leaving. */
   setLeaveGuard: (guard: ((go: () => void) => boolean) | null) => void
+
+  // Link changes waiting for 应用
+  pending: Pending
+  pendingCount: number
+  togglePending: (skill: Skill, agent: string) => void
+  revertPending: () => void
+  applyPending: () => Promise<void>
 
   /** Runs a backend call, toasting its error. */
   run: <R>(fn: () => Promise<R>) => Promise<Result<R>>
@@ -106,7 +145,7 @@ export function useApp() {
   return ctx
 }
 
-function errorText(t: T, error: unknown): string {
+export function errorText(t: T, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error)
   const lower = detail.toLowerCase()
   if (lower.includes("folder picker")) return t("errorFolderPicker")
@@ -115,21 +154,21 @@ function errorText(t: T, error: unknown): string {
 }
 
 const DEFAULT_CONFIG: Config = { editor: "auto", editorCommand: "", lang: "zh", theme: "system", checkOnLaunch: true }
+const STYLE_KEY = "skilldots.desktop.style"
 
-function useSystemDark() {
-  const query = "(prefers-color-scheme: dark)"
-  const [dark, setDark] = React.useState(() => window.matchMedia(query).matches)
-  React.useEffect(() => {
-    const mq = window.matchMedia(query)
-    const on = () => setDark(mq.matches)
-    mq.addEventListener("change", on)
-    return () => mq.removeEventListener("change", on)
-  }, [])
-  return dark
+function readStyle(): Style {
+  try {
+    const s = localStorage.getItem(STYLE_KEY)
+    if (s === "doodle" || s === "clean") return s
+  } catch {
+    // storage unavailable: fall back to the default style
+  }
+  return document.documentElement.dataset.style === "doodle" ? "doodle" : "clean"
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfigState] = React.useState<Config>(DEFAULT_CONFIG)
+  const [style, setStyleState] = React.useState<Style>(readStyle)
   const [loadError, setLoadError] = React.useState<LoadError | null>(null)
   const [loadStage, setLoadStage] = React.useState<LoadStage>("config")
   const [ready, setReady] = React.useState(false)
@@ -148,24 +187,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [view, setView] = React.useState<View>("skills")
   const [editing, setEditing] = React.useState<Ref | null>(null)
   const [selected, setSelected] = React.useState<string | null>(null)
+  const [detail, setDetail] = React.useState<string | null>(null)
   const [dialog, setDialog] = React.useState<DialogState>(null)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
   const [filter, setFilter] = React.useState<SkillFilter>("all")
+  const [skillView, setSkillView] = React.useState<SkillView>("wire")
+  const [grouped, setGrouped] = React.useState(false)
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
+  const [agentFocus, setAgentFocus] = React.useState<string | null>(null)
+  const [tableSort, setTableSort] = React.useState<TableSort>(null)
+  const [sourceFocus, setSourceFocus] = React.useState<string | null>(null)
+  const [pending, setPending] = React.useState<Pending>({})
   const guard = React.useRef<((go: () => void) => boolean) | null>(null)
 
-  const systemDark = useSystemDark()
-  const resolvedTheme = config.theme === "system" ? (systemDark ? "dark" : "light") : config.theme
   const t = React.useMemo(() => translator(config.lang), [config.lang])
 
   React.useLayoutEffect(() => {
     const root = document.documentElement
-    root.classList.toggle("dark", resolvedTheme === "dark")
-    root.style.colorScheme = resolvedTheme
-  }, [resolvedTheme])
+    root.dataset.style = style
+    // Light only for now; the dark variant of both styles is still being designed.
+    root.classList.remove("dark")
+    root.style.colorScheme = "light"
+  }, [style])
   React.useEffect(() => {
     document.documentElement.lang = config.lang === "zh" ? "zh-CN" : "en"
   }, [config.lang])
+
+  const setStyle = React.useCallback((s: Style) => {
+    setStyleState(s)
+    try {
+      localStorage.setItem(STYLE_KEY, s)
+    } catch {
+      // storage unavailable: keep the choice for this session only
+    }
+  }, [])
 
   const execute = React.useCallback(
     async <R,>(fn: () => Promise<R>): Promise<Result<R>> => {
@@ -237,6 +293,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTrashCount(tr.length)
   }, [])
 
+  // Pending changes that the backend now matches (or whose skill is gone) are done.
+  React.useEffect(() => {
+    setPending((p) => prune(p, skills))
+  }, [skills])
+
   const check = React.useCallback(
     async (repos?: string[]) => {
       if (operation) {
@@ -248,7 +309,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const out = await backend.outdated(repos)
         setOutdated(out)
-        return
+        const n = out.packs.filter(hasUpdates).length
+        toast(n ? t("checkedToast", { n }) : t("checkedNone"))
+        if (out.failed.length) toast.error(t("checkFailed"), { description: out.failed.map((f) => `${f.repo}: ${f.error}`).join("\n") })
       } catch (e) {
         toast.error(t("checkFailed"), { description: errorText(t, e) })
       } finally {
@@ -277,13 +340,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (st.root && c.checkOnLaunch) {
         stage = "checking"
         setLoadStage(stage)
-        void check()
+        setChecking(true)
+        const id = beginOperation(translator(c.lang)("checking"))
+        backend
+          .outdated()
+          .then(setOutdated, () => undefined)
+          .finally(() => {
+            setChecking(false)
+            endOperation(id)
+          })
       }
       setLoadStage("ready")
     } catch (error: unknown) {
       setLoadError({ stage, detail: error instanceof Error ? error.message : String(error) })
     }
-  }, [check, reload])
+  }, [reload, beginOperation, endOperation])
 
   React.useEffect(() => {
     if (launched.current) return
@@ -319,6 +390,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const go = () => {
       guard.current = null
       setView(v)
+      setDetail(null)
       if (v !== "editor") setEditing(null)
     }
     if (guard.current && !guard.current(go)) return
@@ -328,6 +400,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openEditor = React.useCallback((ref: Ref) => {
     const go = () => {
       guard.current = null
+      setDetail(null)
       setEditing(ref)
       setView("editor")
     }
@@ -335,11 +408,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go()
   }, [])
 
+  const togglePending = React.useCallback((skill: Skill, agent: string) => {
+    setPending((p) => togglePendingCell(p, skill, agent))
+  }, [])
+
+  const pendingCount = Object.keys(pending).length
+
+  const applyPending = React.useCallback(async () => {
+    const list = changes(pending, skills)
+    if (!list.length) return
+    if (operation) {
+      toast(t("operationWait"))
+      return
+    }
+    const n = list.reduce((sum, c) => sum + c.keys.length, 0)
+    const r = await runTask(t("applyingN", { n }), async () => {
+      for (const c of list) await backend.setTargets(c.skill.ref, c.targets)
+      return n
+    })
+    // Applied skills drop out of `pending` once the reload shows their new targets.
+    await reload().catch(() => undefined)
+    if (r.ok) toast(t("appliedN", { n }))
+  }, [pending, skills, operation, runTask, reload, t])
+
+  const revertPending = React.useCallback(() => setPending({}), [])
+
+  // Pending changes live only in this window: ask before it closes.
+  React.useEffect(() => {
+    if (!pendingCount) return
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onUnload)
+    return () => window.removeEventListener("beforeunload", onUnload)
+  }, [pendingCount])
+
+  const openDialog = React.useCallback(
+    (next: DialogState) => {
+      if (!operation) setDialog(next)
+      else toast(t("operationWait"))
+    },
+    [operation, t],
+  )
+
   const value: AppContextValue = {
     t,
     config,
     setConfig,
-    resolvedTheme,
+    style,
+    setStyle,
     loadError,
     loadStage,
     retryLoad,
@@ -364,20 +482,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     openEditor,
     selected,
     select: setSelected,
+    detail,
+    openDetail: React.useCallback((key: string) => {
+      setSelected(key)
+      setDetail(key)
+    }, []),
+    closeDetail: React.useCallback(() => setDetail(null), []),
     dialog,
-    openDialog: React.useCallback((next) => {
-      if (!operation) setDialog(next)
-    }, [operation]),
-    closeDialog: () => setDialog(null),
+    openDialog,
+    closeDialog: React.useCallback(() => setDialog(null), []),
+    confirm: React.useCallback((req: ConfirmRequest) => openDialog({ kind: "confirm", ...req }), [openDialog]),
     query,
     setQuery,
     filter,
     setFilter,
+    skillView,
+    setSkillView,
+    grouped,
+    setGrouped,
+    collapsed,
+    toggleCollapsed: React.useCallback((g: string) => {
+      setCollapsed((c) => {
+        const n = new Set(c)
+        if (n.has(g)) n.delete(g)
+        else n.add(g)
+        return n
+      })
+    }, []),
+    agentFocus,
+    setAgentFocus,
+    tableSort,
+    setTableSort,
+    sourceFocus,
+    showSource: React.useCallback(
+      (repo: string | null) => {
+        setSourceFocus(repo)
+        if (repo) navigate("sources")
+      },
+      [navigate],
+    ),
     paletteOpen,
     setPaletteOpen,
-    setLeaveGuard: (g) => {
+    setLeaveGuard: React.useCallback((g: ((go: () => void) => boolean) | null) => {
       guard.current = g
-    },
+    }, []),
+    pending,
+    pendingCount,
+    togglePending,
+    revertPending,
+    applyPending,
     run,
     runTask,
   }
@@ -385,10 +538,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
 
-/** Agents shown as columns, in registry order. */
-export function useEnabledAgents(columnsOnly = false) {
+/** Agents shown as columns on the Skill page, in registry order (paused ones included, dimmed). */
+export function useColumnAgents() {
   const { agents } = useApp()
-  return React.useMemo(() => agents.filter((a) => a.enabled && (!columnsOnly || !a.hidden)), [agents, columnsOnly])
+  return React.useMemo(() => agents.filter((a) => !a.hidden), [agents])
+}
+
+/** Agents a new skill can be installed to. */
+export function useEnabledAgents() {
+  const { agents } = useApp()
+  return React.useMemo(() => agents.filter((a) => a.enabled && !a.hidden), [agents])
 }
 
 export function kindLabel(t: T, s: Skill): string {
@@ -398,10 +557,19 @@ export function kindLabel(t: T, s: Skill): string {
     case "private":
       return t("kindPrivate")
     case "app":
-      return t("kindApp")
+      return s.origin || t("kindApp")
     default:
       return s.origin
   }
+}
+
+/** The group a skill belongs to when the list is grouped by source. */
+export function sourceGroup(t: T, s: Skill): string {
+  return s.kind === "skills" || s.kind === "private" ? t("kindMine") : s.origin
+}
+
+export function isMine(s: Skill): boolean {
+  return s.kind === "skills" || s.kind === "private"
 }
 
 export const PLACEHOLDER_DESC = "What this skill does and when an agent should use it."

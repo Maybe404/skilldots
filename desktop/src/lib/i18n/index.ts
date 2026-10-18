@@ -26,11 +26,10 @@ export function ago(iso: string | undefined, t: T, now = Date.now()): string {
   return t("daysAgo", { n: Math.floor(s / 86400) })
 }
 
+/** "10 月 17 日 11:30" / "Oct 17, 11:30" */
 export function formatDate(iso: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso))
+  const d = new Date(iso)
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  if (lang === "zh") return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${hm}`
+  return `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d)}, ${hm}`
 }

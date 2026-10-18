@@ -1,21 +1,23 @@
 import * as React from "react"
 import { MotionConfig } from "motion/react"
-import { isMyGo } from "mygo-runtime"
 
 import { AppProvider, useApp } from "@/lib/app-state"
 import { CommandPalette } from "@/components/app/command-palette"
-import { AppSidebar, OperationBanner, PendingBanner, Toolbar, searchInputId } from "@/components/app/shell"
+import { DoodleDefs, Doodles } from "@/components/app/doodles"
+import { Header, searchInputId } from "@/components/app/header"
+import { RefreshIcon } from "@/components/app/bits"
+import { useElapsed } from "@/components/app/status-bar"
 import { Dialogs } from "@/components/dialogs/dialogs"
 import { AgentsPage } from "@/components/pages/agents-page"
 import { HistoryPage } from "@/components/pages/history-page"
 import { Onboarding } from "@/components/pages/onboarding"
 import { ScanPage } from "@/components/pages/scan-page"
 import { SettingsPage } from "@/components/pages/settings-page"
-import { SkillsPage } from "@/components/pages/skills-page"
 import { SourcesPage } from "@/components/pages/sources-page"
 import { TrashPage } from "@/components/pages/trash-page"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { SkillsPage } from "@/components/skills/skills-page"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -27,8 +29,9 @@ export default function App() {
     <AppProvider>
       <MotionConfig reducedMotion="user">
         <TooltipProvider delay={400}>
+          <DoodleDefs />
           <Root />
-          <Toaster position="bottom-right" />
+          <Toaster />
         </TooltipProvider>
       </MotionConfig>
     </AppProvider>
@@ -40,28 +43,65 @@ function Root() {
   if (loadError) {
     const stageLabel = loadError.stage === "config" ? t("loadingConfig") : loadError.stage === "checking" ? t("loadingCheck") : t("loadingLibrary")
     return (
-      <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-8">
-        <div className="w-full max-w-xl space-y-4 rounded-2xl border bg-background/80 p-7 shadow-sm">
-          <div>
-            <h1 className="text-xl font-semibold">{t("loadFailed")}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{stageLabel}</p>
-          </div>
-          <p className="text-sm text-muted-foreground" role="alert">{t("loadErrorHint")}</p>
-          <details className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-            <summary className="cursor-pointer font-medium">{t("showDetails")}</summary>
-            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">{loadError.detail}</pre>
+      <main className="flex min-h-svh items-center justify-center p-8">
+        <div className="w-full max-w-xl rounded-card border-card bg-dialog px-6 py-[22px] shadow-pop" role="alert">
+          <h1 className="font-heading fs-h3 font-bold text-ink">{t("loadFailed")}</h1>
+          <p className="mt-1 fs-meta text-mut">{stageLabel}</p>
+          <p className="mt-3 fs-body leading-relaxed text-mut">{t("loadErrorHint")}</p>
+          <details className="mt-4 rounded-ctl bg-nav px-3 py-2 fs-meta">
+            <summary className="cursor-pointer font-medium text-ink">{t("showDetails")}</summary>
+            <pre className="mt-2 max-h-40 overflow-auto font-mono break-words whitespace-pre-wrap text-mut">{loadError.detail}</pre>
           </details>
-          <Button onClick={retryLoad}>{t("retry")}</Button>
+          <div className="mt-[22px] flex justify-end">
+            <Button variant="ink" size="lg" onClick={retryLoad}>
+              {t("retry")}
+            </Button>
+          </div>
         </div>
       </main>
     )
   }
   if (!ready) {
     const message = loadStage === "config" ? t("loadingConfig") : loadStage === "checking" ? t("loadingCheck") : t("loadingLibrary")
-    return <main className="flex min-h-svh items-center justify-center p-8"><div className="w-full max-w-xl space-y-4" role="status" aria-live="polite"><div className="h-8 w-40 animate-pulse rounded-md bg-muted motion-reduce:animate-none" /><div className="h-24 animate-pulse rounded-xl border bg-muted/50 motion-reduce:animate-none" /><p className="text-sm text-muted-foreground">{message}</p></div></main>
+    return (
+      <main className="flex min-h-svh flex-col">
+        <div className="flex h-[54px] items-center gap-2.5 px-6">
+          <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
+        </div>
+        <div className="px-10 pt-[26px]" role="status" aria-live="polite">
+          <p className="mb-5 flex items-center gap-2 fs-body text-mut">
+            <RefreshIcon spinning />
+            {message}
+          </p>
+          <div className="w-[400px] max-w-full space-y-2">
+            {Array.from({ length: 6 }, (_, i) => (
+              <Skeleton key={i} className="h-[50px] rounded-card" />
+            ))}
+          </div>
+        </div>
+      </main>
+    )
   }
   if (!status?.root) return <Onboarding />
-  return <>{!isMyGo() && <div className="border-b bg-muted/70 px-8 py-1.5 text-[0.78rem] text-muted-foreground" role="status">{t("exampleMode")}</div>}<Shell /></>
+  return <Shell />
+}
+
+/** Shows a long operation on pages without the Skill page's status bar. */
+function OperationPill() {
+  const { t, operation, view } = useApp()
+  const elapsed = useElapsed(operation?.startedAt)
+  if (!operation || view === "skills") return null
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-4 left-1/2 z-30 flex h-9 -translate-x-1/2 items-center gap-2.5 rounded-[18px] bg-ink px-4 font-body fs-body whitespace-nowrap text-bg shadow-toast"
+    >
+      <RefreshIcon spinning />
+      {operation.label}
+      <span className="text-bg/70">{t("elapsed", { s: elapsed })}</span>
+    </div>
+  )
 }
 
 function Shell() {
@@ -81,7 +121,7 @@ function Shell() {
       } else if (k === "," && !dialog) {
         e.preventDefault()
         navigate("settings")
-      } else if (k === "f" && view === "skills" && !dialog) {
+      } else if (k === "f" && !dialog && view !== "editor") {
         e.preventDefault()
         document.getElementById(searchInputId)?.focus()
       }
@@ -106,30 +146,23 @@ function Shell() {
         return <TrashPage />
       case "settings":
         return <SettingsPage />
-      default:
-        return null
+      case "editor":
+        return editing ? (
+          <React.Suspense fallback={null}>
+            <EditorPage skillRef={editing} />
+          </React.Suspense>
+        ) : null
     }
   })()
 
   return (
-    <SidebarProvider className="h-svh">
-      <AppSidebar />
-      <SidebarInset className="h-[calc(100svh-1rem)] min-h-0 overflow-hidden">
-        {view === "editor" && editing ? (
-          <React.Suspense fallback={null}>
-            <EditorPage skillRef={editing} />
-          </React.Suspense>
-        ) : (
-          <>
-            <Toolbar />
-            <PendingBanner />
-            <OperationBanner />
-            <div className="flex min-h-0 flex-1 flex-col">{page}</div>
-          </>
-        )}
-      </SidebarInset>
+    <div className="relative flex h-svh min-w-0 flex-col overflow-hidden">
+      <Doodles />
+      <Header />
+      <div className="flex min-h-0 flex-1 flex-col">{page}</div>
+      <OperationPill />
       <Dialogs />
       <CommandPalette />
-    </SidebarProvider>
+    </div>
   )
 }
