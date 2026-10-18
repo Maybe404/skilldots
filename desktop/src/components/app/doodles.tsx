@@ -1,4 +1,5 @@
 import { useApp } from "@/lib/app-state"
+import { cn } from "@/lib/utils"
 
 /** The wobble filter used by wires and drawings in the doodle style. Always mounted. */
 export function DoodleDefs() {
@@ -16,15 +17,16 @@ export function DoodleDefs() {
 
 /** Two small drawings from the design (moon and sprouts); doodle style only, decorative. */
 export function Doodles() {
-  const { style } = useApp()
+  const { style, view } = useApp()
   if (style !== "doodle") return null
   return (
     <>
       <svg
         aria-hidden
-        className="pointer-events-none fixed top-14 right-[146px] z-[1] max-[1060px]:hidden"
-        width="64"
-        height="64"
+        // The editor has its own toolbar in that corner; the moon stays out of it.
+        className={cn("pointer-events-none fixed top-[50px] right-[250px] z-[1] max-[960px]:hidden", view === "editor" && "hidden")}
+        width="56"
+        height="56"
         viewBox="0 0 90 90"
         fill="none"
         stroke="var(--hue)"

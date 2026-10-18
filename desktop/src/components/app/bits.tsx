@@ -123,7 +123,7 @@ export function Page({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <main className={cn("min-h-0 flex-1 overflow-y-auto px-10 pt-[26px] pb-10 max-[760px]:px-5", className)} aria-label={title}>
+      <main className={cn("min-h-0 flex-1 overflow-y-auto px-10 pt-[26px] pb-10 doodle:relative doodle:z-[6] doodle:pb-14 max-[760px]:px-5", className)} aria-label={title}>
         <div className="mb-[18px] flex flex-wrap items-end gap-x-3.5 gap-y-2">
           <h1 className="m-0 font-heading fs-h1 leading-none font-semibold tracking-[-0.01em] text-ink">{title}</h1>
           {summary && <div className="flex min-w-0 items-center gap-1.5 pb-0.5 fs-body text-mut">{summary}</div>}

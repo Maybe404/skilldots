@@ -93,7 +93,7 @@ export function StatusBar() {
   }
 
   return (
-    <footer className="relative z-[4] flex h-[49px] shrink-0 items-center gap-3 border-t-hd bg-bg px-10 font-body fs-body text-mut max-[760px]:px-5">
+    <footer className="relative z-[4] flex h-[49px] shrink-0 items-center gap-3 border-t-hd bg-bg px-10 font-body fs-body text-mut doodle:pr-[150px] max-[760px]:px-5">
       {left}
       <span className="flex-1" />
       <span aria-hidden className="font-mono fs-mono-xs whitespace-nowrap max-[1080px]:hidden">

@@ -130,7 +130,7 @@ export function ScanPage() {
         </Button>
       }
       footer={
-        <footer className="relative z-[4] flex h-[57px] shrink-0 items-center gap-3 border-t-hd bg-bg px-10 font-body fs-body text-mut max-[760px]:px-5">
+        <footer className="relative z-[4] flex h-[57px] shrink-0 items-center gap-3 border-t-hd bg-bg px-10 font-body fs-body text-mut doodle:pr-[150px] max-[760px]:px-5">
           <span className="min-w-0 truncate">{t("adoptNote")}</span>
           <span className="flex-1" />
           <Button size="lg" className="px-4" disabled={!n || scanning} variant={n ? "default" : "secondary"} onClick={adopt}>
