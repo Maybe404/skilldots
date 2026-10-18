@@ -105,30 +105,33 @@ export function NewSkillDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="w-[520px]">
+      <DialogContent closeLabel={t("close")} className="flex w-[520px] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{t("newTitle")}</DialogTitle>
           <DialogDescription>{t("newHint")}</DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-4"
+          className="flex min-h-0 flex-1 flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault()
             if (name && !invalid) void create(true)
           }}
         >
-          <Field data-invalid={invalid || undefined}>
-            <FieldLabel htmlFor="new-name">{t("nameLabel")}</FieldLabel>
-            <Input id="new-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} className="font-mono" spellCheck={false} aria-invalid={invalid || undefined} />
-            {invalid ? <FieldError>{t("nameInvalid")}</FieldError> : <FieldDescription>{t("nameHint")}</FieldDescription>}
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="new-desc">{t("descLabel")}</FieldLabel>
-            <Textarea id="new-desc" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t("descPlaceholder")} rows={3} />
-            <FieldDescription>{t("descHint")}</FieldDescription>
-          </Field>
-          <LocationField value={loc} onChange={setLoc} />
-          <AgentTargets value={targets} onChange={setTargets} />
+          {/* The fields scroll when the window is short; title and buttons stay in view. */}
+          <div className="-mx-1 grid min-h-0 gap-4 overflow-y-auto px-1 py-1">
+            <Field data-invalid={invalid || undefined}>
+              <FieldLabel htmlFor="new-name">{t("nameLabel")}</FieldLabel>
+              <Input id="new-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} className="font-mono" spellCheck={false} aria-invalid={invalid || undefined} />
+              {invalid ? <FieldError>{t("nameInvalid")}</FieldError> : <FieldDescription>{t("nameHint")}</FieldDescription>}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-desc">{t("descLabel")}</FieldLabel>
+              <Textarea id="new-desc" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t("descPlaceholder")} rows={3} />
+              <FieldDescription>{t("descHint")}</FieldDescription>
+            </Field>
+            <LocationField value={loc} onChange={setLoc} />
+            <AgentTargets value={targets} onChange={setTargets} />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" size="lg" onClick={onClose}>
               {t("cancel")}
