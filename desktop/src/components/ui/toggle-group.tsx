@@ -17,7 +17,9 @@ import { toggleRadius, toggleThumb, toggleVariants } from "@/components/ui/toggl
  * keeps the group semantics, aria-pressed and the arrow-key roving focus;
  * Animate UI slides one highlight to the pressed item. The highlight is drawn
  * with the look's tokens (toggleThumb), so the segmented controls keep the
- * design's raised white (clean) or hatched (doodle) thumb.
+ * design's raised white (clean) or hatched (doodle) thumb. The highlight
+ * follows the group's value only (click={false}), so a choice the owner
+ * refuses (the dark mode that is not there yet) does not move it.
  */
 type Look = VariantProps<typeof toggleVariants>
 
@@ -40,7 +42,7 @@ function ToggleGroup({
       {...props}
     >
       <ToggleGroupContext.Provider value={{ variant, size }}>
-        <ToggleGroupHighlightPrimitive className={toggleThumb[variant ?? "default"]} transition={{ type: "spring", stiffness: 420, damping: 36 }}>
+        <ToggleGroupHighlightPrimitive click={false} className={toggleThumb[variant ?? "default"]} transition={{ type: "spring", stiffness: 420, damping: 36 }}>
           {children}
         </ToggleGroupHighlightPrimitive>
       </ToggleGroupContext.Provider>

@@ -29,5 +29,9 @@ export function useControlledState<T, Rest extends any[] = []>(
     [onChange],
   );
 
-  return [state, setState] as const;
+  // skilldots: upstream returns its internal copy even when the value is
+  // controlled, so a change the owner refuses (a busy dialog ignoring Esc, a
+  // click on the pressed segment) still moved the animation layer: the dialog
+  // vanished, the highlight left. A controlled value always wins here.
+  return [value !== undefined ? value : state, setState] as const;
 }
