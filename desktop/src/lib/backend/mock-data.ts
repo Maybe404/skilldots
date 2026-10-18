@@ -1,5 +1,6 @@
-// Sample library modelled on a real one. Update history and trash entries are
-// fictional and marked `example`.
+// Sample library for the browser preview. It mirrors the data in the approved
+// design ("skilldots 主界面"), so screenshots can be compared side by side.
+// Update history and trash entries are fictional and marked `example`.
 import type {
   Agent,
   HistoryEntry,
@@ -16,6 +17,8 @@ import type {
 export const HOME = "/Users/maybe"
 export const LIBRARY = `${HOME}/code/github.com/Maybe404/agent-skills`
 
+// Registry order as the design shows it; the real registry has more agents,
+// hidden by default when they are not on this machine.
 const AGENT_DEFS: [string, string, string][] = [
   ["agents", "Agents", ".agents/skills"],
   ["claude", "Claude Code", ".claude/skills"],
@@ -33,62 +36,50 @@ const AGENT_DEFS: [string, string, string][] = [
   ["roo", "Roo Code", ".roo/skills"],
   ["continue", "Continue", ".continue/skills"],
 ]
-const ENABLED = ["agents", "claude", "codex", "gemini", "grok"]
-const DETECTED = [...ENABLED, "cursor", "opencode"]
+const DETECTED = ["agents", "claude", "codex", "gemini", "grok", "cursor"]
+const COLUMNS = DETECTED
 
 export function initialAgents(): Agent[] {
   return AGENT_DEFS.map(([name, label, rel]) => ({
     name,
     label,
-    path: `~/${rel}`,
+    path: `${HOME}/${rel}`,
     detected: DETECTED.includes(name),
-    enabled: ENABLED.includes(name),
+    // Like the real backend: every agent distributes unless paused; the ones
+    // not on this machine are only hidden from the Skill page.
+    enabled: true,
+    hidden: !DETECTED.includes(name),
     isDefault: name === "agents" || name === "claude",
     builtin: true,
   }))
 }
 
-type Seed = [name: string, kind: Skill["kind"], origin: string, category: string, targets: string[], description: string]
+type Seed = [name: string, kind: Skill["kind"], origin: string, category: string, on: string, description: string]
 
+// on: one digit per column agent (agents, claude, codex, gemini, grok, cursor)
 const SEEDS: Seed[] = [
-  ["skilldots", "vendor", "Maybe404/skilldots", "", ["agents", "claude", "codex", "gemini", "grok"],
-    "Manage the skills installed for AI agents on this machine with the `skd` CLI (skilldots). Use when the user asks to install, add, find, update, remove, enable, disable, fork, list, back up or sync agent skills, or mentions skills.toml, a skill library, or a GitHub repository of skills."],
-  ["ui-arsenal", "vendor", "Maybe404/ui-arsenal", "", ["agents", "claude", "codex"],
-    "在前端 UI 任务里选择和获取成熟组件时使用：新增或替换组件、调整页面视觉、加交互或动效、背景、加载态、图标、AI 界面、落地页或后台页面。"],
-  ["defuddle", "vendor", "kepano/obsidian-skills", "", ["agents", "claude"],
-    "Extract clean Markdown from HTML pages with Defuddle CLI."],
-  ["json-canvas", "vendor", "kepano/obsidian-skills", "", ["agents", "claude"],
-    "Create and edit JSON Canvas files (.canvas) with nodes, edges, groups, and connections. Use when working with .canvas files or Obsidian canvases."],
-  ["obsidian-bases", "vendor", "kepano/obsidian-skills", "", ["agents", "claude"],
-    "Create and edit Obsidian Bases (.base files) with views, filters, formulas, and summaries."],
-  ["obsidian-cli", "vendor", "kepano/obsidian-skills", "", ["agents", "claude", "codex"],
-    "Interact with Obsidian vaults using the Obsidian CLI to read, create, search, and manage notes, tasks and properties."],
-  ["obsidian-markdown", "vendor", "kepano/obsidian-skills", "", ["agents", "claude"],
-    "Create and edit Obsidian Flavored Markdown with wikilinks, embeds, callouts, properties, and other Obsidian-specific syntax."],
-  ["impeccable", "vendor", "pbakaus/impeccable", "", ["agents", "claude", "codex", "gemini"],
-    "Use when the user wants to design, redesign, critique, audit, polish or simplify a frontend interface: websites, dashboards, product UI, forms, onboarding and empty states."],
-  ["orchestration", "vendor", "stablyai/orca", "", ["agents", "claude"],
-    "Coordinate supervised Orca workers: threaded messages, blocking ask/reply, task dispatch, task DAGs, decision gates and coordinator loops."],
-  ["differential-review", "vendor", "trailofbits/skills", "differential-review", ["agents", "claude", "codex"],
-    "Performs security-focused differential review of code changes. Use when reviewing a PR, commit, or diff for security vulnerabilities."],
-  ["modern-python", "vendor", "trailofbits/skills", "modern-python", ["agents", "claude"],
-    "Write Python the modern way: uv, ruff, type hints, pyproject.toml and pytest. Use when creating or upgrading a Python project."],
-  ["vercel-react-best-practices", "vendor", "vercel-labs/agent-skills", "", ["agents", "claude"],
-    "React and Next.js performance optimization guidelines from Vercel Engineering. Use when writing, reviewing or refactoring React code."],
-  ["find-skills", "vendor", "vercel-labs/skills", "", ["agents", "claude", "codex", "gemini", "grok"],
-    "Helps users discover and install agent skills when they ask \"how do I do X\" or \"is there a skill that can…\"."],
-  ["subagent", "skills", "", "", ["agents", "claude", "codex"],
-    "派发 subagent 的规则：拆什么、派给谁、怎么写指令、怎么验收和打回。派发任何后台 agent 之前使用。"],
-  ["curated-ui", "skills", "", "", ["agents", "claude"],
-    "Prefer mature, production-oriented UI components, interaction patterns, effects and icons from the user's curated sources when building or reviewing frontend interfaces."],
-  ["test", "skills", "", "", ["agents", "codex"],
-    "What this skill does and when an agent should use it."],
-  ["html-document", "private", "", "", ["agents", "claude"],
-    "将 markdown 转 HTML，生成美观的可交互单页和内部知识库文档。"],
-  ["idea-config-maintainer", "private", "", "", ["agents"],
-    "idea/dify 二开低代码平台 yaml 工作流配置的编写、检查、维护、重构和优化。"],
-  ["surge", "app", "surge", "", ["agents", "claude"],
-    "Control and troubleshoot the Surge proxy app through surge-cli. Use whenever a task involves Surge in any way."],
+  ["skilldots", "vendor", "Maybe404/skilldots", "", "111111", "Manage the skills installed for AI agents on this machine."],
+  ["ui-arsenal", "vendor", "Maybe404/ui-arsenal", "", "111000", "在前端 UI 任务里选择和获取成熟组件时使用。"],
+  ["subagent", "skills", "", "", "111001", "派发 subagent 的规则：拆什么、派给谁、怎么验收。"],
+  ["release-notes", "skills", "", "", "110000", "从 git log 生成发布说明，按用户可感知的改动分组。"],
+  ["design-review", "skills", "", "", "010001", "按设计需求文档逐条审查界面截图。"],
+  ["defuddle", "vendor", "kepano/obsidian-skills", "", "110000", "Extract clean Markdown from HTML pages with Defuddle."],
+  ["json-canvas", "vendor", "kepano/obsidian-skills", "", "110000", "Create and edit JSON Canvas files (.canvas)."],
+  ["obsidian-bases", "vendor", "kepano/obsidian-skills", "", "110000", "Create and edit Obsidian Bases (.base files)."],
+  ["obsidian-cli", "vendor", "kepano/obsidian-skills", "", "111000", "Interact with Obsidian vaults using the Obsidian CLI."],
+  ["obsidian-markdown", "vendor", "kepano/obsidian-skills", "", "110000", "Create and edit Obsidian Flavored Markdown."],
+  ["impeccable", "vendor", "pbakaus/impeccable", "", "111101", "Use when the user wants to design, redesign, critique or polish a UI."],
+  ["orchestration", "vendor", "stablyai/orca", "", "110000", "Coordinate supervised Orca workers."],
+  ["orca-review", "vendor", "stablyai/orca", "", "010000", "Review hand-offs between Orca workers before merging."],
+  ["pdf", "vendor", "anthropics/skills", "document-skills", "110100", "Read, create and edit PDF files."],
+  ["docx", "vendor", "anthropics/skills", "document-skills", "010000", "Create and edit Word documents."],
+  ["xlsx", "vendor", "anthropics/skills", "document-skills", "010000", "Create and analyze spreadsheets."],
+  ["pptx", "vendor", "anthropics/skills", "document-skills", "011000", "Build and edit slide decks."],
+  ["differential-review", "vendor", "trailofbits/skills", "differential-review", "011000", "Security-focused review of a diff."],
+  ["modern-python", "vendor", "trailofbits/skills", "modern-python", "011000", "Project setup with uv, ruff and pytest."],
+  ["find-skills", "vendor", "vercel-labs/agent-skills", "", "110001", "Search skills.sh and GitHub for a skill."],
+  ["web-design-guidelines", "vendor", "vercel-labs/agent-skills", "", "110001", "Audit UI code against web design guidelines."],
+  ["grill-me", "vendor", "mattpocock/skills", "engineering", "010000", "Interrogate a plan until every assumption is explicit."],
 ]
 
 export function skillDir(kind: Skill["kind"], origin: string, category: string, name: string): string {
@@ -116,7 +107,7 @@ export function refKey(kind: Skill["kind"], origin: string, name: string): strin
 }
 
 export function initialSkills(): Skill[] {
-  return SEEDS.map(([name, kind, origin, category, targets, description]) => ({
+  return SEEDS.map(([name, kind, origin, category, on, description]) => ({
     ref: { key: refKey(kind, origin, name) },
     name,
     linkName: name,
@@ -125,11 +116,11 @@ export function initialSkills(): Skill[] {
     category,
     description,
     dir: skillDir(kind, origin, category, name),
-    targets: [...targets],
+    targets: COLUMNS.filter((_, i) => on[i] === "1"),
   }))
 }
 
-export const CLAUDE_OVERRIDES = ["modern-python", "vercel-react-best-practices"]
+export const CLAUDE_OVERRIDES = ["modern-python"]
 
 export function initialPacks(): Pack[] {
   const p = (repo: string, commit: string, upstreamCount: number, license = "MIT", followAll = false): Pack => ({
@@ -146,14 +137,15 @@ export function initialPacks(): Pack[] {
     p("kepano/obsidian-skills", "e52f8c0", 5, "MIT", true),
     p("pbakaus/impeccable", "a1d4e77", 1, "Apache-2.0"),
     p("stablyai/orca", "0f3b9d4", 3),
+    p("anthropics/skills", "71c2b90", 16, "Apache-2.0"),
     p("trailofbits/skills", "7c28e15", 38, "CC-BY-SA-4.0"),
-    p("vercel-labs/agent-skills", "d93a6b0", 6),
-    p("vercel-labs/skills", "2e8f1c4", 2),
+    p("vercel-labs/agent-skills", "2e8f1c4", 12),
+    p("mattpocock/skills", "5d90aa2", 4),
   ]
 }
 
 export function initialOutdated(now: Date): Outdated {
-  const checked = new Date(now.getTime() - 2 * 60 * 1000).toISOString()
+  const checked = new Date(now.getTime() - 20 * 1000).toISOString()
   const base = { changed: [], moved: [], new: [], gone: [], pending: [], commits: [], checked }
   return {
     checked,
@@ -163,39 +155,45 @@ export function initialOutdated(now: Date): Outdated {
         ...base,
         repo: "Maybe404/skilldots",
         commit: "4c1e9a2",
-        latest: "63555da",
+        latest: "e52f8c0",
         changed: ["skilldots"],
         commits: [
-          { id: "63555da", title: "test(tui): cover the dashboard's hangup handling" },
-          { id: "1ecb606", title: "fix(cache): clear the lock file git names, not a fixed list" },
-          { id: "6a140e1", title: "docs: say that updating a pack with only moved skills renames them" },
-          { id: "1da0bdd", title: "fix(tui): run the background check without a terminal and stop it on hangup" },
+          { id: "e52f8c0", title: "skilldots: 记录每次 apply 的改动摘要" },
+          { id: "9a1c0d4", title: "Fix trash restore path on case-insensitive volumes" },
         ],
       },
       {
         ...base,
         repo: "trailofbits/skills",
         commit: "7c28e15",
-        latest: "b4410ea",
-        moved: ["modern-python: modern-python → python/modern-python"],
-        commits: [{ id: "b4410ea", title: "Group Python skills under plugins/python" }],
+        latest: "b3d0a61",
+        changed: ["differential-review"],
+        moved: ["differential-review: differential-review → skills/differential-review"],
+        commits: [
+          { id: "b3d0a61", title: "Move skills into skills/ subfolder" },
+          { id: "2e41f7c", title: "differential-review: add CWE hints" },
+        ],
       },
-      ...["Maybe404/ui-arsenal", "kepano/obsidian-skills", "pbakaus/impeccable", "stablyai/orca", "vercel-labs/agent-skills", "vercel-labs/skills"].map(
-        (repo) => {
-          const c = initialPacks().find((p) => p.repo === repo)!.commit
-          return { ...base, repo, commit: c, latest: c }
-        },
-      ),
+      ...initialPacks()
+        .filter((p) => p.repo !== "Maybe404/skilldots" && p.repo !== "trailofbits/skills")
+        .map((p) => ({ ...base, repo: p.repo, commit: p.commit, latest: p.commit })),
     ],
   }
 }
 
+/** A past day at 11:30 local time. */
+function daysAgoAt(now: Date, days: number): string {
+  const d = new Date(now)
+  d.setDate(d.getDate() - days)
+  d.setHours(11, 30, 0, 0)
+  return d.toISOString()
+}
+
 export function initialHistory(now: Date): HistoryEntry[] {
-  const day = 24 * 3600 * 1000
   return [
     {
       id: "h3",
-      when: new Date(now.getTime() - 1 * day).toISOString(),
+      when: daysAgoAt(now, 1),
       repo: "kepano/obsidian-skills",
       from: "c7a0912",
       to: "e52f8c0",
@@ -212,7 +210,7 @@ export function initialHistory(now: Date): HistoryEntry[] {
     },
     {
       id: "h2",
-      when: new Date(now.getTime() - 6 * day).toISOString(),
+      when: daysAgoAt(now, 6),
       repo: "pbakaus/impeccable",
       from: "5e0c2b8",
       to: "a1d4e77",
@@ -226,8 +224,8 @@ export function initialHistory(now: Date): HistoryEntry[] {
     },
     {
       id: "h1",
-      when: new Date(now.getTime() - 15 * day).toISOString(),
-      repo: "vercel-labs/skills",
+      when: daysAgoAt(now, 15),
+      repo: "vercel-labs/agent-skills",
       from: "88d01aa",
       to: "2e8f1c4",
       changed: [],
@@ -245,37 +243,43 @@ export function initialTrash(now: Date): TrashEntry[] {
   const day = 24 * 3600 * 1000
   return [
     {
-      id: "20261016-213044/grill-me",
+      id: "20261017-213044/grill-me",
       name: "grill-me",
       origin: `${LIBRARY}/vendor/mattpocock/skills/grill-me`,
-      path: `${LIBRARY}/.trash/20261016-213044/grill-me`,
+      path: `${LIBRARY}/.trash/20261017-213044/grill-me`,
       when: new Date(now.getTime() - 1 * day).toISOString(),
+      reason: "removed",
       example: true,
     },
     {
-      id: "20261011-090512/impeccable",
-      name: "impeccable",
-      origin: `${LIBRARY}/vendor/pbakaus/impeccable/impeccable`,
-      path: `${LIBRARY}/.trash/20261011-090512/impeccable`,
+      id: "20261012-090512/typography.md",
+      name: "typography.md",
+      origin: `${LIBRARY}/vendor/pbakaus/impeccable/impeccable/reference/typography.md`,
+      path: `${LIBRARY}/.trash/20261012-090512/typography.md`,
       when: new Date(now.getTime() - 6 * day).toISOString(),
+      reason: "update",
       example: true,
     },
     {
-      id: "20261002-174420/pdf",
+      id: "20261003-174420/pdf",
       name: "pdf",
       origin: `${HOME}/.claude/skills/pdf`,
-      path: `${LIBRARY}/.trash/20261002-174420/pdf`,
+      path: `${LIBRARY}/.trash/20261003-174420/pdf`,
       when: new Date(now.getTime() - 15 * day).toISOString(),
+      reason: "adopt",
       example: true,
     },
   ]
 }
 
+/** Links that disagree with skills.toml (only with ?drift in the preview URL). */
 export function initialPlan(): PlanItem[] {
+  const drift = typeof location !== "undefined" && new URLSearchParams(location.search).has("drift")
+  if (!drift) return []
   return [
-    { action: "link", skill: "find-skills", agent: "gemini", path: "~/.gemini/skills/find-skills", reason: "skills.toml changed on another machine" },
-    { action: "unlink", skill: "test", agent: "codex", path: "~/.codex/skills/test", reason: "no longer a target" },
-    { action: "blocked", skill: "impeccable", agent: "grok", path: "~/.grok/skills/impeccable", reason: "a directory skd did not create is in the way" },
+    { action: "link", skill: "find-skills", agent: "gemini", path: `${HOME}/.gemini/skills/find-skills`, reason: "skills.toml changed on another machine" },
+    { action: "unlink", skill: "orca-review", agent: "codex", path: `${HOME}/.codex/skills/orca-review`, reason: "no longer a target" },
+    { action: "blocked", skill: "impeccable", agent: "grok", path: `${HOME}/.grok/skills/impeccable`, reason: "a directory skd did not create is in the way" },
   ]
 }
 
@@ -285,7 +289,7 @@ export function initialScan(): ScanItem[] {
       id: "s1",
       agent: "claude",
       name: "pdf",
-      path: "~/.claude/skills/pdf",
+      path: `${HOME}/.claude/skills/pdf`,
       state: "copy",
       source: "anthropics/skills",
       proposal: "pack",
@@ -293,29 +297,29 @@ export function initialScan(): ScanItem[] {
       label: "subscribe to anthropics/skills",
     },
     {
-      id: "s2",
-      agent: "gemini",
-      name: "release-notes",
-      path: "~/.gemini/skills/release-notes",
-      state: "copy",
-      proposal: "own",
-      label: "copy into skills/ as your own (no known upstream)",
-    },
-    {
       id: "s3",
       agent: "codex",
       name: "old-notes",
-      path: "~/.codex/skills/old-notes",
+      path: `${HOME}/.codex/skills/old-notes`,
       state: "broken",
-      linkTo: "~/Downloads/old-notes",
+      linkTo: `${HOME}/Downloads/old-notes`,
       proposal: "drop",
       label: "broken link; remove",
+    },
+    {
+      id: "s2",
+      agent: "gemini",
+      name: "release-notes",
+      path: `${HOME}/.gemini/skills/release-notes`,
+      state: "copy",
+      proposal: "own",
+      label: "copy into skills/ as your own (the library has one with the same name; you will be asked to rename)",
     },
     {
       id: "s4",
       agent: "cursor",
       name: "find-skills",
-      path: "~/.cursor/skills/find-skills",
+      path: `${HOME}/.cursor/skills/find-skills`,
       state: "copy",
       proposal: "enable",
       label: "enable for cursor (already in library)",
@@ -367,14 +371,37 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "vercel-labs/agent-skills": {
-    commit: "d93a6b0",
+    commit: "2e8f1c4",
     license: "MIT",
     rejected: [],
     skills: [
+      sk("find-skills", "", "Search skills.sh and GitHub for a skill."),
+      sk("web-design-guidelines", "", "Audit UI code against web design guidelines."),
       sk("vercel-react-best-practices", "", "React and Next.js performance optimization guidelines from Vercel Engineering."),
-      sk("web-design-guidelines", "", "Review UI code against web interface guidelines."),
       sk("vercel-deploy", "", "Deploy the current project to Vercel."),
       sk("composition-patterns", "", "React composition patterns that scale."),
+    ],
+  },
+  "Maybe404/ui-arsenal": {
+    commit: "9b07d31",
+    license: "MIT",
+    rejected: [],
+    skills: [sk("ui-arsenal", "", "在前端 UI 任务里选择和获取成熟组件时使用。")],
+  },
+  "pbakaus/impeccable": {
+    commit: "a1d4e77",
+    license: "Apache-2.0",
+    rejected: [],
+    skills: [sk("impeccable", "", "Use when the user wants to design, redesign, critique or polish a UI.")],
+  },
+  "stablyai/orca": {
+    commit: "0f3b9d4",
+    license: "MIT",
+    rejected: [],
+    skills: [
+      sk("orchestration", "", "Coordinate supervised Orca workers."),
+      sk("orca-review", "", "Review hand-offs between Orca workers before merging."),
+      sk("orca-cli", "", "Drive Orca worktrees and terminals from the command line."),
     ],
   },
   "Maybe404/skilldots": {

@@ -195,6 +195,12 @@ export interface TrashEntry {
   origin: string
   path: string
   when: string
+  /**
+   * Why it is in the trash: "removed" (moved there by the user), "update"
+   * (replaced by an update), "adopt" (replaced while adopting), "purge"
+   * (a removed source). Optional; the UI falls back to where it came from.
+   */
+  reason?: "removed" | "update" | "adopt" | "purge"
   example?: boolean
   restorable?: boolean
   problem?: string

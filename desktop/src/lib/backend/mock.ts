@@ -116,7 +116,7 @@ export function createMockBackend(): Backend {
   const changed = () => {
     st.changes += 1
   }
-  const toTrash = (name: string, origin: string) => {
+  const toTrash = (name: string, origin: string, reason?: TrashEntry["reason"]) => {
     const batch = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15)
     st.trash.unshift({
       id: `${batch}/${name}`,
@@ -124,6 +124,7 @@ export function createMockBackend(): Backend {
       origin,
       path: `${st.root}/.trash/${batch}/${name}`,
       when: new Date().toISOString(),
+      reason,
     })
   }
   const status = (): LibraryStatus => ({
@@ -292,7 +293,7 @@ export function createMockBackend(): Backend {
       const s = find(ref)
       if (s.kind === "app") throw new Error(`${s.name} belongs to an application; disable it instead`)
       st.skills = st.skills.filter((x) => x !== s)
-      toTrash(s.name, s.dir)
+      toTrash(s.name, s.dir, "removed")
       if (!st.skills.some((x) => x.origin === s.origin && x.kind === "vendor")) st.packs = st.packs.filter((p) => p.repo !== s.origin)
       changed()
     },
@@ -302,7 +303,7 @@ export function createMockBackend(): Backend {
       st.skills = st.skills.filter((x) => !(x.kind === "vendor" && x.origin === repo))
       st.packs = st.packs.filter((p) => p.repo !== repo)
       if (st.outdated) st.outdated.packs = st.outdated.packs.filter((p) => p.repo !== repo)
-      toTrash(repo.split("/")[1], `${st.root}/vendor/${repo}`)
+      toTrash(repo.split("/")[1], `${st.root}/vendor/${repo}`, "purge")
       changed()
     },
     async fork(ref, opts) {
@@ -429,7 +430,7 @@ export function createMockBackend(): Backend {
           const sk = st.skills.find((x) => x.origin === repo && x.name === name)
           if (sk && st.touched.has(sk.ref.key)) {
             backups.push(`${name}/SKILL.md`)
-            toTrash(name, sk.dir)
+            toTrash(name, sk.dir, "update")
             st.touched.delete(sk.ref.key)
             st.files[sk.ref.key] = initialFiles([sk])[sk.ref.key]
           }
@@ -488,11 +489,18 @@ export function createMockBackend(): Backend {
             const cat = CATALOG[it.repo]
             st.packs.push({ repo: it.repo, commit: cat?.commit ?? "0000000", followAll: false, upstreamCount: cat?.skills.length ?? 1, license: cat?.license, url: `https://github.com/${it.repo}` })
           }
-          const up = CATALOG[it.repo]?.skills.find((s) => s.name === it.name)
-          addSkill({ name: it.name, kind: "vendor", origin: it.repo, category: up?.category ?? "", description: up?.description ?? "", targets: [it.agent] })
+          const have = st.skills.find((s) => s.kind === "vendor" && s.origin === it.repo && s.name === it.name)
+          if (have) have.targets = [...new Set([...have.targets, it.agent])]
+          else {
+            const up = CATALOG[it.repo]?.skills.find((s) => s.name === it.name)
+            addSkill({ name: it.name, kind: "vendor", origin: it.repo, category: up?.category ?? "", description: up?.description ?? "", targets: [it.agent] })
+          }
+          toTrash(it.name, it.path, "adopt")
         } else if (it.proposal === "own") {
-          addSkill({ name: it.name, kind: "skills", origin: "", category: "", description: "", targets: [it.agent] })
-          toTrash(it.name, it.path)
+          const taken = st.skills.some((s) => s.linkName === it.name)
+          const name = taken ? `${it.name}-${it.agent}` : it.name
+          addSkill({ name, kind: "skills", origin: "", category: "", description: "", targets: [it.agent] })
+          toTrash(it.name, it.path, "adopt")
         } else if (it.proposal === "enable") {
           const s = st.skills.find((x) => x.linkName === it.name)
           if (s) s.targets = [...new Set([...s.targets, it.agent])]
