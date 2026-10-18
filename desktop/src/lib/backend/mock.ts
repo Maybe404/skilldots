@@ -14,6 +14,7 @@ import {
   initialSkills,
   initialTrash,
   refKey,
+  sha,
   skillDir,
 } from "./mock-data"
 import { parseSource } from "./parse-source"
@@ -487,7 +488,7 @@ export function createMockBackend(): Backend {
         if (it.proposal === "pack" && it.repo) {
           if (!st.packs.some((p) => p.repo === it.repo)) {
             const cat = CATALOG[it.repo]
-            st.packs.push({ repo: it.repo, commit: cat?.commit ?? "0000000", followAll: false, upstreamCount: cat?.skills.length ?? 1, license: cat?.license, url: `https://github.com/${it.repo}` })
+            st.packs.push({ repo: it.repo, commit: cat?.commit ?? sha("0000000"), followAll: false, upstreamCount: cat?.skills.length ?? 1, license: cat?.license, url: `https://github.com/${it.repo}` })
           }
           const have = st.skills.find((s) => s.kind === "vendor" && s.origin === it.repo && s.name === it.name)
           if (have) have.targets = [...new Set([...have.targets, it.agent])]

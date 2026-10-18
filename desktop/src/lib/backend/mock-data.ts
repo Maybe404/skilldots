@@ -17,6 +17,22 @@ import type {
 export const HOME = "/Users/maybe"
 export const LIBRARY = `${HOME}/code/github.com/Maybe404/agent-skills`
 
+/**
+ * The real backend returns full 40-digit commit SHAs (`git rev-parse HEAD`,
+ * `git log --format=%H`), and the interface must cope with that width. The
+ * sample data writes the short form the design shows and expands it here to a
+ * stable 40-digit id that starts with it.
+ */
+export function sha(short: string): string {
+  let out = short
+  let h = 0x811c9dc5
+  for (let round = 0; out.length < 40; round++) {
+    for (const c of `${short}:${round}`) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0
+    out += h.toString(16).padStart(8, "0")
+  }
+  return out.slice(0, 40)
+}
+
 // Registry order as the design shows it; the real registry has more agents,
 // hidden by default when they are not on this machine.
 const AGENT_DEFS: [string, string, string][] = [
@@ -36,10 +52,20 @@ const AGENT_DEFS: [string, string, string][] = [
   ["roo", "Roo Code", ".roo/skills"],
   ["continue", "Continue", ".continue/skills"],
 ]
-const DETECTED = ["agents", "claude", "codex", "gemini", "grok", "cursor"]
-const COLUMNS = DETECTED
+/**
+ * Agents present on this machine, in registry order: the design's six, or as
+ * many as `?agents=N` asks for in the preview URL (up to the whole registry).
+ * A real machine often has 11 or more, which makes the Skill page's columns
+ * and the top bar much tighter than the design's sample.
+ */
+function detectedAgents(): string[] {
+  const asked = typeof location !== "undefined" ? Number(new URLSearchParams(location.search).get("agents")) : 0
+  const n = Number.isInteger(asked) && asked > 6 ? Math.min(asked, AGENT_DEFS.length) : 6
+  return AGENT_DEFS.slice(0, n).map(([name]) => name)
+}
 
 export function initialAgents(): Agent[] {
+  const DETECTED = detectedAgents()
   return AGENT_DEFS.map(([name, label, rel]) => ({
     name,
     label,
@@ -107,6 +133,7 @@ export function refKey(kind: Skill["kind"], origin: string, name: string): strin
 }
 
 export function initialSkills(): Skill[] {
+  const COLUMNS = detectedAgents()
   return SEEDS.map(([name, kind, origin, category, on, description]) => ({
     ref: { key: refKey(kind, origin, name) },
     name,
@@ -132,15 +159,15 @@ export function initialPacks(): Pack[] {
     url: `https://github.com/${repo}`,
   })
   return [
-    p("Maybe404/skilldots", "4c1e9a2", 1),
-    p("Maybe404/ui-arsenal", "9b07d31", 1),
-    p("kepano/obsidian-skills", "e52f8c0", 5, "MIT", true),
-    p("pbakaus/impeccable", "a1d4e77", 1, "Apache-2.0"),
-    p("stablyai/orca", "0f3b9d4", 3),
-    p("anthropics/skills", "71c2b90", 16, "Apache-2.0"),
-    p("trailofbits/skills", "7c28e15", 38, "CC-BY-SA-4.0"),
-    p("vercel-labs/agent-skills", "2e8f1c4", 12),
-    p("mattpocock/skills", "5d90aa2", 4),
+    p("Maybe404/skilldots", sha("4c1e9a2"), 1),
+    p("Maybe404/ui-arsenal", sha("9b07d31"), 1),
+    p("kepano/obsidian-skills", sha("e52f8c0"), 5, "MIT", true),
+    p("pbakaus/impeccable", sha("a1d4e77"), 1, "Apache-2.0"),
+    p("stablyai/orca", sha("0f3b9d4"), 3),
+    p("anthropics/skills", sha("71c2b90"), 16, "Apache-2.0"),
+    p("trailofbits/skills", sha("7c28e15"), 38, "CC-BY-SA-4.0"),
+    p("vercel-labs/agent-skills", sha("2e8f1c4"), 12),
+    p("mattpocock/skills", sha("5d90aa2"), 4),
   ]
 }
 
@@ -154,24 +181,24 @@ export function initialOutdated(now: Date): Outdated {
       {
         ...base,
         repo: "Maybe404/skilldots",
-        commit: "4c1e9a2",
-        latest: "e52f8c0",
+        commit: sha("4c1e9a2"),
+        latest: sha("e52f8c0"),
         changed: ["skilldots"],
         commits: [
-          { id: "e52f8c0", title: "skilldots: 记录每次 apply 的改动摘要" },
-          { id: "9a1c0d4", title: "Fix trash restore path on case-insensitive volumes" },
+          { id: sha("e52f8c0"), title: "skilldots: 记录每次 apply 的改动摘要" },
+          { id: sha("9a1c0d4"), title: "Fix trash restore path on case-insensitive volumes" },
         ],
       },
       {
         ...base,
         repo: "trailofbits/skills",
-        commit: "7c28e15",
-        latest: "b3d0a61",
+        commit: sha("7c28e15"),
+        latest: sha("b3d0a61"),
         changed: ["differential-review"],
         moved: ["differential-review: differential-review → skills/differential-review"],
         commits: [
-          { id: "b3d0a61", title: "Move skills into skills/ subfolder" },
-          { id: "2e41f7c", title: "differential-review: add CWE hints" },
+          { id: sha("b3d0a61"), title: "Move skills into skills/ subfolder" },
+          { id: sha("2e41f7c"), title: "differential-review: add CWE hints" },
         ],
       },
       ...initialPacks()
@@ -195,15 +222,15 @@ export function initialHistory(now: Date): HistoryEntry[] {
       id: "h3",
       when: daysAgoAt(now, 1),
       repo: "kepano/obsidian-skills",
-      from: "c7a0912",
-      to: "e52f8c0",
+      from: sha("c7a0912"),
+      to: sha("e52f8c0"),
       changed: ["obsidian-cli", "obsidian-markdown"],
       added: [],
       gone: [],
       moved: [],
       commits: [
-        { id: "e52f8c0", title: "obsidian-cli: document the search command" },
-        { id: "d1b7a35", title: "Clarify callout syntax for nested blocks" },
+        { id: sha("e52f8c0"), title: "obsidian-cli: document the search command" },
+        { id: sha("d1b7a35"), title: "Clarify callout syntax for nested blocks" },
       ],
       backups: [],
       example: true,
@@ -212,13 +239,13 @@ export function initialHistory(now: Date): HistoryEntry[] {
       id: "h2",
       when: daysAgoAt(now, 6),
       repo: "pbakaus/impeccable",
-      from: "5e0c2b8",
-      to: "a1d4e77",
+      from: sha("5e0c2b8"),
+      to: sha("a1d4e77"),
       changed: ["impeccable"],
       added: [],
       gone: [],
       moved: [],
-      commits: [{ id: "a1d4e77", title: "Add the harden command for edge cases" }],
+      commits: [{ id: sha("a1d4e77"), title: "Add the harden command for edge cases" }],
       backups: ["impeccable/reference/typography.md"],
       example: true,
     },
@@ -226,13 +253,13 @@ export function initialHistory(now: Date): HistoryEntry[] {
       id: "h1",
       when: daysAgoAt(now, 15),
       repo: "vercel-labs/agent-skills",
-      from: "88d01aa",
-      to: "2e8f1c4",
+      from: sha("88d01aa"),
+      to: sha("2e8f1c4"),
       changed: [],
       added: ["find-skills"],
       gone: [],
       moved: [],
-      commits: [{ id: "2e8f1c4", title: "find-skills: search skills.sh as well" }],
+      commits: [{ id: sha("2e8f1c4"), title: "find-skills: search skills.sh as well" }],
       backups: [],
       example: true,
     },
@@ -332,7 +359,7 @@ const sk = (name: string, category: string, description: string): UpstreamSkill 
 /** Repositories the mock can "fetch". */
 export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" | "have">> = {
   "mattpocock/skills": {
-    commit: "f01c9e3",
+    commit: sha("f01c9e3"),
     license: "MIT",
     rejected: [],
     skills: [
@@ -345,7 +372,7 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "anthropics/skills": {
-    commit: "3ab72d0",
+    commit: sha("3ab72d0"),
     license: "Apache-2.0",
     rejected: [{ name: "../escape", dir: "skills/escape", reason: "name is not a safe directory name" }],
     skills: [
@@ -358,7 +385,7 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "trailofbits/skills": {
-    commit: "b4410ea",
+    commit: sha("b4410ea"),
     license: "CC-BY-SA-4.0",
     rejected: [],
     skills: [
@@ -371,7 +398,7 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "vercel-labs/agent-skills": {
-    commit: "2e8f1c4",
+    commit: sha("2e8f1c4"),
     license: "MIT",
     rejected: [],
     skills: [
@@ -383,19 +410,19 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "Maybe404/ui-arsenal": {
-    commit: "9b07d31",
+    commit: sha("9b07d31"),
     license: "MIT",
     rejected: [],
     skills: [sk("ui-arsenal", "", "在前端 UI 任务里选择和获取成熟组件时使用。")],
   },
   "pbakaus/impeccable": {
-    commit: "a1d4e77",
+    commit: sha("a1d4e77"),
     license: "Apache-2.0",
     rejected: [],
     skills: [sk("impeccable", "", "Use when the user wants to design, redesign, critique or polish a UI.")],
   },
   "stablyai/orca": {
-    commit: "0f3b9d4",
+    commit: sha("0f3b9d4"),
     license: "MIT",
     rejected: [],
     skills: [
@@ -405,13 +432,13 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "Maybe404/skilldots": {
-    commit: "63555da",
+    commit: sha("63555da"),
     license: "MIT",
     rejected: [],
     skills: [sk("skilldots", "", "Manage the skills installed for AI agents on this machine with the `skd` CLI.")],
   },
   "kepano/obsidian-skills": {
-    commit: "e52f8c0",
+    commit: sha("e52f8c0"),
     license: "MIT",
     rejected: [],
     skills: [
