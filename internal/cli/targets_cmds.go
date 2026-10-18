@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -40,20 +41,25 @@ func targetsCmd() *cobra.Command {
 				// Active is false for a custom target skd does not use;
 				// Problem says why, and Approvable whether a person can
 				// approve it (skd targets trust).
-				Active     bool
+				Active bool
+				// Paused is an agent skills.toml lists in targets.disabled:
+				// skd links nothing there until it is resumed.
+				Paused     bool
 				Approvable bool   `json:",omitempty"`
 				Problem    string `json:",omitempty"`
 			}
 			var rows []row
 			for _, t := range c.reg.All() {
-				rows = append(rows, row{t.Name, t.Path, t.Mode, fsutil.Exists(t.Path) || fsutil.Exists(filepath.Dir(t.Path)), def[t.Name], t.Builtin, true, false, ""})
+				rows = append(rows, row{Name: t.Name, Path: t.Path, Mode: t.Mode, Present: fsutil.Exists(t.Path) || fsutil.Exists(filepath.Dir(t.Path)),
+					Default: def[t.Name], Builtin: t.Builtin, Active: true, Paused: slices.Contains(c.lib.Manifest.Targets.Disabled, t.Name)})
 			}
 			for _, w := range c.reg.Withheld() {
 				p := w.Real
 				if p == "" {
 					p = w.Path
 				}
-				rows = append(rows, row{Name: w.Name, Path: p, Mode: w.Mode, Default: def[w.Name], Approvable: w.Approvable, Problem: w.Problem})
+				rows = append(rows, row{Name: w.Name, Path: p, Mode: w.Mode, Default: def[w.Name], Paused: slices.Contains(c.lib.Manifest.Targets.Disabled, w.Name),
+					Approvable: w.Approvable, Problem: w.Problem})
 			}
 			if c.jsonOut(rows) {
 				return nil
@@ -77,6 +83,9 @@ func targetsCmd() *cobra.Command {
 				if r.Default {
 					d = accent(i18n.T("default"))
 				}
+				if r.Paused {
+					flag, d = dim("‖"), dim(i18n.T("paused"))
+				}
 				if !r.Active {
 					flag, d = warn("!"), warn(i18n.T("not used"))
 					notes = append(notes, i18n.Sprintf("%s custom target %s is not used: %s", warn("!"), txt(r.Name), txt(r.Problem)))
@@ -87,11 +96,101 @@ func targetsCmd() *cobra.Command {
 			for _, n := range notes {
 				c.printf("%s\n", n)
 			}
+			if len(c.lib.Manifest.Targets.Disabled) > 0 {
+				c.printf("%s\n", dim(i18n.T("a paused agent gets no links; its skills keep it selected (skd targets resume <agent>)")))
+			}
 			return nil
 		},
 	}
-	cmd.AddCommand(trustCmd(), untrustCmd())
+	cmd.AddCommand(trustCmd(), untrustCmd(), pauseCmd(), resumeCmd(), defaultTargetsCmd())
 	return cmd
+}
+
+// pausedNote is what a header adds about paused agents ("" when none).
+func pausedNote(paused []string) string {
+	if len(paused) == 0 {
+		return ""
+	}
+	return warn(i18n.Sprintf(" · paused: %s", strings.Join(txts(paused), ", ")))
+}
+
+func pauseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "pause <agent>...",
+		Short: i18n.T("Pause agents: unlink every skill from them, keeping which skills use them"),
+		Long: i18n.T("Pause agents: skd takes out the links it made in their skill directories and\n" +
+			"links nothing there until they are resumed. Every skill keeps the agents it\n" +
+			"was given, so `skd targets resume` puts back exactly what was there. The\n" +
+			"pause is kept in skills.toml (targets.disabled), so it reaches every machine\n" +
+			"that uses the library. Nothing is deleted: what skd did not make stays."),
+		Args: rangeArgs(1, 64),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			out, err := c.PauseAgents(args, true)
+			if err != nil {
+				return err
+			}
+			c.printf("%s %s\n", ok("✓"), i18n.Sprintf("paused %s", strings.Join(txts(args), ", ")))
+			printApply(c, out)
+			c.jsonOut(out)
+			return nil
+		},
+	}
+}
+
+func resumeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "resume <agent>...",
+		Short: i18n.T("Resume paused agents: link their skills again"),
+		Args:  rangeArgs(1, 64),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			for _, a := range args {
+				if !c.Paused(a) {
+					return i18n.Errorf("%s is not paused (see `skd targets`)", a)
+				}
+			}
+			out, err := c.PauseAgents(args, false)
+			if err != nil {
+				return err
+			}
+			c.printf("%s %s\n", ok("✓"), i18n.Sprintf("resumed %s", strings.Join(txts(args), ", ")))
+			printApply(c, out)
+			c.jsonOut(out)
+			return nil
+		},
+	}
+}
+
+func defaultTargetsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "default <agent>...",
+		Short: i18n.T("Set the default agents: those a skill without agents of its own is linked into"),
+		Long: i18n.T("Set targets.default of skills.toml: the agents a skill, pack or app without\n" +
+			"agents of its own is linked into. Skills given their own agents keep them.\n" +
+			"skd applies at once: skills leave the agents taken out of the list."),
+		Args: rangeArgs(1, 64),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			out, err := c.SetDefaultAgents(args)
+			if err != nil {
+				return err
+			}
+			c.printf("%s %s\n", ok("✓"), i18n.Sprintf("default agents: %s", strings.Join(txts(args), ", ")))
+			printApply(c, out)
+			c.jsonOut(out)
+			return nil
+		},
+	}
 }
 
 // personAtTerminal reports whether a person answers skd's questions:

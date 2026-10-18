@@ -215,6 +215,15 @@ func (m Model) upstreamState(compact bool) []seg {
 // syncState summarises whether the machine and the remote match the
 // library: links to apply, uncommitted work, unpushed commits.
 func (m Model) syncState() []seg {
+	out := m.linkState()
+	if len(m.snap.Paused) > 0 {
+		out = append(out, sg(" · ", m.theme.Muted), sg(i18n.Sprintf("‖ paused: %s", strings.Join(m.snap.Paused, ", ")), m.theme.Muted))
+	}
+	return out
+}
+
+// linkState is syncState without the paused agents.
+func (m Model) linkState() []seg {
 	t, s := m.theme, m.snap
 	var parts [][]seg
 	if s.Pending > 0 {

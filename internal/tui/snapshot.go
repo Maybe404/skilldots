@@ -32,6 +32,8 @@ type Snapshot struct {
 	Ahead   int  // commits not pushed (only meaningful when Tracked)
 
 	Defaults []string
+	// Paused are the agents skills.toml pauses (targets.disabled).
+	Paused []string
 	Agents   []targets.Target // agent directories present on this machine
 
 	Packs   []Pack
@@ -72,6 +74,9 @@ type Skill struct {
 	Missing        bool
 	Conflict       string   // set when another entry wants the same link name
 	Agents         []string // targets it is linked into (resolved)
+	// Selected is every agent it is given, paused or unknown ones too:
+	// what the agents picker starts from, so saving keeps them.
+	Selected []string
 	// ClaudeOff is set when Claude Code itself turned the skill off.
 	ClaudeOff bool
 }
@@ -93,7 +98,7 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 	lib, reg := ses.Lib, ses.Reg
 	m := lib.Manifest
 	s := &Snapshot{Root: root, Name: filepath.Base(root), Defaults: append([]string(nil), m.Targets.Default...),
-		Agents: reg.Present()}
+		Paused: append([]string(nil), m.Targets.Disabled...), Agents: reg.Present()}
 
 	ses.Log = func(l app.Level, w string) {
 		if l == app.Problem {
@@ -175,6 +180,7 @@ func toSkill(e engine.Entry) Skill {
 	for _, t := range e.Targets {
 		s.Agents = append(s.Agents, t.Name)
 	}
+	s.Selected = append([]string{}, e.TargetNames...)
 	return s
 }
 

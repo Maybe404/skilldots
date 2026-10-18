@@ -61,3 +61,33 @@ func TestAgentSuspensionPreservesSelectionsAndUnmanagedFiles(t *testing.T) {
 		t.Fatal("unknown target accepted")
 	}
 }
+
+// A paused agent skd no longer knows can still be resumed, and pausing
+// several agents is all or none.
+func TestPauseAgentsAllOrNoneAndResumeUnknown(t *testing.T) {
+	_, root := side(t, t.TempDir())
+	write(t, filepath.Join(root, "skills", "mine", "SKILL.md"), skillMD("mine"))
+	s, err := app.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PauseAgents([]string{"claude", "no-such-agent"}, true); err == nil {
+		t.Fatal("unknown agent accepted")
+	}
+	if s.Paused("claude") {
+		t.Fatal("half of a refused pause was kept")
+	}
+	s.Lib.Manifest.Targets.Disabled = []string{"gone-custom"}
+	if err = s.Lib.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = app.Open(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PauseAgents([]string{"gone-custom"}, false); err != nil {
+		t.Fatalf("resume of an unknown paused agent: %v", err)
+	}
+	if s.Paused("gone-custom") {
+		t.Fatal("still paused")
+	}
+}

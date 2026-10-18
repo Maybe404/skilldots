@@ -408,6 +408,12 @@ func (m Model) targetsView(rows []TargetRow) (tea.Model, tea.Cmd) {
 		case !r.Builtin:
 			detail = i18n.Sprintf("custom · %s", tildify(r.Path))
 		}
+		if r.Default {
+			detail = i18n.Sprintf("default · %s", detail)
+		}
+		if r.Paused {
+			detail = i18n.Sprintf("paused · %s", detail)
+		}
 		items = append(items, pickItem{label: r.Name, detail: detail, value: r.Name})
 	}
 	approve := listAction{key: "a", label: i18n.T("approve"), run: func(it pickItem) step {
@@ -460,8 +466,48 @@ func (m Model) targetsView(rows []TargetRow) (tea.Model, tea.Cmd) {
 		ov.noEnter = true
 		return step{next: ov}
 	}}
+	pause := listAction{key: "p", label: i18n.T("pause/resume"), run: func(it pickItem) step {
+		r := byName[it.value]
+		if !r.Paused && !r.Active {
+			return step{next: textOverlay(clean(r.Name), []string{i18n.T("Not in use: there is nothing to pause.")})}
+		}
+		name, paused := r.Name, !r.Paused
+		if !paused {
+			return step{job: &job{label: i18n.Sprintf("resuming %s", clean(name)), run: func(o Ops) result {
+				msg, err := o.PauseAgent(name, false)
+				return result{msg: msg, err: err}
+			}}}
+		}
+		return step{next: confirmOverlay(i18n.Sprintf("Pause %s", clean(name)), []string{
+			i18n.T("skd takes out the links it made there and links nothing until it is resumed."),
+			i18n.T("Every skill keeps it selected; p again puts the links back."),
+			i18n.T("The pause is kept in skills.toml, so it reaches every machine using the library."),
+		}, jobChoice("y", i18n.T("pause"), job{label: i18n.Sprintf("pausing %s", clean(name)), run: func(o Ops) result {
+			msg, err := o.PauseAgent(name, true)
+			return result{msg: msg, err: err}
+		}}))}
+	}}
+	toggleDefault := listAction{key: "D", label: i18n.T("default"), run: func(it pickItem) step {
+		r := byName[it.value]
+		if !r.Active && !r.Default {
+			return step{next: textOverlay(clean(r.Name), []string{i18n.T("Not in use: approve it first.")})}
+		}
+		var names []string
+		for _, d := range m.snap.Defaults {
+			if d != r.Name {
+				names = append(names, d)
+			}
+		}
+		if !r.Default {
+			names = append(names, r.Name)
+		}
+		return step{job: &job{label: i18n.T("setting the default agents"), run: func(o Ops) result {
+			msg, err := o.SetDefaultAgents(names)
+			return result{msg: msg, err: err}
+		}}}
+	}}
 	m.ov = listOverlay(i18n.T("Agent targets"), i18n.T("where skd links skills · a custom target of skills.toml is used once you approve it here (skd targets trust)"),
-		i18n.T("no targets"), items, approve)
+		i18n.T("no targets"), items, approve, pause, toggleDefault)
 	return m, nil
 }
 

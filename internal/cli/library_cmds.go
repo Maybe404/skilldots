@@ -201,7 +201,7 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 	}
 	home, _ := os.UserHomeDir()
 	c.printf("%s  %s\n", brand(), dim(strings.Replace(c.lib.Root, home, "~", 1)))
-	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(i18n.Sprintf("%d linked", linked))+dim(i18n.Sprintf(" · agents: %s", strings.Join(m.Targets.Default, ", "))))
+	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(i18n.Sprintf("%d linked", linked))+dim(i18n.Sprintf(" · agents: %s", strings.Join(m.Targets.Default, ", ")))+pausedNote(m.Targets.Disabled))
 	rec := c.RecordedOutdated()
 	if line := updatesLine(rec, time.Now()); line != "" {
 		c.printf("%s\n", line)

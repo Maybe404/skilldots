@@ -878,6 +878,9 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 	case s != nil:
 		sk := *s
 		cur, title = sk.Agents, i18n.Sprintf("Agents for %s", sk.LinkName)
+		if sk.Selected != nil {
+			cur = sk.Selected
+		}
 		run = func(o Ops, a []string) (string, error) { return o.SetTargets(&sk, "", a) }
 	case p != nil:
 		repo := p.Repo
@@ -897,12 +900,20 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 	var items []pickItem
 	seen := map[string]bool{}
 	for _, t := range m.snap.Agents {
-		items = append(items, pickItem{label: t.Name, detail: tildify(t.Path), value: t.Name, on: on[t.Name]})
+		detail := tildify(t.Path)
+		if slices.Contains(m.snap.Paused, t.Name) {
+			detail = i18n.Sprintf("paused · %s", detail)
+		}
+		items = append(items, pickItem{label: t.Name, detail: detail, value: t.Name, on: on[t.Name]})
 		seen[t.Name] = true
 	}
 	for _, a := range cur {
 		if !seen[a] {
-			items = append(items, pickItem{label: a, detail: i18n.T("not found on this machine"), value: a, on: true})
+			detail := i18n.T("not found on this machine")
+			if slices.Contains(m.snap.Paused, a) {
+				detail = i18n.T("paused")
+			}
+			items = append(items, pickItem{label: a, detail: detail, value: a, on: true})
 		}
 	}
 	if len(items) == 0 {

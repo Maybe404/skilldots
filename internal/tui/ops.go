@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 
@@ -81,6 +82,10 @@ type Ops interface {
 	// they typed to confirm one whose directory is not named skills
 	// (skd targets trust).
 	TrustTarget(t TargetRow, typed string) (string, error)
+	// PauseAgent pauses or resumes an agent (skd targets pause / resume).
+	PauseAgent(name string, paused bool) (string, error)
+	// SetDefaultAgents sets targets.default (skd targets default).
+	SetDefaultAgents(names []string) (string, error)
 }
 
 // TargetRow is one agent target. A custom target not in use has Active
@@ -91,6 +96,9 @@ type TargetRow struct {
 	// use); Raw is the path as skills.toml has it.
 	Path, Raw, Mode string
 	Builtin, Active bool
+	// Paused: skills.toml pauses it (targets.disabled). Default: it is
+	// one of targets.default.
+	Paused, Default bool
 	Approvable      bool
 	Problem         string
 }
@@ -607,12 +615,41 @@ func (o *libOps) Targets() ([]TargetRow, error) {
 		if c, ok := s.Lib.Manifest.Targets.Custom[t.Name]; ok && !t.Builtin {
 			raw = c.Path
 		}
-		out = append(out, TargetRow{Name: t.Name, Path: t.Path, Raw: raw, Mode: t.Mode, Builtin: t.Builtin, Active: true})
+		out = append(out, TargetRow{Name: t.Name, Path: t.Path, Raw: raw, Mode: t.Mode, Builtin: t.Builtin, Active: true,
+			Paused: s.Paused(t.Name), Default: slices.Contains(s.Lib.Manifest.Targets.Default, t.Name)})
 	}
 	for _, w := range s.Reg.Withheld() {
-		out = append(out, TargetRow{Name: w.Name, Path: w.Real, Raw: w.Path, Mode: w.Mode, Approvable: w.Approvable, Problem: w.Problem})
+		out = append(out, TargetRow{Name: w.Name, Path: w.Real, Raw: w.Path, Mode: w.Mode, Approvable: w.Approvable, Problem: w.Problem,
+			Paused: s.Paused(w.Name), Default: slices.Contains(s.Lib.Manifest.Targets.Default, w.Name)})
 	}
 	return out, nil
+}
+
+func (o *libOps) PauseAgent(name string, paused bool) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	ap, err := s.PauseAgents([]string{name}, paused)
+	if err != nil {
+		return "", err
+	}
+	if paused {
+		return withSummary(i18n.Sprintf("paused %s", name), ap), nil
+	}
+	return withSummary(i18n.Sprintf("resumed %s", name), ap), nil
+}
+
+func (o *libOps) SetDefaultAgents(names []string) (string, error) {
+	s, err := o.open()
+	if err != nil {
+		return "", err
+	}
+	ap, err := s.SetDefaultAgents(names)
+	if err != nil {
+		return "", err
+	}
+	return withSummary(i18n.Sprintf("default agents: %s", joinOr(names, "none")), ap), nil
 }
 
 func (o *libOps) TrustTarget(t TargetRow, typed string) (string, error) {

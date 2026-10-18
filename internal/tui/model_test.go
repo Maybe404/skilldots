@@ -220,6 +220,16 @@ func (f *fakeOps) Targets() ([]TargetRow, error) {
 	f.rec("targets-list")
 	return append([]TargetRow{}, f.targets...), nil
 }
+func (f *fakeOps) PauseAgent(name string, paused bool) (string, error) {
+	f.rec(fmt.Sprintf("pause %s %v", name, paused))
+	return "paused", nil
+}
+
+func (f *fakeOps) SetDefaultAgents(names []string) (string, error) {
+	f.rec("default " + strings.Join(names, ","))
+	return "default", nil
+}
+
 func (f *fakeOps) TrustTarget(r TargetRow, typed string) (string, error) {
 	f.rec("trust " + r.Name + " " + r.Path + " " + r.Mode + " typed=" + typed)
 	return "ok", nil

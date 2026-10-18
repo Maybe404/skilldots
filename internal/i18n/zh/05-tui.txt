@@ -675,8 +675,8 @@
 @ trash: restore what skd set aside, or empty it
 = 回收站：恢复 skd 挪开的东西，或清空它
 
-@ agent targets: approve a custom target of skills.toml (skd targets trust)
-= agent target：批准 skills.toml 里的自定义 target（skd targets trust）
+@ agent targets: p pauses or resumes one, D sets the defaults, a approves a custom target
+= agent target：p 暂停或恢复，D 设为默认，a 批准自定义 target
 
 @ back up: commit and push the library
 = 备份：提交并推送库
@@ -1047,3 +1047,45 @@
 
 @ next
 = 下一步
+
+@ default · %s
+= 默认 · %s
+
+@ paused · %s
+= 已暂停 · %s
+
+@ pause/resume
+= 暂停/恢复
+
+@ Not in use: there is nothing to pause.
+= 未启用：没有可暂停的。
+
+@ resuming %s
+= 正在恢复 %s
+
+@ Pause %s
+= 暂停 %s
+
+@ skd takes out the links it made there and links nothing until it is resumed.
+= skd 撤掉自己在那里建的链接，恢复之前不再往那里链接。
+
+@ Every skill keeps it selected; p again puts the links back.
+= 每个 skill 仍保留对它的选择；再按 p 恢复链接。
+
+@ The pause is kept in skills.toml, so it reaches every machine using the library.
+= 暂停状态记在 skills.toml 里，会同步到使用这个库的每台机器。
+
+@ pause
+= 暂停
+
+@ pausing %s
+= 正在暂停 %s
+
+@ Not in use: approve it first.
+= 未启用：请先批准它。
+
+@ setting the default agents
+= 正在设置默认 agent
+
+@ ‖ paused: %s
+= ‖ 已暂停：%s

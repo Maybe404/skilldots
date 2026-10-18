@@ -38,6 +38,7 @@ skilldots（命令 `skd`）：声明式管理本机所有 agent 工具的 skills
 ```toml
 [targets]
 default = ["agents", "claude"]        # 默认启用到哪些 agent
+disabled = []                         # 暂停的 agent：不建任何链接，各 skill 对它的选择保留
 
 [targets.custom.myagent]              # 自定义 target
 path = "~/.myagent/skills"
@@ -84,7 +85,7 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd list [pack] [--all] [--flat] [--agent x]` | 顶层按 pack 折叠一行一仓库；展开、平铺、按 agent 视角 |
 | `skd apply [--dry-run]` | 使电脑与清单一致：建链接、删多余链接（只删能确认是 skd 放的，见“不删除”） |
 | `skd enable <skill> [--agent a,b]` / `skd disable <skill> [--agent a,b]` | 改 targets 并 apply；不带 `--agent` 用默认集合 |
-| `skd remove <skill\|pack>` | 从所有 agent 目录移除链接/拷贝，**库里保留**，清单里 targets 置空 |
+| `skd remove <skill>` | 从所有 agent 取消链接，并把 skill 目录移入库的回收站：vendor 的取消选择、离开 `vendor/`（pack 的最后一个 skill 连带去掉 pack）；自己的（`skills/`、`private/`）整个目录进回收站，来源记录写在本机配置目录的 `local-trash.json`（不进库，克隆来的库的回收站无法借此往 `skills/` 里放东西），`skd trash restore` 可放回；app 的只取消链接 |
 | `skd purge <skill\|pack>` | 从清单、锁、vendor 彻底清除，并移除所有 agent 目录里的链接/拷贝；先列后删，`--yes` 跳过确认 |
 | `skd update [pack] [--yes] [--commit]` | 交互终端且无 `--yes`/`--json` 时先确认：对给定的 pack（不给为全部）跑一次与 `outdated` 相同的检查，逐包列出 skill 级变化（changed / 将加入 / 上游新增 / 上游删除 / moved），默认全选，可逐个取消，回车只更新勾选的包，ctrl+c 取消；未勾选的包 vendor、锁、链接都不动。不给 pack 时只列 `HasUpdates` 的包（只有 moved 或只有新 commit 的不列），点名的 pack 只要 commit 变了或有 moved 也列。确认后 `update` 重新 fetch，确认与执行之间上游再变的以执行时为准。点名的 pack 上游没有任何变化时，先说明再问“仍然更新？”（与仪表盘 `u` 对等：重新 vendor 缺失的 skill 并补链接）；不点名时提示 `skd apply` 补链接、`skd update <pack>` 强制重来。非交互、`--yes`、`--json` 行为不变（agent 路径）；“交互”要求 stdin 和 stdout 都是终端（所有命令统一），`skd update | cat` 这类 stdout 被管道接走的调用按非交互处理，不会弹出看不见的确认而挂住。之后：按 pack fetch；报告：选中的改动（可看 diff）、未变、上游新增（提示可加）、上游删除（保留本地并标记）。`--commit` 自动提交推送。“上游新增”= 未选中、且不在锁的 `upstream` 名单（上次 `update` 记入，从未 update 的则是 `add` 订阅时）里的 skill（旧锁没有名单时以更新前的缓存克隆为准，两者都没有则不报）；`--json` 的 `packs[].UpstreamNew` 同此含义，仪表盘 `u` 用同一份计算 |
 | `skd history [pack] [--json] [-n N]` | 更新记录：每次 update 成功后，对 commit 变了或 skill 有变化的每个 pack 追加一条到库根的 `skills.history.jsonl`（不在 gitignore 里，`--commit`/`sync` 一并提交推送，换机器 clone 后可见）：时间（UTC）、pack、旧→新 commit、changed / added / moved / gone / dropped / new（上游新增未选）、上游在这些 skill 目录下的提交标题（`git log --no-merges 旧..新 -- 目录`，gone 的按 `**/<名>/**`，最多 20 条，超过标 `moreCommits`）。缓存克隆是浅克隆：旧 commit 不是新 commit 的祖先时先 `fetch --deepen=200`，仍不可达（上游改写了历史）标 `commitsUnknown`。上游提交标题、pack 名和 skill 名在写入时去掉控制字符（ESC、BEL、C1、改变文字方向的 bidi 控制符；制表和换行变空格）并截断（标题与名字各 200 字符），读取时再清洗一遍（旧版本写的、git 合并进来的行），所以 CLI、`--json`、仪表盘都不会把上游的控制序列写到终端。追加前若文件末尾没有换行先补一个，避免和手工编辑留下的最后一行粘连。读记录只读库内文件，无网可用；写入的每行不超过 256 KiB（读端上限的四分之一）：超长时反复把最长的 skill 名单砍掉后一半，砍掉的个数记在 `omitted`（CLI 与仪表盘显示为 “not recorded N more skill names”），名单都空了再砍提交标题（标 `moreCommits`），所以写下的每一行都能读回。读不懂的行（合并冲突残留）和超过 1 MiB 的行跳过并计入 `skipped` 告警，不会让整个 history 失败；按时间倒序（两台机器的记录合并后可能乱序），同一秒内的按文件中后写的在前。update 保存锁文件之后 apply（链接）失败时仍然记录，并在 `applyError` 里写明（vendor 与锁已经到新 commit，更新已经发生，`skd apply` 补完链接；不记的话这次变化就从历史里消失了）；之后一次 apply 成功（含无事可做、以及 enable/disable 等内部调用的 apply）且某个 pack 的 skill 全部链上（计划里没有该 pack 的 skip：挡路、被改动、重名、源目录缺失、未知 target），就把该 pack 记录里的 `applyError` 去掉；还有 skill 被跳过的 pack 保留（只改这些行，行内其他字段、包括不认识的字段保留，其余行逐字节不变；原子替换。从读文件到替换全程持有 history 锁：缓存目录里按库的真实路径命名的文件锁（flock / LockFileEx）加进程内锁，追加记录同样持锁，所以另一个 skd 进程或协程同时追加的记录会等替换完成再写入新文件，不会随旧文件丢失；选择加锁而不是追加 settled 记录由读端折叠，是因为旧版本 skd 会把不认识的 settled 行当坏行告警），历史不再提示“link failed”；锁文件保存失败时不记录（锁仍是旧 commit，下次 update 从旧 commit 重新比较并记录）。默认显示 20 条，`-n 0` 全部。仪表盘 `h` |
@@ -94,7 +95,9 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 | `skd new <名> [--private]` | 在 skills/ 或 private/ 生成模板并链接到默认 agent；名字按 skill 名规则校验（见关键规则），不合规或目录已存在则报错 |
 | `skd scan` | 扫描本机所有已知 agent 目录，列出每个 skill：来源、链接/拷贝、是否受管、重复、断链 |
 | `skd adopt` | 把 scan 到的未受管 skill 收编：能识别来源的（npx `.skill-lock.json`、git remote、App 路径）自动填，否则询问。提案按名字排序；断链提案在执行时重新检查，路径已变成文件、目录或有效链接时不动并告警 |
-| `skd targets [trust <名> \| untrust <名>]` | 列出内置与自定义 target、是否存在、是否生效（不生效的自定义 target 带原因；`--json` 的 `Active`、`Approvable`、`Problem`）；`trust` 由人在终端批准自定义 target，`untrust` 撤销（见上文“自定义 target 先由人批准”） |
+| `skd targets [trust <名> \| untrust <名>]` | 列出内置与自定义 target、是否存在、是否生效、是否暂停（不生效的自定义 target 带原因；`--json` 的 `Active`、`Paused`、`Approvable`、`Problem`）；`trust` 由人在终端批准自定义 target，`untrust` 撤销（见上文“自定义 target 先由人批准”） |
+| `skd targets default <agent>...` | 设置 `targets.default` 并 apply。仪表盘 `T` 里按 `D` 切换 |
+| `skd targets pause <agent>...` / `resume <agent>...` | 暂停：名字记入 `skills.toml` 的 `targets.disabled`（随库同步到每台机器），apply 只撤 skd 自己建的链接，之后不再链接；各 skill 的 targets 原样保留（resolve 时跳过，`TargetNames` 仍含它，enable/disable/仪表盘 `e` 编辑时不会丢），恢复后原样链回。多个名字全部合法才生效；已暂停但现已不认识的名字（自定义 target 被删）也能恢复。`skd list` 概览、问答菜单、仪表盘状态栏显示“已暂停：…”。仪表盘 `T` 里按 `p` 暂停/恢复。旧版 skd 不认识该键，会照常链接 |
 | `skd doctor` | 体检：Windows 符号链接权限、target 不存在、锁与清单不一致、断链 |
 
 所有命令 `--json`（任何语言下输出都是英文，见下文“语言”）；破坏性命令先列清单再确认。`--lang en|zh|auto` 选语言。`--theme light|dark|auto`（默认 auto，也可用环境变量 `SKILLDOTS_THEME`，再次是 `skd config set theme`）选配色，`NO_COLOR` 关闭颜色。

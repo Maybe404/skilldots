@@ -1098,3 +1098,39 @@
 
 @ invalid argument %s for %s flag: %s
 = %[2]s 选项的参数 %[1]s 无效：%[3]s
+
+@ paused
+= 已暂停
+
+@ a paused agent gets no links; its skills keep it selected (skd targets resume <agent>)
+= 已暂停的 agent 不会有任何链接；各 skill 仍保留对它的选择（skd targets resume <agent> 恢复）
+
+@  · paused: %s
+=  · 已暂停：%s
+
+@ Pause agents: unlink every skill from them, keeping which skills use them
+= 暂停 agent：撤掉它里面的所有 skill 链接，但保留各 skill 对它的选择
+
+@ Pause agents: skd takes out the links it made in their skill directories and\nlinks nothing there until they are resumed. Every skill keeps the agents it\nwas given, so `skd targets resume` puts back exactly what was there. The\npause is kept in skills.toml (targets.disabled), so it reaches every machine\nthat uses the library. Nothing is deleted: what skd did not make stays.
+= 暂停 agent：skd 撤掉自己在它的 skill 目录里建的链接，恢复之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样恢复。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
+
+@ paused %s
+= 已暂停 %s
+
+@ Resume paused agents: link their skills again
+= 恢复已暂停的 agent：重新链接它的 skill
+
+@ %s is not paused (see `skd targets`)
+= %s 没有被暂停（见 `skd targets`）
+
+@ resumed %s
+= 已恢复 %s
+
+@ Set the default agents: those a skill without agents of its own is linked into
+= 设置默认 agent：没有单独指定 agent 的 skill 会链接到这些 agent
+
+@ Set targets.default of skills.toml: the agents a skill, pack or app without\nagents of its own is linked into. Skills given their own agents keep them.\nskd applies at once: skills leave the agents taken out of the list.
+= 设置 skills.toml 的 targets.default：没有单独指定 agent 的 skill、pack 或 app\n会链接到这些 agent。单独指定过 agent 的 skill 保持不变。\nskd 会立即应用：从列表里去掉的 agent 中的 skill 链接会被撤掉。
+
+@ default agents: %s
+= 默认 agent：%s

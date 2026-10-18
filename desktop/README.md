@@ -55,5 +55,5 @@ artifacts inside a dedicated test directory. Each run needs a fresh HOME.
 The native toggle/editor path has been verified on macOS. Folder pickers,
 Finder integration, repository cloning/updating and all theme/window-size
 combinations still need broader interactive acceptance testing. History
-backup details and upstream commit lists are not yet populated. Some Go
+backup details are not yet populated. Some Go
 error details remain English. This is an integration build, not a release.
