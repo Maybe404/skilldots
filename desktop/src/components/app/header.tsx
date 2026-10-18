@@ -89,7 +89,7 @@ export function Header() {
         </Highlight>
       </nav>
       <span className="flex-1" />
-      <StyleSwitch className="h-8 shrink-0 max-[1060px]:hidden" itemClassName="h-[26px]" />
+      <StyleSwitch className="h-8 shrink-0 max-[1069px]:hidden" itemClassName="h-[26px]" />
       <InputGroup variant="search" className="w-[246px] min-w-[132px] shrink font-body fs-body">
         <InputGroupAddon className="pl-3">
           <Search aria-hidden className="size-3.5" strokeWidth={1.8} />
@@ -124,9 +124,9 @@ export function Header() {
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
-      <Button size="pill" className="shrink-0 max-[900px]:px-[9px]" aria-label={t("add")} onClick={() => openDialog({ kind: "add" })}>
+      <Button size="pill" className="shrink-0 max-[901px]:px-[9px]" aria-label={t("add")} onClick={() => openDialog({ kind: "add" })}>
         <Plus aria-hidden className="size-3.5" strokeWidth={2.4} />
-        <span className="max-[900px]:sr-only">{t("add")}</span>
+        <span className="max-[901px]:sr-only">{t("add")}</span>
       </Button>
     </header>
   )
