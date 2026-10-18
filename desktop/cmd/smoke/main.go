@@ -76,7 +76,9 @@ func main() {
      const plan = await invoke("plan");
      if (plan.length) throw new Error("links did not settle: "+JSON.stringify(plan));
      ` + titleBarCheck + `
-     return {ok:true,platform:window.mygo.platform,font:getComputedStyle(document.body).fontFamily,pingFang:document.fonts.check('16px "PingFang SC"'),blur:CSS.supports("backdrop-filter","blur(24px)"),titleBar,text:document.body.innerText};
+     const titleBar = await checkBar("start");
+     ` + titleBarSwitches + `
+     return {ok:true,platform:window.mygo.platform,font:getComputedStyle(document.body).fontFamily,pingFang:document.fonts.check('16px "PingFang SC"'),blur:CSS.supports("backdrop-filter","blur(24px)"),titleBar,switches,text:document.body.innerText};
    `)
 			report := map[string]any{"result": result}
 			if err != nil {
@@ -108,30 +110,85 @@ func main() {
 	}
 }
 
-// titleBarCheck (JavaScript) checks that the top bar is the window's title
-// bar: mygo reports the room of the traffic lights, the brand starts right of
-// them, the bar drags the window while its controls do not, and the controls
-// share the traffic lights' centre line. It leaves the numbers in titleBar.
+// titleBarCheck (JavaScript) defines checkBar(what), which checks that the top
+// bar is the window's title bar: mygo reports the room of the traffic lights,
+// the brand starts right of them, the bar drags the window while its controls
+// do not, and the controls share the traffic lights' centre line. It leaves
+// the numbers in the object it returns.
+//
+// It measures only a settled bar. After a reload, a style, page or language
+// switch the layout is not final yet (the old document, fonts still loading,
+// the highlight thumb springing), so it samples the bar's geometry every 50ms
+// and takes it when it has not changed for 300ms and the fonts are loaded.
+// firstNavMid (the first sample) and settleMs show how far off it was before.
 const titleBarCheck = `
-     const titleBar = (() => {
+     const checkBar = async what => {
+       const wait = ms => new Promise(r => setTimeout(r, ms));
+       const box = el => el.getBoundingClientRect();
+       const mid = el => { const r = box(el); return r.top + r.height / 2; };
+       const t0 = performance.now();
+       // window.__smokeStale is set just before a reload: the old document must be gone first.
+       while (window.__smokeStale || !document.querySelector("header nav")) {
+         if (performance.now() - t0 > 15000) throw new Error(what + ": no top bar: " + document.body.innerText);
+         await wait(50);
+       }
+       const header = document.querySelector("header");
+       const nav = header.querySelector("nav"), add = [...header.querySelectorAll("button")].at(-1), search = header.querySelector("input");
+       const geometry = () => [header, nav, add, search].map(el => { const r = box(el); return [r.top, r.height].map(n => n.toFixed(2)).join(","); }).join("|") + "|" + document.fonts.status;
+       const first = mid(nav);
+       const series = [];
+       let key = geometry(), since = performance.now();
+       for (;;) {
+         await wait(50);
+         const now = geometry();
+         if (now !== key) { key = now; since = performance.now(); series.push([Math.round(since - t0), mid(nav)]); }
+         if (performance.now() - since >= 300 && document.fonts.status === "loaded") break;
+         if (performance.now() - t0 > 8000) throw new Error(what + ": the top bar never settled: " + JSON.stringify(series));
+       }
        const root = getComputedStyle(document.documentElement);
        const inset = parseFloat(root.getPropertyValue("--mygo-titlebar-inset-left")) || 0;
        const height = parseFloat(root.getPropertyValue("--mygo-titlebar-height")) || 0;
-       const header = document.querySelector("header");
        const region = el => getComputedStyle(el).getPropertyValue("--app-region").trim();
-       const box = el => el.getBoundingClientRect();
-       const mid = el => { const r = box(el); return r.top + r.height / 2; };
-       const nav = header.querySelector("nav"), add = [...header.querySelectorAll("button")].at(-1);
-       return {inset, height, fullScreen: inset === 0, brandLeft: box(header.firstElementChild).left, paddingLeft: getComputedStyle(header).paddingLeft,
+       const titleBar = {what, style: document.documentElement.dataset.style, inset, height, fullScreen: inset === 0, brandLeft: box(header.firstElementChild).left, paddingLeft: getComputedStyle(header).paddingLeft,
          headerRegion: region(header), navRegion: region(nav), searchRegion: region(header.querySelector("[data-slot=input-group]")),
-         lightsMid: height / 2, navMid: mid(nav), addMid: mid(add), searchMid: mid(header.querySelector("input"))};
-     })();
-     if (!titleBar.fullScreen) {
-       if (titleBar.inset < 40 || titleBar.height < 30) throw new Error("no room reported for the traffic lights: " + JSON.stringify(titleBar));
-       if (titleBar.brandLeft < titleBar.inset + 8) throw new Error("the brand sits under the traffic lights: " + JSON.stringify(titleBar));
-       for (const k of ["navMid", "addMid", "searchMid"]) if (Math.abs(titleBar[k] - titleBar.lightsMid) > 1.5) throw new Error(k + " is off the traffic lights' centre line: " + JSON.stringify(titleBar));
+         lightsMid: height / 2, navMid: mid(nav), addMid: mid(add), searchMid: mid(search), firstNavMid: first, settleMs: Math.round(since - t0)};
+       if (!titleBar.fullScreen) {
+         if (titleBar.inset < 40 || titleBar.height < 30) throw new Error(what + ": no room reported for the traffic lights: " + JSON.stringify(titleBar));
+         if (titleBar.brandLeft < titleBar.inset + 8) throw new Error(what + ": the brand sits under the traffic lights: " + JSON.stringify(titleBar));
+         for (const k of ["navMid", "addMid", "searchMid"]) if (Math.abs(titleBar[k] - titleBar.lightsMid) > 1) throw new Error(what + ": " + k + " is off the traffic lights' centre line: " + JSON.stringify(titleBar));
+       }
+       if (titleBar.headerRegion !== "drag" || titleBar.navRegion !== "no-drag" || titleBar.searchRegion !== "no-drag") throw new Error(what + ": drag regions: " + JSON.stringify(titleBar));
+       return titleBar;
+     };
+`
+
+// titleBarSwitches (JavaScript) switches the style, the pages and the
+// language through the interface, in the window, and checks the bar after
+// each switch (see titleBarCheck). It leaves the style, language and page it
+// started in, and the checks' numbers in switches.
+const titleBarSwitches = `
+     const switches = [];
+     const pause = ms => new Promise(r => setTimeout(r, ms));
+     const headerButton = name => [...document.querySelectorAll("header button, header [role=radio]")].find(b => b.textContent.trim() === name);
+     const press = name => async () => { const b = headerButton(name); if (!b) throw new Error("no button " + name + " in the top bar"); b.click(); };
+     const pickLanguage = label => async () => {
+       document.querySelector("button[aria-label='语言'], button[aria-label='Language']").click();
+       await pause(300);
+       [...document.querySelectorAll("[role=option]")].find(o => o.textContent.trim() === label).click();
+     };
+     const startStyle = document.documentElement.dataset.style === "doodle" ? "涂鸦" : "简洁";
+     const barSteps = [
+       ["style: doodle", press("涂鸦")], ["style: clean", press("简洁")], ["style: doodle again", press("涂鸦")], ["style: clean again", press("简洁")],
+       ["page: sources", press("来源")], ["page: agents", press("Agent")], ["page: skills", press("Skill")], ["page: settings", press("设置")],
+       ["language: en", pickLanguage("English")],
+       ["en style: doodle", press("Doodle")], ["en style: clean", press("Clean")], ["en page: sources", press("Sources")], ["en page: skills", press("Skills")], ["en page: settings", press("Settings")],
+       ["language: zh", pickLanguage("简体中文")], ["zh page: skills", press("Skill")], ["restore style", press(startStyle)],
+     ];
+     for (const [what, act] of barSteps) {
+       await act();
+       const m = await checkBar(what);
+       switches.push({what, style: m.style, navMid: m.navMid, firstNavMid: m.firstNavMid, settleMs: m.settleMs});
      }
-     if (titleBar.headerRegion !== "drag" || titleBar.navRegion !== "no-drag" || titleBar.searchRegion !== "no-drag") throw new Error("drag regions: " + JSON.stringify(titleBar));
 `
 
 // nativeShots captures the whole window (traffic lights included) in both
@@ -174,13 +231,8 @@ func nativeShots(win *mygo.Window, dir string) error {
 		}
 		return fmt.Errorf("no screenshot for %s (%s) within 30s", name, rect)
 	}
-	measure := func() (any, error) {
-		return win.Page().Eval(`
-     const delay = ms => new Promise(r => setTimeout(r, ms));
-     for (let i = 0; i < 100 && !document.querySelector("header nav"); i++) await delay(100);
-     await delay(600);
-     ` + titleBarCheck + `
-     return titleBar;`)
+	measure := func(name string) (any, error) {
+		return win.Page().Eval(titleBarCheck + `return await checkBar(` + fmt.Sprintf("%q", name) + `);`)
 	}
 	metrics := map[string]any{}
 	// A screenshot that cannot be taken (a locked screen, no permission) is
@@ -213,26 +265,28 @@ func nativeShots(win *mygo.Window, dir string) error {
 	for _, st := range states {
 		if _, err := win.Page().Eval(fmt.Sprintf(`localStorage.setItem("skilldots.desktop.style", %q);
      await window.mygo.call("Service.Invoke", "setConfig", [{lang: %q}]);
+     window.__smokeStale = true;
      setTimeout(() => location.reload(), 50);
      return true;`, st.style, st.lang)); err != nil {
 			return err
 		}
 		time.Sleep(1500 * time.Millisecond)
-		if st.js == "" {
-			m, err := measure()
-			if err != nil {
+		if st.js != "" {
+			// The state's own steps need the new document up.
+			if _, err := win.Page().Eval(`for (let i = 0; i < 150 && (window.__smokeStale || !document.querySelector("header nav")); i++) await new Promise(r => setTimeout(r, 100)); return true;`); err != nil {
 				return fmt.Errorf("%s: %w", st.name, err)
 			}
-			metrics[st.name] = m
-		} else if _, err := win.Page().Eval(`for (let i = 0; i < 100 && !document.querySelector("header nav"); i++) await new Promise(r => setTimeout(r, 100)); await new Promise(r => setTimeout(r, 600)); return true;`); err != nil {
-			return fmt.Errorf("%s: %w", st.name, err)
-		}
-		if st.js != "" {
 			if _, err := win.Page().Eval(st.js); err != nil {
 				return fmt.Errorf("%s: %w", st.name, err)
 			}
 			time.Sleep(900 * time.Millisecond)
 		}
+		// Every state's bar is checked once it has settled, whatever the state did to the page.
+		m, err := measure(st.name)
+		if err != nil {
+			return fmt.Errorf("%s: %w", st.name, err)
+		}
+		metrics[st.name] = m
 		shot(st.name)
 	}
 	// A double click on the bar does what the system setting says (zoom by default).
@@ -251,7 +305,7 @@ func nativeShots(win *mygo.Window, dir string) error {
 	win.SetAlwaysOnTop(false)
 	win.SetFullScreen(true)
 	time.Sleep(2500 * time.Millisecond)
-	m, err := measure()
+	m, err := measure("native-fullscreen")
 	if err != nil {
 		return fmt.Errorf("full screen: %w", err)
 	}
