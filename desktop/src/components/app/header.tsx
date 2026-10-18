@@ -84,6 +84,8 @@ export function Header() {
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
+              // Handled here: the Skill page's window-level Esc (which reverts pending changes) must not also run.
+              e.preventDefault()
               setQuery("")
               ;(e.target as HTMLInputElement).blur()
             } else if (e.key === "ArrowDown" || e.key === "Enter") {
