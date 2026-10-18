@@ -418,7 +418,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go()
   }, [])
 
+  // While applying, the snapshot being written is the truth: edits would only disagree with it.
   const togglePending = React.useCallback((skill: Skill, agent: string) => {
+    if (applyingRef.current) return
     setPending((p) => togglePendingCell(p, skill, agent))
   }, [])
 
@@ -467,7 +469,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [pending, skills, operation, runTask, reload, t])
 
-  const revertPending = React.useCallback(() => setPending({}), [])
+  const revertPending = React.useCallback(() => {
+    if (applyingRef.current) return
+    setPending({})
+  }, [])
 
   // Pending changes live only in this window: ask before it closes.
   React.useEffect(() => {

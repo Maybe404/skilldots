@@ -25,7 +25,7 @@ function isTyping(el: Element | null) {
 
 export function SkillsPage() {
   const app = useApp()
-  const { t, skills, updatable, filter, setFilter, query, setQuery, grouped, setGrouped, agentFocus, setAgentFocus, skillView, setSkillView, selected, select, openDetail, pending, pendingCount, togglePending, applyPending, revertPending, detail, dialog, paletteOpen } = app
+  const { t, skills, updatable, filter, setFilter, query, setQuery, grouped, setGrouped, agentFocus, setAgentFocus, skillView, setSkillView, selected, select, openDetail, pending, pendingCount, applying, togglePending, applyPending, revertPending, detail, dialog, paletteOpen } = app
   const list = useSkillList()
   const { order, columns } = list
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -100,7 +100,7 @@ export function SkillsPage() {
         setSkillView(skillView === "wire" ? "table" : "wire")
       } else if (e.key === "Escape") {
         if (agentFocus) setAgentFocus(null)
-        else if (pendingCount) {
+        else if (pendingCount && !applying) {
           revertPending()
           toast(t("revertedN", { n: pendingCount }))
         }
@@ -108,7 +108,7 @@ export function SkillsPage() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [order, selected, columns, detail, dialog, paletteOpen, pendingCount, applyPending, openDetail, togglePending, moveTo, skillView, setSkillView, agentFocus, setAgentFocus, revertPending, t])
+  }, [order, selected, columns, detail, dialog, paletteOpen, pendingCount, applyPending, openDetail, togglePending, moveTo, skillView, setSkillView, agentFocus, setAgentFocus, revertPending, applying, t])
 
   const filters: [SkillFilter, string][] = [
     ["all", t("filterAll")],
