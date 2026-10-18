@@ -105,7 +105,7 @@ function SkillLinks({ list }: { list: Skill[] }) {
           <Button
             variant="quiet"
             size="inline"
-            className="inline rounded-seg whitespace-normal no-underline hover:underline"
+            className="inline rounded-seg font-mono whitespace-normal no-underline hover:underline"
             onClick={() => {
               navigate("skills")
               openDetail(s.ref.key)

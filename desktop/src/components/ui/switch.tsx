@@ -15,6 +15,7 @@ function Switch({ className, ...props }: SwitchPrimitiveProps) {
   const reduce = useReducedMotion()
   return (
     <SwitchPrimitive
+      nativeButton
       className={cn(
         "peer relative flex h-5 w-[34px] shrink-0 items-center justify-start rounded-[10px] px-0.5 transition-colors after:absolute after:-inset-x-2 after:-inset-y-2 data-checked:justify-end data-checked:bg-hue data-unchecked:bg-ln data-disabled:cursor-not-allowed data-disabled:opacity-45",
         className,

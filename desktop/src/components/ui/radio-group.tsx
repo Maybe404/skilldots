@@ -21,6 +21,7 @@ function RadioGroup({ className, ...props }: RadioGroupProps) {
 function RadioGroupItem({ className, ...props }: RadioProps) {
   return (
     <RadioPrimitive
+      nativeButton
       className={cn(
         "peer relative flex aspect-square size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] border-ln transition-colors after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50 data-checked:border-hue data-checked:bg-hue",
         className,

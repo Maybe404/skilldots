@@ -87,6 +87,8 @@ type RadioProps = Omit<
 
 function Radio({
   value: valueProps,
+  // skilldots: passed on to Base UI (upstream leaves it on the motion button).
+  nativeButton,
   disabled,
   required,
   ...props
@@ -102,6 +104,7 @@ function Radio({
     <RadioProvider value={{ isChecked, setIsChecked }}>
       <RadioPrimitive.Root
         value={valueProps}
+        nativeButton={nativeButton}
         disabled={disabled}
         required={required}
         render={

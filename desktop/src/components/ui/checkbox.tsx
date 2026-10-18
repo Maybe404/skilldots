@@ -18,6 +18,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitiveProps) {
   const reduce = useReducedMotion()
   return (
     <CheckboxPrimitive
+      nativeButton
       data-slot="checkbox"
       whileHover={reduce ? undefined : { scale: 1.06 }}
       whileTap={reduce ? undefined : { scale: 0.92 }}
