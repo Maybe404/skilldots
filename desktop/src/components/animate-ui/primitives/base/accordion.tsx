@@ -1,15 +1,15 @@
 'use client';
 
 import * as React from 'react';
-import { Accordion as AccordionPrimitive } from '@base-ui-components/react/accordion';
+import { Accordion as AccordionPrimitive } from '@base-ui/react/accordion';
 import { AnimatePresence, motion, type HTMLMotionProps } from 'motion/react';
 
 import { getStrictContext } from '@/lib/get-strict-context';
 import { useControlledState } from '@/hooks/use-controlled-state';
 
 type AccordionContextType = {
-  value: string | string[] | undefined;
-  setValue: (value: string | string[] | undefined) => void;
+  value: string[] | undefined;
+  setValue: (value: string[] | undefined) => void;
 };
 
 type AccordionItemContextType = {
@@ -26,11 +26,11 @@ const [AccordionItemProvider, useAccordionItem] =
 type AccordionProps = React.ComponentProps<typeof AccordionPrimitive.Root>;
 
 function Accordion(props: AccordionProps) {
-  const [value, setValue] = useControlledState<string | string[] | undefined>({
-    value: props?.value,
-    defaultValue: props?.defaultValue,
-    onChange: props?.onValueChange as (
-      value: string | string[] | undefined,
+  const [value, setValue] = useControlledState<string[] | undefined>({
+    value: props?.value as string[] | undefined,
+    defaultValue: props?.defaultValue as string[] | undefined,
+    onChange: props?.onValueChange as unknown as (
+      value: string[] | undefined,
     ) => void,
   });
 
@@ -39,7 +39,7 @@ function Accordion(props: AccordionProps) {
       <AccordionPrimitive.Root
         data-slot="accordion"
         {...props}
-        onValueChange={setValue}
+        onValueChange={(next) => setValue(next as string[])}
       />
     </AccordionProvider>
   );
