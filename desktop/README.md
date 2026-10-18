@@ -21,6 +21,34 @@ use a dedicated empty HOME, set SKILLDOTS_LIBRARY to an isolated library,
 and isolate Git configuration and SKILLDOTS_CACHE. Do not test against your
 normal skill library. Generated bindings and build products are ignored.
 
+The browser preview accepts `?fresh` (first-run onboarding) and `?drift`
+(links that disagree with `skills.toml`, to exercise the apply dialog).
+
+## Interface
+
+The layout follows the approved design (`skilldots 主界面`): a top bar with
+the page navigation, then Skill, Sources, Agents, History, Adopt, Trash and
+Settings pages. Screenshots of every page, the dialogs and the two styles are
+in `docs/screenshots/` (1280×820 window, 1.5× scale, sample data).
+
+- **Styles.** "Clean" (default) and "Doodle" are two sets of CSS variables in
+  `src/styles/themes.css`, chosen by `data-style` on `<html>` and remembered
+  in the window's local storage. Components use the token utilities from
+  `src/index.css` (`text-ink`, `bg-nav`, `rounded-ctl`, `fs-body`,
+  `border-b-row` …), never raw values. Only light mode exists so far; the
+  dark option in Settings explains that it is still being designed.
+- **Fonts.** Geist, JetBrains Mono, Gaegu and Long Cang (all SIL OFL 1.1, from
+  `@fontsource`) ship inside the bundle as woff2 (`src/styles/fonts.css`), so
+  the window needs no network. Chinese falls back to PingFang SC.
+- **Pending link changes.** Toggling a skill for an agent (wire view, table
+  view, detail sheet, number keys, drag) only records the wanted state. The
+  status bar shows the count with Apply and Undo; Apply calls `setTargets`
+  once per changed skill. Closing the window with pending changes asks first.
+- **Keyboard.** ↑↓ select a skill, 1–9 toggle the agent columns, ⏎ applies
+  pending changes (or opens details), Space opens details, V switches view,
+  Esc clears the agent focus and then the pending changes. ⌘K opens the
+  command palette, ⌘F the search, ⌘N a new skill, ⌘, Settings.
+
 ## Behavior
 
 - Hiding an agent column only changes desktop preferences.
@@ -42,6 +70,9 @@ Go API tests use isolated temporary libraries. The native smoke harness
 (`cmd/smoke`, build tag `desktop_smoke`) launches a real WKWebView, clicks
 agent toggles, checks the resulting links, reads and writes a skill, checks
 an empty apply plan, and records font/blur support plus a screenshot.
+Since the redesign an agent toggle only records a pending change, so the
+harness's toggle step also has to press Apply before it checks the links;
+the harness has not been updated yet.
 Build the harness from the repository root:
 
 ```sh
