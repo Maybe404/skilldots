@@ -3,7 +3,8 @@ import * as React from "react"
 import { useApp } from "@/lib/app-state"
 import { backend, type HistoryEntry } from "@/lib/backend"
 import { formatDate, type MessageKey } from "@/lib/i18n"
-import { EmptyNote, ExampleTag, Mono, Page, PageError, TableHead, UpdateDot } from "@/components/app/bits"
+import { shortSha } from "@/lib/utils"
+import { EmptyNote, ExampleTag, Mono, Page, PageError, Sha, TableHead, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -79,8 +80,8 @@ function Row({ h }: { h: HistoryEntry }) {
         <span className="truncate font-heading fs-name font-semibold text-ink">{h.repo}</span>
         {h.example && <ExampleTag />}
       </div>
-      <div role="cell" className="pt-0.5 font-mono fs-meta text-mut">
-        {h.from} → {h.to}
+      <div role="cell" className="min-w-0 pt-0.5 font-mono fs-meta text-mut" title={`${h.from} → ${h.to}`}>
+        {shortSha(h.from)} → {shortSha(h.to)}
       </div>
       <div role="cell" className="min-w-0">
         {kinds.map(([k, list]) => (
@@ -93,7 +94,7 @@ function Row({ h }: { h: HistoryEntry }) {
           <div className="mt-1.5 flex flex-col gap-[3px]">
             {h.commits.map((c) => (
               <div key={c.id} className="flex gap-3 fs-meta">
-                <Mono className="w-16 flex-none text-mut">{c.id}</Mono>
+                <Sha id={c.id} className="w-16 flex-none text-mut" />
                 <span className="min-w-0 text-ink">{c.title}</span>
               </div>
             ))}

@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react"
 import { useApp } from "@/lib/app-state"
 import { backend, type ParsedSource, type RepoPreview, type UpstreamSkill } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono, RefreshIcon, Tag } from "@/components/app/bits"
+import { Mono, RefreshIcon, Sha, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -205,7 +205,7 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
             <div className="px-6 py-4">
               <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 fs-meta text-mut">
                 <span className="font-medium text-ink">{t("pickSkills")}</span>
-                <Mono>{preview.commit}</Mono>
+                <Sha id={preview.commit} />
                 <span>{preview.license ? t("licenseLabel", { license: preview.license }) : t("noLicense")}</span>
                 {preview.subscribed && <span>{t("alreadySubscribed")}</span>}
               </div>

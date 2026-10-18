@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { cn, shortSha } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
 import { agentMono } from "@/lib/agents"
 import type { Agent } from "@/lib/backend"
@@ -55,6 +55,15 @@ export function AgentMono({
     <span aria-hidden className={cn("skd-mono", className)} style={{ width: w, height: h, fontSize: font }}>
       {agentMono(agent)}
     </span>
+  )
+}
+
+/** A commit id: 7 digits on screen, the full id as the tooltip. */
+export function Sha({ id, className }: { id: string; className?: string }) {
+  return (
+    <Mono className={className} title={id}>
+      {shortSha(id)}
+    </Mono>
   )
 }
 

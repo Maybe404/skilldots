@@ -170,7 +170,9 @@
 }
 
 @layer components {
-  /* Column sets of the page tables (design widths; narrower below 1000px). */
+  /* Column sets of the page tables (design widths; narrower below 1000px). The
+     range syntax matches Tailwind's max-[1000px] (< 1000px), which hides the
+     usage bar on the Sources page; a plain max-width would differ at 1000px. */
   .skd-cols-sources {
     --cols: minmax(0, 1fr) 80px 190px 110px 150px 140px;
   }
@@ -186,9 +188,9 @@
   .skd-cols-trash {
     --cols: 200px minmax(0, 1fr) 110px 220px 120px;
   }
-  @media (max-width: 1000px) {
+  @media (width < 1000px) {
     .skd-cols-sources {
-      --cols: minmax(0, 1fr) 72px 64px 92px 132px 128px;
+      --cols: minmax(0, 1fr) 72px 64px 92px 144px 128px;
     }
     .skd-cols-agents {
       --cols: 36px minmax(0, 1fr) 150px 44px 104px 104px 96px;

@@ -6,7 +6,8 @@ import { agentLabel } from "@/lib/agents"
 import type { Skill } from "@/lib/backend"
 import { cellState } from "@/lib/pending"
 import { useSkillActions } from "@/lib/use-actions"
-import { AgentMono, Mono, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { shortSha } from "@/lib/utils"
+import { AgentMono, Mono, OffRing, Sha, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
@@ -75,15 +76,15 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
                 <p className="flex items-center gap-2 font-semibold text-ink">
                   {t("upstreamChanged")}
                   {status && (
-                    <Mono className="font-normal text-mut">
-                      {status.commit} → {status.latest}
+                    <Mono className="font-normal text-mut" title={`${status.commit} → ${status.latest}`}>
+                      {shortSha(status.commit)} → {shortSha(status.latest)}
                     </Mono>
                   )}
                 </p>
                 <ul className="mt-1.5 space-y-1 text-ink">
                   {status?.commits.slice(0, 3).map((c) => (
                     <li key={c.id} className="flex gap-3">
-                      <Mono className="w-16 shrink-0 text-mut">{c.id}</Mono>
+                      <Sha id={c.id} className="w-16 shrink-0 text-mut" />
                       <span className="min-w-0 truncate">{c.title}</span>
                     </li>
                   ))}
@@ -151,7 +152,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
             <>
               <dt className="text-mut">{t("infoCommit")}</dt>
               <dd>
-                <Mono className="text-ink">{pack.commit}</Mono>
+                <Sha id={pack.commit} className="text-ink" />
               </dd>
             </>
           )}

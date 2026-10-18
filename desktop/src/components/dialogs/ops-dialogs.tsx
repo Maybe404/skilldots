@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { hasUpdates, useApp } from "@/lib/app-state"
 import { backend, type PackStatus, type PlanItem } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono, RefreshIcon, UpdateDot } from "@/components/app/bits"
+import { Mono, RefreshIcon, Sha, UpdateDot } from "@/components/app/bits"
 import { agentLabel } from "@/lib/agents"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -107,9 +107,9 @@ function PackUpdate({
             <UpdateDot decorative /> {pack.repo}
           </span>
           <span className="mt-0.5 flex items-center gap-1.5 fs-meta text-mut">
-            <Mono>{pack.commit}</Mono>
+            <Sha id={pack.commit} />
             <ArrowRight className="size-3" aria-hidden />
-            <Mono>{pack.latest}</Mono>
+            <Sha id={pack.latest} />
             <span>· {t("commitsN", { n: pack.commits.length })}</span>
           </span>
         </label>
@@ -136,7 +136,7 @@ function PackUpdate({
         <ul className="mt-2.5 ml-6.5 space-y-0.5 [border-left:1.5px_solid_var(--ln)] pl-3 fs-meta text-mut">
           {pack.commits.map((c) => (
             <li key={c.id} className="truncate">
-              <Mono className="mr-1.5">{c.id}</Mono>
+              <Sha id={c.id} className="mr-1.5" />
               {c.title}
             </li>
           ))}

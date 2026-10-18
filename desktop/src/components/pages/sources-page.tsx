@@ -2,10 +2,10 @@ import * as React from "react"
 import { toast } from "sonner"
 import { ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { cn, shortSha } from "@/lib/utils"
 import { hasUpdates, isMine, useApp } from "@/lib/app-state"
 import { backend, type Pack, type PackStatus, type Skill } from "@/lib/backend"
-import { EmptyNote, Mono, Page, RefreshIcon, TableHead, Tag, UpdateDot } from "@/components/app/bits"
+import { EmptyNote, Mono, Page, RefreshIcon, Sha, TableHead, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -98,7 +98,7 @@ export function SourcesPage() {
 function SkillLinks({ list }: { list: Skill[] }) {
   const { navigate, openDetail } = useApp()
   return (
-    <span className="block font-mono fs-meta text-mut">
+    <span className="block font-mono fs-meta text-mut [overflow-wrap:anywhere]">
       {list.map((s, i) => (
         <React.Fragment key={s.ref.key}>
           {i > 0 && ", "}
@@ -137,8 +137,8 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
           </div>
           <div className="mt-0.5">{used.length ? <SkillLinks list={used} /> : <span className="fs-meta text-mut">{t("noneUsed")}</span>}</div>
         </div>
-        <div role="cell" className="font-mono fs-meta text-mut">
-          {p.commit}
+        <div role="cell" className="min-w-0 truncate font-mono fs-meta text-mut" title={p.commit}>
+          {shortSha(p.commit)}
         </div>
         <div role="cell" className="flex items-center gap-2.5">
           <span aria-hidden className="h-1 w-[70px] flex-none overflow-hidden rounded-[2px] bg-ln max-[1000px]:hidden">
@@ -148,7 +148,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
             {used.length} / {p.upstreamCount || "?"}
           </span>
         </div>
-        <div role="cell" className="fs-meta text-mut">
+        <div role="cell" className="min-w-0 truncate fs-meta text-mut" title={p.license}>
           {p.license ?? "—"}
         </div>
         <div role="cell" className={cn("flex items-center fs-meta", reviewable ? "font-semibold text-ink" : "text-mut")}>
@@ -210,7 +210,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
     if (!r.ok) return
     await reload()
     onClose()
-    toast(t("updatedOne", { repo: pack.repo, to: st.latest }), { action: { label: t("navHistory"), onClick: () => navigate("history") } })
+    toast(t("updatedOne", { repo: pack.repo, to: shortSha(st.latest) }), { action: { label: t("navHistory"), onClick: () => navigate("history") } })
     const backups = r.value.flatMap((h) => h.backups)
     if (backups.length) toast(t("backupsToast", { n: backups.length }), { action: { label: t("openTrash"), onClick: () => navigate("trash") } })
   }
@@ -220,14 +220,14 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
       <div className="min-w-0">
         <div className="flex items-baseline gap-2.5 fs-meta text-mut">
           <span className="font-semibold text-ink">{t("upstreamCommits")}</span>
-          <Mono>
-            {st.commit} → {st.latest}
+          <Mono title={`${st.commit} → ${st.latest}`}>
+            {shortSha(st.commit)} → {shortSha(st.latest)}
           </Mono>
         </div>
         <div className="mt-2 flex flex-col gap-[5px]">
           {st.commits.map((c) => (
             <div key={c.id} className="flex gap-3 fs-body">
-              <Mono className="w-16 flex-none text-mut">{c.id}</Mono>
+              <Sha id={c.id} className="w-16 flex-none text-mut" />
               <span className="min-w-0 text-ink">{c.title}</span>
             </div>
           ))}
@@ -265,7 +265,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
         </dl>
         <div className="mt-3.5 flex flex-wrap gap-2">
           <Button onClick={go} disabled={!!operation} className="px-3">
-            {t("updateTo")} <span className="font-mono font-medium">{st.latest}</span>
+            {t("updateTo")} <span className="font-mono font-medium" title={st.latest}>{shortSha(st.latest)}</span>
           </Button>
           <Button variant="ghost" onClick={onClose}>
             {t("notNow")}
