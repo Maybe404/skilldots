@@ -70,7 +70,7 @@ export function Header() {
       </nav>
       <span className="flex-1" />
       <StyleSwitch className="h-[30px] p-0.5 max-[1060px]:hidden" />
-      <label className="flex h-[34px] w-[246px] items-center gap-2 rounded-btn border-in bg-in px-3 font-body fs-body text-mut max-[1240px]:w-[190px] max-[980px]:w-[150px]">
+      <label className="flex h-[34px] w-[246px] items-center gap-2 rounded-btn border-in bg-in px-3 font-body fs-body text-mut has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-ring max-[1240px]:w-[190px] max-[980px]:w-[150px]">
         <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="shrink-0">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />

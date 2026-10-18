@@ -9,7 +9,7 @@ import { cn } from "cn"
  * aria-pressed and the roving focus of the group.
  */
 const toggleVariants = cva(
-  "group/toggle inline-flex items-center justify-center gap-1.5 font-body whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[13px]",
+  "group/toggle inline-flex items-center justify-center gap-1.5 font-body whitespace-nowrap disabled:pointer-events-none disabled:opacity-45 aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[13px]",
   {
     variants: {
       variant: {

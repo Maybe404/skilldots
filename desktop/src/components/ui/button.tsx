@@ -9,7 +9,7 @@ import { cn } from "cn"
  * "应用"), ink (confirm), outline (1.5px line), ghost and link.
  */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center gap-1.5 font-body whitespace-nowrap transition-[color,background-color,opacity] outline-none select-none disabled:pointer-events-none disabled:opacity-45 aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[13px]",
+  "group/button inline-flex shrink-0 items-center justify-center gap-1.5 font-body whitespace-nowrap transition-[color,background-color,opacity] select-none disabled:pointer-events-none disabled:opacity-45 aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[13px]",
   {
     variants: {
       variant: {
