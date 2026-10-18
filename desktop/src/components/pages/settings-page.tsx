@@ -1,42 +1,43 @@
-import { CloudUpload, Download, FolderOpen, FolderPlus, Replace } from "lucide-react"
+import * as React from "react"
 import { toast } from "sonner"
 
 import { useApp } from "@/lib/app-state"
 import { backend, type Config, type Theme } from "@/lib/backend"
 import { ago } from "@/lib/i18n"
-import { Mono, PageHeader } from "@/components/app/bits"
+import { Page } from "@/components/app/bits"
+import { StyleSwitch } from "@/components/app/header"
 import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
-function Row({ label, hint, htmlFor, children }: { label: string; hint?: string; htmlFor?: string; children: React.ReactNode }) {
+function Section({ title, children, first }: { title: string; children: React.ReactNode; first?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-6 px-4 py-3.5">
-      <div className="min-w-0">
-        <label htmlFor={htmlFor} className="text-[0.88rem]">
-          {label}
-        </label>
-        {hint && <p className="mt-0.5 text-[0.78rem] text-muted-foreground">{hint}</p>}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  )
-}
-
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mb-7">
-      <h2 className="mb-2 px-1 text-[0.8rem] font-semibold text-muted-foreground">{title}</h2>
-      <div className="divide-y rounded-xl border">{children}</div>
+    <section className={first ? undefined : "mt-[26px]"}>
+      <h2 className="flex h-[31px] items-center border-b-head fs-meta font-normal text-mut">{title}</h2>
+      {children}
     </section>
   )
 }
 
+function Row({ label, hint, htmlFor, children }: { label: string; hint?: string; htmlFor?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-[55px] items-center justify-between gap-4 border-b-row py-2">
+      <div className="min-w-0">
+        <label htmlFor={htmlFor} className="text-ink">
+          {label}
+        </label>
+        {hint && <p className="mt-px fs-meta text-mut">{hint}</p>}
+      </div>
+      <div className="flex shrink-0 justify-end">{children}</div>
+    </div>
+  )
+}
+
+/** Settings shared with the CLI, plus the desktop's own style switch. */
 export function SettingsPage() {
-  const { t, config, setConfig, status, openDialog, run } = useApp()
+  const { t, config, setConfig, status, openDialog, run, runTask, reload } = useApp()
   const editors: [Config["editor"], string][] = [
     ["auto", t("editorAuto")],
     ["code", "VS Code"],
@@ -44,117 +45,160 @@ export function SettingsPage() {
     ["zed", "Zed"],
     ["custom", t("editorCustom")],
   ]
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <PageHeader title={t("settingsTitle")} hint={t("settingsShared")} />
-      <div className="w-full max-w-[76rem] px-8 pb-10 xl:px-10">
-        <div className="grid gap-x-8 gap-y-1 xl:grid-cols-2">
-        <Group title={t("appearance")}>
-          <Row label={t("theme")}>
-            <ToggleGroup
-              aria-label={t("theme")}
-              value={[config.theme]}
-              onValueChange={(v) => v[0] && setConfig({ theme: v[0] as Theme })}
-              variant="outline"
-              size="sm"
-              spacing={0}
-            >
-              {(["system", "light", "dark"] as const).map((v) => (
-                <ToggleGroupItem key={v} value={v} className="data-[pressed]:bg-primary data-[pressed]:text-primary-foreground">
-                  {t(v === "system" ? "themeSystem" : v === "light" ? "themeLight" : "themeDark")}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </Row>
-          <Row label={t("language")}>
-            <Select value={config.lang} onValueChange={(v) => v && setConfig({ lang: v as Config["lang"] })} items={{ zh: "简体中文", en: "English" }}>
-              <SelectTrigger aria-label={t("language")} className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="zh">简体中文</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-              </SelectContent>
-            </Select>
-          </Row>
-        </Group>
+  const [syncing, setSyncing] = React.useState(false)
 
-        <Group title={t("editorSection")}>
-          <Row label={t("editorLabel")}>
-            <Select value={config.editor} onValueChange={(v) => v && setConfig({ editor: v as Config["editor"] })} items={Object.fromEntries(editors)}>
-              <SelectTrigger aria-label={t("editorLabel")} className="w-64">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {editors.map(([v, label]) => (
-                  <SelectItem key={v} value={v}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Row>
-          {config.editor === "custom" && (
-            <div className="px-4 py-3.5">
-              <Field>
-                <FieldLabel htmlFor="editor-cmd">{t("editorCommand")}</FieldLabel>
+  const backup = async () => {
+    if (!status?.remote) {
+      openDialog({ kind: "sync" })
+      return
+    }
+    setSyncing(true)
+    const r = await runTask(t("syncing"), () => backend.sync({}))
+    setSyncing(false)
+    if (!r.ok) return
+    await reload()
+    toast(r.value.committed ? t("syncedToast", { remote: r.value.remote }) : t("nothingToSync"))
+  }
+
+  const link = "text-hue-ink underline decoration-ln underline-offset-[3px] whitespace-nowrap hover:decoration-current"
+
+  return (
+    <Page title={t("settingsTitle")} summary={t("settingsShared")}>
+      <div className="grid grid-cols-2 items-start gap-x-12 max-[900px]:grid-cols-1">
+        <div>
+          <Section title={t("appearance")} first>
+            <Row label={t("styleLabel")}>
+              <StyleSwitch className="h-[34px]" />
+            </Row>
+            <Row label={t("mode")} hint={config.theme === "dark" ? t("darkPending") : undefined}>
+              <ToggleGroup
+                aria-label={t("mode")}
+                value={[config.theme]}
+                onValueChange={(v) => {
+                  const next = v[0] as Theme | undefined
+                  if (!next) return
+                  if (next === "dark") {
+                    toast(t("darkPending"))
+                    return
+                  }
+                  void setConfig({ theme: next })
+                }}
+                className="skd-seg h-[34px] items-start"
+                spacing={2}
+              >
+                <ToggleGroupItem value="system" variant="seg" size="none">
+                  {t("themeSystem")}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="light" variant="seg" size="none">
+                  {t("themeLight")}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="dark" variant="seg" size="none" aria-disabled title={t("darkPending")}>
+                  {t("themeDark")}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </Row>
+            <Row label={t("language")}>
+              <Select value={config.lang} onValueChange={(v) => v && setConfig({ lang: v as Config["lang"] })} items={{ zh: "简体中文", en: "English" }}>
+                <SelectTrigger aria-label={t("language")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="zh">简体中文</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </Row>
+          </Section>
+
+          <Section title={t("editorSection")}>
+            <Row label={t("editorLabel")}>
+              <Select value={config.editor} onValueChange={(v) => v && setConfig({ editor: v as Config["editor"] })} items={Object.fromEntries(editors)}>
+                <SelectTrigger aria-label={t("editorLabel")} className="max-w-[300px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {editors.map(([v, label]) => (
+                    <SelectItem key={v} value={v}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Row>
+            {config.editor === "custom" && (
+              <div className="border-b-row py-3">
+                <label htmlFor="editor-cmd" className="fs-meta text-mut">
+                  {t("editorCommand")}
+                </label>
                 <Input
                   id="editor-cmd"
                   defaultValue={config.editorCommand}
                   onBlur={(e) => setConfig({ editorCommand: e.target.value })}
                   placeholder="subl {path}"
-                  className="font-mono text-[0.82rem]"
+                  className="mt-1 font-mono fs-meta"
                   spellCheck={false}
                 />
-                <FieldDescription>{t("editorCommandHint", { path: "{path}" })}</FieldDescription>
-              </Field>
-            </div>
-          )}
-        </Group>
+                <p className="mt-1 fs-meta text-mut">{t("editorCommandHint", { path: "{path}" })}</p>
+              </div>
+            )}
+            <Row label={t("checkOnLaunch")} hint={t("checkOnLaunchHint")} htmlFor="check-launch">
+              <Switch id="check-launch" checked={config.checkOnLaunch} onCheckedChange={(v) => setConfig({ checkOnLaunch: v })} />
+            </Row>
+          </Section>
+        </div>
 
-        <Group title={t("updatesSection")}>
-          <Row label={t("checkOnLaunch")} hint={t("checkOnLaunchHint")} htmlFor="check-launch">
-            <Switch id="check-launch" checked={config.checkOnLaunch} onCheckedChange={(v) => setConfig({ checkOnLaunch: v })} />
-          </Row>
-        </Group>
+        <div className="max-[900px]:mt-[26px]">
+          <Section title={t("librarySection")} first>
+            <div className="border-b-row py-3">
+              <div className="fs-meta text-mut">{t("libraryPath")}</div>
+              <div className="mt-[3px] font-mono fs-meta break-all text-ink">{status?.root}</div>
+              <div className="mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1.5 fs-meta">
+                <button type="button" className={link} onClick={async () => (await run(() => backend.revealLibrary())).ok && toast(t("revealed"))}>
+                  {t("revealInFinder")}
+                </button>
+                <button type="button" className={link} onClick={() => openDialog({ kind: "library", mode: "use" })}>
+                  {t("switchLibrary")}
+                </button>
+                <button type="button" className={link} onClick={() => openDialog({ kind: "library", mode: "clone" })}>
+                  {t("importLibrary")}
+                </button>
+                <button type="button" className={link} onClick={() => openDialog({ kind: "library", mode: "init" })}>
+                  {t("newLibrary")}
+                </button>
+              </div>
+            </div>
+          </Section>
 
-        <Group title={t("librarySection")}>
-          <div className="px-4 py-3.5">
-            <p className="text-[0.78rem] text-muted-foreground">{t("libraryPath")}</p>
-            <Mono className="mt-0.5 block break-all">{status?.root}</Mono>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={async () => (await run(() => backend.revealLibrary())).ok && toast(t("revealed"))}>
-                <FolderOpen /> {t("revealInFinder")}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => openDialog({ kind: "library", mode: "use" })}>
-                <Replace /> {t("switchLibrary")}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => openDialog({ kind: "library", mode: "clone" })}>
-                <Download /> {t("importLibrary")}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => openDialog({ kind: "library", mode: "init" })}>
-                <FolderPlus /> {t("newLibrary")}
+          <Section title={t("backupSection")}>
+            <div className="flex items-center gap-3.5 border-b-row py-3">
+              <div className="min-w-0 flex-1">
+                {status?.remote ? (
+                  <div className="truncate font-mono fs-meta text-ink">{status.remote}</div>
+                ) : (
+                  <div className="fs-body text-ink">{t("noRemote")}</div>
+                )}
+                <div className="mt-[3px] fs-meta text-mut">
+                  {status?.changes ? t("unsynced", { n: status.changes }) : t("synced")}
+                  {status?.lastSync && ` · ${t("lastSync", { ago: ago(status.lastSync, t) })}`}
+                </div>
+              </div>
+              <Button onClick={() => void backup()} disabled={syncing} variant={status?.changes || !status?.remote ? "default" : "secondary"} className="px-3">
+                <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 12a3.5 3.5 0 0 1 0 6" />
+                  <path d="M12 12v9M9 15l3-3 3 3" />
+                </svg>
+                {syncing ? t("syncing") : status?.changes || !status?.remote ? t("syncNow") : t("backedUp")}
               </Button>
             </div>
-          </div>
-        </Group>
-
-        <Group title={t("backupSection")}>
-          <div className="flex items-center justify-between gap-6 px-4 py-3.5">
-            <div className="min-w-0">
-              {status?.remote ? <Mono className="block truncate">{status.remote}</Mono> : <p className="text-[0.88rem]">{t("noRemote")}</p>}
-              <p className="mt-0.5 text-[0.78rem] text-muted-foreground">
-                {status?.changes ? t("unsynced", { n: status.changes }) : t("synced")}
-                {status?.lastSync && ` · ${t("lastSync", { ago: ago(status.lastSync, t) })}`}
-              </p>
-            </div>
-            <Button size="sm" onClick={() => openDialog({ kind: "sync" })}>
-              <CloudUpload /> {t("syncNow")}
-            </Button>
-          </div>
-        </Group>
+            <p className="py-3 fs-meta text-mut">
+              {t("backupNote2")}{" "}
+              <button type="button" className={link} onClick={() => openDialog({ kind: "sync" })}>
+                {t("backupWithMessage")}
+              </button>
+            </p>
+          </Section>
         </div>
       </div>
-    </div>
+    </Page>
   )
 }

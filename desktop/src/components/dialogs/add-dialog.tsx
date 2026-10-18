@@ -1,17 +1,17 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { ArrowRight, Loader2 } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
-import { useApp, useEnabledAgents } from "@/lib/app-state"
+import { useApp } from "@/lib/app-state"
 import { backend, type ParsedSource, type RepoPreview, type UpstreamSkill } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono } from "@/components/app/bits"
-import { Badge } from "@/components/ui/badge"
+import { Mono, RefreshIcon, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { AgentTargets } from "./skill-dialogs"
 
 const EXAMPLES = [
   "mattpocock/skills",
@@ -31,8 +31,7 @@ const FORM_LABEL: Record<ParsedSource["form"], MessageKey> = {
 }
 
 export function AddDialog({ initial, onClose }: { initial?: string; onClose: () => void }) {
-  const { t, runTask, reload, agents: allAgents } = useApp()
-  const enabled = useEnabledAgents()
+  const { t, runTask, reload, agents: allAgents, openDialog } = useApp()
   const [input, setInput] = React.useState(initial ?? "")
   const [parsed, setParsed] = React.useState<ParsedSource | null>(null)
   const [parseError, setParseError] = React.useState(false)
@@ -41,7 +40,7 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
   const [fetchError, setFetchError] = React.useState<string | null>(null)
   const [picked, setPicked] = React.useState<Set<string>>(new Set())
   const [followAll, setFollowAll] = React.useState(false)
-  const [targets, setTargets] = React.useState<Set<string>>(() => new Set(allAgents.filter((a) => a.isDefault).map((a) => a.name)))
+  const [targets, setTargets] = React.useState<Set<string>>(() => new Set(allAgents.filter((a) => a.isDefault && a.enabled).map((a) => a.name)))
   const [alias, setAlias] = React.useState("")
   const [adding, setAdding] = React.useState(false)
 
@@ -127,14 +126,14 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="flex max-h-[min(44rem,calc(100svh-4rem))] flex-col gap-0 p-0 sm:max-w-2xl">
-        <DialogHeader className="px-5 pt-5 pb-4">
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(46rem,calc(100svh-4rem))] w-[680px] flex-col gap-0 p-0">
+        <DialogHeader className="px-6 pt-[22px] pb-4">
           <DialogTitle>{t("addTitle")}</DialogTitle>
           <DialogDescription>{t("addInputHint")}</DialogDescription>
         </DialogHeader>
 
         <form
-          className="px-5 pb-4"
+          className="px-6 pb-4"
           onSubmit={(e) => {
             e.preventDefault()
             if (parsed) void read(parsed)
@@ -149,21 +148,21 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={t("addInputPlaceholder")}
-                className="font-mono text-[0.82rem]"
+                className="font-mono fs-body"
                 spellCheck={false}
                 autoComplete="off"
                 aria-invalid={parseError || undefined}
                 aria-describedby="add-recognized"
               />
-              <Button type="submit" variant="outline" disabled={!parsed || loading}>
-                {loading ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <ArrowRight />}
+              <Button type="submit" variant="outline" size="lg" disabled={!parsed || loading}>
+                {loading ? <RefreshIcon spinning /> : <ArrowRight />}
                 {t("readRepo")}
               </Button>
             </div>
-            <div id="add-recognized" aria-live="polite" className="min-h-5 text-[0.8rem]">
+            <div id="add-recognized" aria-live="polite" className="min-h-5 fs-meta">
               {parsed && (
-                <p className="text-muted-foreground">
-                  {t("recognized")} {t(FORM_LABEL[parsed.form])} · <Mono className="text-foreground">{parsed.repo}</Mono>
+                <p className="text-mut">
+                  {t("recognized")} {t(FORM_LABEL[parsed.form])} · <Mono className="text-ink">{parsed.repo}</Mono>
                   {parsed.ref && (
                     <>
                       {" "}
@@ -173,12 +172,12 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                   {parsed.skills.length > 0 && <> · {t("preselected", { names: parsed.skills.join(", ") })}</>}
                 </p>
               )}
-              {parseError && <p className="text-foreground">{t("unrecognized")}</p>}
+              {parseError && <p className="text-ink">{t("unrecognized")}</p>}
             </div>
           </Field>
           {!input && (
             <div className="mt-2">
-              <p className="mb-1.5 text-[0.78rem] text-muted-foreground">{t("tryThese")}</p>
+              <p className="mb-1.5 fs-meta text-mut">{t("tryThese")}</p>
               <div className="flex flex-wrap gap-1.5">
                 {EXAMPLES.map((ex) => (
                   <Button key={ex} type="button" variant="secondary" size="xs" className="max-w-full font-mono font-normal" onClick={() => setInput(ex)}>
@@ -190,28 +189,28 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
           )}
         </form>
 
-        <div className="min-h-0 flex-1 overflow-y-auto border-t">
+        <div className="min-h-0 flex-1 overflow-y-auto [border-top:var(--tblRow)]">
           {loading && (
-            <p className="flex items-center gap-2 px-5 py-6 text-sm text-muted-foreground" aria-live="polite">
-              <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> {t("reading")}
+            <p className="flex items-center gap-2 px-6 py-6 fs-body text-mut" aria-live="polite">
+              <RefreshIcon spinning /> {t("reading")}
             </p>
           )}
           {fetchError && (
-            <div className="px-5 py-5 text-sm" role="alert">
-              <p className="font-medium">{t("readFailed")}</p>
-              <p className="mt-1 text-muted-foreground">{fetchError}</p>
+            <div className="px-6 py-5 fs-body" role="alert">
+              <p className="font-heading fs-h3 text-ink">{t("readFailed")}</p>
+              <p className="mt-1 text-mut">{fetchError}</p>
             </div>
           )}
           {preview && !loading && (
-            <div className="px-5 py-4">
-              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8rem] text-muted-foreground">
-                <span className="font-medium text-foreground">{t("pickSkills")}</span>
+            <div className="px-6 py-4">
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 fs-meta text-mut">
+                <span className="font-medium text-ink">{t("pickSkills")}</span>
                 <Mono>{preview.commit}</Mono>
                 <span>{preview.license ? t("licenseLabel", { license: preview.license }) : t("noLicense")}</span>
                 {preview.subscribed && <span>{t("alreadySubscribed")}</span>}
               </div>
 
-              <label className="mb-3 flex items-start gap-2.5 text-[0.85rem]">
+              <label className="mb-3 flex items-start gap-2.5 fs-body text-ink">
                 <Checkbox checked={followAll} onCheckedChange={(v) => setFollowAll(!!v)} className="mt-0.5" />
                 <span>{t("followAllLabel")}</span>
               </label>
@@ -222,7 +221,7 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                   const n = selectable.filter((s) => picked.has(s.name)).length
                   return (
                     <fieldset key={cat || "-"} disabled={followAll} className="disabled:opacity-60">
-                      <legend className="mb-1 flex w-full items-center gap-2.5 text-[0.78rem] font-medium text-muted-foreground">
+                      <legend className="mb-1 flex w-full items-center gap-2.5 fs-meta font-medium text-mut">
                         <Checkbox
                           aria-label={t("selectCategory", { category: cat || t("uncategorized") })}
                           checked={selectable.length > 0 && n === selectable.length}
@@ -232,12 +231,12 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                         />
                         {cat || t("uncategorized")}
                       </legend>
-                      <ul className="ml-1 border-l pl-4">
+                      <ul className="ml-1 [border-left:1.5px_solid_var(--ln)] pl-4">
                         {list.map((s) => {
                           const installed = have.has(s.name)
                           return (
                             <li key={s.name}>
-                              <label className="flex items-start gap-2.5 rounded-md py-1.5 text-[0.85rem]">
+                              <label className="flex items-start gap-2.5 rounded-ctl py-1.5 fs-body">
                                 <Checkbox
                                   className="mt-0.5"
                                   checked={installed || followAll || picked.has(s.name)}
@@ -245,15 +244,11 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                                   onCheckedChange={(v) => toggle(s.name, !!v)}
                                 />
                                 <span className="min-w-0">
-                                  <span className="flex items-center gap-2 font-medium">
+                                  <span className="flex items-center gap-2 font-medium text-ink">
                                     {s.name}
-                                    {installed && (
-                                      <Badge variant="secondary" className="font-normal">
-                                        {t("installed")}
-                                      </Badge>
-                                    )}
+                                    {installed && <Tag>{t("installed")}</Tag>}
                                   </span>
-                                  <span className="block text-[0.8rem] text-muted-foreground">{s.description}</span>
+                                  <span className="block fs-meta text-mut">{s.description}</span>
                                 </span>
                               </label>
                             </li>
@@ -264,50 +259,36 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                   )
                 })}
               </div>
-              {preview.rejected.length > 0 && <p className="mt-3 text-[0.78rem] text-muted-foreground">{t("rejected", { n: preview.rejected.length })}</p>}
+              {preview.rejected.length > 0 && <p className="mt-3 fs-meta text-mut">{t("rejected", { n: preview.rejected.length })}</p>}
 
-              <div className="mt-5 grid gap-4 border-t pt-4 sm:grid-cols-2">
-                <fieldset>
-                  <legend className="mb-2 text-[0.8rem] font-medium">{t("installTo")}</legend>
-                  <div className="space-y-1.5">
-                    {enabled.map((a) => (
-                      <label key={a.name} className="flex items-center gap-2.5 text-[0.85rem]">
-                        <Checkbox
-                          checked={targets.has(a.name)}
-                          onCheckedChange={(v) =>
-                            setTargets((s) => {
-                              const n = new Set(s)
-                              if (v) n.add(a.name)
-                              else n.delete(a.name)
-                              return n
-                            })
-                          }
-                        />
-                        {a.label}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
+              <div className="mt-5 grid gap-4 [border-top:var(--tblRow)] pt-4">
+                <AgentTargets value={targets} onChange={setTargets} />
                 {!preview.subscribed && (
                   <Field>
                     <FieldLabel htmlFor="add-alias">{t("aliasLabel")}</FieldLabel>
-                    <Input id="add-alias" value={alias} onChange={(e) => setAlias(e.target.value)} className="font-mono text-[0.82rem]" spellCheck={false} />
+                    <Input id="add-alias" value={alias} onChange={(e) => setAlias(e.target.value)} className="font-mono fs-body" spellCheck={false} />
                     <FieldDescription>{t("aliasHint")}</FieldDescription>
                   </Field>
                 )}
               </div>
             </div>
           )}
-          {!preview && !loading && !fetchError && <p className="px-5 py-5 text-[0.8rem] text-muted-foreground">{t("previewOnly")}</p>}
+          {!preview && !loading && !fetchError && <p className="px-6 py-5 fs-meta text-mut">{t("previewOnly")}</p>}
         </div>
 
-        <DialogFooter className="m-0 rounded-b-xl px-5 py-3">
-          <span className="mr-auto self-center text-[0.8rem] text-muted-foreground">{preview && t("selectedCount", { n: count })}</span>
-          <Button variant="outline" onClick={onClose}>
+        <DialogFooter className="m-0 px-6 py-3.5 [border-top:var(--tblRow)]">
+          {preview ? (
+            <span className="mr-auto self-center fs-meta text-mut">{t("selectedCount", { n: count })}</span>
+          ) : (
+            <Button variant="link" size="inline" className="mr-auto fs-meta" onClick={() => openDialog({ kind: "new" })}>
+              {t("orNewSkill")}
+            </Button>
+          )}
+          <Button variant="outline" size="lg" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button onClick={submit} disabled={!preview || count === 0 || targets.size === 0 || adding}>
-            {adding && <Loader2 className="animate-spin motion-reduce:animate-none" />}
+          <Button size="lg" onClick={submit} disabled={!preview || count === 0 || targets.size === 0 || adding}>
+            {adding && <RefreshIcon spinning />}
             {t("addN", { n: count })}
           </Button>
         </DialogFooter>

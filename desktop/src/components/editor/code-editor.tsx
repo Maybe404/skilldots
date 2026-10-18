@@ -115,11 +115,11 @@ function graphiteTheme(dark: boolean) {
       "&": {
         backgroundColor: "var(--background)",
         color: "var(--foreground)",
-        fontSize: "13px",
+        fontSize: "13px", fontFamily: "var(--fmCode)",
         height: "100%",
       },
       ".cm-scroller": {
-        fontFamily: "var(--font-mono)",
+        fontFamily: "var(--fmCode)",
         lineHeight: "1.65",
       },
       ".cm-content": { caretColor: "var(--foreground)", padding: "12px 0" },
@@ -134,7 +134,7 @@ function graphiteTheme(dark: boolean) {
         backgroundColor: "var(--background)",
         color: "var(--faint)",
         border: "none",
-        fontFamily: "var(--font-mono)",
+        fontFamily: "var(--fmCode)",
       },
       ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--foreground)" },
       ".cm-lineNumbers .cm-gutterElement": { padding: "0 4px 0 16px", minWidth: "36px" },

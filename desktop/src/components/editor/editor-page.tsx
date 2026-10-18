@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useReducedMotion } from "motion/react"
-import { ArrowLeft, ChevronDown, FileCode2, FileText, FolderOpen, Loader2, PanelRightClose, PanelRightOpen, Save } from "lucide-react"
+import { ArrowLeft, ChevronDown, FileCode2, FileText, FolderOpen, PanelRightClose, PanelRightOpen, Save } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { PLACEHOLDER_DESC, kindLabel, useApp } from "@/lib/app-state"
@@ -11,6 +11,7 @@ import { backend, type FileNode, type Ref, type Skill } from "@/lib/backend"
 import { parseSkillMd, serializeSkillMd } from "@/lib/frontmatter"
 import { useSkillActions } from "@/lib/use-actions"
 import { CodeEditor, languageName } from "@/components/editor/code-editor"
+import { RefreshIcon } from "@/components/app/bits"
 import { Files, FileItem, FolderItem, FolderPanel, FolderTrigger } from "@/components/animate-ui/components/base/files"
 import {
   AlertDialog,
@@ -36,7 +37,7 @@ interface Buffer {
 const isMarkdown = (p: string) => /\.(md|markdown)$/i.test(p)
 
 export function EditorPage({ skillRef }: { skillRef: Ref }) {
-  const { t, skills, run, reload, resolvedTheme, navigate, setLeaveGuard, openDialog } = useApp()
+  const { t, skills, run, reload, navigate, setLeaveGuard, openDialog } = useApp()
   const { reveal } = useSkillActions()
   const skill = skills.find((s) => s.ref.key === skillRef.key)
   const [tree, setTree] = React.useState<FileNode[] | null>(null)
@@ -151,33 +152,33 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="glass-bar flex h-13 shrink-0 items-center gap-2 rounded-t-xl px-3" data-drag-region>
-        <Button variant="ghost" size="sm" onClick={() => navigate("skills")}>
+      <div className="flex h-[46px] shrink-0 items-center gap-2 px-10 font-body fs-body max-[760px]:px-5">
+        <Button variant="ghost" onClick={() => navigate("skills")} className="-ml-2.5">
           <ArrowLeft /> {t("back")}
         </Button>
         <div className="ml-1 flex min-w-0 items-baseline gap-2">
-          <h1 className="truncate text-[0.95rem] font-semibold">{t("editorTitle", { name: skill.linkName })}</h1>
-          <span className="truncate text-[0.78rem] text-muted-foreground">{kindLabel(t, skill)}</span>
+          <h1 className="truncate font-heading fs-name font-semibold text-ink">{t("editorTitle", { name: skill.linkName })}</h1>
+          <span className="truncate font-mono fs-meta text-mut">{kindLabel(t, skill)}</span>
           {hasDirty && (
-            <span className="flex items-center gap-1.5 text-[0.78rem]" role="status">
-              <span className="size-1.5 rounded-full bg-foreground" aria-hidden />
+            <span className="flex items-center gap-1.5 fs-meta text-ink" role="status">
+              <span className="size-1.5 rounded-full bg-ac" aria-hidden />
               {dirty.length > 1 ? t("unsavedFiles", { n: dirty.length }) : t("unsaved")}
             </span>
           )}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <Button variant="ghost" size="sm" onClick={() => reveal(skill.ref)}>
+          <Button variant="ghost" onClick={() => reveal(skill.ref)}>
             <FolderOpen /> {t("revealInFinder")}
           </Button>
-          <Button variant="ghost" size="sm" aria-pressed={preview} onClick={() => setPreview((p) => !p)}>
+          <Button variant="ghost" aria-pressed={preview} onClick={() => setPreview((p) => !p)}>
             {preview ? <PanelRightClose /> : <PanelRightOpen />}
             {preview ? t("hidePreview") : t("showPreview")}
           </Button>
           <Tooltip>
             <TooltipTrigger
               render={
-                <Button size="sm" onClick={() => void save()} disabled={!hasDirty || saving || readOnly}>
-                  {saving ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Save />}
+                <Button onClick={() => void save()} disabled={!hasDirty || saving || readOnly} className="px-3">
+                  {saving ? <RefreshIcon spinning /> : <Save />}
                   {t("save")}
                 </Button>
               }
@@ -187,18 +188,18 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
             </TooltipContent>
           </Tooltip>
         </div>
-      </header>
+      </div>
 
       {needsAck && acked && (
-        <div className="sticky top-0 z-10 border-b bg-muted/90 px-5 py-1.5 text-[0.8rem] backdrop-blur" role="note">
+        <div className="flex items-center gap-2 border-b-row bg-row-hv px-10 py-1.5 fs-meta text-ink [border-left:3px_solid_var(--ac)]" role="note">
           {t("vendorBanner")}
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <nav aria-label={t("files")} className="w-52 shrink-0 overflow-y-auto border-r bg-muted/30 py-2 sm:w-56 lg:w-64">
-          <p className="px-4 pt-1 pb-1 text-[0.72rem] font-medium text-muted-foreground">{t("files")}</p>
-          {tree ? <FileTree nodes={tree} active={active} dirty={dirtySet} onOpen={open} /> : <p className="px-4 text-sm text-muted-foreground">{t("loading")}</p>}
+      <div className="flex min-h-0 flex-1 [border-top:var(--tblHd)]">
+        <nav aria-label={t("files")} className="w-56 shrink-0 overflow-y-auto py-2 pl-7 [border-right:var(--tblRow)] lg:w-64">
+          <p className="px-2 pt-1 pb-1 fs-meta text-mut">{t("files")}</p>
+          {tree ? <FileTree nodes={tree} active={active} dirty={dirtySet} onOpen={open} /> : <p className="px-4 fs-body text-mut">{t("loading")}</p>}
         </nav>
 
         <section className="flex min-w-0 flex-1 flex-col lg:min-w-[30rem]">
@@ -222,14 +223,14 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
                 onChange={onEditorChange}
                 onCursor={(line, col) => setCursor({ line, col })}
                 readOnly={readOnly}
-                dark={resolvedTheme === "dark"}
+                dark={false}
                 label={active}
               />
             ) : (
-              <p className="p-4 text-sm text-muted-foreground">{t("loading")}</p>
+              <p className="p-4 fs-body text-mut">{t("loading")}</p>
             )}
           </div>
-          <footer className="flex h-7 shrink-0 items-center gap-4 border-t px-4 text-[0.72rem] text-muted-foreground">
+          <footer className="flex h-7 shrink-0 items-center gap-4 [border-top:var(--tblRow)] px-4 fs-meta text-mut">
             <span className="font-mono">{active}</span>
             <span>{languageName(active) ?? t("plainText")}</span>
             <span className="ml-auto tabular-nums">{t("lineCol", cursor)}</span>
@@ -237,13 +238,13 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
         </section>
 
         {preview && (
-          <aside aria-label={t("preview")} className="w-[36%] max-w-[38rem] min-w-[20rem] shrink-0 overflow-y-auto border-l px-7 py-6">
+          <aside aria-label={t("preview")} className="w-[36%] max-w-[38rem] min-w-[20rem] shrink-0 overflow-y-auto px-8 py-6 [border-left:var(--tblRow)]">
             {md && buf ? (
               <>
                 {doc?.hasFrontmatter && (
-                  <div className="mb-5 border-b pb-4">
-                    <p className="font-mono text-[0.8rem] text-muted-foreground">{doc.name}</p>
-                    <p className="mt-1 text-[0.85rem] leading-relaxed">{doc.description}</p>
+                  <div className="mb-5 border-b-row pb-4">
+                    <p className="font-mono fs-meta text-mut">{doc.name}</p>
+                    <p className="mt-1 fs-body leading-relaxed text-ink">{doc.description}</p>
                   </div>
                 )}
                 <article className="prose-skill">
@@ -251,7 +252,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
                 </article>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">{t("previewOnlyMd")}</p>
+              <p className="fs-body text-mut">{t("previewOnlyMd")}</p>
             )}
           </aside>
         )}
@@ -259,7 +260,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
 
       {/* vendor / app: warn before editing */}
       <AlertDialog open={needsAck && !acked && !!tree} onOpenChange={(o) => !o && !acked && navigate("skills")}>
-        <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {skill.kind === "app" ? t("appWarnTitle", { name: skill.linkName, origin: skill.origin }) : t("vendorWarnTitle", { name: skill.linkName, origin: skill.origin })}
@@ -268,11 +269,13 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => navigate("skills")}>{t("cancel")}</AlertDialogCancel>
-            <Button variant="outline" onClick={() => setAcked(true)}>
+            <Button variant="outline" size="lg" onClick={() => setAcked(true)}>
               {t("editAnyway")}
             </Button>
             <Button
               autoFocus
+              variant="ink"
+              size="lg"
               onClick={() => {
                 navigate("skills")
                 openDialog({ kind: "fork", ref: skill.ref, thenEdit: true })
@@ -295,6 +298,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
             <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <Button
               variant="outline"
+              size="lg"
               onClick={() => {
                 const go = leaving
                 setLeaving(null)
@@ -306,6 +310,8 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
             </Button>
             <Button
               autoFocus
+              variant="ink"
+              size="lg"
               onClick={async () => {
                 const go = leaving
                 if (await save()) {
@@ -345,32 +351,32 @@ function FrontmatterForm({
   const placeholder = description.trim() === PLACEHOLDER_DESC
   const len = [...description].length
   return (
-    <div className="shrink-0 border-b bg-muted/20">
+    <div className="shrink-0 border-b-row">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left hover:bg-muted/50"
+        className="flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left hover:bg-row-hv"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
       >
         <span className="min-w-0">
-          <span className="block text-[0.72rem] font-medium uppercase tracking-[0.08em] text-muted-foreground">{t("frontmatter")}</span>
-          <span className="mt-0.5 block truncate text-[0.82rem]">{name || skill.name}</span>
+          <span className="block fs-meta text-mut">{t("frontmatter")}</span>
+          <span className="mt-0.5 block truncate font-mono fs-body text-ink">{name || skill.name}</span>
         </span>
         <ChevronDown className={cn("size-4 shrink-0 transition-transform motion-reduce:transition-none", open && "rotate-180")} aria-hidden />
       </button>
       {open && (
-        <div className="grid gap-3 border-t px-5 py-4 lg:grid-cols-[14rem_1fr]">
+        <div className="grid gap-3 [border-top:var(--tblRow)] px-5 py-4 lg:grid-cols-[14rem_1fr]">
           <Field>
             <FieldLabel htmlFor="fm-name">{t("nameLabel")}</FieldLabel>
-            <Input id="fm-name" value={name || skill.name} readOnly className="bg-muted/50 font-mono text-[0.82rem]" aria-describedby="fm-name-hint" />
-            <FieldDescription id="fm-name-hint" className="text-[0.75rem]">
+            <Input id="fm-name" value={name || skill.name} readOnly className="bg-nav font-mono fs-body" aria-describedby="fm-name-hint" />
+            <FieldDescription id="fm-name-hint" className="fs-meta">
               {t("nameReadonlyHint")}
             </FieldDescription>
           </Field>
           <Field data-invalid={placeholder || len > 1024 || undefined}>
             <div className="flex items-baseline justify-between">
               <FieldLabel htmlFor="fm-desc">{t("descLabel")}</FieldLabel>
-              <span className={cn("text-[0.72rem] tabular-nums", len > 1024 ? "font-semibold text-foreground" : "text-muted-foreground")}>{t("descCounter", { n: len })}</span>
+              <span className={cn("fs-meta tabular-nums", len > 1024 ? "font-semibold text-ink" : "text-mut")}>{t("descCounter", { n: len })}</span>
             </div>
             <Textarea
               id="fm-desc"
@@ -379,10 +385,10 @@ function FrontmatterForm({
               readOnly={readOnly}
               rows={3}
               placeholder={t("descPlaceholder")}
-              className="min-h-[4.5rem] resize-y text-[0.85rem]"
+              className="min-h-[4.5rem] resize-y fs-body"
               aria-describedby="fm-desc-hint"
             />
-            <FieldDescription id="fm-desc-hint" className="text-[0.75rem]">
+            <FieldDescription id="fm-desc-hint" className="fs-meta">
               {placeholder ? t("placeholderWarn", { name: skill.name }) : len > 1024 ? t("descTooLong") : t("descHint")}
             </FieldDescription>
           </Field>
@@ -415,18 +421,18 @@ function FileTree({ nodes, active, dirty, onOpen }: { nodes: FileNode[]; active:
           type="button"
           onClick={() => onOpen(n.path)}
           aria-current={active === n.path ? "true" : undefined}
-          className={cn("block w-full rounded-lg text-left", active === n.path && "bg-foreground/[0.07] font-medium")}
+          className={cn("block w-full rounded-ctl text-left", active === n.path && "bg-foreground/[0.07] font-medium")}
         >
           <FileItem icon={isMarkdown(n.path) ? FileText : FileCode2} title={n.name}>
             {n.name}
-            {dirty.has(n.path) && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-foreground align-middle" aria-label={t("unsaved")} title={t("unsaved")} />}
+            {dirty.has(n.path) && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-ac align-middle" aria-label={t("unsaved")} title={t("unsaved")} />}
           </FileItem>
         </button>
       ),
     )
 
   return (
-    <Files defaultOpen={folders} className="p-1.5 text-[0.85rem]">
+    <Files defaultOpen={folders} className="p-1.5 fs-body">
       {render(nodes)}
     </Files>
   )

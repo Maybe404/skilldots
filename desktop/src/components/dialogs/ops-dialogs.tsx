@@ -1,12 +1,13 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { ArrowRight, Loader2 } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { hasUpdates, useApp } from "@/lib/app-state"
 import { backend, type PackStatus, type PlanItem } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono, UpdateDot } from "@/components/app/bits"
+import { Mono, RefreshIcon, UpdateDot } from "@/components/app/bits"
+import { agentLabel } from "@/lib/agents"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -37,13 +38,13 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="flex max-h-[min(42rem,calc(100svh-4rem))] flex-col gap-0 p-0 sm:max-w-xl">
-        <DialogHeader className="px-5 pt-5 pb-4">
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(42rem,calc(100svh-4rem))] w-[600px] flex-col gap-0 p-0">
+        <DialogHeader className="px-6 pt-[22px] pb-4">
           <DialogTitle>{t("updateTitle")}</DialogTitle>
           <DialogDescription>{t("updateHint")}</DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto border-t px-5 py-4">
-          {candidates.length === 0 && <p className="text-sm text-muted-foreground">{t("noUpdates")}</p>}
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto [border-top:var(--tblRow)] px-6 py-4">
+          {candidates.length === 0 && <p className="fs-body text-mut">{t("noUpdates")}</p>}
           {candidates.map((p) => (
             <PackUpdate
               key={p.repo}
@@ -62,12 +63,12 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
             />
           ))}
         </div>
-        <DialogFooter className="m-0 rounded-b-xl px-5 py-3">
-          <Button variant="outline" onClick={onClose}>
+        <DialogFooter className="m-0 px-6 py-3.5 [border-top:var(--tblRow)]">
+          <Button variant="outline" size="lg" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button onClick={go} disabled={picked.size === 0 || busy}>
-            {busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}
+          <Button size="lg" onClick={go} disabled={picked.size === 0 || busy}>
+            {busy && <RefreshIcon spinning />}
             {t("updateSelected", { n: picked.size })}
           </Button>
         </DialogFooter>
@@ -98,14 +99,14 @@ function PackUpdate({
     ...pack.moved.map((n) => [n, "skillMoved"] as [string, MessageKey]),
   ]
   return (
-    <div className={cn("rounded-lg border p-3", checked && "border-foreground/40")}>
+    <div className={cn("rounded-ctl border-line p-3", checked && "border-hue")}>
       <div className="flex items-start gap-2.5">
         <Checkbox id={id} checked={checked} onCheckedChange={(v) => onChecked(!!v)} className="mt-0.5" />
         <label htmlFor={id} className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-[0.9rem] font-medium">
+          <span className="flex items-center gap-2 font-heading fs-name font-semibold text-ink">
             <UpdateDot decorative /> {pack.repo}
           </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[0.78rem] text-muted-foreground">
+          <span className="mt-0.5 flex items-center gap-1.5 fs-meta text-mut">
             <Mono>{pack.commit}</Mono>
             <ArrowRight className="size-3" aria-hidden />
             <Mono>{pack.latest}</Mono>
@@ -113,17 +114,17 @@ function PackUpdate({
           </span>
         </label>
       </div>
-      <ul className="mt-2.5 ml-6.5 space-y-1 text-[0.82rem]">
+      <ul className="mt-2.5 ml-6.5 space-y-1 fs-body">
         {rows.map(([name, label]) => (
           <li key={name + label} className="flex items-baseline justify-between gap-3">
             <Mono className="truncate">{name}</Mono>
-            <span className="shrink-0 text-muted-foreground">{t(label)}</span>
+            <span className="shrink-0 text-mut">{t(label)}</span>
           </li>
         ))}
         {pack.new.map((n) => (
           <li key={"new-" + n} className="flex items-center justify-between gap-3">
             <Mono className="truncate">{n}</Mono>
-            <label className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
+            <label className="flex shrink-0 items-center gap-1.5 text-mut">
               {t("skillNew")} ·
               <Checkbox checked={addNew.includes(n)} onCheckedChange={(v) => onAddNew(v ? [...addNew, n] : addNew.filter((x) => x !== n))} />
               {t("addNewToo")}
@@ -132,7 +133,7 @@ function PackUpdate({
         ))}
       </ul>
       {pack.commits.length > 0 && (
-        <ul className="mt-2.5 ml-6.5 space-y-0.5 border-l pl-3 text-[0.78rem] text-muted-foreground">
+        <ul className="mt-2.5 ml-6.5 space-y-0.5 [border-left:1.5px_solid_var(--ln)] pl-3 fs-meta text-mut">
           {pack.commits.map((c) => (
             <li key={c.id} className="truncate">
               <Mono className="mr-1.5">{c.id}</Mono>
@@ -141,8 +142,8 @@ function PackUpdate({
           ))}
         </ul>
       )}
-      {pack.commitsUnknown && <p className="mt-2.5 ml-6.5 text-[0.78rem] text-muted-foreground">{t("historyCommitsUnknown")}</p>}
-      {pack.moreCommits && <p className="mt-1 ml-6.5 text-[0.78rem] text-muted-foreground">{t("historyMoreCommits")}</p>}
+      {pack.commitsUnknown && <p className="mt-2.5 ml-6.5 fs-meta text-mut">{t("historyCommitsUnknown")}</p>}
+      {pack.moreCommits && <p className="mt-1 ml-6.5 fs-meta text-mut">{t("historyMoreCommits")}</p>}
     </div>
   )
 }
@@ -156,7 +157,10 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
   const [force, setForce] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const blocked = plan.some((p) => p.action === "blocked")
-  const label = (n: string) => agents.find((a) => a.name === n)?.label ?? n
+  const label = (n: string) => {
+    const a = agents.find((x) => x.name === n)
+    return a ? agentLabel(a) : n
+  }
 
   const go = async () => {
     setBusy(true)
@@ -170,44 +174,44 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="min-h-0 max-h-[calc(100svh-2rem)] overflow-hidden sm:max-w-xl">
+      <DialogContent closeLabel={t("close")} className="max-h-[calc(100svh-2rem)] min-h-0 w-[600px] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{t("applyTitle")}</DialogTitle>
           <DialogDescription>{t("applyHint")}</DialogDescription>
         </DialogHeader>
         {plan.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("nothingPending")}</p>
+          <p className="fs-body text-mut">{t("nothingPending")}</p>
         ) : (
-          <ul className="min-h-0 max-h-[calc(100svh-13rem)] overflow-y-auto divide-y rounded-lg border">
+          <ul className="min-h-0 max-h-[calc(100svh-13rem)] overflow-y-auto divide-y divide-ln rounded-ctl border-line">
             {plan.map((p) => (
-              <li key={p.skill + p.agent} className="grid grid-cols-[6rem_1fr] gap-x-3 px-3 py-2 text-[0.82rem]">
+              <li key={p.skill + p.agent} className="grid grid-cols-[6rem_1fr] gap-x-3 px-3 py-2 fs-body">
                 <span className={cn("font-medium", p.action === "blocked" && "underline decoration-dotted underline-offset-4")}>{t(ACT[p.action])}</span>
                 <span className="min-w-0">
                   <span>
                     {p.skill} → {label(p.agent)}
                   </span>
-                  <Mono className="block truncate text-muted-foreground">{p.path}</Mono>
-                  {p.reason && <span className="block text-[0.76rem] text-muted-foreground">{p.reason}</span>}
+                  <Mono className="block truncate text-mut">{p.path}</Mono>
+                  {p.reason && <span className="block fs-meta text-mut">{p.reason}</span>}
                 </span>
               </li>
             ))}
           </ul>
         )}
         {blocked && (
-          <label className="flex items-start gap-2.5 text-[0.85rem]">
+          <label className="flex items-start gap-2.5 fs-body">
             <Checkbox checked={force} onCheckedChange={(v) => setForce(!!v)} className="mt-0.5" />
             <span>
               {t("forceLabel")}
-              <span className="block text-[0.78rem] text-muted-foreground">{t("forceHint")}</span>
+              <span className="block fs-meta text-mut">{t("forceHint")}</span>
             </span>
           </label>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" size="lg" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button onClick={go} disabled={busy || plan.length === 0}>
-            {busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}
+          <Button size="lg" onClick={go} disabled={busy || plan.length === 0}>
+            {busy && <RefreshIcon spinning />}
             {t("apply")}
           </Button>
         </DialogFooter>
@@ -237,7 +241,7 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="sm:max-w-lg">
+      <DialogContent closeLabel={t("close")} className="w-[500px]">
         <DialogHeader>
           <DialogTitle>{t("syncTitle")}</DialogTitle>
           <DialogDescription>{t("syncHint")}</DialogDescription>
@@ -252,9 +256,9 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
           <Field>
             <FieldLabel htmlFor="sync-remote">{t("remoteLabel")}</FieldLabel>
             {needsRemote ? (
-              <Input id="sync-remote" autoFocus value={remote} onChange={(e) => setRemote(e.target.value)} placeholder={t("remotePlaceholder")} className="font-mono text-[0.82rem]" spellCheck={false} />
+              <Input id="sync-remote" autoFocus value={remote} onChange={(e) => setRemote(e.target.value)} placeholder={t("remotePlaceholder")} className="font-mono fs-body" spellCheck={false} />
             ) : (
-              <Mono className="rounded-md bg-muted px-2.5 py-1.5">{status?.remote}</Mono>
+              <Mono className="rounded-ctl bg-nav px-2.5 py-1.5">{status?.remote}</Mono>
             )}
             <FieldDescription>{status?.changes ? t("changesN", { n: status.changes }) : t("noChanges")}</FieldDescription>
           </Field>
@@ -263,11 +267,11 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
             <Input id="sync-msg" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="skd sync" />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               {t("cancel")}
             </Button>
-            <Button type="submit" disabled={busy || (needsRemote && !remote.trim())}>
-              {busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}
+            <Button type="submit" size="lg" disabled={busy || (needsRemote && !remote.trim())}>
+              {busy && <RefreshIcon spinning />}
               {busy ? t("syncing") : t("backUp")}
             </Button>
           </DialogFooter>
@@ -324,14 +328,14 @@ export function LibraryForm({
       {mode === "clone" && (
         <Field>
           <FieldLabel htmlFor="lib-url">{t("gitUrl")}</FieldLabel>
-          <Input id="lib-url" autoFocus={autoFocus} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="git@github.com:you/agent-skills.git" className="font-mono text-[0.82rem]" spellCheck={false} />
+          <Input id="lib-url" autoFocus={autoFocus} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="git@github.com:you/agent-skills.git" className="font-mono fs-body" spellCheck={false} />
         </Field>
       )}
       <Field>
         <FieldLabel htmlFor="lib-dir">{mode === "clone" ? t("cloneInto") : t("folder")}</FieldLabel>
         <div className="flex gap-2">
-          <Input id="lib-dir" autoFocus={autoFocus && mode !== "clone"} value={dir} onChange={(e) => setDir(e.target.value)} className="font-mono text-[0.82rem]" spellCheck={false} />
-          <Button type="button" variant="outline" onClick={pick}>
+          <Input id="lib-dir" autoFocus={autoFocus && mode !== "clone"} value={dir} onChange={(e) => setDir(e.target.value)} className="font-mono fs-body" spellCheck={false} />
+          <Button type="button" variant="outline" size="lg" onClick={pick}>
             {t("choose")}
           </Button>
         </div>
@@ -339,12 +343,12 @@ export function LibraryForm({
       </Field>
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button type="button" variant="outline" size="lg" onClick={onCancel}>
             {t("cancel")}
           </Button>
         )}
-        <Button type="submit" disabled={busy || !dir.trim() || (mode === "clone" && !url.trim())}>
-          {busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}
+        <Button type="submit" size="lg" disabled={busy || !dir.trim() || (mode === "clone" && !url.trim())}>
+          {busy && <RefreshIcon spinning />}
           {busy ? (mode === "clone" ? t("cloning") : t("creating")) : t("continue")}
         </Button>
       </div>
@@ -357,7 +361,7 @@ export function LibraryDialog({ mode, onClose }: { mode: "use" | "clone" | "init
   const title = mode === "use" ? t("switchTitle") : mode === "clone" ? t("importTitle") : t("newLibraryTitle")
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="sm:max-w-lg">
+      <DialogContent closeLabel={t("close")} className="w-[500px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

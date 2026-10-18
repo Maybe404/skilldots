@@ -1,117 +1,145 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { ChevronRight } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
+import { agentLabel, tildify } from "@/lib/agents"
 import { backend, type Agent } from "@/lib/backend"
-import { Mono, PageHeader, Section } from "@/components/app/bits"
+import { isOn } from "@/lib/pending"
+import { AgentMono, Page, TableHead, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
+const COLS = "40px minmax(0,1fr) 220px 70px 100px 110px 120px"
+
+/** Agents: default install, Skill-page column, pause / resume distribution. */
 export function AgentsPage() {
-  const { t, agents, skills, run, reload } = useApp()
-  const enabled = agents.filter((a) => a.enabled)
-  const detected = agents.filter((a) => !a.enabled && a.detected)
-  const missing = agents.filter((a) => !a.enabled && !a.detected)
-  const count = (a: Agent) => skills.filter((s) => s.targets.includes(a.name)).length
+  const { t, agents, skills, pending } = useApp()
+  const [showOthers, setShowOthers] = React.useState(false)
+  const count = (a: Agent) => skills.filter((s) => isOn(s, a.name, pending)).length
+  const main = agents.filter((a) => !a.hidden || a.detected || a.isDefault || !a.enabled || count(a) > 0)
+  const others = agents.filter((a) => !main.includes(a))
+  const defaults = agents.filter((a) => a.isDefault).map(agentLabel)
 
-  const setDefault = async (a: Agent, on: boolean) => {
+  return (
+    <Page title={t("agentsTitle")} summary={t("agentsSummary", { n: main.length, list: defaults.join(t("listSep")) || t("none") })}>
+      <div role="table" aria-label={t("agentsTitle")}>
+        <TableHead style={{ gridTemplateColumns: COLS }}>
+          <div role="columnheader" />
+          <div role="columnheader">Agent</div>
+          <div role="columnheader">{t("colSkillsDir")}</div>
+          <div role="columnheader">skill</div>
+          <div role="columnheader" title={t("defaultInstallHint")}>
+            {t("colDefault")}
+          </div>
+          <div role="columnheader" title={t("colColumnHint")}>
+            {t("colColumn")}
+          </div>
+          <div role="columnheader" title={t("colDistributeHint")}>
+            {t("colDistribute")}
+          </div>
+        </TableHead>
+        {main.map((a) => (
+          <AgentRow key={a.name} agent={a} count={count(a)} />
+        ))}
+      </div>
+      <p className="mt-4 max-w-[640px] fs-meta text-pretty text-mut">{t("agentsFootnote")}</p>
+
+      {others.length > 0 && (
+        <div className="mt-8">
+          <button type="button" aria-expanded={showOthers} onClick={() => setShowOthers((v) => !v)} className="flex h-[30px] items-center gap-2 fs-meta text-mut hover:text-ink">
+            <span aria-hidden className={cn("inline-block w-3 text-sm leading-none transition-transform", showOthers && "rotate-90")}>
+              ›
+            </span>
+            {t("otherAgents", { n: others.length })}
+          </button>
+          {showOthers && (
+            <div role="table" aria-label={t("otherAgents", { n: others.length })} className="[border-top:var(--tblHd)]">
+              {others.map((a) => (
+                <AgentRow key={a.name} agent={a} count={count(a)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Page>
+  )
+}
+
+function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
+  const { t, agents, run, reload, confirm } = useApp()
+  const label = agentLabel(a)
+  const defaults = agents.filter((x) => x.isDefault)
+  const lastDefault = a.isDefault && defaults.length === 1
+  const id = `default-${a.name}`
+
+  const setDefault = async (on: boolean) => {
     const next = agents.filter((x) => (x.name === a.name ? on : x.isDefault)).map((x) => x.name)
     if ((await run(() => backend.setDefaultAgents(next))).ok) {
       await reload()
       toast(t("defaultsSaved"))
     }
   }
-  const setEnabled = async (a: Agent, on: boolean) => {
+  const setHidden = async (hidden: boolean) => {
+    if ((await run(() => backend.setAgentHidden(a.name, hidden))).ok) {
+      await reload()
+      toast(hidden ? t("columnHidden", { agent: label }) : t("columnShown", { agent: label }))
+    }
+  }
+  const setEnabled = async (on: boolean) => {
     if ((await run(() => backend.setAgentEnabled(a.name, on))).ok) {
       await reload()
-      toast(on ? t("agentEnabled", { agent: a.label }) : t("agentDisabled", { agent: a.label }))
+      toast(on ? t("agentResumed", { agent: label, n: count }) : t("agentPaused", { agent: label }))
     }
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <PageHeader title={t("agentsTitle")} hint={t("agentsHint")} />
-
-      <Section title={t("enabledAgents")} hint={t("defaultInstallHint")}>
-        <ul className="divide-y rounded-xl border">
-          {enabled.map((a) => {
-            const n = count(a)
-            const id = `default-${a.name}`
-            return (
-              <li key={a.name} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-5">
-                <div className="min-w-0">
-                  <div className="font-medium">{a.label}</div>
-                  <Mono className="text-muted-foreground">{a.path}</Mono>
-                </div>
-                <span className="text-[0.8rem] text-muted-foreground tabular-nums sm:col-start-2 sm:row-start-1">{t("skillsInAgent", { n })}</span>
-                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 sm:col-start-2 sm:row-start-2">
-                  <label htmlFor={id} className="flex items-center gap-2 text-[0.82rem]">
-                    <Checkbox id={id} checked={a.isDefault} onCheckedChange={(v) => setDefault(a, !!v)} disabled={a.isDefault && agents.filter((x) => x.isDefault).length === 1} />
-                    {t("defaultInstall")}
-                  </label>
-                  <Button variant="ghost" size="sm" onClick={async () => {
-                    if ((await run(() => backend.setAgentHidden(a.name, !a.hidden))).ok) await reload()
-                  }}>
-                    {t(a.hidden ? "showAgentColumn" : "hideAgentColumn")}
-                  </Button>
-                  <Button variant="ghost" size="sm" disabled={n > 0} title={n > 0 ? t("disableAgentBlocked", { n }) : undefined} onClick={() => setEnabled(a, false)}>
-
-                    {t("disableAgent")}
-                  </Button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </Section>
-
-      <Section title={t("otherDetected")} hint={t("otherDetectedHint")}>
-        {detected.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("noOtherAgents")}</p>
-        ) : (
-          <ul className="divide-y rounded-xl border">
-            {detected.map((a) => (
-              <li key={a.name} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="font-medium">{a.label}</div>
-                  <Mono className="text-muted-foreground">{a.path}</Mono>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setEnabled(a, true)}>
-                  {t("enable")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title={t("notDetected")}>
-        <NotDetected agents={missing} />
-      </Section>
+    <div role="row" className={cn("grid h-[57px] items-center border-b-row px-2.5 hover:bg-row-hv", a.hidden && "opacity-55")} style={{ gridTemplateColumns: COLS }}>
+      <div role="cell">
+        <AgentMono agent={a} size={28} />
+      </div>
+      <div role="cell" className="flex min-w-0 items-center gap-2 font-heading fs-name font-semibold text-ink">
+        <span className="truncate">{label}</span>
+        {!a.enabled && <Tag tone="accent">{t("pausedLong")}</Tag>}
+        {!a.detected && <Tag>{t("notOnMachine")}</Tag>}
+      </div>
+      <div role="cell" className="truncate pr-3 font-mono fs-meta text-mut" title={a.path}>
+        {tildify(a.path)}
+      </div>
+      <div role="cell" className="font-mono fs-body text-hue-ink">
+        {count}
+      </div>
+      <div role="cell">
+        <label htmlFor={id} className="flex cursor-pointer items-center gap-2 fs-meta whitespace-nowrap text-ink" title={lastDefault ? t("lastDefault") : undefined}>
+          <Checkbox id={id} checked={a.isDefault} disabled={lastDefault} onCheckedChange={(v) => void setDefault(!!v)} />
+          {a.isDefault ? t("defaultOn") : t("defaultOff")}
+        </label>
+      </div>
+      <div role="cell">
+        <Button variant={a.hidden ? "link" : "quiet"} size="inline" className="fs-meta" onClick={() => void setHidden(!a.hidden)} aria-label={`${label} · ${a.hidden ? t("showAgentColumn") : t("hideAgentColumn")}`}>
+          {a.hidden ? t("hiddenShow") : t("hideAgentColumn")}
+        </Button>
+      </div>
+      <div role="cell">
+        <Button
+          variant="quiet"
+          size="inline"
+          className={cn("fs-meta", !a.enabled && "font-semibold text-ac")}
+          aria-label={`${label} · ${a.enabled ? t("pauseAgent") : t("resumeAgent")}`}
+          onClick={() =>
+            a.enabled
+              ? confirm({
+                  title: t("pauseTitle", { agent: label }),
+                  body: t("pauseBody", { agent: label, n: count }),
+                  action: t("pauseAgent"),
+                  run: () => setEnabled(false),
+                })
+              : void setEnabled(true)
+          }
+        >
+          {a.enabled ? t("pauseAgent") : t("resumeAgent")}
+        </Button>
+      </div>
     </div>
-  )
-}
-
-function NotDetected({ agents }: { agents: Agent[] }) {
-  const [open, setOpen] = React.useState(false)
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger render={<Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground" />}>
-        <ChevronRight className={open ? "rotate-90" : undefined} />
-        {agents.map((a) => a.label).slice(0, 4).join("、")}
-        {agents.length > 4 && ` +${agents.length - 4}`}
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <ul className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[0.82rem] lg:grid-cols-3">
-          {agents.map((a) => (
-            <li key={a.name} className="min-w-0">
-              <span>{a.label}</span> <Mono className="text-muted-foreground">{a.path}</Mono>
-            </li>
-          ))}
-        </ul>
-      </CollapsibleContent>
-    </Collapsible>
   )
 }

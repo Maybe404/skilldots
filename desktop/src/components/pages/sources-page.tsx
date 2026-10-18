@@ -1,153 +1,302 @@
-import { FolderGit2, ListChecks, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react"
+import * as React from "react"
+import { toast } from "sonner"
+import { ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react"
 
-import { hasUpdates, useApp } from "@/lib/app-state"
-import { Mono, PageHeader, Section, UpdateDot } from "@/components/app/bits"
-import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+import { hasUpdates, isMine, useApp } from "@/lib/app-state"
+import { backend, type Pack, type PackStatus, type Skill } from "@/lib/backend"
+import { EmptyNote, Mono, Page, RefreshIcon, TableHead, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 
+const COLS = "minmax(0,1fr) 80px 190px 110px 150px 140px"
+
+/** Sources (subscribed repositories): the design's table with an inline update review. */
 export function SourcesPage() {
-  const { t, packs, skills, outdated, openDialog, check, checking, navigate, select } = useApp()
-  const own = skills.filter((s) => s.kind === "skills" || s.kind === "private")
-  const apps = skills.filter((s) => s.kind === "app")
+  const { t, packs, skills, outdated, check, checking, openDialog, sourceFocus, showSource } = useApp()
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(sourceFocus ? [sourceFocus] : []))
 
-  const show = (key: string) => {
-    navigate("skills")
-    select(key)
+  // Opened from a skill's update notice: show that source's changes.
+  React.useEffect(() => {
+    if (!sourceFocus) return
+    setExpanded((e) => new Set(e).add(sourceFocus))
+    requestAnimationFrame(() => document.getElementById(`source-${sourceFocus}`)?.scrollIntoView({ block: "nearest" }))
+    showSource(null)
+  }, [sourceFocus, showSource])
+
+  const status = (repo: string) => outdated?.packs.find((p) => p.repo === repo)
+  const used = (p: Pack) => skills.filter((s) => s.kind === "vendor" && s.origin === p.repo)
+  const upd = packs.filter((p) => {
+    const st = status(p.repo)
+    return st && hasUpdates(st)
+  }).length
+  const totalUsed = packs.reduce((n, p) => n + used(p).length, 0)
+  const totalAll = packs.reduce((n, p) => n + Math.max(p.upstreamCount, used(p).length), 0)
+  const own = skills.filter(isMine)
+  const apps = [...new Set(skills.filter((s) => s.kind === "app").map((s) => s.origin))]
+
+  const toggle = (repo: string) =>
+    setExpanded((e) => {
+      const n = new Set(e)
+      if (n.has(repo)) n.delete(repo)
+      else n.add(repo)
+      return n
+    })
+
+  return (
+    <Page
+      title={t("sourcesTitle")}
+      summary={t("sourcesSummary", { n: packs.length, upd, used: totalUsed, all: totalAll })}
+      actions={
+        <Button variant="outline" onClick={() => check()} disabled={checking}>
+          <RefreshIcon spinning={checking} />
+          {checking ? t("checking") : t("recheck")}
+        </Button>
+      }
+    >
+      {packs.length === 0 ? (
+        <EmptyNote title={t("noSources")} action={<Button onClick={() => openDialog({ kind: "add" })}>{t("addSkill")}</Button>}>
+          {t("noSourcesBody")}
+        </EmptyNote>
+      ) : (
+        <div role="table" aria-label={t("sourcesTitle")}>
+          <TableHead style={{ gridTemplateColumns: COLS }}>
+            <div role="columnheader">{t("colSourceSkills")}</div>
+            <div role="columnheader">{t("colVersion")}</div>
+            <div role="columnheader">{t("colUsedOf")}</div>
+            <div role="columnheader">{t("colLicense")}</div>
+            <div role="columnheader">{t("colStatus")}</div>
+            <div role="columnheader" />
+          </TableHead>
+          {packs.map((p) => (
+            <SourceRow key={p.repo} pack={p} used={used(p)} st={status(p.repo)} open={expanded.has(p.repo)} onToggle={() => toggle(p.repo)} failed={outdated?.failed.find((f) => f.repo === p.repo)?.error} />
+          ))}
+        </div>
+      )}
+
+      {(own.length > 0 || apps.length > 0) && (
+        <div role="table" aria-label={t("localTitle")} className="mt-8">
+          <TableHead style={{ gridTemplateColumns: COLS }}>
+            <div role="columnheader">{t("localTitle")}</div>
+            <div role="columnheader" />
+            <div role="columnheader">{t("colCount")}</div>
+            <div role="columnheader" />
+            <div role="columnheader" />
+            <div role="columnheader" />
+          </TableHead>
+          <LocalRow name={t("ownTitle")} hint={t("ownHint")} list={own} action={<Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "new" })}><Plus />{t("newSkill")}</Button>} />
+          {apps.map((app) => (
+            <LocalRow key={app} name={app} hint={t("appsHint")} list={skills.filter((s) => s.kind === "app" && s.origin === app)} />
+          ))}
+        </div>
+      )}
+    </Page>
+  )
+}
+
+function SkillLinks({ list }: { list: Skill[] }) {
+  const { navigate, openDetail } = useApp()
+  return (
+    <span className="block truncate font-mono fs-meta text-mut">
+      {list.map((s, i) => (
+        <React.Fragment key={s.ref.key}>
+          {i > 0 && ", "}
+          <button
+            type="button"
+            className="rounded-seg hover:text-ink hover:underline hover:underline-offset-[3px]"
+            onClick={() => {
+              navigate("skills")
+              openDetail(s.ref.key)
+            }}
+          >
+            {s.linkName}
+          </button>
+        </React.Fragment>
+      ))}
+    </span>
+  )
+}
+
+function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; used: Skill[]; st?: PackStatus; open: boolean; onToggle: () => void; failed?: string }) {
+  const { t, openDialog, check } = useApp()
+  const upd = !!st && hasUpdates(st)
+  const movedOnly = !!st && !upd && st.moved.length > 0
+  const total = Math.max(p.upstreamCount, used.length, 1)
+  const reviewable = upd || movedOnly
+  const statusText = reviewable ? (open ? t("collapse") : st!.moved.length ? t("hasUpdatesMoved") : t("hasUpdatesView")) : failed ? t("checkFailedShort") : st ? t("upToDate") : "—"
+
+  return (
+    <div id={`source-${p.repo}`} className={cn(open && "bg-row-hv")}>
+      <div role="row" className="grid min-h-[61px] items-center border-b-row px-2.5 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
+        <div role="cell" className="min-w-0 pr-4">
+          <div className="flex items-center gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
+            <span className="truncate">{p.repo}</span>
+            {p.followAll && <Tag>{t("followAll")}</Tag>}
+            {p.alias && <Mono className="font-normal text-mut">{p.alias}</Mono>}
+          </div>
+          <div className="mt-0.5">{used.length ? <SkillLinks list={used} /> : <span className="fs-meta text-mut">{t("noneUsed")}</span>}</div>
+        </div>
+        <div role="cell" className="font-mono fs-meta text-mut">
+          {p.commit}
+        </div>
+        <div role="cell" className="flex items-center gap-2.5">
+          <span aria-hidden className="h-1 w-[70px] flex-none overflow-hidden rounded-[2px] bg-ln">
+            <span className="block h-full rounded-[2px] bg-hue" style={{ width: `${Math.max(4, Math.round((100 * used.length) / total))}%` }} />
+          </span>
+          <span className="font-mono fs-meta text-ink">
+            {used.length} / {p.upstreamCount || "?"}
+          </span>
+        </div>
+        <div role="cell" className="fs-meta text-mut">
+          {p.license ?? "—"}
+        </div>
+        <div role="cell" className={cn("flex items-center fs-meta", reviewable ? "font-semibold text-ink" : "text-mut")}>
+          {reviewable ? (
+            <button type="button" aria-expanded={open} onClick={onToggle} className="flex items-center gap-1.5 whitespace-nowrap underline decoration-ln underline-offset-[3px]">
+              {upd && <UpdateDot decorative />}
+              {statusText}
+            </button>
+          ) : (
+            <span title={failed}>{statusText}</span>
+          )}
+        </div>
+        <div role="cell" className="flex justify-end gap-1">
+          <Button variant="ghost" size="sm" title={t("chooseSkillsHint")} onClick={() => openDialog({ kind: "add", initial: p.repo })}>
+            <ListChecks />
+            {t("chooseSkills")}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("moreFor", { name: p.repo })} />}>
+              <MoreHorizontal className="size-[15px]" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => check([p.repo])}>
+                <RefreshCw /> {t("checkThis")}
+              </DropdownMenuItem>
+              {reviewable && (
+                <DropdownMenuItem onClick={() => openDialog({ kind: "update", repos: [p.repo] })}>
+                  <ListChecks /> {t("updateDialogOpen")}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => openDialog({ kind: "purge", repo: p.repo })}>
+                <Trash2 /> {t("removeSource")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      {open && st && <UpdateReview pack={p} st={st} used={used} onClose={onToggle} />}
+    </div>
+  )
+}
+
+/** The expanded update review of one source (design: commits on the left, impact and actions on the right). */
+function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus; used: Skill[]; onClose: () => void }) {
+  const { t, runTask, reload, navigate } = useApp()
+  const [addNew, setAddNew] = React.useState<string[]>([])
+  const usedNames = new Set(used.map((s) => s.name))
+  const affected = [...st.changed, ...st.pending].filter((n) => usedNames.has(n))
+  const impact: [string, string[]][] = [
+    [t("skillChanged"), st.changed],
+    [t("skillPending"), st.pending],
+    [t("skillGone"), st.gone],
+    [t("skillMoved"), st.moved.map((m) => m.split(": ")[0])],
+  ]
+
+  const go = async () => {
+    const r = await runTask(t("updating"), () => backend.update([pack.repo], { addNew: addNew.length ? { [pack.repo]: addNew } : undefined }))
+    if (!r.ok) return
+    await reload()
+    onClose()
+    toast(t("updatedOne", { repo: pack.repo, to: st.latest }), { action: { label: t("navHistory"), onClick: () => navigate("history") } })
+    const backups = r.value.flatMap((h) => h.backups)
+    if (backups.length) toast(t("backupsToast", { n: backups.length }), { action: { label: t("openTrash"), onClick: () => navigate("trash") } })
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <PageHeader
-        title={t("sourcesTitle")}
-        hint={t("sourcesHint")}
-        actions={
-          <Button variant="outline" size="sm" onClick={() => check()} disabled={checking}>
-            <RefreshCw className={checking ? "animate-spin motion-reduce:animate-none" : undefined} /> {t("recheck")}
-          </Button>
-        }
-      />
-
-      <div className="px-8 pb-8">
-        {packs.length === 0 ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <FolderGit2 />
-              </EmptyMedia>
-              <EmptyTitle>{t("noSources")}</EmptyTitle>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button size="sm" onClick={() => openDialog({ kind: "add" })}>
-                {t("addSkill")}
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <ul className="divide-y rounded-xl border">
-            {packs.map((p) => {
-              const used = skills.filter((s) => s.kind === "vendor" && s.origin === p.repo)
-              const st = outdated?.packs.find((x) => x.repo === p.repo)
-              const upd = st ? hasUpdates(st) : false
-              const movedOnly = st && !upd && st.moved.length > 0
-              return (
-                <li key={p.repo} className="grid gap-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <span className="font-medium">{p.repo}</span>
-                      {p.alias && <Mono className="text-muted-foreground">{p.alias}</Mono>}
-                      {p.followAll && (
-                        <Badge variant="outline" className="font-normal">
-                          {t("followAll")}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8rem] text-muted-foreground">
-                      <Mono>{p.commit}</Mono>
-                      <span>{t("usedOf", { used: used.length, all: p.upstreamCount })}</span>
-                      {p.license && <span>{p.license}</span>}
-                      <span className="inline-flex items-center gap-1.5 text-foreground">
-                        {upd ? (
-                          <>
-                            <UpdateDot /> {t("hasUpdates")}
-                          </>
-                        ) : movedOnly ? (
-                          <span className="text-muted-foreground">{t("pathOnly")}</span>
-                        ) : st ? (
-                          <span className="text-muted-foreground">{t("upToDate")}</span>
-                        ) : null}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {used.map((s) => (
-                        <Button key={s.ref.key} variant="secondary" size="xs" className="font-normal" onClick={() => show(s.ref.key)}>
-                          {s.linkName}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-1.5 sm:max-w-[23rem]">
-                    {(upd || movedOnly) && (
-                      <Button size="sm" onClick={() => openDialog({ kind: "update", repos: [p.repo] })}>
-                        {t("update")}
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => openDialog({ kind: "add", initial: p.repo })}>
-                      <ListChecks /> {t("chooseSkills")}
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("more")} />}>
-                        <MoreHorizontal />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => check([p.repo])}>
-                          <RefreshCw /> {t("check")}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => openDialog({ kind: "purge", repo: p.repo })}>
-                          <Trash2 /> {t("removeSource")}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+    <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6 border-b-row bg-row-hv py-3.5 pr-2.5 pb-4 pl-[26px] [border-left:3px_solid_var(--ac)] max-[900px]:grid-cols-1">
+      <div className="min-w-0">
+        <div className="flex items-baseline gap-2.5 fs-meta text-mut">
+          <span className="font-semibold text-ink">{t("upstreamCommits")}</span>
+          <Mono>
+            {st.commit} → {st.latest}
+          </Mono>
+        </div>
+        <div className="mt-2 flex flex-col gap-[5px]">
+          {st.commits.map((c) => (
+            <div key={c.id} className="flex gap-3 fs-body">
+              <Mono className="w-16 flex-none text-mut">{c.id}</Mono>
+              <span className="min-w-0 text-ink">{c.title}</span>
+            </div>
+          ))}
+          {st.commitsUnknown && <p className="fs-meta text-mut">{t("historyCommitsUnknown")}</p>}
+          {st.moreCommits && <p className="fs-meta text-mut">{t("historyMoreCommits")}</p>}
+        </div>
+        {st.moved.length > 0 && <p className="mt-2.5 fs-meta text-ink">{t("movedNote")}</p>}
+        {st.new.length > 0 && (
+          <fieldset className="mt-3">
+            <legend className="fs-meta text-mut">{t("upstreamNew")}</legend>
+            <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1.5">
+              {st.new.map((n) => (
+                <label key={n} className="flex items-center gap-2 fs-body text-ink">
+                  <Checkbox checked={addNew.includes(n)} onCheckedChange={(v) => setAddNew((l) => (v ? [...l, n] : l.filter((x) => x !== n)))} />
+                  <Mono className="fs-body">{n}</Mono>
+                  <span className="fs-meta text-mut">{t("addNewToo")}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
         )}
       </div>
-
-      <Section title={t("ownTitle")} hint={t("ownHint")}>
-        <div className="flex flex-wrap gap-1.5">
-          {own.map((s) => (
-            <Button key={s.ref.key} variant="outline" size="sm" className="font-normal" onClick={() => show(s.ref.key)}>
-              {s.linkName}
-              <span className="text-muted-foreground">{s.kind === "private" ? t("kindPrivate") : "skills/"}</span>
-            </Button>
-          ))}
-          <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "new" })}>
-            + {t("newSkill")}
+      <div>
+        <div className="fs-meta text-mut">{t("affectsYours")}</div>
+        <div className="mt-1 font-mono fs-body text-hue-ink">{affected.length ? affected.join(", ") : t("affectsNone")}</div>
+        <dl className="mt-2 space-y-0.5 fs-meta">
+          {impact
+            .filter(([, l]) => l.length)
+            .map(([label, l]) => (
+              <div key={label} className="flex gap-2">
+                <dt className="flex-none text-mut">{label}</dt>
+                <dd className="min-w-0 truncate font-mono text-ink">{l.join(", ")}</dd>
+              </div>
+            ))}
+        </dl>
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          <Button onClick={go} className="px-3">
+            {t("updateTo")} <span className="font-mono font-medium">{st.latest}</span>
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("notNow")}
           </Button>
         </div>
-      </Section>
+      </div>
+    </div>
+  )
+}
 
-      {apps.length > 0 && (
-        <Section title={t("appsTitle")} hint={t("appsHint")}>
-          <ul className="divide-y rounded-xl border">
-            {apps.map((s) => (
-              <li key={s.ref.key} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <button type="button" className="font-medium hover:underline" onClick={() => show(s.ref.key)}>
-                    {s.linkName}
-                  </button>
-                  <Mono className="block truncate text-muted-foreground">{s.dir}</Mono>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+function LocalRow({ name, hint, list, action }: { name: string; hint: string; list: Skill[]; action?: React.ReactNode }) {
+  return (
+    <div role="row" className="grid min-h-[60px] items-center border-b-row px-2.5 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
+      <div role="cell" className="min-w-0 pr-4">
+        <div className="flex items-baseline gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
+          <span className="truncate">{name}</span>
+          <span className="truncate font-body fs-meta font-normal text-mut">{hint}</span>
+        </div>
+        <div className="mt-0.5">
+          <SkillLinks list={list} />
+        </div>
+      </div>
+      <div role="cell" />
+      <div role="cell" className="font-mono fs-meta text-ink">
+        {list.length}
+      </div>
+      <div role="cell" />
+      <div role="cell" />
+      <div role="cell" className="flex justify-end">
+        {action}
+      </div>
     </div>
   )
 }

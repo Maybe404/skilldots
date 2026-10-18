@@ -1,14 +1,17 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { CheckCheck, Loader2, ScanSearch } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
+import { agentLabel, tildify } from "@/lib/agents"
 import { backend, type ScanItem } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono, PageError, PageHeader } from "@/components/app/bits"
+import { AgentMono, EmptyNote, Page, PageError, RefreshIcon, TableHead } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Skeleton } from "@/components/ui/skeleton"
+
+const COLS = "28px minmax(0,1fr) 110px minmax(0,380px)"
 
 const STATE: Record<ScanItem["state"], MessageKey> = {
   copy: "stateCopy",
@@ -21,40 +24,47 @@ const STATE: Record<ScanItem["state"], MessageKey> = {
   other: "stateCopy",
 }
 
+/** 收编: scan the agent folders and adopt what skilldots does not manage yet. */
 export function ScanPage() {
-  const { t, runTask, reload, agents } = useApp()
+  const { t, runTask, reload, agents, skills, confirm } = useApp()
   const [items, setItems] = React.useState<ScanItem[] | null>(null)
   const [failed, setFailed] = React.useState(false)
   const [scanning, setScanning] = React.useState(false)
   const [picked, setPicked] = React.useState<Set<string>>(new Set())
-  const [busy, setBusy] = React.useState(false)
-  const label = (n: string) => agents.find((a) => a.name === n)?.label ?? n
 
-  const scan = React.useCallback(async () => {
-    setScanning(true)
-    setFailed(false)
-    const r = await runTask(t("scanning"), () => backend.scan())
-    setScanning(false)
-    if (!r.ok) {
-      setFailed(true)
-      return
-    }
-    setItems(r.value)
-    setPicked(new Set(r.value.filter((x) => x.proposal !== "skip").map((x) => x.id)))
-  }, [runTask, t])
+  const scan = React.useCallback(
+    async (announce: boolean) => {
+      setScanning(true)
+      setFailed(false)
+      const r = await runTask(t("scanning"), () => backend.scan())
+      setScanning(false)
+      if (!r.ok) {
+        setFailed(true)
+        return
+      }
+      setItems(r.value)
+      setPicked(new Set(r.value.filter((x) => x.proposal !== "skip").map((x) => x.id)))
+      if (announce) toast(r.value.length ? t("scanDone", { n: r.value.length }) : t("scanDoneNone"))
+    },
+    [runTask, t],
+  )
 
   React.useEffect(() => {
-    void scan()
+    void scan(false)
   }, [scan])
 
+  const label = (n: string) => {
+    const a = agents.find((x) => x.name === n)
+    return a ? agentLabel(a) : n
+  }
   const proposal = (it: ScanItem) => {
     switch (it.proposal) {
       case "pack":
-        return t("propPack", { repo: it.repo ?? "" })
+        return t("propPack", { repo: it.repo ?? "", name: it.name })
       case "own":
-        return t("propOwn")
+        return skills.some((s) => s.linkName === it.name) ? t("propOwnRename") : t("propOwn")
       case "enable":
-        return t("propEnable", { agent: label(it.agent) })
+        return t("propEnable", { agent: label(it.agent), name: it.name })
       case "drop":
         return t("propDrop")
       case "app":
@@ -64,100 +74,143 @@ export function ScanPage() {
     }
   }
 
-  const adopt = async () => {
-    setBusy(true)
-    const r = await runTask(t("operating"), () => backend.adopt([...picked]))
-    setBusy(false)
-    if (!r.ok) return
-    toast(t("adoptedToast", { n: r.value.adopted }))
-    await reload()
-    await scan()
-  }
-
-  const byAgent = React.useMemo(() => {
+  // Grouped by agent, in registry order.
+  const groups = React.useMemo(() => {
+    const order = agents.map((a) => a.name)
     const m = new Map<string, ScanItem[]>()
     for (const it of items ?? []) m.set(it.agent, [...(m.get(it.agent) ?? []), it])
-    return [...m.entries()]
-  }, [items])
+    return [...m.entries()].sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+  }, [items, agents])
+
+  const selectable = (items ?? []).filter((x) => x.proposal !== "skip")
+  const n = picked.size
+  const all = selectable.length > 0 && selectable.every((x) => picked.has(x.id))
+  const some = selectable.some((x) => picked.has(x.id))
+  const toggle = (id: string, on: boolean) =>
+    setPicked((s) => {
+      const next = new Set(s)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+
+  const adopt = () => {
+    const chosen = (items ?? []).filter((x) => picked.has(x.id))
+    confirm({
+      title: t("adoptTitle", { n: chosen.length }),
+      body: chosen.map((x) => `${x.name}：${proposal(x)}`).join(t("listSepLong")) + t("adoptBodyTail"),
+      action: t("adoptAction"),
+      run: async () => {
+        const r = await runTask(t("adopting"), () => backend.adopt([...picked]))
+        if (!r.ok) return false
+        toast(t("adoptedToast", { n: r.value.adopted }))
+        await reload()
+        await scan(false)
+      },
+    })
+  }
+
+  const summary = scanning
+    ? t("scanning")
+    : items === null
+      ? ""
+      : items.length
+        ? t("scanSummary", { agents: groups.length, n: items.length })
+        : t("scanSummaryNone")
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title={t("scanTitle")}
-        hint={t("scanHint")}
-        actions={
-          <Button variant="outline" size="sm" onClick={scan} disabled={scanning}>
-            <ScanSearch /> {items ? t("rescan") : t("scan")}
+    <Page
+      title={t("scanTitle")}
+      summary={summary}
+      className="pb-5"
+      actions={
+        <Button variant="outline" onClick={() => void scan(true)} disabled={scanning}>
+          <RefreshIcon spinning={scanning} />
+          {scanning ? t("scanningShort") : t("rescan")}
+        </Button>
+      }
+      footer={
+        <footer className="relative z-[4] flex h-[57px] shrink-0 items-center gap-3 border-t-hd bg-bg px-10 font-body fs-body text-mut max-[760px]:px-5">
+          <span className="min-w-0 truncate">{t("adoptNote")}</span>
+          <span className="flex-1" />
+          <Button size="lg" className="px-4" disabled={!n || scanning} variant={n ? "default" : "secondary"} onClick={adopt}>
+            {n ? t("adoptSelected", { n }) : t("adoptPickFirst")}
           </Button>
-        }
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-6">
-        {scanning && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
-            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> {t("scanning")}
-          </p>
-        )}
-        {!scanning && items && items.length === 0 && (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <CheckCheck />
-              </EmptyMedia>
-              <EmptyTitle>{t("scanEmpty")}</EmptyTitle>
-            </EmptyHeader>
-          </Empty>
-        )}
-        {!scanning && failed && <PageError onRetry={() => void scan()} />}
-        {!scanning && !failed &&
-          byAgent.map(([agent, list]) => (
-            <section key={agent} className="mb-6">
-              <h2 className="mb-2 text-sm font-semibold">{label(agent)}</h2>
-              <ul className="divide-y rounded-xl border">
+        </footer>
+      }
+    >
+      {failed ? (
+        <PageError onRetry={() => void scan(false)} />
+      ) : items === null ? (
+        <div className="space-y-2 pt-1" role="status" aria-label={t("scanning")}>
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-[52px]" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyNote title={t("scanEmpty")}>{t("scanEmptyBody")}</EmptyNote>
+      ) : (
+        <div role="table" aria-label={t("scanTitle")} aria-busy={scanning}>
+          <TableHead style={{ gridTemplateColumns: COLS }}>
+            <div role="columnheader">
+              <Checkbox
+                aria-label={t("selectAll")}
+                checked={all}
+                indeterminate={some && !all}
+                onCheckedChange={() => setPicked(all ? new Set() : new Set(selectable.map((x) => x.id)))}
+              />
+            </div>
+            <div role="columnheader">{t("colFound")}</div>
+            <div role="columnheader">{t("colState")}</div>
+            <div role="columnheader">{t("colAfter")}</div>
+          </TableHead>
+          {groups.map(([agent, list]) => {
+            const a = agents.find((x) => x.name === agent) ?? { name: agent, label: agent, path: "" }
+            return (
+              <div role="rowgroup" key={agent} aria-label={label(agent)}>
+                <div role="row" className="flex h-[35px] items-center gap-2 border-b-row px-2.5">
+                  <AgentMono agent={a} size={20} className="rounded-[5px]" />
+                  <span className="font-heading fs-body font-semibold text-ink">{label(agent)}</span>
+                  <span className="truncate font-mono fs-meta text-mut">{tildify(a.path)}</span>
+                </div>
                 {list.map((it) => {
                   const id = `scan-${it.id}`
+                  const on = picked.has(it.id)
+                  const skip = it.proposal === "skip"
                   return (
-                    <li key={it.id} className="flex items-start gap-3 px-4 py-3">
-                      <Checkbox
-                        id={id}
-                        className="mt-0.5"
-                        disabled={it.proposal === "skip"}
-                        checked={picked.has(it.id)}
-                        onCheckedChange={(v) =>
-                          setPicked((s) => {
-                            const n = new Set(s)
-                            if (v) n.add(it.id)
-                            else n.delete(it.id)
-                            return n
-                          })
-                        }
-                      />
-                      <label htmlFor={id} className="grid min-w-0 flex-1 gap-0.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-6">
-                        <span className="min-w-0">
-                          <span className="font-medium">{it.name}</span>
-                          <span className="ml-2 text-[0.8rem] text-muted-foreground">{t(STATE[it.state])}</span>
-                          <Mono className="block truncate text-muted-foreground">
-                            {it.path}
-                            {it.linkTo && ` → ${it.linkTo}`}
-                          </Mono>
-                        </span>
-                        <span className="text-[0.85rem]">{proposal(it)}</span>
-                      </label>
-                    </li>
+                    <div
+                      role="row"
+                      key={it.id}
+                      onClick={() => !skip && toggle(it.id, !on)}
+                      className={cn("grid h-[59px] cursor-pointer items-center border-b-row px-2.5 hover:bg-row-hv", (!on || skip) && "opacity-55", skip && "cursor-default")}
+                      style={{ gridTemplateColumns: COLS }}
+                    >
+                      <div role="cell" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox id={id} checked={on} disabled={skip} onCheckedChange={(v) => toggle(it.id, !!v)} />
+                      </div>
+                      <div role="cell" className="min-w-0 pr-3">
+                        <label htmlFor={id} className="block cursor-pointer font-heading fs-name font-semibold text-ink" onClick={(e) => e.stopPropagation()}>
+                          {it.name}
+                        </label>
+                        <div className="mt-0.5 truncate font-mono fs-meta text-mut">
+                          {tildify(it.path)}
+                          {it.linkTo && ` → ${tildify(it.linkTo)}`}
+                        </div>
+                      </div>
+                      <div role="cell" className={cn("fs-meta", it.state === "broken" ? "font-semibold text-ac" : "text-mut")}>
+                        {t(STATE[it.state])}
+                      </div>
+                      <div role="cell" className="min-w-0 truncate fs-body text-ink" title={proposal(it)}>
+                        {proposal(it)}
+                      </div>
+                    </div>
                   )
                 })}
-              </ul>
-            </section>
-          ))}
-      </div>
-      {items && items.length > 0 && (
-        <div className="flex items-center justify-between gap-4 border-t px-8 py-3">
-          <span className="text-[0.8rem] text-muted-foreground">{t("adoptNote")}</span>
-          <Button onClick={adopt} disabled={busy || picked.size === 0}>
-            {busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}
-            {t("adoptSelected", { n: picked.size })}
-          </Button>
+              </div>
+            )
+          })}
         </div>
       )}
-    </div>
+    </Page>
   )
 }

@@ -1,17 +1,25 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { Trash2, Undo2 } from "lucide-react"
 
 import { useApp } from "@/lib/app-state"
 import { backend, type TrashEntry } from "@/lib/backend"
-import { ago } from "@/lib/i18n"
-import { ExampleTag, Mono, PageError, PageHeader } from "@/components/app/bits"
+import { ago, type MessageKey } from "@/lib/i18n"
+import { EmptyNote, ExampleTag, Page, PageError, TableHead } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 
+const COLS = "200px minmax(0,1fr) 110px 220px 120px"
+
+const REASON: Record<NonNullable<TrashEntry["reason"]>, MessageKey> = {
+  removed: "reasonRemoved",
+  update: "reasonUpdate",
+  adopt: "reasonAdopt",
+  purge: "reasonPurge",
+}
+
+/** Trash: restore only. Emptying it is a terminal command (skd trash empty). */
 export function TrashPage() {
-  const { t, run, reload, trashCount } = useApp()
+  const { t, run, reload, trashCount, status } = useApp()
   const [items, setItems] = React.useState<TrashEntry[] | null>(null)
   const [failed, setFailed] = React.useState(false)
 
@@ -31,49 +39,72 @@ export function TrashPage() {
     await reload()
   }
 
+  // Older entries carry no reason: say where they came from instead.
+  const why = (e: TrashEntry) => {
+    if (e.reason === "update") {
+      const name = e.origin.match(/\/vendor\/[^/]+\/[^/]+\/([^/]+)\//)?.[1]
+      if (name) return t("reasonUpdateOf", { name })
+    }
+    if (e.reason) return t(REASON[e.reason])
+    return status?.root && e.origin.startsWith(status.root) ? t("reasonLibrary") : t("reasonAgentDir")
+  }
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <PageHeader
-        title={t("trashTitle")}
-        hint={t("trashHint")}
-      />
-      <div className="px-8 pb-8">
-        {failed ? <PageError onRetry={() => void load()} /> : items === null ? (
-          <div className="space-y-3">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-          </div>
-        ) : items.length === 0 ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Trash2 />
-              </EmptyMedia>
-              <EmptyTitle>{t("trashEmpty")}</EmptyTitle>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <ul className="divide-y rounded-xl border">
-            {items?.map((e) => (
-              <li key={e.id} className="flex items-center gap-4 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{e.name}</span>
-                    {e.example && <ExampleTag />}
-                    <span className="text-[0.78rem] text-muted-foreground">{ago(e.when, t)}</span>
-                  </div>
-                  <p className="mt-0.5 truncate text-[0.8rem] text-muted-foreground">
-                    {t("from")} <Mono>{e.origin}</Mono>
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" disabled={e.restorable === false} title={e.problem} onClick={() => restore(e)}>
-                  <Undo2 /> {t("restore")}
+    <Page
+      title={t("trashTitle")}
+      summary={
+        <>
+          {t("trashRestoreOnly")}
+          <code className="rounded-[4px] bg-nav px-1.5 py-px font-mono fs-meta text-ink">skd trash empty</code>
+        </>
+      }
+    >
+      {failed ? (
+        <PageError onRetry={() => void load()} />
+      ) : items === null ? (
+        <div className="space-y-2 pt-1" role="status" aria-label={t("loading")}>
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyNote title={t("trashEmpty")}>{t("trashEmptyBody")}</EmptyNote>
+      ) : (
+        <div role="table" aria-label={t("trashTitle")}>
+          <TableHead style={{ gridTemplateColumns: COLS }}>
+            <div role="columnheader">{t("colName")}</div>
+            <div role="columnheader">{t("from")}</div>
+            <div role="columnheader">{t("colTime")}</div>
+            <div role="columnheader">{t("colWhy")}</div>
+            <div role="columnheader" />
+          </TableHead>
+          {items.map((e) => (
+            <div role="row" key={e.id} className="grid h-[57px] items-center border-b-row px-2.5 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
+              <div role="cell" className="flex min-w-0 items-center gap-2 pr-3">
+                <span className="truncate font-heading fs-name font-semibold text-ink">{e.name}</span>
+                {e.example && <ExampleTag />}
+              </div>
+              <div role="cell" className="truncate pr-3 text-left font-mono fs-meta text-mut [direction:rtl]" title={e.origin}>
+                <bdi>{e.origin}</bdi>
+              </div>
+              <div role="cell" className="fs-meta text-mut">
+                <time dateTime={e.when}>{ago(e.when, t)}</time>
+              </div>
+              <div role="cell" className="truncate fs-meta text-mut" title={e.problem ?? why(e)}>
+                {e.restorable === false && e.problem ? e.problem : why(e)}
+              </div>
+              <div role="cell" className="flex justify-end">
+                <Button variant="outline" size="sm" disabled={e.restorable === false} title={e.problem} onClick={() => restore(e)} aria-label={`${t("restore")} ${e.name}`}>
+                  <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 14 4 9l5-5" />
+                    <path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+                  </svg>
+                  {t("restore")}
                 </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Page>
   )
 }
