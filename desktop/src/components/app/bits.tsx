@@ -32,7 +32,7 @@ export function OffRing({ className, label }: { className?: string; label?: stri
   )
 }
 
-/** Small tag next to a name ("我的", "已暂停", "示例"). */
+/** Small tag next to a name ("本地", "已暂停", "示例"). */
 export function Tag({ children, className, tone }: { children: React.ReactNode; className?: string; tone?: "accent" }) {
   return <span className={cn("skd-tag", tone === "accent" && "bg-ac text-ac-ink", className)}>{children}</span>
 }

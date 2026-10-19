@@ -337,7 +337,7 @@
     color: var(--mut);
   }
 
-  /* Small tag next to a name ("我的", "已暂停"). */
+  /* Small tag next to a name ("本地", "已暂停"). */
   .skd-tag {
     font-family: var(--fb);
     font-size: 10px;
