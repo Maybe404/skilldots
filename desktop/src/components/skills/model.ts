@@ -13,6 +13,9 @@ export const AGENT_H = 72
 /** Top of the first agent row (12 padding + 24 header + 6). */
 export const AGENTS_TOP = 42
 
+/** DOM id of a skill's row (wire and table view), to move focus back to it. */
+export const rowId = (key: string) => "skill-row-" + key.replace(/[^A-Za-z0-9_-]/g, "_")
+
 export function matchesFilter(s: Skill, filter: SkillFilter, updatable: Set<string>) {
   switch (filter) {
     case "mine":

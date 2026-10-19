@@ -96,7 +96,7 @@ export function SourcesPage() {
 }
 
 function SkillLinks({ list }: { list: Skill[] }) {
-  const { navigate, openDetail } = useApp()
+  const { openDetail } = useApp()
   return (
     <span className="block font-mono fs-meta text-mut [overflow-wrap:anywhere]">
       {list.map((s, i) => (
@@ -106,10 +106,7 @@ function SkillLinks({ list }: { list: Skill[] }) {
             variant="quiet"
             size="inline"
             className="inline rounded-seg font-mono whitespace-normal no-underline hover:underline"
-            onClick={() => {
-              navigate("skills")
-              openDetail(s.ref.key)
-            }}
+            onClick={() => openDetail(s.ref.key)}
           >
             {s.linkName}
           </Button>

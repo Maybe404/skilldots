@@ -10,12 +10,9 @@ import { StatusBar } from "@/components/app/status-bar"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { matchesFilter, useSkillList } from "./model"
-import { SkillSheet } from "./skill-sheet"
+import { matchesFilter, rowId, useSkillList } from "./model"
 import { TableView } from "./table-view"
 import { WireView } from "./wire-view"
-
-const rowId = (key: string) => "skill-row-" + key.replace(/[^A-Za-z0-9_-]/g, "_")
 
 // The first skill is picked once per launch; after that the selection is the user's, including none.
 let autoPicked = false
@@ -226,7 +223,6 @@ export function SkillsPage() {
       </div>
 
       <StatusBar />
-      <SkillSheet returnFocus={() => (selected ? document.getElementById(rowId(selected)) : null)} />
     </div>
   )
 }

@@ -13,17 +13,18 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch"
 
 /**
- * Skill details (not drawn in the design): a side sheet over the Skill page
- * with the description, where it is installed, upstream changes and the
+ * Skill details (not drawn in the design): a side sheet over the current page
+ * (the Skill page, or Sources through a skill link) with the description, where it is installed, upstream changes and the
  * actions that used to live in the old detail panel. Agent switches add
  * pending changes like everything else on the Skill page.
  */
 export function SkillSheet({ returnFocus }: { returnFocus: () => HTMLElement | null }) {
-  const { t, detail, closeDetail, skills } = useApp()
+  const { t, view, detail, closeDetail, skills } = useApp()
   const skill = skills.find((s) => s.ref.key === detail) ?? null
   const start = React.useRef<HTMLDivElement>(null)
+  // Not over the editor: a detail opened while its unsaved-changes prompt holds the navigation waits for it.
   return (
-    <Sheet open={!!skill} onOpenChange={(o) => !o && closeDetail()}>
+    <Sheet open={!!skill && view !== "editor"} onOpenChange={(o) => !o && closeDetail()}>
       {/*
         Focus lands on the panel body, not on its first switch: the key that
         opened the panel (Space) would otherwise toggle that switch on keyup.

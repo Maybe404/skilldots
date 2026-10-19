@@ -16,6 +16,8 @@ import { ScanPage } from "@/components/pages/scan-page"
 import { SettingsPage } from "@/components/pages/settings-page"
 import { SourcesPage } from "@/components/pages/sources-page"
 import { TrashPage } from "@/components/pages/trash-page"
+import { rowId } from "@/components/skills/model"
+import { SkillSheet } from "@/components/skills/skill-sheet"
 import { SkillsPage } from "@/components/skills/skills-page"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -121,7 +123,7 @@ function OperationPill() {
 }
 
 function Shell() {
-  const { view, editing, setPaletteOpen, paletteOpen, openDialog, navigate, dialog } = useApp()
+  const { view, editing, setPaletteOpen, paletteOpen, openDialog, navigate, dialog, selected } = useApp()
 
   // Global shortcuts: ⌘K palette, ⌘N new skill, ⌘, settings, ⌘F search.
   React.useEffect(() => {
@@ -177,6 +179,8 @@ function Shell() {
       <Header />
       <div className="flex min-h-0 flex-1 flex-col">{page}</div>
       <OperationPill />
+      {/* Skill details open over any page (the Skill page, or a skill link on Sources); closing returns focus to the skill's row when it is on screen. */}
+      <SkillSheet returnFocus={() => (selected ? document.getElementById(rowId(selected)) : null)} />
       <Dialogs />
       <CommandPalette />
     </div>
