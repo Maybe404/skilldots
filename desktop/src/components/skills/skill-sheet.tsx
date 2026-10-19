@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Copy, FolderOpen, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
 
-import { PLACEHOLDER_DESC, isMine, kindLabel, useApp, useColumnAgents } from "@/lib/app-state"
+import { PLACEHOLDER_DESC, isMine, kindLabel, sourceText, useApp, useColumnAgents } from "@/lib/app-state"
 import { agentLabel } from "@/lib/agents"
 import type { Skill } from "@/lib/backend"
 import { cellState } from "@/lib/pending"
@@ -53,9 +53,9 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
         <SheetTitle className="flex items-center gap-2">
           <span className="truncate">{skill.linkName}</span>
           {updatable.has(skill.ref.key) && <UpdateDot />}
-          {mine && <Tag>{skill.kind === "private" ? t("kindPrivate") : t("kindMine")}</Tag>}
+          {mine && <Tag>{t("kindMine")}</Tag>}
         </SheetTitle>
-        <SheetDescription className="truncate font-mono">{kindLabel(t, skill)}</SheetDescription>
+        <SheetDescription className="truncate font-mono">{sourceText(t, skill)}</SheetDescription>
       </SheetHeader>
 
       <div ref={start} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 outline-none">

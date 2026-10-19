@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
-import { isMine, kindLabel, useApp } from "@/lib/app-state"
+import { isMine, sourceText, useApp } from "@/lib/app-state"
 import { agentLabel, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
@@ -373,7 +373,7 @@ export function WireView({
                     selected={it.skill.ref.key === selected}
                     tabStop={it.skill.ref.key === tabKey}
                     update={updatable.has(it.skill.ref.key)}
-                    sourceText={isMine(it.skill) ? t("kindMine") : kindLabel(t, it.skill)}
+                    sourceText={sourceText(t, it.skill)}
                     // A second click on the selected skill clears the selection (and its orange curves).
                     onSelect={(e) => e.detail < 2 && select(it.skill.ref.key === selected ? null : it.skill.ref.key)}
                     onOpen={() => {

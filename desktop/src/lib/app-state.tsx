@@ -610,6 +610,11 @@ export function kindLabel(t: T, s: Skill): string {
 }
 
 /** The group a skill belongs to when the list is grouped by source. */
+/** Where a skill lives, shown under its name next to the 本地 tag: the library folder of your own skills, the repository of the rest. */
+export function sourceText(t: T, s: Skill): string {
+  return s.kind === "skills" ? "skills/" : s.kind === "private" ? "private/" : kindLabel(t, s)
+}
+
 export function sourceGroup(t: T, s: Skill): string {
   return s.kind === "skills" || s.kind === "private" ? t("kindMine") : s.origin
 }

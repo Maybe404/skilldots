@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { isMine, kindLabel, useApp, type TableSort } from "@/lib/app-state"
+import { isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
 import { agentLabel, agentMono } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
@@ -165,7 +165,7 @@ function Row({
   onToggle: (agent: string) => void
 }) {
   const { t, pending } = useApp()
-  const source = isMine(skill) ? t("kindMine") : kindLabel(t, skill)
+  const source = sourceText(t, skill)
   return (
     <div
       role="row"
