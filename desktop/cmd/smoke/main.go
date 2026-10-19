@@ -322,6 +322,8 @@ const uiHelpers = `
      const delay = ms => new Promise(r => setTimeout(r, ms));
      const byText = (sel, text) => [...document.querySelectorAll(sel)].find(b => b.textContent.trim() === text);
      const row = name => [...document.querySelectorAll("[id^=skill-row-]")].find(b => b.getAttribute("aria-label")?.startsWith(name));
+     // A click on the selected row clears the selection, so only an unselected row is clicked.
+     const pick = name => row(name).getAttribute("aria-current") === "true" || row(name).click();
      const toggle = agent => document.querySelector("button[aria-pressed][aria-label*='(" + agent + ")']");
 `
 
@@ -329,9 +331,9 @@ const uiHelpers = `
 // link to claude is pending removal (grey dots), partial-skill gets a pending
 // link to claude (orange dashes) and is the selected skill.
 const wireStates = uiHelpers + `
-     row("native-smoke").click(); await delay(150);
+     pick("native-smoke"); await delay(150);
      toggle("claude").click(); await delay(150);
-     row("partial-skill").click(); await delay(150);
+     pick("partial-skill"); await delay(150);
      toggle("claude").click(); await delay(150);
      row("native-smoke").parentElement.dispatchEvent(new MouseEvent("mouseover", {bubbles: true}));
      await delay(300);

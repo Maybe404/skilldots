@@ -17,6 +17,9 @@ import { WireView } from "./wire-view"
 
 const rowId = (key: string) => "skill-row-" + key.replace(/[^A-Za-z0-9_-]/g, "_")
 
+// The first skill is picked once per launch; after that the selection is the user's, including none.
+let autoPicked = false
+
 function isTyping(el: Element | null) {
   if (!el) return false
   const h = el as HTMLElement
@@ -30,29 +33,29 @@ export function SkillsPage() {
   const { order, columns } = list
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [width, setWidth] = React.useState(1280)
-  const [scrollTop, setScrollTop] = React.useState(0)
+  const [height, setHeight] = React.useState(0)
   const [hover, setHover] = React.useState<string | null>(null)
 
   React.useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth))
+    const measure = () => {
+      setWidth(el.clientWidth)
+      setHeight(el.clientHeight)
+    }
+    const ro = new ResizeObserver(measure)
     ro.observe(el)
-    setWidth(el.clientWidth)
+    measure()
     return () => ro.disconnect()
   }, [])
 
-  // Keep a selection: the first visible skill, like the design.
+  // Start on the first visible skill, like the design, and move to it when the selected one disappears
+  // from the library. A cleared selection (a second click, esc, moving the skill to the trash) stays cleared.
   React.useEffect(() => {
     if (!order.length) return
-    if (!selected || !skills.some((s) => s.ref.key === selected)) select(order[0].ref.key)
+    if (selected ? !skills.some((s) => s.ref.key === selected) : !autoPicked) select(order[0].ref.key)
+    autoPicked = true
   }, [order, selected, skills, select])
-
-  const raf = React.useRef(0)
-  const onScroll = () => {
-    cancelAnimationFrame(raf.current)
-    raf.current = requestAnimationFrame(() => setScrollTop(scrollRef.current?.scrollTop ?? 0))
-  }
 
   const moveTo = React.useCallback(
     (key: string, focus: boolean) => {
@@ -100,6 +103,7 @@ export function SkillsPage() {
         setSkillView(skillView === "wire" ? "table" : "wire")
       } else if (e.key === "Escape") {
         if (agentFocus) setAgentFocus(null)
+        else if (selected) select(null)
         else if (pendingCount && !applying) {
           revertPending()
           toast(t("revertedN", { n: pendingCount }))
@@ -108,7 +112,7 @@ export function SkillsPage() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [order, selected, columns, detail, dialog, paletteOpen, pendingCount, applyPending, openDetail, togglePending, moveTo, skillView, setSkillView, agentFocus, setAgentFocus, revertPending, applying, t])
+  }, [order, selected, select, columns, detail, dialog, paletteOpen, pendingCount, applyPending, openDetail, togglePending, moveTo, skillView, setSkillView, agentFocus, setAgentFocus, revertPending, applying, t])
 
   const filters: [SkillFilter, string][] = [
     ["all", t("filterAll")],
@@ -159,22 +163,22 @@ export function SkillsPage() {
           </Button>
         )}
         <span className="flex-1" />
-        <ToggleGroup aria-label={t("viewLabel")} variant="seg" size="none" value={[skillView]} onValueChange={(v) => v[0] && setSkillView(v[0] as "wire" | "table")} className="skd-seg h-[34px] items-start" spacing={2}>
-          <ToggleGroupItem value="wire">
+        <ToggleGroup aria-label={t("viewLabel")} variant="seg" size="none" value={[skillView]} onValueChange={(v) => v[0] && setSkillView(v[0] as "wire" | "table")} className="skd-seg h-[34px]" spacing={2}>
+          <ToggleGroupItem value="wire" className="h-7">
             {/* The design's own wire glyph (two crossing curves); Lucide has none like it. */}
             <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6c8 0 8 12 16 12M4 18c8 0 8-12 16-12" />
             </svg>
             {t("viewWire")}
           </ToggleGroupItem>
-          <ToggleGroupItem value="table">
+          <ToggleGroupItem value="table" className="h-7">
             <Table aria-hidden strokeWidth={2} />
             {t("viewTable")}
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
 
-      <div ref={scrollRef} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         {order.length === 0 && list.items.length === 0 ? (
           <div className="px-10 max-[760px]:px-5">
             {skills.length === 0 ? (
@@ -215,7 +219,7 @@ export function SkillsPage() {
             )}
           </div>
         ) : skillView === "wire" ? (
-          <WireView list={list} width={width} scrollTop={scrollTop} hover={hover} setHover={setHover} rowId={rowId} />
+          <WireView list={list} width={width} height={height} scroller={scrollRef} hover={hover} setHover={setHover} rowId={rowId} />
         ) : (
           <TableView list={list} hover={hover} setHover={setHover} rowId={rowId} />
         )}

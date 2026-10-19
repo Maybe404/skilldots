@@ -85,12 +85,12 @@ export function SettingsPage() {
                   }
                   void setConfig({ theme: next })
                 }}
-                className="skd-seg h-[34px] items-start"
+                className="skd-seg h-[34px]"
                 spacing={2}
               >
-                <ToggleGroupItem value="system">{t("themeSystem")}</ToggleGroupItem>
-                <ToggleGroupItem value="light">{t("themeLight")}</ToggleGroupItem>
-                <ToggleGroupItem value="dark" aria-disabled title={t("darkPending")}>
+                <ToggleGroupItem value="system" className="h-7">{t("themeSystem")}</ToggleGroupItem>
+                <ToggleGroupItem value="light" className="h-7">{t("themeLight")}</ToggleGroupItem>
+                <ToggleGroupItem value="dark" className="h-7" aria-disabled title={t("darkPending")}>
                   {t("themeDark")}
                 </ToggleGroupItem>
               </ToggleGroup>

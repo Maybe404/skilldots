@@ -34,6 +34,8 @@ export function TableView({
   const { items, columns } = list
   const cols = `minmax(0,1fr) 170px repeat(${columns.length},52px)`
   const focusKey = hover ?? selected
+  // Without a selection the first row takes Tab, so the table stays reachable.
+  const tabKey = list.order.some((s) => s.ref.key === selected) ? selected : list.order[0]?.ref.key
 
   const sortButton = (by: NonNullable<TableSort>["by"], label: string) => {
     const dir = tableSort?.by === by ? tableSort.dir : null
@@ -92,10 +94,16 @@ export function TableView({
             dim={it.dim}
             focused={it.skill.ref.key === focusKey}
             selected={it.skill.ref.key === selected}
+            tabStop={it.skill.ref.key === tabKey}
             update={updatable.has(it.skill.ref.key)}
             claudeOff={overrides.has(it.skill.name)}
             onSelect={() => select(it.skill.ref.key)}
-            onOpen={() => openDetail(it.skill.ref.key)}
+            // A second click on the selected row clears the selection.
+            onPick={(e) => e.detail < 2 && select(it.skill.ref.key === selected ? null : it.skill.ref.key)}
+            onOpen={() => {
+              select(it.skill.ref.key)
+              openDetail(it.skill.ref.key)
+            }}
             onEnter={() => setHover(it.skill.ref.key)}
             onLeave={() => setHover(null)}
             onToggle={(agent) => togglePending(it.skill, agent)}
@@ -129,9 +137,11 @@ function Row({
   dim,
   focused,
   selected,
+  tabStop,
   update,
   claudeOff,
   onSelect,
+  onPick,
   onOpen,
   onEnter,
   onLeave,
@@ -144,9 +154,11 @@ function Row({
   dim: boolean
   focused: boolean
   selected: boolean
+  tabStop: boolean
   update: boolean
   claudeOff: boolean
   onSelect: () => void
+  onPick: (e: React.MouseEvent) => void
   onOpen: () => void
   onEnter: () => void
   onLeave: () => void
@@ -158,7 +170,7 @@ function Row({
     <div
       role="row"
       aria-selected={selected}
-      onClick={onSelect}
+      onClick={onPick}
       onDoubleClick={onOpen}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
@@ -169,11 +181,11 @@ function Row({
         <button
           id={id}
           type="button"
-          tabIndex={selected ? 0 : -1}
+          tabIndex={tabStop ? 0 : -1}
           aria-current={selected ? "true" : undefined}
           onClick={(e) => {
             e.stopPropagation()
-            onSelect()
+            onPick(e)
           }}
           className="block w-full min-w-0 rounded-ctl text-left"
         >
