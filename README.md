@@ -2,6 +2,8 @@
 
 Declarative skill management for AI coding agents. One git-backed library, linked into every agent you use.
 
+**Try the desktop app's interface:** [skilldots.maybe404.com](https://skilldots.maybe404.com) runs it in your browser with sample data; nothing is installed or written.
+
 ```
 skd add mattpocock/skills          # pick skills from a repo; vendored into your library
 skd add trailofbits/skills -s differential-review

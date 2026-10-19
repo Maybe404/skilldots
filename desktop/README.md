@@ -14,7 +14,14 @@ bun run desktop:dev     # native window with the real Go backend
 bun run desktop:build   # native application bundle under build/
 bun run typecheck
 bun run lint
+bun run preview:deploy  # publish the browser preview to skilldots.maybe404.com
 ```
+
+The browser preview is also public at https://skilldots.maybe404.com: the
+same `dist` build, served as static assets by a Cloudflare Worker
+(`wrangler.jsonc`). It always runs on the mock, so it never touches a real
+library. `preview:deploy` needs a Wrangler login for the account that holds
+the maybe404.com zone.
 
 Native development can change library files and agent links. For testing,
 use a dedicated empty HOME, set SKILLDOTS_LIBRARY to an isolated library,

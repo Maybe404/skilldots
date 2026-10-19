@@ -1,0 +1,14 @@
+{
+	// The browser preview (sample data, see src/lib/backend) served as static
+	// assets at skilldots.maybe404.com. Deploy with `bun run preview:deploy`.
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "skilldots-preview",
+	"compatibility_date": "2026-10-19",
+	"assets": {
+		"directory": "./dist",
+		"not_found_handling": "single-page-application"
+	},
+	"routes": [{ "pattern": "skilldots.maybe404.com", "custom_domain": true }],
+	"workers_dev": false,
+	"preview_urls": false
+}
