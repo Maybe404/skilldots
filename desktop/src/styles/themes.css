@@ -36,8 +36,9 @@
   --inBd: 1px solid transparent;
   --btnRad: 999px;
   /* type */
-  --fh: "Geist", -apple-system, "PingFang SC", sans-serif;
-  --fb: "Geist", -apple-system, "PingFang SC", sans-serif;
+  /* PingFang for Chinese and Latin alike; other systems get their own UI font. */
+  --fh: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  --fb: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
   --fm: "JetBrains Mono", "PingFang SC", monospace;
   /* code in the editor stays monospaced in both styles */
   --fmCode: "JetBrains Mono", ui-monospace, monospace;
