@@ -23,6 +23,26 @@ same `dist` build, served as static assets by a Cloudflare Worker
 library. `preview:deploy` needs a Wrangler login for the account that holds
 the maybe404.com zone.
 
+Pushes to `main` that change `desktop/` also deploy it, through
+`.github/workflows/preview.yml` (it can be run by hand from the Actions tab
+too). The workflow reads two repository secrets, set under Settings →
+Secrets and variables → Actions:
+
+- `CLOUDFLARE_ACCOUNT_ID`: the ID of the account that holds the
+  `skilldots-preview` Worker and the maybe404.com zone.
+- `CLOUDFLARE_API_TOKEN`: an account-owned token (Manage Account → Account
+  API Tokens → Create Token, Custom) with two permissions:
+  - Workers: **Editor**, scope **All Workers**. Editor deploys an existing
+    Worker but cannot create or delete one. It has to be the product scope:
+    Custom Domains do not support per-Worker roles yet, and every deploy
+    re-sends the `skilldots.maybe404.com` Custom Domain. (In the legacy
+    permission list this is Account → Workers Scripts → Edit.)
+  - Zone → **Workers Routes** → Write (Edit), for the maybe404.com zone
+    only.
+
+The Worker has to exist before CI can deploy it, since Editor cannot create
+one; the first deploy was made with `preview:deploy`.
+
 Native development can change library files and agent links. For testing,
 use a dedicated empty HOME, set SKILLDOTS_LIBRARY to an isolated library,
 and isolate Git configuration and SKILLDOTS_CACHE. Do not test against your
