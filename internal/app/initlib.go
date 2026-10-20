@@ -115,7 +115,10 @@ func (s *Session) DetectedTargets() []string {
 }
 
 // HasSelfSkill reports whether the agents already get a skilldots skill:
-// SelfRepo's, or the user's own fork of it.
+// SelfRepo's, the user's own fork of it, or an [[app]] entry named
+// skilldots (the copy shipped with skilldots.app, see selfskill.go). One
+// that is missing on this machine counts too: a second skilldots would
+// clash with it by name.
 func (s *Session) HasSelfSkill() bool {
 	entries, err := s.Resolve()
 	if err != nil {
@@ -125,7 +128,7 @@ func (s *Session) HasSelfSkill() bool {
 		if e.Name != SelfSkill {
 			continue
 		}
-		if e.Kind == engine.KindSkill || e.Kind == engine.KindPrivate || (e.Kind == engine.KindVendor && strings.EqualFold(e.Origin, SelfRepo)) {
+		if e.Kind == engine.KindSkill || e.Kind == engine.KindPrivate || e.Kind == engine.KindApp || (e.Kind == engine.KindVendor && strings.EqualFold(e.Origin, SelfRepo)) {
 			return true
 		}
 	}
@@ -137,9 +140,18 @@ func (s *Session) HasSelfSkill() bool {
 // installed on the machine resolving the library (targets.AllInstalled,
 // after the defaults for an older skd), since Claude Code, for one, does
 // not read ~/.agents/skills. Agents the user chose for that pack are kept.
-// It fetches from GitHub and is an extra to whatever the caller did: any
-// error comes with a nil report, and callers report it and go on.
+// It is an extra to whatever the caller did: any error comes with a nil
+// report, and callers report it and go on.
+//
+// Run by skilldots.app, or by the skd command it installs, it links the
+// copy shipped inside the app (BundledSelfSkill) with an [[app]] entry and
+// needs no network, unless the library already subscribes to SelfRepo (its
+// pack, maybe with use = []: that choice of source is kept). skd built on
+// its own fetches SelfRepo from GitHub.
 func (s *Session) InstallSelfSkill() (*engine.SyncReport, *ApplyOutcome, error) {
+	if dir := bundledSelfSkill(); dir != "" && s.Lib.Manifest.FindPack(SelfRepo) == nil {
+		return s.installAppSelfSkill(dir)
+	}
 	src, err := pack.ParseSource(SelfRepo)
 	if err != nil {
 		return nil, nil, err

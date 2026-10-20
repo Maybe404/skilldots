@@ -14,8 +14,8 @@ import (
 )
 
 // initLibrary creates a library in an empty directory, the way `skd init`
-// does, and with withSkill also subscribes the skilldots skill for the
-// agents on this machine. That needs GitHub: when it fails the library
+// does, and with withSkill also installs the skilldots skill for the
+// agents on this machine (installSelfSkill). When that fails the library
 // stays, and the status carries skillError.
 func (s *Service) initLibrary(dir string, withSkill bool) (any, error) {
 	dir, err := filepath.Abs(expand(dir))
@@ -50,8 +50,12 @@ func (s *Service) initLibrary(dir string, withSkill bool) (any, error) {
 	return out, nil
 }
 
-// installSelfSkill subscribes the skilldots skill and links it into every
-// agent on this machine, unless the library already follows it.
+// installSelfSkill links the skilldots skill into every agent on this
+// machine, unless the library already has one (a GitHub source, a fork, or
+// an [[app]] entry). The packaged app links the copy inside its bundle with
+// an [[app]] entry and needs no network; in development, or run from the
+// disk image, it subscribes to Maybe404/skilldots on GitHub (see
+// BundledSelfSkill and app.Session.InstallSelfSkill).
 func (s *Service) installSelfSkill() (any, error) {
 	ses, err := s.session()
 	if err != nil {
@@ -114,6 +118,9 @@ func (s *Service) cloneLibrary(url, dir string) (any, error) {
 	}
 	s.root = dir
 	s.previews = map[string]*app.Fetched{}
+	// A library from another Mac may name the skilldots skill inside the
+	// app where that Mac keeps it: point it at this app's before linking.
+	s.repointSelfSkill()
 	ses, err := s.session()
 	if err != nil {
 		return nil, err

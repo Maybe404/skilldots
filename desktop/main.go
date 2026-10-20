@@ -7,11 +7,15 @@ import (
 	"path/filepath"
 
 	"github.com/Maybe404/skilldots/desktop/api"
+	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/cli"
 	"github.com/egoist/mygo"
 )
 
 func main() {
+	// The skilldots skill shipped in the bundle: a new library links it
+	// instead of fetching it from GitHub, as skd and as the app.
+	app.BundledSelfSkill = api.BundledSelfSkill
 	// Run as skd (the link the app installs on the PATH, see api/cli.go),
 	// this executable is the command line tool: no window, no Dock icon.
 	if filepath.Base(os.Args[0]) == "skd" {
@@ -30,6 +34,8 @@ func main() {
 			return paths[0], nil
 		},
 	})
+	// The library's skilldots skill follows this app if the app moved.
+	api.RepointSelfSkill(service)
 	mygo.Bind(service)
 	mygo.App.WhenReady(func() {
 		mygo.NewWindow(mygo.WindowOptions{
