@@ -66,6 +66,8 @@ export function ScanPage() {
       case "pack":
         return t("propPack", { repo: it.repo ?? "", name: it.name })
       case "own":
+        // Changed since it was installed from upstream: kept as yours; the upstream version is an explicit add.
+        if (it.differs && it.upstream) return t("propOwnDiffers", { repo: it.upstream })
         return skills.some((s) => s.linkName === it.name) ? t("propOwnRename") : t("propOwn")
       case "enable":
         return t("propEnable", { agent: label(it.agent), name: it.name })
@@ -173,6 +175,8 @@ export function ScanPage() {
         <PageError onRetry={() => void scan(false)} />
       ) : items === null ? (
         <div className="space-y-2 pt-1" role="status" aria-label={t("scanning")}>
+          {/* Scanning fetches each upstream to compare: it can take a while. */}
+          <p className="pb-1 fs-meta text-mut">{t("scanningHint")}</p>
           {Array.from({ length: 4 }, (_, i) => (
             <Skeleton key={i} className="h-[52px]" />
           ))}
@@ -212,7 +216,7 @@ export function ScanPage() {
                       role="row"
                       key={it.id}
                       onClick={() => !skip && toggle(it.id, !on)}
-                      className={cn("grid h-[59px] cursor-pointer items-center border-b-row px-2.5 hover:bg-row-hv", (!on || skip) && "opacity-55", skip && "cursor-default")}
+                      className={cn("grid min-h-[59px] cursor-pointer items-center border-b-row px-2.5 py-2 hover:bg-row-hv", (!on || skip) && "opacity-55", skip && "cursor-default")}
                       style={{ gridTemplateColumns: COLS }}
                     >
                       <div role="cell" onClick={(e) => e.stopPropagation()}>
@@ -228,9 +232,9 @@ export function ScanPage() {
                         </div>
                       </div>
                       <div role="cell" className={cn("fs-meta", it.state === "broken" ? "font-semibold text-ac" : "text-mut")}>
-                        {it.proposal === "enable" ? t("stateInLibrary") : t(STATE[it.state])}
+                        {it.proposal === "enable" ? t("stateInLibrary") : it.differs ? t("stateDiffers") : t(STATE[it.state])}
                       </div>
-                      <div role="cell" className="line-clamp-2 min-w-0 fs-body leading-snug text-ink" title={proposal(it)}>
+                      <div role="cell" className="line-clamp-3 min-w-0 fs-body leading-snug text-ink" title={proposal(it)}>
                         {proposal(it)}
                       </div>
                     </div>
