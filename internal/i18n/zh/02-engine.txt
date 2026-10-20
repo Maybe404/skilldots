@@ -7,10 +7,10 @@
 = 它的目录经过 %s，这是资料库内的一个符号链接
 
 @ source directory missing
-= 来源目录不存在
+= 源目录不存在
 
 @ source changed
-= 来源已变化
+= 源目录已变化
 
 @ points at the previous library location %s
 = 指向资料库先前的位置 %s
@@ -70,7 +70,7 @@
 = %s：未改动：%v
 
 @ %s: not changed: its source goes through %s, a symbolic link inside the library
-= %s：未改动：它的来源经过 %s，这是资料库内的一个符号链接
+= %s：未改动：它的源目录经过 %s，这是资料库内的一个符号链接
 
 @ target %q: registry not initialised
 = target %q：登记表尚未初始化

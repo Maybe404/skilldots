@@ -11,9 +11,9 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库
   clone       克隆一个资料库（你在另一台机器上的备份）并应用它
   completion  为指定的 shell 生成自动补全脚本
   config      查看或修改设置（editor、theme、lang）
-  disable     从 agent 取消 skill（或来源）的链接；资料库里仍保留
+  disable     从 agent 上卸下 skill（或来源）；资料库里仍保留
   edit        用编辑器打开 skill 的目录
-  enable      把 skill（或整个来源）链接到 agent
+  enable      把 skill（或整个来源）装到 agent 上
   fork        把引入的 skill 复制到 skills/ 以便编辑；上游从此不再动它
   help        查看任意命令的帮助
   history     每次更新改了什么：commit、skill 以及上游的 commit 信息

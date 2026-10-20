@@ -142,7 +142,7 @@
 = %s 已在 %s 初始化资料库\n  %s\n
 
 @ default targets: %s  (skd enable <skill> --agent <name> adds another agent)
-= 默认 target：%s  （用 skd enable <skill> --agent <名字> 给 skill 加一个 agent）
+= 默认 target：%s  （用 skd enable <skill> --agent <name> 给 skill 加一个 agent）
 
 @   %s could not install the %s skill (%s); run `skd add %s --skill %s --agent '*'` later\n
 =   %s 没能安装 %s skill（%s）；稍后请运行 `skd add %s --skill %s --agent '*'`\n
@@ -463,7 +463,7 @@
 = 移除哪个 skill？
 
 @ Unlink from all agents, keep in library  (skd disable)
-= 从所有 agent 取消链接，保留在资料库里  （skd disable）
+= 从所有 agent 上卸下，保留在资料库里  （skd disable）
 
 @ Unlink and drop from the library           (skd remove)
 = 取消链接并从资料库中丢弃  （skd remove）
@@ -703,13 +703,13 @@
 = 查看改动：git -C %s diff -- vendor/%s
 
 @ Link a skill (or whole pack) into agents
-= 把 skill（或整个来源）链接到 agent
+= 把 skill（或整个来源）装到 agent 上
 
 @ targets to add (default: manifest default)
 = 要添加的 target（默认：清单里的默认值）
 
 @ Unlink a skill (or pack) from agents; the library keeps it
-= 从 agent 取消 skill（或来源）的链接；资料库里仍保留
+= 从 agent 上卸下 skill（或来源）；资料库里仍保留
 
 @ targets to remove (default: all)
 = 要移除的 target（默认：全部）
@@ -1091,31 +1091,31 @@
 = %[2]s 选项的参数 %[1]s 无效：%[3]s
 
 @ paused
-= 已暂停
+= 已暂停分发
 
 @ a paused agent gets no links; its skills keep it selected (skd targets resume <agent>)
-= 已暂停的 agent 不会有任何链接；各 skill 仍保留对它的选择（skd targets resume <agent> 恢复）
+= 暂停分发的 agent 不会有任何链接；各 skill 仍保留对它的选择（skd targets resume <agent> 恢复分发）
 
 @  · paused: %s
-=  · 已暂停：%s
+=  · 已暂停分发：%s
 
 @ Pause agents: unlink every skill from them, keeping which skills use them
-= 暂停 agent：撤掉它里面的所有 skill 链接，但保留各 skill 对它的选择
+= 暂停分发：撤掉这些 agent 里的所有 skill 链接，但保留各 skill 对它们的选择
 
 @ Pause agents: skd takes out the links it made in their skill directories and\nlinks nothing there until they are resumed. Every skill keeps the agents it\nwas given, so `skd targets resume` puts back exactly what was there. The\npause is kept in skills.toml (targets.disabled), so it reaches every machine\nthat uses the library. Nothing is deleted: what skd did not make stays.
-= 暂停 agent：skd 撤掉自己在它的 skill 目录里建的链接，恢复之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样恢复。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个资料库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
+= 暂停分发：skd 撤掉自己在这些 agent 的 skill 目录里建的链接，恢复分发之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样放回。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个资料库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
 
 @ paused %s
-= 已暂停 %s
+= 已暂停分发 %s
 
 @ Resume paused agents: link their skills again
-= 恢复已暂停的 agent：重新链接它的 skill
+= 恢复分发：重新把 skill 链接到已暂停分发的 agent
 
 @ %s is not paused (see `skd targets`)
-= %s 没有被暂停（见 `skd targets`）
+= %s 没有暂停分发（见 `skd targets`）
 
 @ resumed %s
-= 已恢复 %s
+= 已恢复分发 %s
 
 @ Set the default agents: those a skill without agents of its own is linked into
 = 设置默认 agent：没有单独指定 agent 的 skill 会链接到这些 agent

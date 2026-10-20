@@ -241,7 +241,7 @@
 = 有些链接没有改动：%s
 
 @ %q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it
-= %q 是 %s 类的 skill；用 `skd disable` 取消链接，或删除它的目录来去掉它
+= %q 是 %s 类的 skill；用 `skd disable` 把它从 agent 上卸下，或删除它的目录来去掉它
 
 @ %q is already yours (%s)
 = %q 已经是你自己的（%s）
@@ -289,7 +289,7 @@
 = （仅路径变化）
 
 @ skills.toml does not select it, so no agent gets it: `skd add <repository> --skill <name>` follows it again (the files restored are kept when they are what upstream has)
-= skills.toml 没有选中它，所以没有 agent 能用到：运行 `skd add <仓库> --skill <名字>` 重新订阅（恢复的文件与上游一致时会原样保留）
+= skills.toml 没有选中它，所以没有 agent 能用到：运行 `skd add <repository> --skill <name>` 重新订阅（恢复的文件与上游一致时会原样保留）
 
 @ skills.toml does not select it, so no agent gets it: `skd add %s --skill %s` follows it again
 = skills.toml 没有选中它，所以没有 agent 能用到：运行 `skd add %s --skill %s` 重新订阅
