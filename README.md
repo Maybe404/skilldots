@@ -59,7 +59,7 @@ skilldots treats skills like dotfiles:
 
 Most of the time it is not a person running `skd` but the agent on their machine. skilldots is designed around that:
 
-- **Agents learn skd.** `skd init` (and a new library in the desktop app) installs the [`skilldots` skill](skills/skilldots/SKILL.md) and links it into every agent found on the machine, not only the default targets (Claude Code does not read `~/.agents/skills`). Each agent then knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
+- **Agents learn skd.** `skd init` (and a new library in the desktop app) installs the [`skilldots` skill](skills/skilldots/SKILL.md) for every agent on the machine: through `~/.agents/skills`, which most agents read, and into the own directory of each installed agent that does not (Claude Code, Kiro, …), so no agent loads it twice. Each agent then knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
 - **No terminal needed.** Every command works when stdin or stdout is not a terminal, so `skd update | cat` never waits on a hidden prompt. Use `--json` for structured results, `--yes` for prompts, and `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
 - **Nothing is deleted.** `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. skd removes outright only what it can tell it made. The exact rules are in [docs/safety.md](docs/safety.md#the-trash).
 - **Permanent deletion is for people.** `skd trash empty` is the one irreversible command, and it only runs for a person at a terminal: stdin and stdout are terminals and, where it asks, the answer was typed. Approving a [custom target](#custom-targets) works the same way. This keeps out agents' ordinary tool calls, scripts, cron and `--yes`, so an agent can do everything short of permanent deletion.
@@ -116,8 +116,8 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd remove <skill>` | unlink a skill everywhere and move its directory to the trash |
 | `skd purge <pack>` | delete a pack from the manifest, the lock, `vendor/` and every agent directory |
 | **Cleaning up** | |
-| `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own, enable per agent |
-| `skd trash [restore <id> \| empty]` | what skd set aside; restore it; or (a person, interactively) delete for good |
+| `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own (always, when your copy differs from upstream), enable per agent |
+| `skd trash [restore <id\|skill> \| empty]` | what skd set aside and why; restore it (undoing `remove` or `purge`, links included); or (a person, interactively) delete for good |
 | `skd config list \| get <key> \| set <key> [value]` | settings: `editor`, `editor-kind`, `theme`, `lang`, `library` |
 | `skd [--simple]` | the dashboard; `--simple`, a narrow terminal or `TERM=dumb` give a question-and-answer menu |
 
@@ -125,7 +125,7 @@ Every command takes `--json` for scripts and agents, `--yes` to skip prompts, `-
 
 ## Dashboard
 
-`skd` in a terminal at least 90 columns wide opens a dashboard: packs and your own skills on the left, the selected pack's skills on the right. It runs the same code as the commands, so anything you do there leaves the library exactly as the matching command would.
+`skd` in a terminal at least 90 columns wide opens a dashboard: packs and your own skills on the left, the selected pack's skills on the right. It runs the same code as the commands, so anything you do there leaves the library exactly as the matching command would. In every pick or list dialog, `/` filters by name, description or category.
 
 | key | does | command |
 |---|---|---|
@@ -209,7 +209,7 @@ targets = ["agents"]
 - **Defaults.** A new library links into `agents` (`~/.agents/skills`, which nearly every agent reads) and, when Claude Code is installed, `claude`, because Claude Code does not read `~/.agents/skills`. On a machine without Claude Code, no `~/.claude` is made.
 - **Inheritance.** Targets inherit: global default → pack → skill. `targets = []` keeps a skill in the library without linking it anywhere.
 - **Agents that are not installed.** skd does not create the skills directory of a built-in agent that is not installed on the machine (the shared `~/.agents/skills` excepted): `skd apply` skips that agent and says so.
-- **`"*"`** in a targets list stands for the default targets plus every built-in agent installed on the machine resolving the library (its skill directory, or the directory holding it, exists). Each machine links into the agents it has, and an agent installed later gets the skill at the next `skd apply`.
+- **`"*"`** in a targets list stands for the default targets plus every built-in agent installed on the machine resolving the library (its skill directory, or the directory holding it, exists). Each machine links into the agents it has, and an agent installed later gets the skill at the next `skd apply`. When `agents` is among the targets, `"*"` leaves out the agents that read `~/.agents/skills` themselves (Codex, Gemini CLI, Cursor, Copilot, …; `skd targets` marks them), so no skill is loaded twice; agents named explicitly are kept.
 - **The `skilldots` skill** is followed with the default targets of the day plus `"*"`: from the copy inside skilldots.app (an `[[app]]` entry) when the app installed it, from `Maybe404/skilldots` on GitHub otherwise. An older skd ignores `"*"` with a warning and keeps linking the defaults; a later change of `targets.default` does not reach it. Editing a skill's agents (`skd enable`, `skd disable`, the app) turns `"*"` into the names it stands for.
 
 ### Application skills

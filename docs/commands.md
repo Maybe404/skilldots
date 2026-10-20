@@ -28,7 +28,7 @@ Creates a library in `dir` (default `~/.skilldots`, or `$SKILLDOTS_LIBRARY`).
 
 - The library is its own git repository, even inside another repo; `private/` is a separate one.
 - Default targets of a new library: `agents` (`~/.agents/skills`, which nearly every agent reads), plus `claude` when Claude Code is installed, because Claude Code does not read `~/.agents/skills`. On a machine without Claude Code, no `~/.claude` is made.
-- It installs the [`skilldots` skill](../skills/skilldots/SKILL.md) and links it into every agent found on the machine ([README → Built for agents](../README.md#built-for-agents)).
+- It installs the [`skilldots` skill](../skills/skilldots/SKILL.md) for every agent on the machine: through `~/.agents/skills` and the own directory of each installed agent that does not read it ([README → Built for agents](../README.md#built-for-agents)).
 
 ### `skd clone <git-url> [dir]`
 
@@ -54,6 +54,8 @@ Lists what a repository offers, without installing anything. `skd show owner/rep
 ### `skd add <source>[@ref]`
 
 Fetches a repository and lets you choose skills interactively, or with flags:
+
+- skd never asks for a username or password: a private repository over HTTPS needs a git credential helper, or use its SSH address. When a repository cannot be fetched, skd says why (not found or private, no SSH access, no such ref, network), with git's own words after it.
 
 - `--skill x`, `--category c`, `--all`. `--all` follows everything; names given with it are only checked.
 - On a pack that follows `"*"`, `--skill x` takes `x` out of `skip`. If a wildcard such as `eng/*` excludes it, the command fails and tells you to edit `skills.toml`.
@@ -169,7 +171,7 @@ Opens a skill's directory in your editor. The editor is, first match wins: the `
 
 ### `skd remove <skill>`
 
-Unlinks a skill everywhere and moves its directory to the library trash; `skd trash restore` puts it back.
+Unlinks a skill everywhere and moves its directory to the library trash; `skd trash restore <skill>` undoes it: the files, the skill's place in `skills.toml` and `skills.lock`, and its links.
 
 - A vendored skill is deselected and leaves `vendor/`. Removing a pack's last skill drops the pack.
 - Your own skill leaves `skills/` or `private/`.
@@ -185,9 +187,11 @@ Deletes a pack from the manifest, the lock, `vendor/` and every agent directory.
 
 Takes over unmanaged entries found by `skd scan`: subscribes to their repository, registers apps, copies the rest in as your own, and enables each for the agents it was found in.
 
-### `skd trash [restore <id> | empty]`
+- A copy whose repository skd knows is compared with upstream first (one fetch per repository). If you changed it, it is copied in as your own skill rather than replaced by upstream's; the proposal names the repository and the `skd add` that would follow upstream instead (`Upstream` and `Differs` in `--json`).
 
-Lists what skd set aside; `restore` puts an entry back; `empty` deletes everything for good, interactively, and only for a person at a terminal ([safety.md](safety.md#the-trash)).
+### `skd trash [restore <id|skill> | empty]`
+
+Lists what skd set aside, with the skills in each entry and why; `restore` takes an ID or a skill name (several matches are listed, never guessed) and puts the entry back, undoing `remove` and `purge` entirely (manifest, lock and links); `empty` deletes everything for good, interactively, and only for a person at a terminal ([safety.md](safety.md#the-trash)).
 
 ## Settings
 

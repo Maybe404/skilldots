@@ -37,6 +37,8 @@ It only puts a directory back where skd takes them from:
 - a place inside the library's `vendor/`;
 - a skill directory of the library's `skills/` or `private/` that `skd remove` moved there on this machine. skd records that beside the settings file, in `local-trash.json`, never in the library, so a cloned library's trash cannot put files into your `skills/`.
 
+What `remove` and `purge` took out of `skills.toml` and `skills.lock` is recorded the same way, in `trash-notes.json` beside the settings file, so restoring their entry also puts the manifest and lock back and relinks. An entry from before that record, or from another machine, gets its files back and a hint naming the `skd add` that follows it again.
+
 A trash entry recorded as coming from anywhere else, or reached through a symbolic link, is listed as not restorable, with the reason, and left for you to move by hand. A library cloned from someone else carries their `.trash/` too, so such a record, and where a link entry leads, is never shown: it may be anyone's text.
 
 An entry not named the way skd names what it sets aside is listed as `(unsafe name)`, numbered from the second on so each ID is different (`"unsafe": true` in `--json`), and skd does not restore it. What skd sets aside itself is always named so (for example the vendored `.github` of a pack `owner/.github` goes in as `github`) and goes back under its own name.
