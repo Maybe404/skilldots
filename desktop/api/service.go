@@ -91,8 +91,10 @@ func checkApply(out *app.ApplyOutcome, err error) error {
 	return nil
 }
 
-// Invoke is the desktop-only API. It deliberately has no permanent deletion
-// or custom-target trust operation. The CLI JSON protocol is not involved.
+// Invoke is the desktop-only API. It has no custom-target trust operation.
+// Its only permanent deletion is the trash (emptyTrash, deleteTrash): the
+// person at the window confirms it first, and the call carries what that
+// confirmation showed (trash.go). The CLI JSON protocol is not involved.
 func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMessage) (any, error) {
 	// The skd command touches no library and may wait on the password
 	// prompt: it runs outside the lock, so the rest of the app keeps going.
@@ -269,8 +271,8 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 	case "history":
 		rows, _, err := ses.History("", 0)
 		return history(rows), err
-	case "trash":
-		return ses.Trash()
+	case "trash", "trashUsage", "emptyTrash", "deleteTrash":
+		return s.trashOperation(ses, method, args)
 	case "restore":
 		id, err := argument[string](args, 0)
 		if err != nil {
@@ -424,7 +426,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		return nil, s.native.Reveal(ses.Lib.Root)
 	case "reveal", "openInEditor", "files", "readFile", "writeFile":
 		return s.fileOperation(ses, method, args)
-	case "parseSource", "show", "add", "update":
+	case "parseSource", "show", "add", "update", "updateDiff":
 		return s.packOperation(ctx, ses, method, args)
 	case "scan", "adopt":
 		return s.scanOperation(ses, method, args)
