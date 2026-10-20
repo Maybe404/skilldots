@@ -8,5 +8,6 @@
   "buildCommand": "bun run build",
   "frontendDist": "dist",
   "bindings": "src/mygo.ts",
+  "resources": ["../skills"],
   "out": "build"
 }

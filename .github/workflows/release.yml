@@ -54,6 +54,9 @@ jobs:
         working-directory: desktop/build/darwin-universal
         run: |
           lipo -archs skilldots.app/Contents/MacOS/skilldots
+          # The skilldots skill ships in the bundle (mygo.json resources):
+          # new libraries link it offline, at this skd's version.
+          cmp skilldots.app/Contents/Resources/skills/skilldots/SKILL.md "$GITHUB_WORKSPACE/skills/skilldots/SKILL.md"
           ditto -c -k --keepParent skilldots.app skilldots-macos.zip
           shasum -a 256 skilldots-macos.zip > skilldots-macos.zip.sha256
           ls -l
