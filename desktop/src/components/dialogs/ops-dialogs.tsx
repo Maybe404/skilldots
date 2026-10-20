@@ -4,9 +4,11 @@ import { ArrowRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { errorText, hasUpdates, useApp } from "@/lib/app-state"
-import { backend, type CliStatus, type PackStatus, type PlanItem } from "@/lib/backend"
+import { backend, type CliStatus, type PackStatus, type PlanItem, type SkillDiff, type UpdateDiff } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
-import { Mono, RefreshIcon, Sha, UpdateDot } from "@/components/app/bits"
+import { Mono, RefreshIcon, Sha, Tag, UpdateDot } from "@/components/app/bits"
+import { SkillDiffView } from "@/components/app/diff-view"
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
 import { agentLabel } from "@/lib/agents"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,6 +18,35 @@ import { Input } from "@/components/ui/input"
 
 // Update ---------------------------------------------------------------------
 
+type DiffState = { state: "loading" } | { state: "ok"; diff: UpdateDiff } | { state: "error"; error: string }
+
+/**
+ * Reads, for each source, what updating it would change file by file
+ * (read-only; the cache is reused when it is at the checked commit), so the
+ * skills you edited are marked before anything happens.
+ */
+export function useUpdateDiffs(packs: PackStatus[]) {
+  const { t } = useApp()
+  const [diffs, setDiffs] = React.useState<Record<string, DiffState>>({})
+  const key = packs.map((p) => p.repo + "@" + p.latest).join(",")
+  React.useEffect(() => {
+    let live = true
+    for (const p of packs) {
+      setDiffs((d) => ({ ...d, [p.repo]: { state: "loading" } }))
+      backend.updateDiff(p.repo, p.latest).then(
+        (diff) => live && setDiffs((d) => ({ ...d, [p.repo]: { state: "ok", diff } })),
+        (e: unknown) => live && setDiffs((d) => ({ ...d, [p.repo]: { state: "error", error: errorText(t, e) } })),
+      )
+    }
+    return () => {
+      live = false
+    }
+    // The packs are named by key; t only words an error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return diffs
+}
+
 export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: () => void }) {
   const { t, outdated, runTask, reload } = useApp()
   const all = outdated?.packs ?? []
@@ -23,6 +54,13 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(repos?.length ? repos.filter((r) => candidates.some((c) => c.repo === r)) : candidates.map((c) => c.repo)))
   const [addNew, setAddNew] = React.useState<Record<string, string[]>>({})
   const [busy, setBusy] = React.useState(false)
+  const diffs = useUpdateDiffs(candidates)
+  // Opened for one source: show it first.
+  const shown = repos?.length ? [...candidates.filter((c) => repos.includes(c.repo)), ...candidates.filter((c) => !repos.includes(c.repo))] : candidates
+  const edited = [...picked].reduce((n, r) => {
+    const d = diffs[r]
+    return n + (d?.state === "ok" ? d.diff.skills.filter((s) => s.local).length : 0)
+  }, 0)
 
   const go = async () => {
     setBusy(true)
@@ -38,17 +76,19 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent closeLabel={t("close")} className="flex max-h-[min(42rem,calc(100svh-4rem))] w-[600px] flex-col gap-0 p-0">
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(46rem,calc(100svh-4rem))] w-[720px] flex-col gap-0 p-0">
         <DialogHeader className="px-6 pt-[22px] pb-4">
           <DialogTitle>{t("updateTitle")}</DialogTitle>
           <DialogDescription>{t("updateHint")}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto [border-top:var(--tblRow)] px-6 py-4">
           {candidates.length === 0 && <p className="fs-body text-mut">{t("noUpdates")}</p>}
-          {candidates.map((p) => (
+          {shown.map((p) => (
             <PackUpdate
               key={p.repo}
               pack={p}
+              diff={diffs[p.repo]}
+              open={repos?.includes(p.repo)}
               checked={picked.has(p.repo)}
               onChecked={(v) =>
                 setPicked((s) => {
@@ -63,7 +103,8 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
             />
           ))}
         </div>
-        <DialogFooter className="m-0 px-6 py-3.5 [border-top:var(--tblRow)]">
+        <DialogFooter className="m-0 items-center px-6 py-3.5 [border-top:var(--tblRow)]">
+          {edited > 0 && <span className="mr-auto fs-meta text-ink">{t("updateLocalSummary", { n: edited })}</span>}
           <Button variant="outline" size="lg" onClick={onClose}>
             {t("cancel")}
           </Button>
@@ -79,12 +120,17 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
 
 function PackUpdate({
   pack,
+  diff,
+  open,
   checked,
   onChecked,
   addNew,
   onAddNew,
 }: {
   pack: PackStatus
+  diff?: DiffState
+  /** Open the first skill's changes (the dialog was opened for this source). */
+  open?: boolean
   checked: boolean
   onChecked: (v: boolean) => void
   addNew: string[]
@@ -92,12 +138,18 @@ function PackUpdate({
 }) {
   const { t } = useApp()
   const id = `upd-${pack.repo}`
-  const rows: [string, MessageKey][] = [
-    ...pack.changed.map((n) => [n, "skillChanged"] as [string, MessageKey]),
-    ...pack.pending.map((n) => [n, "skillPending"] as [string, MessageKey]),
-    ...pack.gone.map((n) => [n, "skillGone"] as [string, MessageKey]),
-    ...pack.moved.map((n) => [n, "skillMoved"] as [string, MessageKey]),
-  ]
+  // One row per skill: changed and moved upstream reads "有改动 · 路径也变了".
+  const rows: [string, MessageKey[]][] = []
+  const push = (name: string, key: MessageKey) => {
+    const row = rows.find(([n]) => n === name)
+    if (row) row[1].push(key === "skillMoved" ? "skillMovedToo" : key)
+    else rows.push([name, [key]])
+  }
+  pack.changed.forEach((n) => push(n, "skillChanged"))
+  pack.pending.forEach((n) => push(n, "skillPending"))
+  pack.gone.forEach((n) => push(n, "skillGone"))
+  pack.moved.forEach((n) => push(n.split(": ")[0], "skillMoved"))
+  const skillDiff = (name: string) => (diff?.state === "ok" ? diff.diff.skills.find((s) => s.name === name) : undefined)
   return (
     <div className={cn("rounded-ctl border-line p-3", checked && "border-hue")}>
       <div className="flex items-start gap-2.5">
@@ -115,15 +167,19 @@ function PackUpdate({
         </label>
       </div>
       <ul className="mt-2.5 ml-6.5 space-y-1 fs-body">
-        {rows.map(([name, label]) => (
-          <li key={name + label} className="flex items-baseline justify-between gap-3">
-            <Mono className="truncate">{name}</Mono>
-            <span className="shrink-0 text-mut">{t(label)}</span>
-          </li>
+        {rows.map(([name, keys], i) => (
+          <SkillUpdateRow
+            key={name}
+            name={name}
+            label={keys.map((k) => t(k)).join(" · ")}
+            diff={keys.includes("skillGone") ? undefined : diff}
+            skill={skillDiff(name)}
+            defaultOpen={!!open && i === 0}
+          />
         ))}
         {pack.new.map((n) => (
-          <li key={"new-" + n} className="flex items-center justify-between gap-3">
-            <Mono className="truncate">{n}</Mono>
+          <li key={"new-" + n} className="flex min-h-7 items-center justify-between gap-3">
+            <span className="truncate pl-5 font-medium text-ink">{n}</span>
             <label className="flex shrink-0 items-center gap-1.5 text-mut">
               {t("skillNew")} ·
               <Checkbox checked={addNew.includes(n)} onCheckedChange={(v) => onAddNew(v ? [...addNew, n] : addNew.filter((x) => x !== n))} />
@@ -132,6 +188,7 @@ function PackUpdate({
           </li>
         ))}
       </ul>
+      {diff?.state === "error" && <p className="mt-2 ml-6.5 fs-meta text-mut">{t("diffFailed", { error: diff.error })}</p>}
       {pack.commits.length > 0 && (
         <ul className="mt-2.5 ml-6.5 space-y-0.5 [border-left:1.5px_solid_var(--ln)] pl-3 fs-meta text-mut">
           {pack.commits.map((c) => (
@@ -145,6 +202,44 @@ function PackUpdate({
       {pack.commitsUnknown && <p className="mt-2.5 ml-6.5 fs-meta text-mut">{t("historyCommitsUnknown")}</p>}
       {pack.moreCommits && <p className="mt-1 ml-6.5 fs-meta text-mut">{t("historyMoreCommits")}</p>}
     </div>
+  )
+}
+
+/** One skill of a source's update: what happens to it, whether you edited it, and its file changes on demand. */
+function SkillUpdateRow({ name, label, diff, skill, defaultOpen }: { name: string; label: string; diff?: DiffState; skill?: SkillDiff; defaultOpen: boolean }) {
+  const { t } = useApp()
+  const [open, setOpen] = React.useState(defaultOpen)
+  const loading = diff?.state === "loading"
+  const viewable = loading || !!skill
+  const head = (
+    <>
+      <span className="truncate font-medium text-ink">{name}</span>
+      {skill?.local && <Tag tone="accent">{t("localEdited")}</Tag>}
+      <span className="flex-1" />
+      <span className="shrink-0 text-mut">{label}</span>
+    </>
+  )
+  if (!viewable) return <li className="flex min-h-7 items-center gap-2 pl-5">{head}</li>
+  return (
+    <li>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="-mx-1 flex min-h-7 w-[calc(100%+0.5rem)] items-center gap-2 rounded-ctl px-1 text-left hover:bg-row-hv" aria-label={`${name} · ${open ? t("hideChanges") : t("showChanges")}`}>
+          <DisclosureChevron open={open} />
+          {head}
+        </CollapsibleTrigger>
+        <CollapsiblePanel>
+          <div className="pt-1.5 pb-3 pl-5">
+            {skill ? (
+              <SkillDiffView diff={skill} />
+            ) : (
+              <p className="flex items-center gap-2 fs-meta text-mut" role="status">
+                <RefreshIcon spinning /> {t("diffLoading")}
+              </p>
+            )}
+          </div>
+        </CollapsiblePanel>
+      </Collapsible>
+    </li>
   )
 }
 
@@ -294,7 +389,7 @@ export function LibraryForm({
   onCancel?: () => void
   autoFocus?: boolean
 }) {
-  const { t, runTask, run, reload } = useApp()
+  const { t, runTask, run, reload, status } = useApp()
   const [dir, setDir] = React.useState(mode === "init" ? "~/.skilldots" : mode === "clone" ? "~/.skilldots" : "")
   const [url, setUrl] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -378,7 +473,7 @@ export function LibraryForm({
           <Checkbox checked={withSkill} onCheckedChange={(v) => setWithSkill(!!v)} className="mt-0.5" />
           <span>
             <span className="block">{t("obSkill")}</span>
-            <span className="mt-0.5 block fs-meta text-mut">{t("obSkillHint")}</span>
+            <span className="mt-0.5 block fs-meta text-mut">{t(status?.bundledSkill ? "obSkillHint" : "obSkillHintOnline")}</span>
           </span>
         </label>
         {cli?.reason === "move" && cli.state !== "installed" && <p className="fs-meta text-mut">{t("cliMoveHint")}</p>}
