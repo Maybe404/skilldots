@@ -38,6 +38,17 @@ export function toggle(pending: Pending, skill: Skill, agent: string): Pending {
   return next
 }
 
+/** Want every one of skills on (or off) for agent: a pending change where that differs from now, none where it does not. */
+export function setMany(pending: Pending, skills: Skill[], agent: string, want: boolean): Pending {
+  const next = { ...pending }
+  for (const s of skills) {
+    const k = pendingKey(s.ref.key, agent)
+    if (s.targets.includes(agent) === want) delete next[k]
+    else next[k] = want
+  }
+  return next
+}
+
 /**
  * Drops entries for skills that are gone or already in the wanted state, and
  * for agents whose Skill-page column is hidden (or gone): a change nobody can

@@ -27,6 +27,9 @@ import type {
   Backend,
   CliStatus,
   Config,
+  DiffHunk,
+  DiffLine,
+  FileDiff,
   FileNode,
   HistoryEntry,
   LibraryStatus,
@@ -37,6 +40,7 @@ import type {
   RepoPreview,
   ScanItem,
   Skill,
+  SkillDiff,
   TrashEntry,
 } from "./types"
 
@@ -74,6 +78,14 @@ interface State {
 function sampleState(root: string | null): State {
   const now = new Date()
   const skills = initialSkills()
+  const files = initialFiles(skills)
+  // One vendored skill the user edited, so the update review can show what moves to the trash.
+  const touched = new Set<string>()
+  const edited = skills.find((s) => s.kind === "vendor" && s.name === "differential-review")
+  if (edited && files[edited.ref.key]?.["SKILL.md"]) {
+    files[edited.ref.key]["SKILL.md"] += "\nMy note: also check the migration files.\n"
+    touched.add(edited.ref.key)
+  }
   return {
     root,
     remote: REMOTE,
@@ -83,13 +95,13 @@ function sampleState(root: string | null): State {
     skills,
     packs: initialPacks(),
     agents: initialAgents(),
-    files: initialFiles(skills),
+    files,
     outdated: initialOutdated(now),
     history: initialHistory(now),
     trash: initialTrash(now),
     plan: initialPlan(),
     scan: initialScan(skills),
-    touched: new Set(),
+    touched,
   }
 }
 
@@ -117,7 +129,8 @@ export function createMockBackend(): Backend {
   let st: State = fresh ? emptyState(null) : sampleState(LIBRARY)
   // The preview never touches /usr/local/bin: the command is only pretended.
   let cli: CliStatus = { path: "/usr/local/bin/skd", state: "missing", target: "", canInstall: true, reason: "" }
-  const selfSkill = () => st.packs.some((p) => p.repo === "Maybe404/skilldots")
+  // Like Session.HasSelfSkill: the skill from GitHub, or the app's own copy as an [[app]] entry.
+  const selfSkill = () => st.packs.some((p) => p.repo === "Maybe404/skilldots") || st.skills.some((s) => s.kind === "app" && s.name === "skilldots")
 
   const find = (ref: Ref): Skill => {
     const s = st.skills.find((x) => x.ref.key === ref.key)
@@ -146,6 +159,8 @@ export function createMockBackend(): Backend {
     lastSync: st.lastSync,
     unmanaged: st.scan.length,
     selfSkill: selfSkill(),
+    // The preview plays the packaged app, which carries the skill.
+    bundledSkill: true,
   })
 
   const readConfig = (): Config => {
@@ -169,18 +184,19 @@ export function createMockBackend(): Backend {
     return skill
   }
 
-  // Like InstallSelfSkill: the skilldots skill, linked into every agent on this machine.
+  // Like InstallSelfSkill in the packaged app: the skill shipped inside the app, as an [[app]] entry
+  // (no download), linked into every agent on this machine.
   const installSelf = () => {
     if (selfSkill()) return
-    st.packs.push({ repo: "Maybe404/skilldots", commit: sha("4c1e9a2"), followAll: false, upstreamCount: 1, license: "MIT", url: "https://github.com/Maybe404/skilldots" })
-    addSkill({
+    const skill = addSkill({
       name: "skilldots",
-      kind: "vendor",
-      origin: "Maybe404/skilldots",
+      kind: "app",
+      origin: "skilldots",
       category: "",
       description: upstreamDescription("Maybe404/skilldots", "skilldots"),
       targets: st.agents.filter((a) => a.detected).map((a) => a.name),
     })
+    skill.dir = "/Applications/skilldots.app/Contents/Resources/skills/skilldots"
   }
 
   return {
@@ -277,7 +293,16 @@ export function createMockBackend(): Backend {
       if (!cat) throw new Error(`repository ${src.repo} not found (the sample backend knows ${Object.keys(CATALOG).join(", ")})`)
       const pack = st.packs.find((p) => p.repo === src.repo)
       const have = st.skills.filter((s) => s.origin === src.repo).map((s) => s.name)
-      return clone({ ...cat, source: src, subscribed: !!pack, have })
+      // Like Fetched.Preselect: a name, category/name or folder; what matches nothing is reported, not an error.
+      const chosen = new Set<string>()
+      const missing: string[] = []
+      for (const n of src.skills) {
+        const hit = cat.skills.find((s) => s.name === n || `${s.category}/${s.name}` === n || n.split("/").pop() === s.name)
+        if (hit) chosen.add(hit.name)
+        else missing.push(n)
+      }
+      const preselected = cat.skills.filter((s) => chosen.has(s.name)).map((s) => s.name)
+      return clone({ ...cat, source: src, subscribed: !!pack, have, preselected, missing })
     },
     async add(preview: RepoPreview, sel) {
       await wait(800)
@@ -515,6 +540,29 @@ export function createMockBackend(): Backend {
       if (out.length) changed()
       return clone(out)
     },
+    async updateDiff(repo) {
+      await wait(700)
+      const s = st.outdated?.packs.find((x) => x.repo === repo)
+      if (!s || !st.packs.some((p) => p.repo === repo)) throw new Error(`no pack "${repo}"`)
+      const skills: SkillDiff[] = []
+      const title = s.commits[0]?.title ?? "Update"
+      for (const name of s.changed) {
+        const sk = st.skills.find((x) => x.origin === repo && x.name === name)
+        if (!sk) continue
+        const vendored = initialFiles([sk])[sk.ref.key]
+        const mine = st.files[sk.ref.key] ?? vendored
+        const upstream = upstreamVersion(vendored, title)
+        const localFiles = changedPaths(vendored, mine)
+        const local = new Set(localFiles)
+        skills.push({ name, status: "changed", local: localFiles.length > 0, localFiles, files: diffFiles(mine, upstream, local) })
+      }
+      for (const name of s.pending) skills.push({ name, status: "added", local: false, localFiles: [], files: diffFiles({}, { "SKILL.md": `---\nname: ${name}\n---\n` }, new Set()) })
+      for (const mv of s.moved) {
+        const name = mv.split(": ")[0]
+        if (!skills.some((x) => x.name === name)) skills.push({ name, status: "moved", local: false, localFiles: [], files: [] })
+      }
+      return clone({ repo, commit: s.commit, latest: s.latest, skills })
+    },
     async history() {
       await wait(100)
       return clone(st.history)
@@ -566,7 +614,23 @@ export function createMockBackend(): Backend {
 
     async trash() {
       await wait(100)
-      return clone(st.trash)
+      return clone(st.trash.map((e) => ({ ...e, size: e.size ?? sampleSize(e.id) })))
+    },
+    async trashUsage() {
+      await wait(80)
+      return { count: st.trash.length, bytes: st.trash.reduce((n, e) => n + (e.size ?? sampleSize(e.id)), 0) }
+    },
+    async emptyTrash({ count }) {
+      await wait(400)
+      if (count !== st.trash.length) throw new Error("the trash changed since it was shown; look at it again")
+      const deleted = st.trash.length
+      st.trash = []
+      return { deleted }
+    },
+    async deleteTrash(id) {
+      await wait(200)
+      if (!st.trash.some((x) => x.id === id)) throw new Error(`no trash entry ${id}`)
+      st.trash = st.trash.filter((x) => x.id !== id)
     },
     async restore(id) {
       await wait(300)
@@ -599,6 +663,80 @@ export function createMockBackend(): Backend {
       return next
     },
   }
+}
+
+/** A stable, plausible size for a sample trash entry. */
+function sampleSize(id: string): number {
+  let h = 0
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return 2_000 + (h % 60_000)
+}
+
+/** The sample's "upstream" version of a skill: a changed description and a new section. */
+function upstreamVersion(files: Record<string, string>, title: string): Record<string, string> {
+  const out = { ...files }
+  const md = out["SKILL.md"] ?? ""
+  out["SKILL.md"] = md.replace(/^(description:.*?)\s*$/m, "$1 Also covers follow-up checks.") + `\n## What changed upstream\n\n- ${title}\n`
+  out["references/checklist.md"] = "# Checklist\n\n- Read the diff once without commenting.\n- Note every assumption.\n"
+  return out
+}
+
+function changedPaths(a: Record<string, string>, b: Record<string, string>): string[] {
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((p) => a[p] !== b[p]).sort()
+}
+
+function diffFiles(old: Record<string, string>, next: Record<string, string>, local: Set<string>): FileDiff[] {
+  return changedPaths(old, next).map((path) => {
+    const status: FileDiff["status"] = !(path in old) ? "added" : !(path in next) ? "removed" : "modified"
+    const { hunks, added, removed } = lineDiff(lines(old[path]), lines(next[path]))
+    return { path, status, local: local.has(path), added, removed, hunks }
+  })
+}
+
+const lines = (s?: string) => (s ? s.replace(/\n$/, "").split("\n") : [])
+
+/** A small LCS line diff with three lines of context, as app.lineDiff. */
+function lineDiff(a: string[], b: string[]): { hunks: DiffHunk[]; added: number; removed: number } {
+  const n = a.length
+  const m = b.length
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+  const ops: { op: DiffLine["op"]; text: string; o: number; n: number }[] = []
+  let i = 0
+  let j = 0
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) ops.push({ op: " ", text: a[i], o: i++, n: j++ })
+    else if (i < n && (j === m || lcs[i + 1][j] >= lcs[i][j + 1])) ops.push({ op: "-", text: a[i], o: i++, n: j })
+    else ops.push({ op: "+", text: b[j], o: i, n: j++ })
+  }
+  const hunks: DiffHunk[] = []
+  for (let k = 0; k < ops.length; ) {
+    if (ops[k].op === " ") {
+      k++
+      continue
+    }
+    const start = Math.max(0, k - 3)
+    let end = k
+    while (end < ops.length) {
+      if (ops[end].op !== " ") {
+        end++
+        continue
+      }
+      let run = end
+      while (run < ops.length && ops[run].op === " ") run++
+      if (run === ops.length || run - end > 6) {
+        end = Math.min(ops.length, end + 3)
+        break
+      }
+      end = run
+    }
+    const part = ops.slice(start, end)
+    const oldLines = part.filter((x) => x.op !== "+").length
+    const newLines = part.filter((x) => x.op !== "-").length
+    hunks.push({ oldStart: ops[start].o + (oldLines ? 1 : 0), oldLines, newStart: ops[start].n + (newLines ? 1 : 0), newLines, lines: part.map(({ op, text }) => ({ op, text })) })
+    k = end
+  }
+  return { hunks, added: ops.filter((x) => x.op === "+").length, removed: ops.filter((x) => x.op === "-").length }
 }
 
 function safeJson(s: string): string {
