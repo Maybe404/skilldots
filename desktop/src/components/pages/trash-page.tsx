@@ -59,16 +59,19 @@ export function TrashPage() {
   }
 
   const emptyAll = async () => {
-    // Counted now, not from the list on screen: the confirmation names exactly what goes.
-    const u = await read(() => backend.trashUsage())
-    if (!u.ok || !u.value.count) return
-    const { count, bytes } = u.value
+    // Read now, not from the list on screen: the confirmation names exactly what goes, and the
+    // backend deletes only if the trash still holds exactly these entries.
+    const u = await read(() => Promise.all([backend.trash(), backend.trashUsage()]))
+    if (!u.ok || !u.value[0].length) return
+    const ids = u.value[0].map((e) => e.id)
+    const { bytes } = u.value[1]
+    setItems(u.value[0])
     confirm({
-      title: t("emptyTrashTitle", { n: count }),
+      title: t("emptyTrashTitle", { n: ids.length }),
       body: t("emptyTrashBody", { size: formatBytes(bytes) }),
       action: t("deleteForever"),
       run: async () => {
-        const r = await run(() => backend.emptyTrash({ count }))
+        const r = await run(() => backend.emptyTrash({ ids }))
         if (!r.ok) return false
         toast(t("emptiedToast", { n: r.value.deleted }))
         await reload()

@@ -120,7 +120,8 @@ export function ScanPage() {
       body: t("adoptConfirmBody", { parts: parts.join(t("listSep")) }),
       action: t("adoptAction"),
       run: async () => {
-        const r = await runTask(t("adopting"), () => backend.adopt([...picked]))
+        // Each row with the kind shown here: the backend refuses a row whose proposal changed since.
+        const r = await runTask(t("adopting"), () => backend.adopt(chosen.map((x) => ({ id: x.id, kind: x.proposal }))))
         if (!r.ok) return false
         toast(t("adoptedToast", { n: r.value.adopted }))
         await reload()

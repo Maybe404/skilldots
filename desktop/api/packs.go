@@ -217,22 +217,32 @@ func (s *Service) scanOperation(ses *app.Session, method string, args []json.Raw
 	}
 	props := ses.Proposals(rep)
 	if method == "adopt" {
-		ids, err := argument[[]string](args, 0)
+		// Each pick names the row and what the person saw would happen to
+		// it. The proposals are worked out again (upstream may have moved
+		// meanwhile): a row whose kind changed is refused, not adopted
+		// some other way than the confirmation said.
+		picks, err := argument[[]struct {
+			ID   string `json:"id"`
+			Kind string `json:"kind"`
+		}](args, 0)
 		if err != nil {
 			return nil, err
 		}
 		selected := []app.Proposal{}
-		for _, id := range ids {
+		for _, pick := range picks {
 			found := false
 			for _, p := range props {
-				if p.Item.Target+"/"+p.Item.Name == id && p.Actionable() {
+				if p.Item.Target+"/"+p.Item.Name == pick.ID && p.Actionable() {
+					if p.Kind != pick.Kind {
+						return nil, fmt.Errorf("scan item %q changed (now %s, shown as %s); scan again", pick.ID, p.Kind, pick.Kind)
+					}
 					selected = append(selected, p)
 					found = true
 					break
 				}
 			}
 			if !found {
-				return nil, fmt.Errorf("scan item %q changed; scan again", id)
+				return nil, fmt.Errorf("scan item %q changed; scan again", pick.ID)
 			}
 		}
 		o, err := ses.Adopt(selected)

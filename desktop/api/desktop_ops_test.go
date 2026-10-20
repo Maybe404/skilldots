@@ -252,6 +252,39 @@ func TestScanRowsCarryUpstream(t *testing.T) {
 	t.Fatalf("loose not found: %s", b)
 }
 
+// Adopting takes each row as the confirmation showed it: a row whose
+// proposal is now of another kind is refused.
+func TestAdoptChecksTheKindShown(t *testing.T) {
+	s := setup(t)
+	home, _ := os.UserHomeDir()
+	writeFile(t, filepath.Join(home, ".claude", "skills", "loose", "SKILL.md"), "---\nname: loose\ndescription: d\n---\n")
+	rows := roundTrip[[]struct{ ID, Proposal string }](t, invoke(t, s, "scan"))
+	var row struct{ ID, Proposal string }
+	for _, r := range rows {
+		if r.ID == "claude/loose" {
+			row = r
+		}
+	}
+	if row.Proposal != "own" {
+		t.Fatalf("scan: %+v", rows)
+	}
+	for _, picks := range []any{[]string{row.ID}, []object{{"id": row.ID, "kind": "pack"}}, []object{{"id": "claude/nothing", "kind": "own"}}} {
+		if _, err := s.Invoke(context.Background(), "adopt", mustArgs(t, picks)); err == nil {
+			t.Fatalf("adopted with %v", picks)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.root, "skills", "loose")); !os.IsNotExist(err) {
+		t.Fatal("a refused adopt changed the library")
+	}
+	out := roundTrip[struct{ Adopted int }](t, invoke(t, s, "adopt", []object{{"id": row.ID, "kind": "own"}}))
+	if out.Adopted != 1 {
+		t.Fatalf("adopted %d", out.Adopted)
+	}
+	if _, err := os.Stat(filepath.Join(s.root, "skills", "loose", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTrashDeletionNeedsConfirmation(t *testing.T) {
 	s := setup(t)
 	for _, n := range []string{"a", "b", "c"} {
@@ -279,8 +312,20 @@ func TestTrashDeletionNeedsConfirmation(t *testing.T) {
 		t.Fatal("deleted the same entry twice")
 	}
 
-	// The count the person confirmed must still be the trash's.
-	for _, args := range [][]json.RawMessage{nil, mustArgs(t, object{}), mustArgs(t, object{"count": 3})} {
+	// The entries the person confirmed must be exactly the trash's: not
+	// just as many (one in and one out since then is refused too).
+	shown := []string{}
+	for _, e := range roundTrip[[]entry](t, invoke(t, s, "trash")) {
+		shown = append(shown, e.ID)
+	}
+	invoke(t, s, "newSkill", object{"name": "late", "agents": []string{"agents"}})
+	invoke(t, s, "remove", ref{Key: "skills:late"})
+	invoke(t, s, "deleteTrash", shown[0])
+	now := roundTrip[[]entry](t, invoke(t, s, "trash"))
+	if len(now) != len(shown) {
+		t.Fatalf("setup: %d entries, shown %d", len(now), len(shown))
+	}
+	for _, args := range [][]json.RawMessage{nil, mustArgs(t, object{}), mustArgs(t, object{"count": 2}), mustArgs(t, object{"ids": shown}), mustArgs(t, object{"ids": []string{now[0].ID}})} {
 		if _, err := s.Invoke(context.Background(), "emptyTrash", args); err == nil {
 			t.Fatalf("emptied with %s", args)
 		}
@@ -288,7 +333,8 @@ func TestTrashDeletionNeedsConfirmation(t *testing.T) {
 	if left := roundTrip[[]entry](t, invoke(t, s, "trash")); len(left) != 2 {
 		t.Fatal("a refused empty deleted something")
 	}
-	out := roundTrip[struct{ Deleted int }](t, invoke(t, s, "emptyTrash", object{"count": 2}))
+	ids := []string{now[0].ID, now[1].ID}
+	out := roundTrip[struct{ Deleted int }](t, invoke(t, s, "emptyTrash", object{"ids": ids}))
 	if out.Deleted != 2 {
 		t.Fatalf("deleted %d", out.Deleted)
 	}
