@@ -103,6 +103,45 @@ func TestInitLibraryWithBundledSkillOffline(t *testing.T) {
 	}
 }
 
+// Switching the app to another library points that library's entry at this
+// app's copy right away, and the status says the skill comes with the app.
+func TestUseLibraryRepointsSelfSkill(t *testing.T) {
+	home := offlineHome(t)
+	exe := bundledApp(t, filepath.Join(home, "Applications"))
+	runningFrom(t, exe)
+	s := New("", Native{})
+	other := filepath.Join(home, "other")
+	invoke(t, s, "initLibrary", other, true)
+	invoke(t, s, "initLibrary", filepath.Join(t.TempDir(), "second"), false)
+
+	apps, _ := filepath.EvalSymlinks(t.TempDir())
+	if err := os.Rename(filepath.Join(home, "Applications", "skilldots.app"), filepath.Join(apps, "skilldots.app")); err != nil {
+		t.Fatal(err)
+	}
+	runningFrom(t, filepath.Join(apps, "skilldots.app", "Contents", "MacOS", "skilldots"))
+	st := invoke(t, s, "useLibrary", other).(object)
+	if st["bundledSkill"] != true {
+		t.Fatalf("bundledSkill = %v", st["bundledSkill"])
+	}
+	want := filepath.Join(apps, "skilldots.app", "Contents", "Resources", "skills", "skilldots")
+	m, err := manifest.Load(filepath.Join(other, "skills.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Apps) != 1 || m.Apps[0].Path != want {
+		t.Fatalf("[[app]] after useLibrary: %+v, want %s", m.Apps, want)
+	}
+	if got, _ := os.Readlink(filepath.Join(home, ".agents", "skills", "skilldots")); got != want {
+		t.Fatalf("~/.agents/skills/skilldots → %s, want %s", got, want)
+	}
+
+	// In development the skill would come from GitHub.
+	runningFrom(t, filepath.Join(home, "skilldots Dev.app", "Contents", "MacOS", "skilldots Dev"))
+	if st := invoke(t, s, "status").(object); st["bundledSkill"] != false {
+		t.Fatalf("development bundledSkill = %v", st["bundledSkill"])
+	}
+}
+
 // In development there is no bundle: the GitHub source is used, so
 // offline the library is made and the status says why the skill is not.
 func TestInitLibraryInDevelopmentUsesGitHub(t *testing.T) {

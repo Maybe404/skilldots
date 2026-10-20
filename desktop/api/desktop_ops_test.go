@@ -137,6 +137,28 @@ func TestUpdateDiffThroughTheBridge(t *testing.T) {
 	}
 }
 
+// With no library yet, status still counts what the agents have (for the
+// first-run screen) without creating anything.
+func TestStatusWithoutLibraryCountsUnmanaged(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("SKILLDOTS_LIBRARY", "")
+	writeFile(t, filepath.Join(home, ".claude", "skills", "one", "SKILL.md"), "---\nname: one\ndescription: one\n---\n")
+	writeFile(t, filepath.Join(home, ".agents", "skills", "two", "SKILL.md"), "---\nname: two\ndescription: two\n---\n")
+	s := New("", Native{})
+	st := roundTrip[struct {
+		Root      *string
+		Unmanaged int
+	}](t, invoke(t, s, "status"))
+	if st.Root != nil || st.Unmanaged != 2 {
+		t.Fatalf("status: %+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".skilldots")); !os.IsNotExist(err) {
+		t.Fatal("status made a library")
+	}
+}
+
 func TestTrashDeletionNeedsConfirmation(t *testing.T) {
 	s := setup(t)
 	for _, n := range []string{"a", "b", "c"} {

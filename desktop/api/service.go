@@ -167,6 +167,9 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		}
 		s.root = dir
 		s.previews = map[string]*app.Fetched{}
+		// That library may name another copy of this app's skill (the app
+		// moved since it was used, or it came from another Mac).
+		s.repointSelfSkill()
 		return s.status()
 	}
 	ses, err := s.session()
@@ -469,13 +472,25 @@ func expand(p string) string {
 	return p
 }
 
+// bundledSkill reports whether the skilldots skill would come from this
+// app's own copy (no network needed) rather than from GitHub.
+func bundledSkill() bool {
+	return app.BundledSelfSkill != nil && app.BundledSelfSkill() != ""
+}
+
 func (s *Service) status() (any, error) {
 	root := s.root
 	if root == "" {
 		root = config.Get(config.Library)
 	}
 	if root == "" {
-		return object{"root": nil, "branch": "", "changes": 0, "unmanaged": 0}, nil
+		// No library yet: the first-run screen still says how many skills
+		// the agents here have that a new library could adopt (read only).
+		unmanaged := 0
+		if rep, err := app.ScanWithoutLibrary(); err == nil {
+			unmanaged = len(rep.Unmanaged())
+		}
+		return object{"root": nil, "branch": "", "changes": 0, "unmanaged": unmanaged, "bundledSkill": bundledSkill()}, nil
 	}
 	ses, err := app.Open(root)
 	if err != nil {
@@ -499,7 +514,7 @@ func (s *Service) status() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill()}, nil
+	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill(), "bundledSkill": bundledSkill()}, nil
 }
 func outdated(o *app.Outdated) any {
 	if o == nil {
