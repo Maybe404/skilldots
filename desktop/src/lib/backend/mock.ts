@@ -21,8 +21,10 @@ import {
   trashBatch,
   upstreamDescription,
 } from "./mock-data"
+import { SHARED_READERS } from "@/lib/agents"
 import { parseSource } from "./parse-source"
 import type {
+  Absent,
   Agent,
   Backend,
   CliStatus,
@@ -86,6 +88,13 @@ function sampleState(root: string | null): State {
     files[edited.ref.key]["SKILL.md"] += "\nMy note: also check the migration files.\n"
     touched.add(edited.ref.key)
   }
+  // A skill of yours also chosen for Kiro, which this Mac does not have: shown as chosen but not linked.
+  skills.find((s) => s.name === "design-review")?.targets.push("kiro")
+  // Copies another installer put in agent folders and that were changed since: adopted as your own, not replaced by upstream.
+  const differs: ScanItem[] = [
+    { id: "claude/tdd", agent: "claude", name: "tdd", path: `${HOME}/.claude/skills/tdd`, state: "copy", source: "mattpocock/skills", proposal: "own", label: "", upstream: "mattpocock/skills", differs: true },
+    { id: "cursor/code-review", agent: "cursor", name: "code-review", path: `${HOME}/.cursor/skills/code-review`, state: "copy", source: "mattpocock/skills", proposal: "own", label: "", upstream: "mattpocock/skills", differs: true },
+  ]
   return {
     root,
     remote: REMOTE,
@@ -100,7 +109,7 @@ function sampleState(root: string | null): State {
     history: initialHistory(now),
     trash: initialTrash(now),
     plan: initialPlan(),
-    scan: initialScan(skills),
+    scan: [...initialScan(skills), ...differs],
     touched,
   }
 }
@@ -140,16 +149,30 @@ export function createMockBackend(): Backend {
   const changed = () => {
     st.changes += 1
   }
-  const toTrash = (name: string, origin: string, reason?: TrashEntry["reason"]) => {
+  // Built-in agents not installed on this machine: apply links nothing there (the shared folder is always made).
+  const absentAgents = () => st.agents.filter((a) => a.builtin && !a.detected && a.name !== "agents").map((a) => a.name)
+  const absentOf = (list: Skill[]): Absent => {
+    const away = absentAgents()
+    const out: Absent = {}
+    for (const s of list) for (const a of s.targets) if (away.includes(a)) out[a] = [...(out[a] ?? []), s.linkName]
+    return out
+  }
+  // Like the note skd keeps beside a removed or purged entry: what restoring puts back.
+  const notes = new Map<string, { skills: Skill[]; pack?: Pack }>()
+  const toTrash = (name: string, origin: string, reason?: TrashEntry["reason"], note?: { skills: Skill[]; pack?: Pack }) => {
     const batch = trashBatch(new Date().toISOString())
+    const id = `${batch}/${name}`
     st.trash.unshift({
-      id: `${batch}/${name}`,
+      id,
       name,
       origin,
       path: `${st.root}/.trash/${batch}/${name}`,
       when: new Date().toISOString(),
       reason,
+      skills: note?.skills.map((s) => s.name),
+      repo: note?.pack?.repo,
     })
+    if (note) notes.set(id, clone(note))
   }
   const status = (): LibraryStatus => ({
     root: st.root,
@@ -194,7 +217,8 @@ export function createMockBackend(): Backend {
       origin: "skilldots",
       category: "",
       description: upstreamDescription("Maybe404/skilldots", "skilldots"),
-      targets: st.agents.filter((a) => a.detected).map((a) => a.name),
+      // What "*" expands to here: agents that read ~/.agents/skills get it from there.
+      targets: st.agents.filter((a) => a.detected && !SHARED_READERS.includes(a.name)).map((a) => a.name),
     })
     skill.dir = "/Applications/skilldots.app/Contents/Resources/skills/skilldots"
   }
@@ -250,7 +274,8 @@ export function createMockBackend(): Backend {
 
     async skills() {
       await wait(80)
-      return clone(st.skills)
+      const away = absentAgents()
+      return clone(st.skills.map((s) => ({ ...s, absent: s.targets.filter((a) => away.includes(a)) })))
     },
     async packs() {
       await wait(60)
@@ -258,7 +283,14 @@ export function createMockBackend(): Backend {
     },
     async agents() {
       await wait(60)
-      return clone(st.agents)
+      // Like the bridge: which agents read ~/.agents/skills too, and an agent not here is shown while a skill names it.
+      return clone(
+        st.agents.map((a) => ({
+          ...a,
+          readsShared: SHARED_READERS.includes(a.name),
+          hidden: a.hidden && !st.skills.some((s) => s.targets.includes(a.name)),
+        })),
+      )
     },
     async claudeOverrides() {
       return [...CLAUDE_OVERRIDES]
@@ -339,7 +371,7 @@ export function createMockBackend(): Backend {
       }
       st.scan = st.scan.filter((x) => !(x.proposal === "pack" && x.repo === repo && names.has(x.name)))
       changed()
-      return { repo, linked, renamed, nothing: false }
+      return { repo, linked, renamed, nothing: false, absent: absentOf(st.skills) }
     },
 
     async enable(ref, agents) {
@@ -347,34 +379,40 @@ export function createMockBackend(): Backend {
       const s = find(ref)
       s.targets = [...new Set([...s.targets, ...agents])]
       changed()
+      return { absent: absentOf(st.skills) }
     },
     async disable(ref, agents) {
       await wait(150)
       const s = find(ref)
       s.targets = agents.length ? s.targets.filter((t) => !agents.includes(t)) : []
       changed()
+      return { absent: absentOf(st.skills) }
     },
     async setTargets(ref, agents) {
       await wait(150)
       find(ref).targets = [...agents]
       changed()
+      return { absent: absentOf(st.skills) }
     },
     async remove(ref) {
       await wait(300)
       const s = find(ref)
       if (s.kind === "app") throw new Error(`${s.name} belongs to an application; disable it instead`)
       st.skills = st.skills.filter((x) => x !== s)
-      toTrash(s.name, s.dir, "removed")
+      const pack = st.packs.find((p) => p.repo === s.origin)
+      toTrash(s.name, s.dir, "remove", { skills: [s], pack: s.kind === "vendor" ? pack : undefined })
       if (!st.skills.some((x) => x.origin === s.origin && x.kind === "vendor")) st.packs = st.packs.filter((p) => p.repo !== s.origin)
       changed()
     },
     async purge(repo) {
       await wait(400)
-      if (!st.packs.some((p) => p.repo === repo)) throw new Error(`not subscribed: ${repo}`)
-      st.skills = st.skills.filter((x) => !(x.kind === "vendor" && x.origin === repo))
+      const pack = st.packs.find((p) => p.repo === repo)
+      if (!pack) throw new Error(`not subscribed: ${repo}`)
+      const gone = st.skills.filter((x) => x.kind === "vendor" && x.origin === repo)
+      st.skills = st.skills.filter((x) => !gone.includes(x))
       st.packs = st.packs.filter((p) => p.repo !== repo)
       if (st.outdated) st.outdated.packs = st.outdated.packs.filter((p) => p.repo !== repo)
-      toTrash(repo.split("/")[1], `${st.root}/vendor/${repo}`, "purge")
+      toTrash(repo.split("/")[1], `${st.root}/vendor/${repo}`, "purge", { skills: gone, pack })
       changed()
     },
     async fork(ref, opts) {
@@ -466,7 +504,7 @@ export function createMockBackend(): Backend {
         if (p.action === "unlink") s.targets = s.targets.filter((t) => t !== p.agent)
       }
       st.plan = left
-      return { linked, unlinked, trashed }
+      return { linked, unlinked, trashed, absent: absentOf(st.skills) }
     },
 
     async recordedOutdated() {
@@ -638,6 +676,17 @@ export function createMockBackend(): Backend {
       if (!e) throw new Error(`no trash entry ${id}`)
       if (st.skills.some((s) => s.name === e.name && s.dir === e.origin)) throw new Error(`${e.origin} exists again; move it away first`)
       st.trash = st.trash.filter((x) => x !== e)
+      // Like RestoreEntry: what remove or purge took out goes back into the library, selected and linked again.
+      const note = notes.get(id)
+      notes.delete(id)
+      if (note) {
+        if (note.pack && !st.packs.some((p) => p.repo === note.pack!.repo)) st.packs.push(note.pack)
+        for (const s of note.skills) if (!st.skills.some((x) => x.ref.key === s.ref.key)) st.skills.push(s)
+        changed()
+        return { skills: note.skills.map((s) => s.name), repo: note.pack?.repo, selected: true, linked: true, absent: absentOf(note.skills) }
+      }
+      const inLibrary = !!st.root && e.origin.startsWith(st.root)
+      return { skills: [e.name], linked: inLibrary, unused: inLibrary && e.origin.includes("/vendor/") }
     },
     async sync({ remote, message }) {
       await wait(1200)

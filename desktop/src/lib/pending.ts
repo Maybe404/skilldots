@@ -14,19 +14,20 @@ const SEP = "\u0000"
 export const pendingKey = (skill: string, agent: string) => skill + SEP + agent
 export const splitKey = (k: string) => k.split(SEP) as [skill: string, agent: string]
 
-export type CellState = "on" | "off" | "adding" | "removing"
+/** "absent": chosen, but the agent is not installed on this machine, so nothing is linked. */
+export type CellState = "on" | "off" | "adding" | "removing" | "absent"
 
 export function cellState(skill: Skill, agent: string, pending: Pending): CellState {
   const base = skill.targets.includes(agent)
   const k = pendingKey(skill.ref.key, agent)
-  if (!(k in pending)) return base ? "on" : "off"
+  if (!(k in pending)) return base ? (skill.absent?.includes(agent) ? "absent" : "on") : "off"
   return pending[k] ? "adding" : "removing"
 }
 
 /** Installed once the pending changes are applied. */
 export function isOn(skill: Skill, agent: string, pending: Pending): boolean {
   const s = cellState(skill, agent, pending)
-  return s === "on" || s === "adding"
+  return s === "on" || s === "adding" || s === "absent"
 }
 
 /** Flip one cell: a pending change is reverted, otherwise one is recorded. */

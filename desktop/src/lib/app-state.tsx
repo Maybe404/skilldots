@@ -3,6 +3,7 @@ import { toast } from "sonner"
 
 import {
   backend,
+  type Absent,
   type Agent,
   type Config,
   type LibraryStatus,
@@ -13,6 +14,7 @@ import {
   type Ref,
   type Skill,
 } from "@/lib/backend"
+import { agentLabel } from "@/lib/agents"
 import { translator, type T } from "@/lib/i18n"
 import { changes, prune, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
 
@@ -447,10 +449,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // One enable / disable per skill (see changes()); it stops at the first skill that fails.
       const r = await runTask(t("applyingN", { n }), async () => {
         let done = 0
+        // Agents not installed here that a skill was just turned on for: linked nowhere, said once.
+        const absent: Absent = {}
         for (const c of list) {
           try {
             if (c.enable.length) {
-              await backend.enable(c.skill.ref, c.enable)
+              const note = await backend.enable(c.skill.ref, c.enable)
+              for (const a of c.enable) {
+                if (note?.absent?.[a]?.includes(c.skill.linkName)) absent[a] = [...(absent[a] ?? []), c.skill.linkName]
+              }
               done += c.enableKeys.length
             }
             if (c.disable.length) {
@@ -458,23 +465,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               done += c.disableKeys.length
             }
           } catch (error) {
-            return { done, failed: { name: c.skill.name, error } }
+            return { done, absent, failed: { name: c.skill.name, error } }
           }
         }
-        return { done, failed: undefined }
+        return { done, absent, failed: undefined }
       })
       // Applied links drop out of `pending` once the reload shows their new targets;
       // whatever failed or was not reached stays.
       await reload().catch(() => undefined)
       if (!r.ok) return
-      const { done, failed } = r.value
+      const { done, failed, absent } = r.value
+      toastAbsent(t, agents, absent)
       if (failed) toast.error(t("applyFailedAt", { name: failed.name, done, rest: n - done }), { description: errorText(t, failed.error) })
       else toast(t("appliedN", { n }))
     } finally {
       applyingRef.current = false
       setApplying(false)
     }
-  }, [pending, skills, operation, runTask, reload, t])
+  }, [pending, skills, agents, operation, runTask, reload, t])
 
   const revertPending = React.useCallback(() => {
     if (applyingRef.current) return
@@ -602,6 +610,35 @@ export function useColumnAgents() {
 export function useEnabledAgents() {
   const { agents } = useApp()
   return React.useMemo(() => agents.filter((a) => a.enabled), [agents])
+}
+
+/**
+ * One toast per agent an apply left out because it is not installed on
+ * this Mac ("本机没有安装 Claude Code：有 1 个 skill 没有链接到那里").
+ */
+export function toastAbsent(t: T, agents: Agent[], ...notes: (Absent | undefined)[]) {
+  const merged = new Map<string, Set<string>>()
+  for (const absent of notes) {
+    for (const [agent, skills] of Object.entries(absent ?? {})) {
+      const set = merged.get(agent) ?? new Set<string>()
+      skills.forEach((s) => set.add(s))
+      merged.set(agent, set)
+    }
+  }
+  for (const [name, skills] of merged) {
+    const a = agents.find((x) => x.name === name)
+    toast(t("absentToast", { agent: a ? agentLabel(a) : name, n: skills.size }))
+  }
+}
+
+/** The part of an apply's absent list about names (an apply reports the whole library's). */
+export function absentFor(absent: Absent | undefined, names: string[]): Absent {
+  const out: Absent = {}
+  for (const [agent, list] of Object.entries(absent ?? {})) {
+    const hit = list.filter((n) => names.includes(n))
+    if (hit.length) out[agent] = hit
+  }
+  return out
 }
 
 export function kindLabel(t: T, s: Skill): string {

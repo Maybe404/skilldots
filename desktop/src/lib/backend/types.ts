@@ -31,6 +31,8 @@ export interface Agent {
   /** In skills.toml [targets].default: new skills go here. */
   isDefault: boolean
   builtin: boolean
+  /** Also loads skills from ~/.agents/skills: "*" does not link into it separately when Agents is a target. */
+  readsShared?: boolean
 }
 
 /** One resolved library entry (engine.Entry). */
@@ -51,6 +53,8 @@ export interface Skill {
   conflict?: string
   /** Source dir absent (not vendored yet). */
   missing?: boolean
+  /** Agents it names that are not installed on this machine: nothing is linked there. */
+  absent?: string[]
 }
 
 /** A subscribed repository ([[pack]] in skills.toml plus its lock). */
@@ -170,6 +174,7 @@ export interface AddOutcome {
   /** upstream name → link name assigned because the name was taken */
   renamed: Record<string, string>
   nothing: boolean
+  absent?: Absent
 }
 
 /** One link change apply would make (engine.Plan item). */
@@ -192,6 +197,10 @@ export interface ScanItem {
   source?: string
   /** pack | app | own | enable | drop | skip */
   proposal: "pack" | "app" | "own" | "enable" | "drop" | "skip"
+  /** The repository it came from (as recorded by its installer, or its link). */
+  upstream?: string
+  /** Its content differs from what upstream has now: proposed as your own skill ("own"). */
+  differs?: boolean
   label: string
   repo?: string
 }
@@ -208,7 +217,10 @@ export interface TrashEntry {
    * (replaced by an update), "adopt" (replaced while adopting), "purge"
    * (a removed source). Optional; the UI falls back to where it came from.
    */
-  reason?: "removed" | "update" | "adopt" | "purge"
+  reason?: "removed" | "update" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | ""
+  /** The skills it holds and the source they came from, as recorded when it was set aside. */
+  skills?: string[]
+  repo?: string
   example?: boolean
   restorable?: boolean
   problem?: string
@@ -324,6 +336,28 @@ export interface SyncOutcome {
   remote: string
 }
 
+/** Agent not installed on this machine → the skills an apply did not link there. */
+export type Absent = Record<string, string[]>
+
+/** What a change of links reports besides success. */
+export interface ApplyNote {
+  absent?: Absent
+}
+
+/** app.RestoreOutcome */
+export interface RestoreOutcome {
+  skills?: string[]
+  repo?: string
+  /** Selected again in skills.toml (what remove or purge took out is back). */
+  selected?: boolean
+  /** Linked again (it went back into the library, not into an agent's folder). */
+  linked?: boolean
+  /** Back in vendor/ but nothing selects it. */
+  unused?: boolean
+  hint?: string
+  absent?: Absent
+}
+
 export interface Backend {
   // Library ---------------------------------------------------------------
   /** session.Open + git status. */
@@ -371,11 +405,11 @@ export interface Backend {
 
   // Per skill -------------------------------------------------------------
   /** Session.Enable */
-  enable(ref: Ref, agents: string[]): Promise<void>
+  enable(ref: Ref, agents: string[]): Promise<ApplyNote | void>
   /** Session.Disable: unlink only, files stay in the library. */
-  disable(ref: Ref, agents: string[]): Promise<void>
+  disable(ref: Ref, agents: string[]): Promise<ApplyNote | void>
   /** Session.SetTargets */
-  setTargets(ref: Ref, agents: string[]): Promise<void>
+  setTargets(ref: Ref, agents: string[]): Promise<ApplyNote | void>
   /** Session.Remove: to the trash. */
   remove(ref: Ref): Promise<void>
   /** Session.Purge: the whole pack to the trash. */
@@ -400,7 +434,7 @@ export interface Backend {
   /** Session.Plan (skd apply -n) */
   plan(): Promise<PlanItem[]>
   /** Session.Apply */
-  apply(opts: { force: boolean }): Promise<{ linked: number; unlinked: number; trashed: number }>
+  apply(opts: { force: boolean }): Promise<{ linked: number; unlinked: number; trashed: number; absent?: Absent }>
 
   // Updates ---------------------------------------------------------------
   /** Session.RecordedOutdated: last check, no network. */
@@ -422,7 +456,8 @@ export interface Backend {
 
   // Trash -----------------------------------------------------------------
   trash(): Promise<TrashEntry[]>
-  restore(id: string): Promise<void>
+  /** Session.RestoreEntry: what remove or purge took out comes back into skills.toml and is linked again. */
+  restore(id: string): Promise<RestoreOutcome>
   /** Entries and bytes the trash holds (what emptying it deletes). */
   trashUsage(): Promise<{ count: number; bytes: number }>
   /** Permanently deletes everything; count is what the person confirmed and must still match. */

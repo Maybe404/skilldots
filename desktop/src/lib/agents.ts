@@ -61,6 +61,18 @@ const MONOS: Record<string, string> = {
   pi: "Pi",
 }
 
+/**
+ * Built-in agents that also read ~/.agents/skills (targets.SharedReaders,
+ * as the core checked them). Only the sample backend uses this list; the
+ * real one reports Agent.readsShared.
+ */
+export const SHARED_READERS = ["codex", "gemini", "cursor", "opencode", "copilot", "windsurf", "grok", "qwen", "goose", "roo", "kilocode", "augment", "junie", "openhands", "crush", "factory", "pi"]
+
+/** A built-in agent this Mac does not have: apply links nothing there (the shared folder is always made). */
+export function isAbsentAgent(a: Pick<Agent, "name" | "builtin" | "detected">): boolean {
+  return a.builtin && !a.detected && a.name !== "agents"
+}
+
 export function agentLabel(a: Pick<Agent, "name" | "label">): string {
   if (a.label && a.label !== a.name) return a.label
   return LABELS[a.name] ?? a.name

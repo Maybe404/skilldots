@@ -79,11 +79,12 @@ export function Mono({ children, className, title }: { children: React.ReactNode
   )
 }
 
-export function Hint({ label, children }: { label: string; children: React.ReactElement }) {
+/** Tooltip on a control. wide: for a paragraph rather than a label. */
+export function Hint({ label, children, wide }: { label: string; children: React.ReactElement; wide?: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger render={children} />
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent className={wide ? "max-w-md" : undefined}>{label}</TooltipContent>
     </Tooltip>
   )
 }
