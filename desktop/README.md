@@ -107,14 +107,16 @@ in `docs/screenshots/` (1280×820 window, 1.5× scale, sample data).
   height and stroke animations). The wire view's layout is written for this
   app; its buttons and hints are components.
 - **Styles.** "Clean" (default) and "Doodle" are two sets of CSS variables in
-  `src/styles/themes.css`, chosen by `data-style` on `<html>` and remembered
-  in the window's local storage. Components use the token utilities from
+  `src/styles/themes.css`, chosen in Settings, set as `data-style` on
+  `<html>` and remembered in the window's local storage. Components use the token utilities from
   `src/index.css` (`text-ink`, `bg-nav`, `rounded-ctl`, `fs-body`,
   `border-b-row` …), never raw values. Only light mode exists so far; the
-  dark option in Settings explains that it is still being designed.
-- **Fonts.** Geist, JetBrains Mono, Gaegu and Long Cang (all SIL OFL 1.1, from
-  `@fontsource`) ship inside the bundle as woff2 (`src/styles/fonts.css`), so
-  the window needs no network. Chinese falls back to PingFang SC.
+  dark option in Settings is shown as coming soon and cannot be chosen.
+- **Fonts.** Text is PingFang SC (the system's). JetBrains Mono (paths and
+  commit ids) and the doodle style's Gaegu and Long Cang (headings and names
+  only; body text stays in PingFang) are SIL OFL 1.1 fonts from
+  `@fontsource`, shipped inside the bundle as woff2 (`src/styles/fonts.css`),
+  so the window needs no network.
 - **Pending link changes.** Toggling a skill for an agent (wire view, table
   view, detail sheet, number keys, drag) only records the wanted state. The
   status bar shows the count with Apply and Undo; while applying it shows a
@@ -141,8 +143,10 @@ in `docs/screenshots/` (1280×820 window, 1.5× scale, sample data).
 - Library skills, including private and self-authored skills, move to the
   library trash. A machine-local provenance record permits safe restoration.
 - App-owned skills can be unlinked but are not moved or edited in place.
-- Permanent deletion is unavailable in the desktop bridge. Empty the trash
-  explicitly from an interactive terminal with `skd trash empty`.
+- Permanent deletion happens only in the Trash page, after a confirmation
+  that names how many entries and how much space: empty the whole trash, or
+  delete one entry. The bridge refuses when the trash changed since the
+  confirmation was shown. Nothing else in the app deletes for good.
 - File editing is confined to regular UTF-8 files within the selected skill;
   hidden paths, symlinks and traversal are rejected. Copy-based destinations
   require Apply after editing.
