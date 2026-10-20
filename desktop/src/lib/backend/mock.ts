@@ -3,7 +3,9 @@
 import {
   CATALOG,
   CLAUDE_OVERRIDES,
+  HOME,
   LIBRARY,
+  REMOTE,
   initialAgents,
   initialFiles,
   initialHistory,
@@ -16,6 +18,8 @@ import {
   refKey,
   sha,
   skillDir,
+  trashBatch,
+  upstreamDescription,
 } from "./mock-data"
 import { parseSource } from "./parse-source"
 import type {
@@ -72,9 +76,10 @@ function sampleState(root: string | null): State {
   const skills = initialSkills()
   return {
     root,
-    remote: "git@github.com:Maybe404/agent-skills.git",
+    remote: REMOTE,
+    // Not backed up since two days ago: yesterday's removal and update.
     changes: 2,
-    lastSync: new Date(now.getTime() - 3 * 3600 * 1000).toISOString(),
+    lastSync: new Date(now.getTime() - 2 * 24 * 3600 * 1000).toISOString(),
     skills,
     packs: initialPacks(),
     agents: initialAgents(),
@@ -83,32 +88,33 @@ function sampleState(root: string | null): State {
     history: initialHistory(now),
     trash: initialTrash(now),
     plan: initialPlan(),
-    scan: initialScan(),
+    scan: initialScan(skills),
     touched: new Set(),
   }
 }
 
-function emptyState(root: string): State {
+/** A new library: nothing in it yet (initLibrary adds the skilldots skill when asked). */
+function emptyState(root: string | null): State {
   const s = sampleState(root)
-  const keep = s.skills.filter((x) => x.name === "skilldots")
   return {
     ...s,
     remote: undefined,
     changes: 1,
     lastSync: undefined,
-    skills: keep,
-    packs: s.packs.filter((p) => p.repo === "Maybe404/skilldots"),
-    files: initialFiles(keep),
+    skills: [],
+    packs: [],
+    files: {},
     outdated: null,
     history: [],
     trash: [],
     plan: [],
+    scan: initialScan([]),
   }
 }
 
 export function createMockBackend(): Backend {
   const fresh = typeof location !== "undefined" && new URLSearchParams(location.search).has("fresh")
-  let st: State = fresh ? { ...sampleState(null), root: null } : sampleState(LIBRARY)
+  let st: State = fresh ? emptyState(null) : sampleState(LIBRARY)
   // The preview never touches /usr/local/bin: the command is only pretended.
   let cli: CliStatus = { path: "/usr/local/bin/skd", state: "missing", target: "", canInstall: true, reason: "" }
   const selfSkill = () => st.packs.some((p) => p.repo === "Maybe404/skilldots")
@@ -122,7 +128,7 @@ export function createMockBackend(): Backend {
     st.changes += 1
   }
   const toTrash = (name: string, origin: string, reason?: TrashEntry["reason"]) => {
-    const batch = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15)
+    const batch = trashBatch(new Date().toISOString())
     st.trash.unshift({
       id: `${batch}/${name}`,
       name,
@@ -138,7 +144,7 @@ export function createMockBackend(): Backend {
     branch: "main",
     changes: st.changes,
     lastSync: st.lastSync,
-    unmanaged: 47,
+    unmanaged: st.scan.length,
     selfSkill: selfSkill(),
   })
 
@@ -172,7 +178,7 @@ export function createMockBackend(): Backend {
       kind: "vendor",
       origin: "Maybe404/skilldots",
       category: "",
-      description: "Manage the skills installed for AI agents on this machine.",
+      description: upstreamDescription("Maybe404/skilldots", "skilldots"),
       targets: st.agents.filter((a) => a.detected).map((a) => a.name),
     })
   }
@@ -184,7 +190,7 @@ export function createMockBackend(): Backend {
     },
     async initLibrary(dir, withSkill) {
       await wait(500)
-      st = emptyState(dir || `${"/Users/maybe"}/.skilldots`)
+      st = emptyState(dir || `${HOME}/.skilldots`)
       if (withSkill) installSelf()
       return status()
     },
@@ -210,7 +216,7 @@ export function createMockBackend(): Backend {
     async cloneLibrary(url, dir) {
       await wait(1200)
       if (!/github\.com|^git@|\//.test(url)) throw new Error(`cannot clone ${url}`)
-      st = sampleState(dir || "/Users/maybe/.skilldots")
+      st = sampleState(dir || `${HOME}/.skilldots`)
       st.remote = url
       st.changes = 0
       return status()
@@ -546,6 +552,10 @@ export function createMockBackend(): Backend {
           if (s) s.targets = [...new Set([...s.targets, it.agent])]
           const a = st.agents.find((x) => x.name === it.agent)
           if (a) a.enabled = true
+          // The copy makes way for the link, like any adopted copy.
+          if (it.state === "copy") toTrash(it.name, it.path, "adopt")
+        } else if (it.proposal === "drop") {
+          toTrash(it.name, it.path, "adopt")
         }
         st.scan = st.scan.filter((x) => x.id !== id)
         adopted++

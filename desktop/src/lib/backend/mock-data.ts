@@ -1,6 +1,8 @@
-// Sample library for the browser preview. It mirrors the data in the approved
-// design ("skilldots 主界面"), so screenshots can be compared side by side.
-// Update history and trash entries are fictional and marked `example`.
+// Sample library for the browser preview. It follows the data in the approved
+// design ("skilldots 主界面"), so screenshots can be compared side by side, and
+// it is kept self-consistent: commits, counts, descriptions, history, trash and
+// the scan all describe the same library. Update history and trash entries are
+// fictional and marked `example`. Nothing here is anyone's real machine.
 import type {
   Agent,
   HistoryEntry,
@@ -14,8 +16,10 @@ import type {
   UpstreamSkill,
 } from "./types"
 
-export const HOME = "/Users/maybe"
-export const LIBRARY = `${HOME}/code/github.com/Maybe404/agent-skills`
+export const HOME = "/Users/you"
+export const LIBRARY = `${HOME}/.skilldots`
+/** Where the sample library is backed up (`skd sync`). */
+export const REMOTE = "git@github.com:you/agent-skills.git"
 
 /**
  * The real backend returns full 40-digit commit SHAs (`git rev-parse HEAD`,
@@ -80,33 +84,39 @@ export function initialAgents(): Agent[] {
   }))
 }
 
-type Seed = [name: string, kind: Skill["kind"], origin: string, category: string, on: string, description: string]
+type Seed = [name: string, kind: Skill["kind"], origin: string, category: string, on: string, description?: string]
 
-// on: one digit per column agent (agents, claude, codex, gemini, grok, cursor)
+// on: one digit per column agent (agents, claude, codex, gemini, grok, cursor).
+// A vendored skill's description is upstream's, from CATALOG below.
 const SEEDS: Seed[] = [
-  ["skilldots", "vendor", "Maybe404/skilldots", "", "111111", "Manage the skills installed for AI agents on this machine."],
-  ["ui-arsenal", "vendor", "Maybe404/ui-arsenal", "", "111000", "在前端 UI 任务里选择和获取成熟组件时使用。"],
-  ["subagent", "skills", "", "", "111001", "派发 subagent 的规则：拆什么、派给谁、怎么验收。"],
-  ["release-notes", "skills", "", "", "110000", "从 git log 生成发布说明，按用户可感知的改动分组。"],
-  ["design-review", "skills", "", "", "010001", "按设计需求文档逐条审查界面截图。"],
-  ["defuddle", "vendor", "kepano/obsidian-skills", "", "110000", "Extract clean Markdown from HTML pages with Defuddle."],
-  ["json-canvas", "vendor", "kepano/obsidian-skills", "", "110000", "Create and edit JSON Canvas files (.canvas)."],
-  ["obsidian-bases", "vendor", "kepano/obsidian-skills", "", "110000", "Create and edit Obsidian Bases (.base files)."],
-  ["obsidian-cli", "vendor", "kepano/obsidian-skills", "", "111000", "Interact with Obsidian vaults using the Obsidian CLI."],
-  ["obsidian-markdown", "vendor", "kepano/obsidian-skills", "", "110000", "Create and edit Obsidian Flavored Markdown."],
-  ["impeccable", "vendor", "pbakaus/impeccable", "", "111101", "Use when the user wants to design, redesign, critique or polish a UI."],
-  ["orchestration", "vendor", "stablyai/orca", "", "110000", "Coordinate supervised Orca workers."],
-  ["orca-review", "vendor", "stablyai/orca", "", "010000", "Review hand-offs between Orca workers before merging."],
-  ["pdf", "vendor", "anthropics/skills", "document-skills", "110100", "Read, create and edit PDF files."],
-  ["docx", "vendor", "anthropics/skills", "document-skills", "010000", "Create and edit Word documents."],
-  ["xlsx", "vendor", "anthropics/skills", "document-skills", "010000", "Create and analyze spreadsheets."],
-  ["pptx", "vendor", "anthropics/skills", "document-skills", "011000", "Build and edit slide decks."],
-  ["differential-review", "vendor", "trailofbits/skills", "differential-review", "011000", "Security-focused review of a diff."],
-  ["modern-python", "vendor", "trailofbits/skills", "modern-python", "011000", "Project setup with uv, ruff and pytest."],
-  ["find-skills", "vendor", "vercel-labs/agent-skills", "", "110001", "Search skills.sh and GitHub for a skill."],
-  ["web-design-guidelines", "vendor", "vercel-labs/agent-skills", "", "110001", "Audit UI code against web design guidelines."],
-  ["grill-me", "vendor", "mattpocock/skills", "engineering", "010000", "Interrogate a plan until every assumption is explicit."],
+  ["skilldots", "vendor", "Maybe404/skilldots", "", "111111"],
+  ["ui-arsenal", "vendor", "Maybe404/ui-arsenal", "", "111000"],
+  ["subagent", "skills", "", "", "111001", "Brief a helper agent: the goal, the files it may touch and how the result is checked."],
+  ["release-notes", "skills", "", "", "110000", "Draft release notes from git log, grouped by what users will notice."],
+  ["design-review", "skills", "", "", "010001", "Review interface screenshots against the design spec, item by item."],
+  ["defuddle", "vendor", "kepano/obsidian-skills", "", "110000"],
+  ["json-canvas", "vendor", "kepano/obsidian-skills", "", "110000"],
+  ["obsidian-bases", "vendor", "kepano/obsidian-skills", "", "110000"],
+  ["obsidian-cli", "vendor", "kepano/obsidian-skills", "", "111000"],
+  ["obsidian-markdown", "vendor", "kepano/obsidian-skills", "", "110000"],
+  ["impeccable", "vendor", "pbakaus/impeccable", "", "111101"],
+  ["orchestration", "vendor", "stablyai/orca", "", "110000"],
+  ["orca-review", "vendor", "stablyai/orca", "", "010000"],
+  ["pdf", "vendor", "anthropics/skills", "document-skills", "110100"],
+  ["docx", "vendor", "anthropics/skills", "document-skills", "010000"],
+  ["xlsx", "vendor", "anthropics/skills", "document-skills", "010000"],
+  ["pptx", "vendor", "anthropics/skills", "document-skills", "011000"],
+  ["differential-review", "vendor", "trailofbits/skills", "differential-review", "011000"],
+  ["modern-python", "vendor", "trailofbits/skills", "modern-python", "011000"],
+  ["find-skills", "vendor", "vercel-labs/agent-skills", "", "110001"],
+  ["web-design-guidelines", "vendor", "vercel-labs/agent-skills", "", "110001"],
+  ["grill-me", "vendor", "mattpocock/skills", "engineering", "010000"],
 ]
+
+/** Upstream's description of a vendored skill (as CATALOG has it). */
+export function upstreamDescription(repo: string, name: string): string {
+  return CATALOG[repo]?.skills.find((s) => s.name === name)?.description ?? ""
+}
 
 export function skillDir(kind: Skill["kind"], origin: string, category: string, name: string): string {
   switch (kind) {
@@ -141,7 +151,7 @@ export function initialSkills(): Skill[] {
     kind,
     origin,
     category,
-    description,
+    description: description ?? upstreamDescription(origin, name),
     dir: skillDir(kind, origin, category, name),
     targets: COLUMNS.filter((_, i) => on[i] === "1"),
   }))
@@ -149,26 +159,30 @@ export function initialSkills(): Skill[] {
 
 export const CLAUDE_OVERRIDES = ["modern-python"]
 
+/** The commit each subscribed repository is vendored at (skills.lock). */
+const VENDORED: [repo: string, short: string, license: string, followAll?: boolean][] = [
+  ["Maybe404/skilldots", "4c1e9a2", "MIT"],
+  ["Maybe404/ui-arsenal", "9b07d31", "MIT"],
+  ["kepano/obsidian-skills", "e52f8c0", "MIT", true],
+  ["pbakaus/impeccable", "a1d4e77", "Apache-2.0"],
+  ["stablyai/orca", "0f3b9d4", "MIT"],
+  ["anthropics/skills", "71c2b90", "Apache-2.0"],
+  ["trailofbits/skills", "7c28e15", "CC-BY-SA-4.0"],
+  ["vercel-labs/agent-skills", "2e8f1c4", "MIT"],
+  ["mattpocock/skills", "5d90aa2", "MIT"],
+]
+
 export function initialPacks(): Pack[] {
-  const p = (repo: string, commit: string, upstreamCount: number, license = "MIT", followAll = false): Pack => ({
+  return VENDORED.map(([repo, short, license, followAll = false]) => ({
     repo,
-    commit,
+    commit: sha(short),
     followAll,
-    upstreamCount,
+    // None of the sample's pending updates adds or drops a skill, so the
+    // count at the last update is what upstream has now.
+    upstreamCount: CATALOG[repo]?.skills.length ?? 1,
     license,
     url: `https://github.com/${repo}`,
-  })
-  return [
-    p("Maybe404/skilldots", sha("4c1e9a2"), 1),
-    p("Maybe404/ui-arsenal", sha("9b07d31"), 1),
-    p("kepano/obsidian-skills", sha("e52f8c0"), 5, "MIT", true),
-    p("pbakaus/impeccable", sha("a1d4e77"), 1, "Apache-2.0"),
-    p("stablyai/orca", sha("0f3b9d4"), 3),
-    p("anthropics/skills", sha("71c2b90"), 16, "Apache-2.0"),
-    p("trailofbits/skills", sha("7c28e15"), 38, "CC-BY-SA-4.0"),
-    p("vercel-labs/agent-skills", sha("2e8f1c4"), 12),
-    p("mattpocock/skills", sha("5d90aa2"), 4),
-  ]
+  }))
 }
 
 export function initialOutdated(now: Date): Outdated {
@@ -182,10 +196,10 @@ export function initialOutdated(now: Date): Outdated {
         ...base,
         repo: "Maybe404/skilldots",
         commit: sha("4c1e9a2"),
-        latest: sha("e52f8c0"),
+        latest: sha("8d3f6b1"),
         changed: ["skilldots"],
         commits: [
-          { id: sha("e52f8c0"), title: "skilldots: 记录每次 apply 的改动摘要" },
+          { id: sha("8d3f6b1"), title: "skilldots: say what apply changed in one line" },
           { id: sha("9a1c0d4"), title: "Fix trash restore path on case-insensitive volumes" },
         ],
       },
@@ -195,9 +209,9 @@ export function initialOutdated(now: Date): Outdated {
         commit: sha("7c28e15"),
         latest: sha("b3d0a61"),
         changed: ["differential-review"],
-        moved: ["differential-review: differential-review → skills/differential-review"],
+        moved: ["differential-review: differential-review → security"],
         commits: [
-          { id: sha("b3d0a61"), title: "Move skills into skills/ subfolder" },
+          { id: sha("b3d0a61"), title: "Group the review plugins under plugins/security" },
           { id: sha("2e41f7c"), title: "differential-review: add CWE hints" },
         ],
       },
@@ -266,36 +280,29 @@ export function initialHistory(now: Date): HistoryEntry[] {
   ]
 }
 
+/** The batch directory name skd gives what it moves to the trash at `iso` (UTC). */
+export function trashBatch(iso: string): string {
+  return iso.replace(/[-:]/g, "").replace("T", "-").slice(0, 15)
+}
+
 export function initialTrash(now: Date): TrashEntry[] {
-  const day = 24 * 3600 * 1000
+  const entry = (name: string, origin: string, when: string, reason: TrashEntry["reason"]): TrashEntry => ({
+    id: `${trashBatch(when)}/${name}`,
+    name,
+    origin,
+    path: `${LIBRARY}/.trash/${trashBatch(when)}/${name}`,
+    when,
+    reason,
+    example: true,
+  })
+  const ago = (days: number, minutes: number) => new Date(now.getTime() - (days * 24 * 60 + minutes) * 60 * 1000).toISOString()
   return [
-    {
-      id: "20261017-213044/grill-me",
-      name: "grill-me",
-      origin: `${LIBRARY}/vendor/mattpocock/skills/grill-me`,
-      path: `${LIBRARY}/.trash/20261017-213044/grill-me`,
-      when: new Date(now.getTime() - 1 * day).toISOString(),
-      reason: "removed",
-      example: true,
-    },
-    {
-      id: "20261012-090512/typography.md",
-      name: "typography.md",
-      origin: `${LIBRARY}/vendor/pbakaus/impeccable/impeccable/reference/typography.md`,
-      path: `${LIBRARY}/.trash/20261012-090512/typography.md`,
-      when: new Date(now.getTime() - 6 * day).toISOString(),
-      reason: "update",
-      example: true,
-    },
-    {
-      id: "20261003-174420/pdf",
-      name: "pdf",
-      origin: `${HOME}/.claude/skills/pdf`,
-      path: `${LIBRARY}/.trash/20261003-174420/pdf`,
-      when: new Date(now.getTime() - 15 * day).toISOString(),
-      reason: "adopt",
-      example: true,
-    },
+    // Removed yesterday; the pack keeps its other skill, grill-me.
+    entry("write-a-prd", `${LIBRARY}/vendor/mattpocock/skills/planning/write-a-prd`, ago(1, 40), "removed"),
+    // Your edit, set aside by the impeccable update (history h2).
+    entry("typography.md", `${LIBRARY}/vendor/pbakaus/impeccable/impeccable/reference/typography.md`, daysAgoAt(now, 6), "update"),
+    // The copy in Claude Code's folder, replaced by a link when pdf was adopted.
+    entry("pdf", `${HOME}/.claude/skills/pdf`, ago(15, 90), "adopt"),
   ]
 }
 
@@ -310,56 +317,45 @@ export function initialPlan(): PlanItem[] {
   ]
 }
 
-export function initialScan(): ScanItem[] {
-  return [
-    {
-      id: "s1",
-      agent: "claude",
-      name: "pdf",
-      path: `${HOME}/.claude/skills/pdf`,
-      state: "copy",
-      source: "anthropics/skills",
-      proposal: "pack",
-      repo: "anthropics/skills",
-      label: "subscribe to anthropics/skills",
-    },
-    {
-      id: "s3",
-      agent: "codex",
-      name: "old-notes",
-      path: `${HOME}/.codex/skills/old-notes`,
-      state: "broken",
-      linkTo: `${HOME}/Downloads/old-notes`,
-      proposal: "drop",
-      label: "broken link; remove",
-    },
-    {
-      id: "s2",
-      agent: "gemini",
-      name: "release-notes",
-      path: `${HOME}/.gemini/skills/release-notes`,
-      state: "copy",
-      proposal: "own",
-      label: "copy into skills/ as your own (the library has one with the same name; you will be asked to rename)",
-    },
-    {
-      id: "s4",
-      agent: "cursor",
-      name: "find-skills",
-      path: `${HOME}/.cursor/skills/find-skills`,
-      state: "copy",
-      proposal: "enable",
-      label: "enable for cursor (already in library)",
-    },
-  ]
+/** What the scan finds in the agent folders that skilldots does not manage. */
+const FOUND: Pick<ScanItem, "id" | "agent" | "name" | "state" | "source" | "linkTo">[] = [
+  // Installed with `npx skills add`, so its upstream is known.
+  { id: "s1", agent: "claude", name: "canvas-design", state: "copy", source: "anthropics/skills" },
+  { id: "s2", agent: "codex", name: "find-skills", state: "copy", source: "vercel-labs/agent-skills" },
+  { id: "s3", agent: "codex", name: "old-notes", state: "broken", linkTo: `${HOME}/Downloads/old-notes` },
+  { id: "s4", agent: "gemini", name: "release-notes", state: "copy" },
+]
+
+/**
+ * The scan of FOUND against a library, with the proposal skd would make
+ * (app.Proposals): a name the library has becomes "enable" (or nothing, when
+ * that agent already gets it), a broken link is dropped, a copy with a known
+ * upstream subscribes to it, anything else is copied in as your own.
+ */
+export function initialScan(library: Skill[]): ScanItem[] {
+  const out: ScanItem[] = []
+  for (const f of FOUND) {
+    const path = `${HOME}/${AGENT_DEFS.find(([n]) => n === f.agent)![2]}/${f.name}`
+    const have = library.find((s) => s.linkName.toLowerCase() === f.name.toLowerCase())
+    if (have?.targets.includes(f.agent)) continue
+    if (have) out.push({ ...f, path, proposal: "enable", label: `enable for ${f.agent} (already in library)` })
+    else if (f.state === "broken") out.push({ ...f, path, proposal: "drop", label: "broken link; move to the trash" })
+    else if (f.source) out.push({ ...f, path, proposal: "pack", repo: f.source, label: `subscribe to ${f.source}` })
+    else out.push({ ...f, path, proposal: "own", label: "copy into skills/ as your own (no known upstream)" })
+  }
+  return out
 }
 
 const sk = (name: string, category: string, description: string): UpstreamSkill => ({ name, category, description })
 
-/** Repositories the mock can "fetch". */
+/**
+ * Repositories the mock can "fetch": what upstream has now. A subscribed
+ * repository's commit is the vendored one unless initialOutdated lists an
+ * update for it, and the descriptions are the vendored skills' descriptions.
+ */
 export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" | "have">> = {
   "mattpocock/skills": {
-    commit: sha("f01c9e3"),
+    commit: sha("5d90aa2"),
     license: "MIT",
     rejected: [],
     skills: [
@@ -372,7 +368,7 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "anthropics/skills": {
-    commit: sha("3ab72d0"),
+    commit: sha("71c2b90"),
     license: "Apache-2.0",
     rejected: [{ name: "../escape", dir: "skills/escape", reason: "name is not a safe directory name" }],
     skills: [
@@ -380,17 +376,27 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
       sk("docx", "document-skills", "Create and edit Word documents with tracked changes."),
       sk("xlsx", "document-skills", "Work with spreadsheets: formulas, charts and cleaning data."),
       sk("pptx", "document-skills", "Create and edit PowerPoint decks."),
+      sk("doc-coauthoring", "document-skills", "Write a document together with the user, section by section."),
+      sk("algorithmic-art", "creative", "Generative art with p5.js, seeded and reproducible."),
       sk("canvas-design", "creative", "Create posters and visual art as PNG or PDF."),
+      sk("slack-gif-creator", "creative", "Make small animated GIFs that fit Slack's limits."),
+      sk("theme-factory", "creative", "Apply a ready-made colour and font theme to slides, documents or pages."),
+      sk("brand-guidelines", "enterprise", "Apply a brand's colours and typography to anything you make."),
+      sk("internal-comms", "enterprise", "Write status reports, newsletters and other internal updates."),
+      sk("frontend-design", "development", "Build distinctive, production-grade web interfaces."),
+      sk("mcp-builder", "development", "Build an MCP server that gives an agent a well-designed set of tools."),
+      sk("web-artifacts-builder", "development", "Build multi-component HTML artifacts with React and Tailwind."),
+      sk("webapp-testing", "development", "Test a local web app with Playwright: screenshots, logs and clicks."),
       sk("skill-creator", "meta", "Create and improve skills and measure how well they trigger."),
     ],
   },
   "trailofbits/skills": {
-    commit: sha("b4410ea"),
+    commit: sha("b3d0a61"),
     license: "CC-BY-SA-4.0",
     rejected: [],
     skills: [
-      sk("differential-review", "differential-review", "Security-focused differential review of code changes."),
-      sk("modern-python", "python", "Write Python the modern way: uv, ruff, type hints and pytest."),
+      sk("differential-review", "security", "Security-focused differential review of code changes."),
+      sk("modern-python", "modern-python", "Write Python the modern way: uv, ruff, type hints and pytest."),
       sk("semgrep-rule-creator", "static-analysis", "Write and test Semgrep rules for a bug class."),
       sk("codeql", "static-analysis", "Run CodeQL queries and triage the results."),
       sk("constant-time-analysis", "crypto", "Check cryptographic code for timing side channels."),
@@ -413,7 +419,7 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     commit: sha("9b07d31"),
     license: "MIT",
     rejected: [],
-    skills: [sk("ui-arsenal", "", "在前端 UI 任务里选择和获取成熟组件时使用。")],
+    skills: [sk("ui-arsenal", "", "Pick mature UI components, motion and icons from a curated catalogue for front-end work.")],
   },
   "pbakaus/impeccable": {
     commit: sha("a1d4e77"),
@@ -432,10 +438,10 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     ],
   },
   "Maybe404/skilldots": {
-    commit: sha("63555da"),
+    commit: sha("8d3f6b1"),
     license: "MIT",
     rejected: [],
-    skills: [sk("skilldots", "", "Manage the skills installed for AI agents on this machine with the `skd` CLI.")],
+    skills: [sk("skilldots", "", "Manage the skills installed for AI agents on this machine with the skd CLI.")],
   },
   "kepano/obsidian-skills": {
     commit: sha("e52f8c0"),
@@ -443,10 +449,10 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
     rejected: [],
     skills: [
       sk("defuddle", "", "Extract clean Markdown from HTML pages with Defuddle CLI."),
-      sk("json-canvas", "", "Create and edit JSON Canvas files."),
-      sk("obsidian-bases", "", "Create and edit Obsidian Bases."),
+      sk("json-canvas", "", "Create and edit JSON Canvas files (.canvas)."),
+      sk("obsidian-bases", "", "Create and edit Obsidian Bases (.base files)."),
       sk("obsidian-cli", "", "Interact with Obsidian vaults using the Obsidian CLI."),
-      sk("obsidian-markdown", "", "Obsidian Flavored Markdown."),
+      sk("obsidian-markdown", "", "Create and edit Obsidian Flavored Markdown."),
     ],
   },
 }
@@ -460,14 +466,6 @@ export function initialFiles(skills: Skill[]): Record<string, Record<string, str
   extra(out, "skills:subagent", {
     "references/briefing.md": "# Writing a brief\n\n- State the goal and what *done* looks like.\n- List the files the agent may touch.\n- Say how the result will be checked.\n",
     "scripts/check.sh": "#!/usr/bin/env bash\nset -euo pipefail\n\n# Fail when a brief is missing its acceptance section.\nfor f in \"$@\"; do\n  grep -q '^## Acceptance' \"$f\" || { echo \"missing acceptance: $f\"; exit 1; }\ndone\n",
-  })
-  extra(out, "private:html-document", {
-    "scripts/build.ts": "import { readFile, writeFile } from \"node:fs/promises\"\n\nexport async function build(input: string, output: string): Promise<void> {\n  const md = await readFile(input, \"utf8\")\n  const html = `<!doctype html>\\n<main>${md}</main>`\n  await writeFile(output, html)\n}\n",
-    "references/style.json": "{\n  \"font\": \"PingFang SC\",\n  \"maxWidth\": 720,\n  \"code\": { \"theme\": \"graphite\" }\n}\n",
-  })
-  extra(out, "private:idea-config-maintainer", {
-    "scripts/validate.py": "\"\"\"Check a workflow export before importing it.\"\"\"\nimport sys\n\nimport yaml\n\n\ndef main(path: str) -> int:\n    with open(path, encoding=\"utf-8\") as f:\n        doc = yaml.safe_load(f)\n    nodes = doc[\"workflow\"][\"graph\"][\"nodes\"]\n    print(f\"{len(nodes)} nodes\")\n    return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main(sys.argv[1]))\n",
-    "references/nodes.yaml": "llm:\n  required: [model, prompt_template]\ncode:\n  required: [code, outputs]\nif-else:\n  required: [cases]\n",
   })
   extra(out, "Maybe404/ui-arsenal:ui-arsenal", {
     "scripts/find.sh": "#!/usr/bin/env bash\n# Search the local catalogue.\nset -euo pipefail\ngrep -i -- \"$1\" sources/*.tsv | head -20\n",
@@ -494,6 +492,6 @@ function skillMd(name: string, description: string, body: string): string {
 function bodyFor(name: string): string {
   if (name === "test") return "# test\n\nTODO: describe what this skill does.\n"
   if (name === "subagent")
-    return "# 派发 subagent\n\n## 什么时候派\n\n- 任务能拆成**互不依赖**的几块\n- 需要读很多文件但只要结论\n\n## 怎么写指令\n\n1. 目标和验收标准\n2. 允许改哪些文件\n3. 回报格式\n\n```bash\nscripts/check.sh brief.md\n```\n\n| 情况 | 做法 |\n|---|---|\n| 结果不完整 | 打回，写明缺什么 |\n| 越界改动 | 回滚后重派 |\n"
+    return "# Briefing a subagent\n\n## When to hand work off\n\n- The task splits into pieces that **do not depend** on each other\n- Many files need reading, but only the conclusion matters\n\n## What a brief says\n\n1. The goal and how it will be checked\n2. The files it may change\n3. What to report back\n\n```bash\nscripts/check.sh brief.md\n```\n\n| Result | Next step |\n|---|---|\n| Incomplete | Send it back, saying what is missing |\n| Changed files outside its scope | Revert them and brief it again |\n"
   return `# ${name}\n\n## When to use\n\nSee the description above.\n\n## Steps\n\n1. Read the task.\n2. Do the work.\n3. Check the result.\n`
 }
