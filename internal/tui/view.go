@@ -13,6 +13,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/safetext"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // Minimum size the full layout needs; below it a notice is shown instead.
@@ -378,7 +379,9 @@ func (m Model) packHeader(p Pack, w int) []string {
 		meta = append(meta, sg(" · "+p.License, t.Muted))
 	}
 	agents := i18n.Sprintf("default (%s)", joinOr(m.snap.Defaults, "none"))
-	if p.Targets != nil {
+	if slices.Contains(p.Targets, targets.AllInstalled) {
+		agents = i18n.Sprintf("%s (every installed agent)", joinOr(targets.ExpandNames(p.Targets, m.snap.Defaults, m.snap.Agents), "none"))
+	} else if p.Targets != nil {
 		agents = joinOr(p.Targets, "none (kept in library)")
 	}
 	sel := i18n.Sprintf("%d of %d selected", p.Selected, p.Total)

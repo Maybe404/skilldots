@@ -97,6 +97,7 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 				e.Description = meta.Description
 			}
 		}
+		e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
 		for _, n := range e.TargetNames {
 			if slices.Contains(lib.Manifest.Targets.Disabled, n) {
 				continue
@@ -233,6 +234,15 @@ func collect(lib *library.Library) ([]Entry, []string) {
 		}
 	}
 	return out, warnings
+}
+
+// AllInstalled is targets.AllInstalled: the default targets and every
+// built-in agent installed on this machine.
+const AllInstalled = targets.AllInstalled
+
+// ExpandTargets replaces AllInstalled in names (see targets.ExpandNames).
+func ExpandTargets(names, defaults []string, reg *targets.Registry) []string {
+	return targets.ExpandNames(names, defaults, reg.Present())
 }
 
 func inherit(parent []string, child *[]string) []string {

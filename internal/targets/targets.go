@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -73,6 +74,18 @@ var builtin = []struct{ name, rel string }{
 	{"crush", ".config/crush/skills"},
 	{"factory", ".factory/skills"},
 	{"pi", ".pi/agent/skills"},
+}
+
+// Installed reports whether the agent whose skill directory is path looks
+// installed on this machine: the directory, or the one holding it, exists
+// (~/.claude for ~/.claude/skills).
+func Installed(path string) bool {
+	for _, p := range []string{path, filepath.Dir(path)} {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Registry resolves target names to directories. It holds the built-in
@@ -209,12 +222,46 @@ func (r *Registry) All() []Target {
 func (r *Registry) Present() []Target {
 	var out []Target
 	for _, t := range r.All() {
-		if _, err := os.Stat(t.Path); err == nil {
+		if Installed(t.Path) {
 			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// AllInstalled in a targets list stands for the default targets and every
+// built-in agent installed on this machine, worked out on each machine when
+// the library is resolved: an agent installed later gets the skill at the
+// next apply, and a machine without an agent gets no directory for it.
+// An older skd ignores it with a warning, so it is written after the
+// default targets, which every skd links.
+const AllInstalled = "*"
+
+// ExpandNames replaces AllInstalled in names by defaults and the built-in
+// agents among present (Registry.Present, in its order), without
+// duplicates. Lists without it are returned as they are.
+func ExpandNames(names, defaults []string, present []Target) []string {
+	if !slices.Contains(names, AllInstalled) {
+		return names
+	}
+	out := []string{}
+	add := func(n string) {
+		if n != AllInstalled && !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	for _, n := range names {
+		if n != AllInstalled {
+			add(n)
 			continue
 		}
-		if _, err := os.Stat(filepath.Dir(t.Path)); err == nil {
-			out = append(out, t)
+		for _, d := range defaults {
+			add(d)
+		}
+		for _, t := range present {
+			if t.Builtin {
+				add(t.Name)
+			}
 		}
 	}
 	return out

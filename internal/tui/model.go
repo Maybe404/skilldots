@@ -17,6 +17,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/app"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/i18n"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 type focus int
@@ -888,6 +889,8 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 		if cur == nil {
 			cur = m.snap.Defaults
 		}
+		// "*" is ticked as the agents it stands for here; saving names them.
+		cur = targets.ExpandNames(cur, m.snap.Defaults, m.snap.Agents)
 		title = i18n.Sprintf("Agents for every skill in %s", repo)
 		run = func(o Ops, a []string) (string, error) { return o.SetTargets(nil, repo, a) }
 	default:

@@ -457,6 +457,9 @@
 @ not found on this machine
 = 本机上没有找到
 
+@ %s (every installed agent)
+= %s（本机所有已装的 agent）
+
 @ no agent skill directories found on this machine
 = 本机上没有找到 agent 的 skill 目录
 

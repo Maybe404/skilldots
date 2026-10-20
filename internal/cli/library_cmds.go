@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,29 +12,19 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/app"
-	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
-	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/targets"
 )
 
 // SelfRepo ships the skill that teaches agents to use skd.
 const (
-	SelfRepo  = "Maybe404/skilldots"
-	SelfSkill = "skilldots"
+	SelfRepo  = app.SelfRepo
+	SelfSkill = app.SelfSkill
 )
-
-const gitignore = `.DS_Store
-# Machine-local skills: a separate git repository that is never pushed with this one.
-/private/
-# Where skd parks anything it takes out of the way. Empty with: skd trash empty
-/.trash/
-# Temporary files of a save that was interrupted; the next save removes them.
-.*.tmp-*
-`
 
 func initCmd() *cobra.Command {
 	var from string
@@ -51,59 +42,10 @@ func initCmd() *cobra.Command {
 				root = from
 			}
 			root, _ = filepath.Abs(root)
-			if fsutil.Exists(filepath.Join(root, manifest.FileName)) {
-				return i18n.Errorf("%s already has a %s", root, manifest.FileName)
-			}
-			// init records the library in the settings file at the end:
-			// fail before creating anything when it cannot.
-			if _, err := config.Load(); err != nil {
-				return i18n.Errorf("%w; init records the library there, so fix or remove it first (nothing was created)", err)
-			}
-			// private/ becomes a git repository of its own: never through
-			// a link (init --from a directory that has one).
-			if l := library.PrivateLink(root); l != "" {
-				return i18n.Errorf("%s is a symbolic link; skd does not set up private/ through it (make it a directory of its own; nothing was created)", l)
-			}
-			for _, d := range []string{"", library.DirSkills, library.DirVendor, library.DirPrivate} {
-				if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
-					return err
-				}
-			}
 			if len(defaults) == 0 {
-				defaults = detectDefaults()
+				defaults = app.DefaultTargets()
 			}
-			for _, f := range []string{manifest.FileName, lock.FileName, ".gitignore"} {
-				if err := library.CheckFile(root, filepath.Join(root, f)); err != nil {
-					return err
-				}
-			}
-			m := manifest.New(defaults)
-			if err := m.Save(filepath.Join(root, manifest.FileName)); err != nil {
-				return err
-			}
-			l := &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{}}
-			if err := l.Save(filepath.Join(root, lock.FileName)); err != nil {
-				return err
-			}
-			gi := filepath.Join(root, ".gitignore")
-			if !fsutil.Exists(gi) {
-				os.WriteFile(gi, []byte(gitignore), 0o644)
-			} else {
-				b, _ := os.ReadFile(gi)
-				for _, line := range []string{"/private/", "/.trash/", ".*.tmp-*"} {
-					if !strings.Contains(string(b), line) {
-						b = append(b, []byte("\n"+line+"\n")...)
-					}
-				}
-				os.WriteFile(gi, b, 0o644)
-			}
-			if err := library.EnsureGit(root); err != nil {
-				return err
-			}
-			if err := library.EnsurePrivateGit(root); err != nil {
-				return err
-			}
-			if err := app.UseLibrary(root); err != nil {
+			if err := app.InitLibrary(root, defaults); err != nil {
 				return err
 			}
 			say("%s initialised library at %s\n  %s\n", ok("✓"), root, dim(i18n.Sprintf("default targets: %s  (skd enable <skill> --agent claude to add more)", strings.Join(defaults, ", "))))
@@ -120,9 +62,9 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rep, out, err := c.Subscribe(&manifest.Pack{Repo: SelfRepo, Use: []string{SelfSkill}})
+			rep, out, err := c.InstallSelfSkill()
 			if rep == nil && err != nil {
-				say("  %s could not fetch the %s skill (%s); run `skd add %s --skill %s` later\n", warn("!"), SelfSkill, errText(err), SelfRepo, SelfSkill)
+				say("  %s could not install the %s skill (%s); run `skd add %s --skill %s --agent '*'` later\n", warn("!"), SelfSkill, errText(err), SelfRepo, SelfSkill)
 				result["skillError"] = err.Error()
 				jsonOut(result)
 				return nil
@@ -142,10 +84,6 @@ func initCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noSkill, "no-skill", false, i18n.T("do not install the skilldots skill for agents"))
 	return cmd
 }
-
-// detectDefaults returns the cross-agent directory only; nearly every agent
-// reads ~/.agents/skills, and users opt specific agents in with --agent.
-func detectDefaults() []string { return []string{"agents"} }
 
 func listCmd() *cobra.Command {
 	var all, flat bool
@@ -287,6 +225,9 @@ func packEntries(entries []engine.Entry, repo string) []engine.Entry {
 func packTargets(c *ctx, p *manifest.Pack) string {
 	if p.Targets == nil {
 		return dim(i18n.T("default"))
+	}
+	if slices.Contains(*p.Targets, targets.AllInstalled) {
+		return i18n.Sprintf("%s (every installed agent)", joinOr(engine.ExpandTargets(*p.Targets, c.Lib.Manifest.Targets.Default, c.Reg), "none"))
 	}
 	return joinOr(*p.Targets, "off")
 }

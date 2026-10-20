@@ -109,8 +109,10 @@ func (m Model) aliasStep(src string, b *Browse, req AddRequest) *overlay {
 }
 
 func (m Model) agentsStep(src string, b *Browse, req AddRequest) *overlay {
+	// "*" is ticked as the agents it stands for here; ticking names them.
+	cur := targets.ExpandNames(b.Targets, m.snap.Defaults, m.snap.Agents)
 	on := map[string]bool{}
-	for _, a := range b.Targets {
+	for _, a := range cur {
 		on[a] = true
 	}
 	var items []pickItem
@@ -119,7 +121,7 @@ func (m Model) agentsStep(src string, b *Browse, req AddRequest) *overlay {
 	}
 	keep := i18n.Sprintf("the default agents (%s)", joinOr(m.snap.Defaults, "none"))
 	if b.Targets != nil {
-		keep = i18n.Sprintf("the pack's agents (%s)", joinOr(b.Targets, "none"))
+		keep = i18n.Sprintf("the pack's agents (%s)", joinOr(cur, "none"))
 	}
 	return pickOverlay(i18n.Sprintf("Agents for %s", b.Repo), i18n.Sprintf("none ticked: %s", keep), items, false, func(values []string, _ bool) step {
 		r := req

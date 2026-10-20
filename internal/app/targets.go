@@ -58,6 +58,8 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 		if p.Targets != nil {
 			cur = append([]string(nil), *p.Targets...)
 		}
+		// An edit names agents: "*" becomes the agents it stands for here.
+		cur = engine.ExpandTargets(cur, m.Targets.Default, s.Reg)
 		next = nonNil(edit(cur))
 		p.Targets = &next
 		out.Label, out.Pack = p.Repo, true

@@ -144,8 +144,8 @@
 @ default targets: %s  (skd enable <skill> --agent claude to add more)
 = 默认 target：%s  （用 skd enable <skill> --agent claude 添加更多）
 
-@   %s could not fetch the %s skill (%s); run `skd add %s --skill %s` later\n
-=   %s 无法拉取 %s skill（%s）；稍后请运行 `skd add %s --skill %s`\n
+@   %s could not install the %s skill (%s); run `skd add %s --skill %s --agent '*'` later\n
+=   %s 没能安装 %s skill（%s）；稍后请运行 `skd add %s --skill %s --agent '*'`\n
 
 @ installed the %s skill so agents on this machine know how to use skd
 = 已安装 %s skill，让本机上的 agent 知道怎么使用 skd
