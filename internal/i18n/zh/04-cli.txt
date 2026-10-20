@@ -321,12 +321,6 @@
 @ %s %s cannot be restored: %s
 = %s %s 无法恢复：%s
 
-@ skd trash restore <id>   ·   skd trash empty
-= skd trash restore <id>   ·   skd trash empty
-
-@ Put a parked directory back where it came from
-= 把挪开的目录放回原处
-
 @ %s restored to %s\n
 = %s 已恢复到 %s\n
 
@@ -1134,3 +1128,27 @@
 
 @ default agents: %s
 = 默认 agent：%s
+
+@ WHY
+= 原因
+
+@ skd trash restore <id|skill>   ·   skd trash empty
+= skd trash restore <id|skill>   ·   skd trash empty
+
+@ Put a parked directory back where it came from, selected and linked again
+= 把挪开的目录放回原处，并重新选中、重新链接
+
+@ selected again in skills.toml: %s
+= 已在 skills.toml 里重新选中：%s
+
+@ removed %s, the last skill of %s: the pack is dropped from skills.toml too
+= 已移除 %s；它是 %s 的最后一个 skill，这个来源也从 skills.toml 里去掉了
+
+@ removed %s
+= 已移除 %s
+
+@ its files are in the library trash as %s; `skd trash restore %s` puts everything back
+= 文件在资料库的回收站里（%s）；`skd trash restore %s` 可以全部恢复
+
+@ WAS AT
+= 原位置

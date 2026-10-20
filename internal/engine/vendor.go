@@ -42,6 +42,9 @@ type SyncReport struct {
 	// that is a symlink and was not copied).
 	Warnings []string     `json:",omitempty"`
 	Upstream []pack.Skill `json:"-"`
+	// Trashed maps each Dropped skill to where in the trash its
+	// directory went.
+	Trashed map[string]string `json:"-"`
 }
 
 // PackDir returns where a pack is vendored, refusing repo keys that would
@@ -173,6 +176,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 		if to != "" {
 			rep.Backups = append(rep.Backups, lib.Rel(dest)+" → "+lib.Rel(to))
+			_ = SetTrashNote(to, &TrashNote{Reason: ReasonReplaced, Skills: []string{filepath.Base(dest)}, Repo: p.Repo})
 		}
 		return nil
 	}
@@ -296,9 +300,18 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 		rep.Dropped = append(rep.Dropped, n)
 		if old, err := skillDir(packDir, ls.Category, n); err == nil && fsutil.Lexists(old) {
-			if _, err := Trash(lib, old); err != nil {
+			to, err := Trash(lib, old)
+			if err != nil {
 				return nil, err
 			}
+			if rep.Trashed == nil {
+				rep.Trashed = map[string]string{}
+			}
+			rep.Trashed[n] = to
+			// What restoring it needs to select it again.
+			was := &lock.Pack{Commit: lp.Commit, Ref: lp.Ref, Upstream: append([]string(nil), lp.Upstream...),
+				Skills: map[string]*lock.Skill{n: {Category: ls.Category, Hash: ls.Hash}}}
+			_ = SetTrashNote(to, &TrashNote{Reason: ReasonDeselected, Skills: []string{n}, Repo: p.Repo, Lock: was})
 		}
 		delete(lp.Skills, n)
 	}
@@ -411,21 +424,44 @@ func renameCase(lib *library.Library, p *manifest.Pack, lp *lock.Pack, packDir, 
 
 // RemovePack moves a pack's vendored files to the trash and drops its lock entry.
 func RemovePack(lib *library.Library, repo string) error {
+	_, err := RemovePackTo(lib, repo)
+	return err
+}
+
+// RemovePackTo is RemovePack that also says where in the trash the pack's
+// directory went ("" when nothing was vendored). The entry is named after
+// the repository ("owner-repo"), so `skd trash` tells packs apart.
+func RemovePackTo(lib *library.Library, repo string) (string, error) {
 	dir, err := PackDir(lib, repo)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := throughLink(lib, dir); err != nil {
-		return err
+		return "", err
 	}
+	to := ""
 	if fsutil.Lexists(dir) {
-		if _, err := Trash(lib, dir); err != nil {
-			return err
+		if to, err = trashAs(lib, dir, packTrashName(repo)); err != nil {
+			return "", err
 		}
 	}
 	delete(lib.Lock.Packs, repo)
 	pruneEmpty(lib, filepath.Dir(dir))
-	return nil
+	return to, nil
+}
+
+// packTrashName is the name a pack's directory gets in the trash:
+// "owner-repo" for owner/repo, else the repository's last segment (a URL
+// or a path would make a long name of no use).
+func packTrashName(repo string) string {
+	parts := strings.FieldsFunc(repo, func(r rune) bool { return r == '/' || r == '\\' || r == ':' })
+	switch {
+	case len(parts) == 2:
+		return parts[0] + "-" + parts[1]
+	case len(parts) > 0:
+		return parts[len(parts)-1]
+	}
+	return repo
 }
 
 // pruneEmpty removes dir and empty parents up to vendor/.

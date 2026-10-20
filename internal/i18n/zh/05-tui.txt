@@ -1092,3 +1092,6 @@
 
 @ ‖ paused: %s
 = ‖ 已暂停：%s
+
+@ restored %s; selected and linked again
+= 已恢复 %s，并重新选中、重新链接

@@ -473,8 +473,7 @@ func trashCmd() *cobra.Command {
 				c.printf("%s\n", dim(i18n.T("trash is empty")))
 				return nil
 			}
-			home, _ := os.UserHomeDir()
-			t := newTable("ID", "FROM", "WHEN")
+			t := newTable("ID", "SKILL", "WHY", "WAS AT", "WHEN")
 			var refused []string
 			for _, it := range items {
 				id := txt(it.ID)
@@ -482,31 +481,40 @@ func trashCmd() *cobra.Command {
 					refused = append(refused, i18n.Sprintf("%s %s cannot be restored: %s", warn("!"), id, txt(it.Problem)))
 					id += " " + warn("!")
 				}
-				t.Row(id, dim(txt(strings.Replace(it.Origin, home, "~", 1))), dim(it.When.Format("2006-01-02 15:04")))
+				t.Row(id, strings.Join(txts(it.Skills), ", "), dim(trashReason(it)), dim(txt(tildePath(it.Origin))), dim(it.When.Format("2006-01-02 15:04")))
 			}
 			c.printf("%s\n", t.Render())
 			for _, r := range refused {
 				c.printf("%s\n", r)
 			}
-			c.printf("%s\n", dim(i18n.T("skd trash restore <id>   ·   skd trash empty")))
+			c.printf("%s\n", dim(i18n.T("skd trash restore <id|skill>   ·   skd trash empty")))
 			return nil
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "restore <id>",
-		Short: i18n.T("Put a parked directory back where it came from"),
+		Use:   "restore <id|skill>",
+		Short: i18n.T("Put a parked directory back where it came from, selected and linked again"),
 		Args:  exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
 			}
-			dest, err := c.Restore(args[0])
+			out, err := c.RestoreEntry(args[0])
+			if out != nil && out.Apply != nil {
+				printApply(c, out.Apply)
+			}
 			if err != nil {
 				return err
 			}
-			c.printf("%s restored to %s\n", ok("✓"), txt(dest))
-			c.jsonOut(map[string]any{"id": args[0], "restored": dest})
+			c.printf("%s restored to %s\n", ok("✓"), txt(tildePath(out.Path)))
+			if out.Selected {
+				c.printf("  %s\n", dim(i18n.Sprintf("selected again in skills.toml: %s", strings.Join(txts(out.Skills), ", "))))
+			}
+			if out.Hint != "" {
+				c.printf("%s %s\n", warn("!"), txt(out.Hint))
+			}
+			c.jsonOut(out)
 			return nil
 		},
 	}, &cobra.Command{
@@ -541,4 +549,12 @@ func trashCmd() *cobra.Command {
 		},
 	})
 	return cmd
+}
+
+// trashReason says why a trash entry was set aside.
+func trashReason(it engine.TrashEntry) string {
+	if r := app.TrashReason(it); r != "" {
+		return r
+	}
+	return "·"
 }

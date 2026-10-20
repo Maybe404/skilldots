@@ -536,13 +536,20 @@ func (o *libOps) Restore(id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest, err := s.Restore(id)
+	out, err := s.RestoreEntry(id)
 	if err != nil {
 		return "", err
 	}
-	// Like `skd trash restore`, nothing is re-linked: the header shows
-	// what `A` would apply.
-	return i18n.Sprintf("restored %s", tildify(dest)), nil
+	// Like `skd trash restore`: what remove or purge took out is selected
+	// and linked again.
+	msg := i18n.Sprintf("restored %s", tildify(out.Path))
+	if out.Selected {
+		msg = i18n.Sprintf("restored %s; selected and linked again", strings.Join(out.Skills, ", "))
+	}
+	if out.Hint != "" {
+		return "", warning(msg + " · " + out.Hint)
+	}
+	return withSummary(msg, out.Apply), nil
 }
 
 func (o *libOps) EmptyTrash() (string, error) {

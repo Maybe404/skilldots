@@ -506,7 +506,7 @@ func TestFilesAreWrittenInEnglish(t *testing.T) {
 		t.Errorf("git log holds Chinese:\n%s", log)
 	}
 	// And the settings did take: the language was Chinese all along.
-	if out := e.ok(lib, "--library", lib, "trash"); !strings.Contains(out, "来源") {
+	if out := e.ok(lib, "--library", lib, "trash"); !strings.Contains(out, "原位置") {
 		t.Errorf("the lang setting was not used:\n%s", out)
 	}
 }

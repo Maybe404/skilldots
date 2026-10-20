@@ -41,6 +41,15 @@ type TrashEntry struct {
 	// an entry's ID, Name and Path show only what is safe, with
 	// UnsafeName in place of the rest, and it is not restorable.
 	Unsafe bool `json:"unsafe,omitempty"`
+	// Skills are the skills the entry holds, as far as skd knows: what
+	// it recorded when it set the entry aside (a purged pack holds
+	// several), else the entry's own name. Empty for an unsafe entry.
+	Skills []string `json:"skills,omitempty"`
+	// Reason is why it was set aside (ReasonRemove, ReasonPurge, …), ""
+	// when skd cannot tell.
+	Reason string `json:"reason,omitempty"`
+	// Repo is the pack it was vendored from, when recorded.
+	Repo string `json:"repo,omitempty"`
 }
 
 // UnsafeName stands for a trash batch or entry name that is not shown.
@@ -129,6 +138,13 @@ func batch() string {
 // outright (Apply). `skd trash` lists such an entry, but restore leaves
 // it to a person (see ListTrash).
 func Trash(lib *library.Library, src string) (string, error) {
+	return trashAs(lib, src, filepath.Base(src))
+}
+
+// trashAs is Trash naming the entry after base (made safe by entryName)
+// rather than src's own name: a pack's directory is named after its
+// repository ("owner-repo"), not its last segment.
+func trashAs(lib *library.Library, src, base string) (string, error) {
 	if _, err := os.Lstat(src); err != nil {
 		return "", err
 	}
@@ -149,7 +165,7 @@ func Trash(lib *library.Library, src string) (string, error) {
 	}
 	// Named as skd names what it sets aside, so `skd trash` shows it and
 	// restores it by the ID it shows.
-	name := entryName(filepath.Base(src))
+	name := entryName(base)
 	// Neither the entry nor its record may be there already, in any
 	// form: a batch directory of a cloned library's trash is someone
 	// else's to fill, and a "<name>.origin" there that is a link to a
@@ -254,6 +270,17 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 			if err == nil {
 				e.Origin = origin
 			}
+			if n := TrashNoteFor(p); n != nil {
+				// Written by skd on this machine (never part of a library).
+				e.Reason, e.Repo = n.Reason, n.Repo
+				e.Skills = append([]string(nil), n.Skills...)
+			}
+			if len(e.Skills) == 0 {
+				e.Skills = []string{trashSkillName(it.Name())}
+			}
+			if e.Reason == "" && e.Origin != "" && reg != nil && inTarget(reg, e.Origin) {
+				e.Reason = ReasonInTheWay
+			}
 			if link {
 				// A link moved aside (apply --force, adopt). Restoring one
 				// would put a link to anywhere into an agent's directory,
@@ -269,7 +296,25 @@ func ListTrash(lib *library.Library, reg *targets.Registry) ([]TrashEntry, error
 			out = append(out, e)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
+	// Newest first: by batch, then, within one (a second), by when the
+	// record was written, so what one command set aside last comes first.
+	moved := map[string]time.Time{}
+	for _, e := range out {
+		if st, err := os.Lstat(filepath.Join(root, filepath.FromSlash(e.ID)) + ".origin"); err == nil && !e.Unsafe {
+			moved[e.ID] = st.ModTime()
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		bi, _, _ := strings.Cut(out[i].ID, "/")
+		bj, _, _ := strings.Cut(out[j].ID, "/")
+		if bi != bj {
+			return bi > bj
+		}
+		if ti, tj := moved[out[i].ID], moved[out[j].ID]; !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return out[i].ID > out[j].ID
+	})
 	return out, nil
 }
 
@@ -473,7 +518,29 @@ func EmptyTrash(lib *library.Library) (int, error) {
 	if err := os.RemoveAll(filepath.Join(lib.Root, TrashDir)); err != nil {
 		return 0, err
 	}
+	dropTrashNotesUnder(filepath.Join(lib.Root, TrashDir))
 	return len(entries), nil
+}
+
+// trashSkillName is the skill an entry named name holds when nothing
+// else is recorded: its name without the "-<n>" Trash adds.
+func trashSkillName(name string) string {
+	if m := suffixRE.FindStringSubmatch(name); m != nil && manifest.CheckName(m[1]) == nil {
+		return m[1]
+	}
+	return name
+}
+
+// inTarget reports whether origin is a direct child of a target's
+// directory in reg.
+func inTarget(reg *targets.Registry, origin string) bool {
+	parent := filepath.Dir(origin)
+	for _, t := range reg.All() {
+		if tp, err := filepath.Abs(t.Path); err == nil && (parent == tp || fsutil.SameDir(resolve(parent), resolve(tp), false)) {
+			return true
+		}
+	}
+	return false
 }
 
 func pruneBatch(dir string) {

@@ -484,13 +484,18 @@ func removeCmd() *cobra.Command {
 				return err
 			}
 			if out.Purged != nil {
-				printPurge(c, out.Purged.Repo, out.Purged.Unlinked)
+				// The apply lists the links taken out; the pack goes with
+				// its last skill.
 				printApply(c, out.Purged.Apply)
-				c.jsonOut(map[string]any{"removed": out.Entry.LinkName, "purged": out.Purged})
+				c.printf("%s %s\n", ok("✓"), i18n.Sprintf("removed %s, the last skill of %s: the pack is dropped from skills.toml too", txt(out.Entry.LinkName), txt(out.Purged.Repo)))
+				printUndo(c, out.Trash)
+				c.jsonOut(map[string]any{"removed": out.Entry.LinkName, "purged": out.Purged, "trash": out.Trash})
 				return nil
 			}
 			printApply(c, out.Apply)
-			c.jsonOut(map[string]any{"removed": out.Entry.LinkName, "apply": out.Apply})
+			c.printf("%s %s\n", ok("✓"), i18n.Sprintf("removed %s", txt(out.Entry.LinkName)))
+			printUndo(c, out.Trash)
+			c.jsonOut(map[string]any{"removed": out.Entry.LinkName, "apply": out.Apply, "trash": out.Trash})
 			return nil
 		},
 	}
@@ -520,11 +525,21 @@ func purgeCmd() *cobra.Command {
 				return err
 			}
 			printApply(c, out.Apply)
+			printUndo(c, out.Trash)
 			c.jsonOut(out)
 			return nil
 		},
 	}
 	return cmd
+}
+
+// printUndo says where in the trash the files went and how to put them
+// back (id is "" when nothing was moved).
+func printUndo(c *ctx, id string) {
+	if id == "" {
+		return
+	}
+	c.printf("  %s\n", dim(i18n.Sprintf("its files are in the library trash as %s; `skd trash restore %s` puts everything back", txt(id), txt(id))))
 }
 
 // printPurge lists what purging repo removes.

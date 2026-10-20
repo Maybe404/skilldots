@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/i18n"
+	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 	"github.com/Maybe404/skilldots/internal/skillmd"
@@ -413,10 +415,16 @@ type RemoveOutcome struct {
 	// pack was dropped.
 	Purged *PurgeOutcome
 	Apply  *ApplyOutcome
+	// Trash is the ID of the trash entry the skill's files went to (""
+	// when nothing was there to move); `skd trash restore <id>` undoes
+	// the remove.
+	Trash string
 }
 
 // Remove deselects a vendored skill: it is unlinked everywhere and its
 // files go to the trash. Removing a pack's last skill drops the pack.
+// The trash entry remembers what restoring it needs to select the skill
+// again (engine.TrashNote).
 func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 	entries, err := s.Resolve()
 	if err != nil {
@@ -433,12 +441,14 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 		if err := s.writableInLibrary(e.Dir); err != nil {
 			return nil, err
 		}
-		if _, err := engine.TrashLocal(s.Lib, e.Dir); err != nil {
+		to, err := engine.TrashLocal(s.Lib, e.Dir)
+		if err != nil {
 			return nil, err
 		}
+		_ = engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}})
 		// Keep local overrides so restoring the directory restores its selections.
 		ap, err := s.Apply(ApplyOptions{})
-		return &RemoveOutcome{Entry: *e, Apply: ap}, err
+		return &RemoveOutcome{Entry: *e, Apply: ap, Trash: engine.TrashID(s.Lib, to)}, err
 	}
 
 	if e.Kind != engine.KindVendor {
@@ -446,19 +456,33 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 	}
 	out := &RemoveOutcome{Entry: *e}
 	p := s.Lib.Manifest.FindPack(e.Origin)
+	was := snapshotPack(p)
+	wasLock := snapshotLock(s.Lib.Lock.Packs[p.Repo])
+	// Listed before the skill is deselected, while it still has links.
+	links := s.PurgeLinks(p.Repo)
 	deselect(p, e.Name)
 	if len(p.Use) == 0 && !p.UsesAll() {
 		// Removing the last skill of a pack is the whole pack: the user
 		// named exactly what goes, so no further confirmation.
-		s.logf(Info, "%s has no skills left; dropping the pack", p.Repo)
-		out.Purged, err = s.purge(p, s.PurgeLinks(p.Repo))
+		out.Purged, err = s.purge(p, links, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}, Repo: p.Repo, Pack: was, Lock: wasLock})
 		if err != nil {
 			return nil, err
 		}
+		out.Trash = out.Purged.Trash
 		return out, nil
 	}
-	if _, err := engine.Sync(s.Lib, p); err != nil {
+	rep, err := engine.Sync(s.Lib, p)
+	if err != nil {
 		return nil, err
+	}
+	if to := rep.Trashed[e.Name]; to != "" {
+		var lp *lock.Pack
+		if wasLock != nil && wasLock.Skills[e.Name] != nil {
+			lp = &lock.Pack{Commit: wasLock.Commit, Ref: wasLock.Ref, Upstream: wasLock.Upstream,
+				Skills: map[string]*lock.Skill{e.Name: wasLock.Skills[e.Name]}}
+		}
+		_ = engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}, Repo: p.Repo, Pack: was, Lock: lp})
+		out.Trash = engine.TrashID(s.Lib, to)
 	}
 	out.Apply, err = s.saveAndApply()
 	if err != nil {
@@ -467,12 +491,39 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 	return out, nil
 }
 
+// snapshotPack is a deep copy of p, as it is now.
+func snapshotPack(p *manifest.Pack) *manifest.Pack {
+	if p == nil {
+		return nil
+	}
+	var c manifest.Pack
+	if b, err := json.Marshal(p); err == nil && json.Unmarshal(b, &c) == nil {
+		return &c
+	}
+	return nil
+}
+
+// snapshotLock is a deep copy of lp, as it is now.
+func snapshotLock(lp *lock.Pack) *lock.Pack {
+	if lp == nil {
+		return nil
+	}
+	var c lock.Pack
+	if b, err := json.Marshal(lp); err == nil && json.Unmarshal(b, &c) == nil {
+		return &c
+	}
+	return nil
+}
+
 // PurgeOutcome is the result of Purge; its JSON form is what
 // `skd purge --json` prints.
 type PurgeOutcome struct {
 	Repo     string        `json:"repo"`
 	Unlinked []string      `json:"unlinked"`
 	Apply    *ApplyOutcome `json:"apply"`
+	// Trash is the ID of the trash entry vendor/<repo> went to ("" when
+	// nothing was vendored); `skd trash restore <id>` brings the pack back.
+	Trash string `json:"trash,omitempty"`
 }
 
 // PurgeLinks lists the "<target>/<link>" entries purging repo removes.
@@ -497,10 +548,19 @@ func (s *Session) Purge(repo string) (*PurgeOutcome, error) {
 	if p == nil {
 		return nil, i18n.Errorf("no pack %q", repo)
 	}
-	return s.purge(p, s.PurgeLinks(p.Repo))
+	note := &engine.TrashNote{Reason: engine.ReasonPurge, Repo: p.Repo, Pack: snapshotPack(p), Lock: snapshotLock(s.Lib.Lock.Packs[p.Repo])}
+	if note.Lock != nil {
+		for n := range note.Lock.Skills {
+			note.Skills = append(note.Skills, n)
+		}
+		sort.Strings(note.Skills)
+	}
+	return s.purge(p, s.PurgeLinks(p.Repo), note)
 }
 
-func (s *Session) purge(p *manifest.Pack, links []string) (*PurgeOutcome, error) {
+// purge drops p; note is what the trash entry of its vendored files
+// remembers, so that restoring it brings the pack back.
+func (s *Session) purge(p *manifest.Pack, links []string, note *engine.TrashNote) (*PurgeOutcome, error) {
 	m := s.Lib.Manifest
 	for i, q := range m.Packs {
 		if q == p {
@@ -512,13 +572,19 @@ func (s *Session) purge(p *manifest.Pack, links []string) (*PurgeOutcome, error)
 	if err != nil {
 		return nil, err
 	}
-	if err := engine.RemovePack(s.Lib, p.Repo); err != nil {
+	to, err := engine.RemovePackTo(s.Lib, p.Repo)
+	if err != nil {
 		return nil, err
 	}
 	if err := s.Lib.Save(); err != nil {
 		return nil, err
 	}
-	return &PurgeOutcome{Repo: p.Repo, Unlinked: links, Apply: ap}, nil
+	out := &PurgeOutcome{Repo: p.Repo, Unlinked: links, Apply: ap}
+	if to != "" {
+		_ = engine.SetTrashNote(to, note)
+		out.Trash = engine.TrashID(s.Lib, to)
+	}
+	return out, nil
 }
 
 // ForkOutcome is the result of Fork.
