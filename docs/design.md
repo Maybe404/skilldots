@@ -59,7 +59,7 @@ path = "/Applications/Surge.app/Contents/Resources/Skills/surge"
 targets = ["claude", "agents"]
 
 [[local]]                             # skills/ 与 private/ 下的目录默认自动纳入，这里只写例外
-name = "idea-config-maintainer"
+name = "release-notes"
 targets = ["agents"]
 ```
 
