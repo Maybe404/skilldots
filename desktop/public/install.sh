@@ -7,11 +7,14 @@
 # skilldots.app in /Applications (~/Applications when that is not writable)
 # and links /usr/local/bin/skd to the app, asking for your password only
 # when that directory needs it. A download by curl is not quarantined, so
-# macOS opens the app without the "unverified developer" prompt.
+# macOS opens the app without the "unverified developer" prompt. Run from
+# a terminal, it then opens the app, and says how to start from the
+# command line instead.
 #
 # Environment: SKILLDOTS_APP_DIR and SKILLDOTS_BIN_DIR change the two
-# directories; SKILLDOTS_NO_CLI=1 skips the skd command; SKILLDOTS_RELEASE
-# is the download base URL (for testing).
+# directories; SKILLDOTS_NO_CLI=1 skips the skd command; SKILLDOTS_NO_OPEN=1
+# leaves the app closed (it is only opened when stdout is a terminal);
+# SKILLDOTS_RELEASE is the download base URL (for testing).
 set -eu
 
 REPO="Maybe404/skilldots"
@@ -70,27 +73,29 @@ rm -rf "$old" 2>/dev/null || say "Could not remove the previous version at $old;
 say "Installed $APP"
 
 # skd: replace only a link to some skilldots.app, never another program.
+# cli ends up installed, other (another skd is there), or off.
+cli=off
+link="$BIN_DIR/skd"
 if [ "${SKILLDOTS_NO_CLI:-}" = "1" ]; then
 	say "Skipped the skd command (SKILLDOTS_NO_CLI=1); turn it on later in skilldots → Settings → Agents (设置 → Agent 接入)."
 else
-	link="$BIN_DIR/skd"
 	if [ -e "$link" ] || [ -L "$link" ]; then
 		case "$(readlink "$link" 2>/dev/null || true)" in
 		*.app/Contents/MacOS/skilldots) ;;
 		*)
 			say "Left $link alone: it is another program. Remove it, or use that one; skilldots works with either."
-			link=""
+			cli=other
 			;;
 		esac
 	fi
-	if [ -n "$link" ]; then
+	if [ "$cli" = off ]; then
 		if mkdir -p "$BIN_DIR" 2>/dev/null && [ -w "$BIN_DIR" ]; then
-			ln -sfh "$EXE" "$link" && ok=1 || ok=""
+			if ln -sfh "$EXE" "$link"; then cli=installed; fi
 		else
 			say "Linking $link needs your password:"
-			if sudo mkdir -p "$BIN_DIR" && sudo ln -sfh "$EXE" "$link"; then ok=1; else ok=""; fi
+			if sudo mkdir -p "$BIN_DIR" && sudo ln -sfh "$EXE" "$link"; then cli=installed; fi
 		fi
-		if [ -n "$ok" ]; then
+		if [ "$cli" = installed ]; then
 			say "Installed the skd command: $link"
 		else
 			say "The skd command was not installed; turn it on in skilldots → Settings → Agents (设置 → Agent 接入)."
@@ -99,5 +104,34 @@ else
 fi
 
 say ""
-say "Done. Open skilldots from $APP_DIR, or run: open \"$APP\""
-say "On first launch it can create your library and teach the agents on this Mac to use skd."
+# Open the app only for someone watching it happen: stdout is a terminal
+# (under `curl | sh` stdin is the pipe, but stdout is still the terminal),
+# and SKILLDOTS_NO_OPEN is not 1.
+if [ "${SKILLDOTS_NO_OPEN:-}" != "1" ] && [ -t 1 ] && open "$APP" 2>/dev/null; then
+	say "Done. skilldots is opening; on first launch it can create your library and teach the agents on this Mac to use skd."
+else
+	say "Done. Open skilldots from $APP_DIR, or run: open \"$APP\""
+	say "On first launch it can create your library and teach the agents on this Mac to use skd."
+fi
+
+# The next step for someone who would rather use the command line.
+say ""
+if [ "$cli" = off ]; then
+	say "For the command line, turn on the skd command in skilldots → Settings → Agents (设置 → Agent 接入),"
+	say "then run \"skd init\" to create your library and \"skd add owner/repo\" to pick skills from a GitHub repository."
+else
+	skd=skd
+	case ":$PATH:" in
+	*":$BIN_DIR:"*) ;;
+	*)
+		if [ "$cli" = installed ]; then
+			skd="$link"
+			say "$BIN_DIR is not on your PATH: add it, or run skd as $link."
+		fi
+		;;
+	esac
+	say "Prefer the command line? Set up from the terminal instead of the app:"
+	say "  $skd init                  create ~/.skilldots and teach your agents to use skd"
+	say "  $skd add owner/repo        pick skills from a GitHub repository (try: $skd add anthropics/skills)"
+	say "  $skd                       the full-screen dashboard; \"$skd --help\" lists every command"
+fi
