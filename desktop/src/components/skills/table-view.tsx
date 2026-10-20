@@ -1,13 +1,14 @@
-import { ArrowDown, ArrowUp } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
-import { agentLabel, agentMono } from "@/lib/agents"
+import { agentLabel } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
-import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
+import { GroupCell } from "./group-batch"
 import type { ListItem, useSkillList } from "./model"
 
 /*
@@ -32,7 +33,7 @@ export function TableView({
 }) {
   const { t, skills, selected, select, openDetail, pending, togglePending, agentFocus, setAgentFocus, toggleCollapsed, updatable, overrides, tableSort, setTableSort } = useApp()
   const { items, columns } = list
-  const cols = `minmax(0,1fr) 170px repeat(${columns.length},52px)`
+  const cols = `minmax(0,1fr) minmax(0,170px) repeat(${columns.length},64px)`
   const focusKey = hover ?? selected
   // Without a selection the first row takes Tab, so the table stays reachable.
   const tabKey = list.order.some((s) => s.ref.key === selected) ? selected : list.order[0]?.ref.key
@@ -61,20 +62,21 @@ export function TableView({
         {sortButton("source", t("colSource"))}
         {columns.map((a) => (
           <div role="columnheader" key={a.name} className="grid place-items-center">
-            <Hint label={agentLabel(a)}>
+            {/* The agent's own name (two short lines at most), its count under it; the full name, and what the shared folder is, on hover. */}
+            <Hint label={a.name === "agents" ? `${agentLabel(a)} · ${t("sharedDirNote")}` : agentLabel(a)}>
               <button
                 type="button"
                 aria-pressed={agentFocus === a.name}
                 aria-label={t("agentFocusHint", { agent: agentLabel(a) })}
                 onClick={() => setAgentFocus(agentFocus === a.name ? null : a.name)}
                 className={cn(
-                  "flex h-9 w-full flex-col items-center justify-center gap-0.5 rounded-ctl",
+                  "flex h-10 w-full flex-col items-center justify-center gap-px rounded-ctl px-0.5",
                   agentFocus === a.name && "bg-row-on shadow-[inset_0_-2px_0_var(--hue)]",
                   !a.enabled && "opacity-50",
                 )}
               >
-                <AgentMono agent={a} size={[26, 22]} className="rounded-[6px]" />
-                <span className="font-mono text-[10px] text-mut">{skills.filter((s) => isOn(s, a.name, pending)).length}</span>
+                <span className="line-clamp-2 max-w-full text-center text-[11px] leading-[1.15] font-medium break-words text-ink">{agentLabel(a)}</span>
+                <span className="text-[10px] leading-none text-mut tabular-nums">{skills.filter((s) => isOn(s, a.name, pending)).length}</span>
               </button>
             </Hint>
           </div>
@@ -83,7 +85,7 @@ export function TableView({
 
       {items.map((it) =>
         it.type === "group" ? (
-          <GroupRow key={"g:" + it.name} item={it} onToggle={() => toggleCollapsed(it.name)} />
+          <GroupRow key={"g:" + it.name} item={it} cols={cols} columns={columns} onToggle={() => toggleCollapsed(it.name)} />
         ) : (
           <Row
             key={it.skill.ref.key}
@@ -114,17 +116,23 @@ export function TableView({
   )
 }
 
-function GroupRow({ item, onToggle }: { item: Extract<ListItem, { type: "group" }>; onToggle: () => void }) {
+/** A source's group header: folds the group, and switches the whole group per agent (pending changes). */
+function GroupRow({ item, onToggle, cols, columns }: { item: Extract<ListItem, { type: "group" }>; onToggle: () => void; cols: string; columns: Agent[] }) {
   const { t } = useApp()
   return (
-    <div role="row" className="border-b-row">
-      <div role="cell">
-        <button type="button" aria-expanded={!item.collapsed} onClick={onToggle} className="flex h-[34px] w-full items-center gap-2 px-3.5 text-left">
+    <div role="row" className="grid h-[34px] items-center border-b-row px-3.5" style={{ gridTemplateColumns: cols }}>
+      <div role="cell" className="col-span-2 min-w-0">
+        <button type="button" aria-expanded={!item.collapsed} onClick={onToggle} className="flex h-[34px] w-full min-w-0 items-center gap-2 text-left">
           <DisclosureChevron open={!item.collapsed} />
-          <span className="font-mono fs-meta text-ink">{item.name}</span>
-          <span className="font-body fs-meta text-mut">{t("groupCount", { n: item.skills.length })}</span>
+          <span className="truncate fs-meta font-medium text-ink">{item.name}</span>
+          <span className="shrink-0 font-body fs-meta text-mut">{t("groupCount", { n: item.skills.length })}</span>
         </button>
       </div>
+      {columns.map((a) => (
+        <div role="cell" key={a.name} className="grid place-items-center">
+          <GroupCell group={item.name} skills={item.skills} agent={a} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -197,7 +205,7 @@ function Row({
           <span className="mt-0.5 block truncate font-body fs-meta text-mut">{skill.description}</span>
         </button>
       </div>
-      <div role="cell" className="truncate pr-2.5 font-mono fs-meta text-mut" title={source}>
+      <div role="cell" className="truncate pr-2.5 fs-meta text-mut" title={source}>
         {source}
       </div>
       {columns.map((a) => {
@@ -222,7 +230,7 @@ function Row({
                 }}
                 className={cn("skd-cell", !a.enabled && "opacity-45")}
               >
-                {agentMono(a)}
+                {st === "removing" ? <Minus aria-hidden className="size-3.5" strokeWidth={2.4} /> : on ? <Check aria-hidden className="size-3.5" strokeWidth={2.6} /> : <Plus aria-hidden className="size-3.5" strokeWidth={2.2} />}
               </button>
             </Hint>
             {claudeOff && a.name === "claude" && <OffRing className="pointer-events-none absolute top-1 right-2" />}

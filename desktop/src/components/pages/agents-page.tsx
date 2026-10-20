@@ -109,15 +109,19 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
       <div role="cell">
         <AgentMono agent={a} size={28} />
       </div>
-      <div role="cell" className="flex min-w-0 items-center gap-2 pr-3 font-heading fs-name font-semibold text-ink">
-        <span className="truncate">{label}</span>
-        {!a.enabled && <Tag tone="accent">{t("pausedLong")}</Tag>}
-        {!a.detected && <Tag>{t("notOnMachine")}</Tag>}
+      <div role="cell" className="min-w-0 pr-3">
+        <div className="flex min-w-0 items-center gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
+          <span className="truncate">{label}</span>
+          {!a.enabled && <Tag tone="accent">{t("pausedLong")}</Tag>}
+          {!a.detected && <Tag>{t("notOnMachine")}</Tag>}
+        </div>
+        {/* ~/.agents/skills is not one agent's folder: say who reads it. */}
+        {a.name === "agents" && <p className="mt-0.5 truncate fs-meta text-mut" title={t("sharedDirNote")}>{t("sharedDirNote")}</p>}
       </div>
       <div role="cell" className="truncate pr-3 font-mono fs-meta text-mut" title={a.path}>
         {tildify(a.path)}
       </div>
-      <div role="cell" className="font-mono fs-body text-hue-ink">
+      <div role="cell" className="fs-body text-hue-ink tabular-nums">
         {count}
       </div>
       <div role="cell">
