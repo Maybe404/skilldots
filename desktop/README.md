@@ -17,6 +17,13 @@ skilldots.app is ever replaced or removed; another `skd` there is left
 alone. Updating the app updates the command. As `skd`, the version comes
 from the bundle's Info.plist, so mygo's backend (AppKit) never starts.
 
+The `skilldots` skill ships inside the app too: `skills/` is copied into
+`Contents/Resources` (`resources` in `mygo.json`), and a library links it
+with an `[[app]]` entry, so it installs offline and always matches the
+app's `skd`. When the app has moved, it points that entry at itself on
+launch (`api.RepointSelfSkill`); a development build or an app run from its
+disk image follows `Maybe404/skilldots` on GitHub instead.
+
 ## Releases
 
 Pushing a tag `v<version>` (matching `version` in `mygo.json`) runs

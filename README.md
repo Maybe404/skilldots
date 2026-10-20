@@ -14,7 +14,7 @@ Claude Code, Codex, Cursor and the rest each read skills from their own folder. 
 curl -fsSL https://skilldots.maybe404.com/install.sh | sh
 ```
 
-The script installs skilldots.app (Apple silicon and Intel) from the latest [release](https://github.com/Maybe404/skilldots/releases), checks its SHA-256, links `/usr/local/bin/skd` to the app (asking for your password only when that directory needs it), and, when run from a terminal, opens the app. On first launch the app creates your library and installs the `skilldots` skill for every agent it finds, so Claude Code, Codex and the rest can manage skills through `skd` right away. Settings → Agents installs, repairs or removes either later.
+The script installs skilldots.app (Apple silicon and Intel) from the latest [release](https://github.com/Maybe404/skilldots/releases), checks its SHA-256, links `/usr/local/bin/skd` to the app (asking for your password only when that directory needs it), and, when run from a terminal, opens the app. On first launch the app creates your library and installs the `skilldots` skill for every agent it finds, so Claude Code, Codex and the rest can manage skills through `skd` right away. That skill comes with the app (no internet needed, always matching the app's `skd`); an `skd` installed with `go install` follows it from GitHub instead. Settings → Agents installs, repairs or removes either later.
 
 Prefer the disk image from the release page? The app is signed but not notarized: copy it to Applications, open it once, then choose **Open Anyway** in System Settings → Privacy & Security.
 
@@ -210,7 +210,7 @@ targets = ["agents"]
 - **Inheritance.** Targets inherit: global default → pack → skill. `targets = []` keeps a skill in the library without linking it anywhere.
 - **Agents that are not installed.** skd does not create the skills directory of a built-in agent that is not installed on the machine (the shared `~/.agents/skills` excepted): `skd apply` skips that agent and says so.
 - **`"*"`** in a targets list stands for the default targets plus every built-in agent installed on the machine resolving the library (its skill directory, or the directory holding it, exists). Each machine links into the agents it has, and an agent installed later gets the skill at the next `skd apply`.
-- **The `skilldots` skill** is followed with the default targets of the day plus `"*"`. An older skd ignores `"*"` with a warning and keeps linking the defaults; a later change of `targets.default` does not reach it. Editing a skill's agents (`skd enable`, `skd disable`, the app) turns `"*"` into the names it stands for.
+- **The `skilldots` skill** is followed with the default targets of the day plus `"*"`: from the copy inside skilldots.app (an `[[app]]` entry) when the app installed it, from `Maybe404/skilldots` on GitHub otherwise. An older skd ignores `"*"` with a warning and keeps linking the defaults; a later change of `targets.default` does not reach it. Editing a skill's agents (`skd enable`, `skd disable`, the app) turns `"*"` into the names it stands for.
 
 ### Application skills
 
