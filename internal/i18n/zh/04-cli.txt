@@ -273,9 +273,6 @@
 @ , %d skipped
 = ，跳过 %d 个
 
-@ +%d ↻%d −%d · %d kept · %d skipped
-= +%d ↻%d −%d · 保持 %d · 跳过 %d
-
 @ dry run · %s
 = 预演 · %s
 
@@ -1152,3 +1149,27 @@
 
 @ WAS AT
 = 原位置
+
+@ kept %d
+= 保持 %d 个
+
+@ skipped %d
+= 跳过 %d 个
+
+@ no pack %q; %s is a skill of %s: `skd list %s` shows it with its pack, `skd path %s` where its files are
+= 没有来源 %q；%s 是 %s 里的一个 skill：`skd list %s` 连同来源一起显示它，`skd path %s` 显示它的文件在哪里
+
+@ no pack %q; %s is a skill (%s): `skd list --all` shows it, `skd path %s` where its files are
+= 没有来源 %q；%s 是一个 skill（%s）：`skd list --all` 会列出它，`skd path %s` 显示它的文件在哪里
+
+@ no pack %q (`skd list` lists the packs; `skd list --all` every skill)
+= 没有来源 %q（`skd list` 列出所有来源，`skd list --all` 列出所有 skill）
+
+@ %s: %v; nothing to take off
+= %s：%v；没有可卸下的
+
+@ %s was not installed for %s; nothing to take off
+= %s 本来就没有装在 %s 上，没有可卸下的
+
+@ %s was already installed for %s
+= %s 已经装在 %s 上了

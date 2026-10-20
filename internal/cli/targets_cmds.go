@@ -90,7 +90,7 @@ func targetsCmd() *cobra.Command {
 					flag, d = warn("!"), warn(i18n.T("not used"))
 					notes = append(notes, i18n.Sprintf("%s custom target %s is not used: %s", warn("!"), txt(r.Name), txt(r.Problem)))
 				}
-				t.Row(flag, txt(r.Name), d, dim(txt(r.Path)))
+				t.Row(flag, txt(r.Name), d, dim(txt(tildePath(r.Path))))
 			}
 			c.printf("%s\n", t.Render())
 			for _, n := range notes {

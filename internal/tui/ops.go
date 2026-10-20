@@ -163,8 +163,8 @@ func applySummary(out *app.ApplyOutcome) string {
 	}
 	n := out.Counts()
 	var parts []string
-	if n["create"]+n["replace"]+n["remove"] > 0 {
-		parts = append(parts, fmt.Sprintf("+%d ↻%d −%d", n["create"], n["replace"], n["remove"]))
+	if sum := out.ChangeSummary(); sum != "" {
+		parts = append(parts, sum)
 	}
 	if n["skip"] > 0 {
 		var why []string

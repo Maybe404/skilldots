@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -110,7 +109,14 @@ func listCmd() *cobra.Command {
 			if len(args) == 1 {
 				p := c.lib.Manifest.FindPack(args[0])
 				if p == nil {
-					return i18n.Errorf("no pack %q", args[0])
+					// A skill's name, given where a pack is expected.
+					if e, err := c.Lookup(entries, args[0]); err == nil && e != nil {
+						if e.Kind == engine.KindVendor {
+							return i18n.Errorf("no pack %q; %s is a skill of %s: `skd list %s` shows it with its pack, `skd path %s` where its files are", args[0], e.LinkName, e.Origin, e.Origin, args[0])
+						}
+						return i18n.Errorf("no pack %q; %s is a skill (%s): `skd list --all` shows it, `skd path %s` where its files are", args[0], e.LinkName, engine.Describe(*e), args[0])
+					}
+					return i18n.Errorf("no pack %q (`skd list` lists the packs; `skd list --all` every skill)", args[0])
 				}
 				printPack(c, p, entries, true)
 				return nil
@@ -137,8 +143,7 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 			linked++
 		}
 	}
-	home, _ := os.UserHomeDir()
-	c.printf("%s  %s\n", brand(), dim(strings.Replace(c.lib.Root, home, "~", 1)))
+	c.printf("%s  %s\n", brand(), dim(tildePath(c.lib.Root)))
 	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(i18n.Sprintf("%d linked", linked))+dim(i18n.Sprintf(" · agents: %s", strings.Join(m.Targets.Default, ", ")))+pausedNote(m.Targets.Disabled))
 	rec := c.RecordedOutdated()
 	if line := updatesLine(rec, time.Now()); line != "" {
@@ -307,7 +312,7 @@ func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
 	if err != nil {
 		return err
 	}
-	c.printf("%s %s\n", bold(t.Name), dim(t.Path))
+	c.printf("%s %s\n", bold(t.Name), dim(tildePath(t.Path)))
 	tb := newTable("SKILL", "FROM")
 	for _, e := range entries {
 		for _, et := range e.Targets {
@@ -388,7 +393,10 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 		c.printf("%s %s\n", ok("✓"), dim(msg))
 		return
 	}
-	summary := i18n.Sprintf("+%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])
+	summary := out.ChangeSummary() + " · " + i18n.Sprintf("kept %d", counts["keep"])
+	if counts["skip"] > 0 {
+		summary += " · " + i18n.Sprintf("skipped %d", counts["skip"])
+	}
 	if out.DryRun {
 		c.printf("%s\n", dim(i18n.Sprintf("dry run · %s", summary)))
 		return

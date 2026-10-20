@@ -262,7 +262,7 @@ func TestChineseOutput(t *testing.T) {
 		{[]string{"config", "set", "lang", "zh"}, []string{"✓ lang = zh"}},
 		{[]string{"config", "set", "nope", "x"}, []string{"未知的设置"}},
 		{[]string{"path", "nope"}, []string{"没有 skill \"nope\""}},
-		{[]string{"new", "other"}, []string{"已创建", "已应用 · +1"}},
+		{[]string{"new", "other"}, []string{"已创建", "已应用 · 新链接 1 个"}},
 		{[]string{"disable", "tdd", "--agent", "agents"}, []string{"已应用", "− agents"}},
 		{[]string{"enable", "tdd"}, []string{"已应用", "+ agents"}},
 		{[]string{"fork", "tdd", "--as", "mytdd"}, []string{"已 fork tdd"}},

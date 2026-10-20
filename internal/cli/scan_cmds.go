@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -79,8 +77,7 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 }
 
 func scanRow(c *ctx, it scan.Item) (mark, state, detail string) {
-	home, _ := os.UserHomeDir()
-	short := func(p string) string { return txt(strings.Replace(p, home, "~", 1)) }
+	short := func(p string) string { return txt(tildePath(p)) }
 	switch it.State {
 	case scan.Managed:
 		return ok("●"), dim(i18n.T("managed")), dim(short(it.LinkTo))

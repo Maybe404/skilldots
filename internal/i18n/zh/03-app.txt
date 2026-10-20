@@ -320,3 +320,12 @@
 
 @ in the way in an agent directory
 = 挡在 agent 目录里
+
+@ linked %d
+= 新链接 %d 个
+
+@ relinked %d
+= 重新链接 %d 个
+
+@ unlinked %d
+= 取消链接 %d 个

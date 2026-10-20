@@ -1,7 +1,10 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // ApplyOptions tunes Apply.
@@ -32,6 +35,24 @@ type ApplyOutcome struct {
 
 // Counts tallies the plan by action.
 func (o *ApplyOutcome) Counts() map[string]int { return o.Plan.Counts() }
+
+// ChangeSummary says in words what the apply changes in agent
+// directories ("linked 2 · relinked 1 · unlinked 1"), leaving out what
+// is none; "" when it changes nothing.
+func (o *ApplyOutcome) ChangeSummary() string {
+	n := o.Counts()
+	var parts []string
+	if n["create"] > 0 {
+		parts = append(parts, i18n.Sprintf("linked %d", n["create"]))
+	}
+	if n["replace"] > 0 {
+		parts = append(parts, i18n.Sprintf("relinked %d", n["replace"]))
+	}
+	if n["remove"] > 0 {
+		parts = append(parts, i18n.Sprintf("unlinked %d", n["remove"]))
+	}
+	return strings.Join(parts, " · ")
+}
 
 // Plan computes what apply would do for entries.
 func (s *Session) Plan(entries []engine.Entry, force bool) engine.Plan {
