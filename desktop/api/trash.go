@@ -20,7 +20,7 @@ func (s *Service) trashOperation(ses *app.Session, method string, args []json.Ra
 		}
 		out := []object{}
 		for _, e := range u.Entries {
-			out = append(out, object{"id": e.ID, "name": e.Name, "origin": e.Origin, "path": e.Path, "when": e.When, "restorable": e.Restorable, "problem": e.Problem, "unsafe": e.Unsafe, "size": u.Sizes[e.ID]})
+			out = append(out, object{"id": e.ID, "name": e.Name, "origin": e.Origin, "path": e.Path, "when": e.When, "restorable": e.Restorable, "problem": e.Problem, "unsafe": e.Unsafe, "size": u.Sizes[e.ID], "skills": nonNilList(e.Skills), "reason": e.Reason, "repo": e.Repo})
 		}
 		return out, nil
 	case "trashUsage":

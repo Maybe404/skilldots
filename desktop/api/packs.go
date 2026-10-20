@@ -123,7 +123,7 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 		if o.Report != nil && o.Report.Renamed != nil {
 			renamed = o.Report.Renamed
 		}
-		return object{"repo": o.Repo, "linked": o.Linked, "renamed": renamed, "nothing": o.Nothing}, nil
+		return object{"repo": o.Repo, "linked": o.Linked, "renamed": renamed, "nothing": o.Nothing, "absent": absentOf(o.Apply)}, nil
 	case "updateDiff":
 		repo, err := argument[string](args, 0)
 		if err != nil {
@@ -246,14 +246,14 @@ func (s *Service) scanOperation(ses *app.Session, method string, args []json.Raw
 	}
 	out := []object{}
 	for _, it := range rep.Items {
-		kind, label, repo := "skip", "", ""
+		kind, label, repo, upstream, differs := "skip", "", "", "", false
 		for _, p := range props {
 			if p.Item.Path == it.Path {
-				kind, label, repo = p.Kind, p.Label, p.Repo
+				kind, label, repo, upstream, differs = p.Kind, p.Label, p.Repo, p.Upstream, p.Differs
 				break
 			}
 		}
-		out = append(out, object{"id": it.Target + "/" + it.Name, "agent": it.Target, "name": it.Name, "path": it.Path, "state": it.State, "linkTo": it.LinkTo, "source": it.Source, "proposal": kind, "label": label, "repo": repo})
+		out = append(out, object{"id": it.Target + "/" + it.Name, "agent": it.Target, "name": it.Name, "path": it.Path, "state": it.State, "linkTo": it.LinkTo, "source": it.Source, "proposal": kind, "label": label, "repo": repo, "upstream": upstream, "differs": differs})
 	}
 	return out, nil
 }

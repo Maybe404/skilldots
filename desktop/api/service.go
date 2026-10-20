@@ -78,7 +78,23 @@ func skill(e engine.Entry) object {
 	if e.Kind == engine.KindVendor {
 		prefix = e.Origin
 	}
-	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "conflict": e.Conflict, "missing": e.Missing}
+	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "absent": append([]string{}, e.Absent...), "conflict": e.Conflict, "missing": e.Missing}
+}
+
+// absentOf is what an apply left out because the agent is not installed
+// on this machine (agent → skills); always a map, empty when nothing.
+func absentOf(o *app.ApplyOutcome) map[string][]string {
+	if o == nil || o.Absent == nil {
+		return map[string][]string{}
+	}
+	return o.Absent
+}
+
+func nonNilList(l []string) []string {
+	if l == nil {
+		return []string{}
+	}
+	return l
 }
 
 func checkApply(out *app.ApplyOutcome, err error) error {
@@ -231,7 +247,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			if !explicit {
 				hidden = !detected && !used[a.Name] && !slices.Contains(ses.Lib.Manifest.Targets.Default, a.Name)
 			}
-			out = append(out, object{"name": a.Name, "label": a.Name, "path": a.Path, "detected": detected, "enabled": !slices.Contains(ses.Lib.Manifest.Targets.Disabled, a.Name), "isDefault": slices.Contains(ses.Lib.Manifest.Targets.Default, a.Name), "hidden": hidden, "builtin": a.Builtin})
+			out = append(out, object{"name": a.Name, "label": a.Name, "path": a.Path, "detected": detected, "enabled": !slices.Contains(ses.Lib.Manifest.Targets.Disabled, a.Name), "isDefault": slices.Contains(ses.Lib.Manifest.Targets.Default, a.Name), "hidden": hidden, "builtin": a.Builtin, "readsShared": a.ReadsShared})
 		}
 		return out, nil
 	case "packs":
@@ -281,11 +297,16 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		if err != nil {
 			return nil, err
 		}
-		if _, err = ses.Restore(id); err != nil {
+		// RestoreEntry puts back what remove or purge took out of
+		// skills.toml and skills.lock, and links it again itself.
+		o, err := ses.RestoreEntry(id)
+		if o == nil {
 			return nil, err
 		}
-		o, err := ses.Apply(app.ApplyOptions{})
-		return nil, checkApply(o, err)
+		if err = checkApply(o.Apply, err); err != nil {
+			return nil, err
+		}
+		return object{"skills": nonNilList(o.Skills), "repo": o.Repo, "selected": o.Selected, "linked": o.Apply != nil, "unused": o.Unused, "hint": o.Hint, "absent": absentOf(o.Apply)}, nil
 	case "plan":
 		entries, err := ses.Resolve()
 		if err != nil {
@@ -309,7 +330,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			return nil, err
 		}
 		c := o.Counts()
-		return object{"linked": c["create"] + c["replace"], "unlinked": c["remove"], "trashed": len(o.Backups)}, nil
+		return object{"linked": c["create"] + c["replace"], "unlinked": c["remove"], "trashed": len(o.Backups), "absent": absentOf(o)}, nil
 	case "setDefaultAgents":
 		names, err := argument[[]string](args, 0)
 		if err != nil {
@@ -354,7 +375,10 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		if err != nil {
 			return nil, err
 		}
-		return nil, checkApply(o.Apply, nil)
+		if err = checkApply(o.Apply, nil); err != nil {
+			return nil, err
+		}
+		return object{"absent": absentOf(o.Apply)}, nil
 	case "remove":
 		r, err := argument[ref](args, 0)
 		if err != nil {

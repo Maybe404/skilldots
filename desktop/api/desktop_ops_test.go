@@ -159,6 +159,99 @@ func TestStatusWithoutLibraryCountsUnmanaged(t *testing.T) {
 	}
 }
 
+// An agent not installed here gets no link: the bridge says which skills
+// wanted it, the skill still names it, and the agents list says which
+// agents read the shared directory.
+func TestAbsentAgentAndSharedReaders(t *testing.T) {
+	s := setup(t) // Claude Code is installed, Codex is not
+	invoke(t, s, "newSkill", object{"name": "here", "agents": []string{"claude"}})
+	got := roundTrip[struct{ Absent map[string][]string }](t, invoke(t, s, "enable", ref{Key: "skills:here"}, []string{"codex"}))
+	if len(got.Absent["codex"]) != 1 || got.Absent["codex"][0] != "here" {
+		t.Fatalf("absent: %+v", got.Absent)
+	}
+	home, _ := os.UserHomeDir()
+	if _, err := os.Stat(filepath.Join(home, ".codex")); !os.IsNotExist(err) {
+		t.Fatal("made a directory for an agent not installed")
+	}
+	skills := roundTrip[[]struct {
+		Name            string
+		Targets, Absent []string
+	}](t, invoke(t, s, "skills"))
+	for _, sk := range skills {
+		if sk.Name == "here" && (!slices.Contains(sk.Targets, "codex") || !slices.Equal(sk.Absent, []string{"codex"})) {
+			t.Fatalf("skill: %+v", sk)
+		}
+	}
+	agents := roundTrip[[]struct {
+		Name        string
+		ReadsShared bool
+	}](t, invoke(t, s, "agents"))
+	shared := map[string]bool{}
+	for _, a := range agents {
+		shared[a.Name] = a.ReadsShared
+	}
+	if !shared["codex"] || shared["claude"] || shared["agents"] {
+		t.Fatalf("readsShared: %+v", shared)
+	}
+	if applied := roundTrip[struct{ Absent map[string][]string }](t, invoke(t, s, "apply", object{"force": false})); len(applied.Absent["codex"]) != 1 {
+		t.Fatalf("apply absent: %+v", applied)
+	}
+}
+
+// Restoring a removed skill links it again in the same call (the app
+// layer applies); the result says so.
+func TestRestoreLinksAgain(t *testing.T) {
+	s := setup(t)
+	invoke(t, s, "newSkill", object{"name": "back", "agents": []string{"claude"}})
+	invoke(t, s, "remove", ref{Key: "skills:back"})
+	home, _ := os.UserHomeDir()
+	link := filepath.Join(home, ".claude", "skills", "back")
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatal("removed skill still linked")
+	}
+	rows := roundTrip[[]struct {
+		ID, Reason string
+		Skills     []string
+	}](t, invoke(t, s, "trash"))
+	if len(rows) != 1 || rows[0].Reason != "remove" {
+		t.Fatalf("trash: %+v", rows)
+	}
+	out := roundTrip[struct {
+		Linked bool
+		Skills []string
+	}](t, invoke(t, s, "restore", rows[0].ID))
+	if !out.Linked {
+		t.Fatalf("restore: %+v", out)
+	}
+	if _, err := os.Stat(filepath.Join(link, "SKILL.md")); err != nil {
+		t.Fatalf("not linked again: %v", err)
+	}
+}
+
+// Scan rows carry where an entry came from and whether it differs.
+func TestScanRowsCarryUpstream(t *testing.T) {
+	s := setup(t)
+	home, _ := os.UserHomeDir()
+	writeFile(t, filepath.Join(home, ".claude", "skills", "loose", "SKILL.md"), "---\nname: loose\ndescription: d\n---\n")
+	b, _ := json.Marshal(invoke(t, s, "scan"))
+	var rows []map[string]any
+	if err := json.Unmarshal(b, &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r["name"] == "loose" {
+			if _, ok := r["differs"]; !ok {
+				t.Fatalf("no differs: %v", r)
+			}
+			if _, ok := r["upstream"]; !ok {
+				t.Fatalf("no upstream: %v", r)
+			}
+			return
+		}
+	}
+	t.Fatalf("loose not found: %s", b)
+}
+
 func TestTrashDeletionNeedsConfirmation(t *testing.T) {
 	s := setup(t)
 	for _, n := range []string{"a", "b", "c"} {
