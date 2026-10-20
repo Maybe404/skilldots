@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -110,7 +109,14 @@ func listCmd() *cobra.Command {
 			if len(args) == 1 {
 				p := c.lib.Manifest.FindPack(args[0])
 				if p == nil {
-					return i18n.Errorf("no pack %q", args[0])
+					// A skill's name, given where a pack is expected.
+					if e, err := c.Lookup(entries, args[0]); err == nil && e != nil {
+						if e.Kind == engine.KindVendor {
+							return i18n.Errorf("no pack %q; %s is a skill of %s: `skd list %s` shows it with its pack, `skd path %s` where its files are", args[0], e.LinkName, e.Origin, e.Origin, args[0])
+						}
+						return i18n.Errorf("no pack %q; %s is a skill (%s): `skd list --all` shows it, `skd path %s` where its files are", args[0], e.LinkName, engine.Describe(*e), args[0])
+					}
+					return i18n.Errorf("no pack %q (`skd list` lists the packs; `skd list --all` every skill)", args[0])
 				}
 				printPack(c, p, entries, true)
 				return nil
@@ -137,8 +143,7 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 			linked++
 		}
 	}
-	home, _ := os.UserHomeDir()
-	c.printf("%s  %s\n", brand(), dim(strings.Replace(c.lib.Root, home, "~", 1)))
+	c.printf("%s  %s\n", brand(), dim(tildePath(c.lib.Root)))
 	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(i18n.Sprintf("%d linked", linked))+dim(i18n.Sprintf(" · agents: %s", strings.Join(m.Targets.Default, ", ")))+pausedNote(m.Targets.Disabled))
 	rec := c.RecordedOutdated()
 	if line := updatesLine(rec, time.Now()); line != "" {
@@ -307,7 +312,7 @@ func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
 	if err != nil {
 		return err
 	}
-	c.printf("%s %s\n", bold(t.Name), dim(t.Path))
+	c.printf("%s %s\n", bold(t.Name), dim(tildePath(t.Path)))
 	tb := newTable("SKILL", "FROM")
 	for _, e := range entries {
 		for _, et := range e.Targets {
@@ -380,6 +385,9 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 			c.printf("%s\n", line)
 		}
 	}
+	for _, a := range sortedKeys(out.Absent) {
+		c.printf("  %s %s\n", dim("·"), dim(i18n.Sprintf("%s is not installed on this machine: %s not linked there", txt(a), plural(len(out.Absent[a]), "skill"))))
+	}
 	if !plan.Changes() {
 		msg := i18n.Sprintf("up to date, %d linked", counts["keep"])
 		if counts["skip"] > 0 {
@@ -388,7 +396,10 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 		c.printf("%s %s\n", ok("✓"), dim(msg))
 		return
 	}
-	summary := i18n.Sprintf("+%d ↻%d −%d · %d kept · %d skipped", counts["create"], counts["replace"], counts["remove"], counts["keep"], counts["skip"])
+	summary := out.ChangeSummary() + " · " + i18n.Sprintf("kept %d", counts["keep"])
+	if counts["skip"] > 0 {
+		summary += " · " + i18n.Sprintf("skipped %d", counts["skip"])
+	}
 	if out.DryRun {
 		c.printf("%s\n", dim(i18n.Sprintf("dry run · %s", summary)))
 		return
@@ -473,8 +484,7 @@ func trashCmd() *cobra.Command {
 				c.printf("%s\n", dim(i18n.T("trash is empty")))
 				return nil
 			}
-			home, _ := os.UserHomeDir()
-			t := newTable("ID", "FROM", "WHEN")
+			t := newTable("ID", "SKILL", "WHY", "WAS AT", "WHEN")
 			var refused []string
 			for _, it := range items {
 				id := txt(it.ID)
@@ -482,31 +492,40 @@ func trashCmd() *cobra.Command {
 					refused = append(refused, i18n.Sprintf("%s %s cannot be restored: %s", warn("!"), id, txt(it.Problem)))
 					id += " " + warn("!")
 				}
-				t.Row(id, dim(txt(strings.Replace(it.Origin, home, "~", 1))), dim(it.When.Format("2006-01-02 15:04")))
+				t.Row(id, strings.Join(txts(it.Skills), ", "), dim(trashReason(it)), dim(txt(tildePath(it.Origin))), dim(it.When.Format("2006-01-02 15:04")))
 			}
 			c.printf("%s\n", t.Render())
 			for _, r := range refused {
 				c.printf("%s\n", r)
 			}
-			c.printf("%s\n", dim(i18n.T("skd trash restore <id>   ·   skd trash empty")))
+			c.printf("%s\n", dim(i18n.T("skd trash restore <id|skill>   ·   skd trash empty")))
 			return nil
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "restore <id>",
-		Short: i18n.T("Put a parked directory back where it came from"),
+		Use:   "restore <id|skill>",
+		Short: i18n.T("Put a parked directory back where it came from, selected and linked again"),
 		Args:  exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
 			}
-			dest, err := c.Restore(args[0])
+			out, err := c.RestoreEntry(args[0])
+			if out != nil && out.Apply != nil {
+				printApply(c, out.Apply)
+			}
 			if err != nil {
 				return err
 			}
-			c.printf("%s restored to %s\n", ok("✓"), txt(dest))
-			c.jsonOut(map[string]any{"id": args[0], "restored": dest})
+			c.printf("%s restored to %s\n", ok("✓"), txt(tildePath(out.Path)))
+			if out.Selected {
+				c.printf("  %s\n", dim(i18n.Sprintf("selected again in skills.toml: %s", strings.Join(txts(out.Skills), ", "))))
+			}
+			if out.Hint != "" {
+				c.printf("%s %s\n", warn("!"), txt(out.Hint))
+			}
+			c.jsonOut(out)
 			return nil
 		},
 	}, &cobra.Command{
@@ -541,4 +560,12 @@ func trashCmd() *cobra.Command {
 		},
 	})
 	return cmd
+}
+
+// trashReason says why a trash entry was set aside.
+func trashReason(it engine.TrashEntry) string {
+	if r := app.TrashReason(it); r != "" {
+		return r
+	}
+	return "·"
 }

@@ -262,7 +262,7 @@ func TestChineseOutput(t *testing.T) {
 		{[]string{"config", "set", "lang", "zh"}, []string{"✓ lang = zh"}},
 		{[]string{"config", "set", "nope", "x"}, []string{"未知的设置"}},
 		{[]string{"path", "nope"}, []string{"没有 skill \"nope\""}},
-		{[]string{"new", "other"}, []string{"已创建", "已应用 · +1"}},
+		{[]string{"new", "other"}, []string{"已创建", "已应用 · 新链接 1 个"}},
 		{[]string{"disable", "tdd", "--agent", "agents"}, []string{"已应用", "− agents"}},
 		{[]string{"enable", "tdd"}, []string{"已应用", "+ agents"}},
 		{[]string{"fork", "tdd", "--as", "mytdd"}, []string{"已 fork tdd"}},
@@ -506,7 +506,7 @@ func TestFilesAreWrittenInEnglish(t *testing.T) {
 		t.Errorf("git log holds Chinese:\n%s", log)
 	}
 	// And the settings did take: the language was Chinese all along.
-	if out := e.ok(lib, "--library", lib, "trash"); !strings.Contains(out, "来源") {
+	if out := e.ok(lib, "--library", lib, "trash"); !strings.Contains(out, "原位置") {
 		t.Errorf("the lang setting was not used:\n%s", out)
 	}
 }

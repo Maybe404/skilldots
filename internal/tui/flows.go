@@ -286,6 +286,9 @@ func (m Model) trashView(entries []engine.TrashEntry) (tea.Model, tea.Cmd) {
 		if e.Origin != "" {
 			from = i18n.Sprintf("from %s", tildify(e.Origin))
 		}
+		if why := app.TrashReason(e); why != "" {
+			when += " · " + why
+		}
 		detail := when + "  " + from
 		if !e.Restorable {
 			problems[e.ID] = e.Problem
@@ -294,7 +297,11 @@ func (m Model) trashView(entries []engine.TrashEntry) (tea.Model, tea.Cmd) {
 				detail += " · " + from
 			}
 		}
-		items = append(items, pickItem{label: e.Name, detail: detail, value: e.ID})
+		label := e.Name
+		if len(e.Skills) > 0 && !e.Unsafe {
+			label = strings.Join(e.Skills, ", ")
+		}
+		items = append(items, pickItem{label: label, detail: detail, value: e.ID})
 	}
 	n := len(entries)
 	restore := listAction{key: "r", label: i18n.T("restore"), run: func(it pickItem) step {

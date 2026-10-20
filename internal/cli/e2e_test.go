@@ -103,6 +103,18 @@ func (e *env) noLang() {
 
 func (e *env) p(rel string) string { return filepath.Join(e.home, filepath.FromSlash(rel)) }
 
+// installed makes the home directories of agents (".claude", ".codex"),
+// so they count as installed: skd links nothing into a built-in agent
+// that is not.
+func (e *env) installed(dirs ...string) {
+	e.t.Helper()
+	for _, d := range dirs {
+		if err := os.MkdirAll(e.p(d), 0o755); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+}
+
 // skd runs the binary in dir (home when ""), with stdin not a terminal.
 func (e *env) skd(dir string, args ...string) (stdout, stderr string, code int) {
 	e.t.Helper()

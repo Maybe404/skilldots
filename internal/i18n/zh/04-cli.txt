@@ -142,7 +142,7 @@
 = %s 已在 %s 初始化资料库\n  %s\n
 
 @ default targets: %s  (skd enable <skill> --agent <name> adds another agent)
-= 默认 target：%s  （用 skd enable <skill> --agent <名字> 给 skill 加一个 agent）
+= 默认 target：%s  （用 skd enable <skill> --agent <name> 给 skill 加一个 agent）
 
 @   %s could not install the %s skill (%s); run `skd add %s --skill %s --agent '*'` later\n
 =   %s 没能安装 %s skill（%s）；稍后请运行 `skd add %s --skill %s --agent '*'`\n
@@ -273,9 +273,6 @@
 @ , %d skipped
 = ，跳过 %d 个
 
-@ +%d ↻%d −%d · %d kept · %d skipped
-= +%d ↻%d −%d · 保持 %d · 跳过 %d
-
 @ dry run · %s
 = 预演 · %s
 
@@ -320,12 +317,6 @@
 
 @ %s %s cannot be restored: %s
 = %s %s 无法恢复：%s
-
-@ skd trash restore <id>   ·   skd trash empty
-= skd trash restore <id>   ·   skd trash empty
-
-@ Put a parked directory back where it came from
-= 把挪开的目录放回原处
 
 @ %s restored to %s\n
 = %s 已恢复到 %s\n
@@ -472,7 +463,7 @@
 = 移除哪个 skill？
 
 @ Unlink from all agents, keep in library  (skd disable)
-= 从所有 agent 取消链接，保留在资料库里  （skd disable）
+= 从所有 agent 上卸下，保留在资料库里  （skd disable）
 
 @ Unlink and drop from the library           (skd remove)
 = 取消链接并从资料库中丢弃  （skd remove）
@@ -712,13 +703,13 @@
 = 查看改动：git -C %s diff -- vendor/%s
 
 @ Link a skill (or whole pack) into agents
-= 把 skill（或整个来源）链接到 agent
+= 把 skill（或整个来源）装到 agent 上
 
 @ targets to add (default: manifest default)
 = 要添加的 target（默认：清单里的默认值）
 
 @ Unlink a skill (or pack) from agents; the library keeps it
-= 从 agent 取消 skill（或来源）的链接；资料库里仍保留
+= 从 agent 上卸下 skill（或来源）；资料库里仍保留
 
 @ targets to remove (default: all)
 = 要移除的 target（默认：全部）
@@ -1100,31 +1091,31 @@
 = %[2]s 选项的参数 %[1]s 无效：%[3]s
 
 @ paused
-= 已暂停
+= 已暂停分发
 
 @ a paused agent gets no links; its skills keep it selected (skd targets resume <agent>)
-= 已暂停的 agent 不会有任何链接；各 skill 仍保留对它的选择（skd targets resume <agent> 恢复）
+= 暂停分发的 agent 不会有任何链接；各 skill 仍保留对它的选择（skd targets resume <agent> 恢复分发）
 
 @  · paused: %s
-=  · 已暂停：%s
+=  · 已暂停分发：%s
 
 @ Pause agents: unlink every skill from them, keeping which skills use them
-= 暂停 agent：撤掉它里面的所有 skill 链接，但保留各 skill 对它的选择
+= 暂停分发：撤掉这些 agent 里的所有 skill 链接，但保留各 skill 对它们的选择
 
 @ Pause agents: skd takes out the links it made in their skill directories and\nlinks nothing there until they are resumed. Every skill keeps the agents it\nwas given, so `skd targets resume` puts back exactly what was there. The\npause is kept in skills.toml (targets.disabled), so it reaches every machine\nthat uses the library. Nothing is deleted: what skd did not make stays.
-= 暂停 agent：skd 撤掉自己在它的 skill 目录里建的链接，恢复之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样恢复。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个资料库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
+= 暂停分发：skd 撤掉自己在这些 agent 的 skill 目录里建的链接，恢复分发之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样放回。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个资料库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
 
 @ paused %s
-= 已暂停 %s
+= 已暂停分发 %s
 
 @ Resume paused agents: link their skills again
-= 恢复已暂停的 agent：重新链接它的 skill
+= 恢复分发：重新把 skill 链接到已暂停分发的 agent
 
 @ %s is not paused (see `skd targets`)
-= %s 没有被暂停（见 `skd targets`）
+= %s 没有暂停分发（见 `skd targets`）
 
 @ resumed %s
-= 已恢复 %s
+= 已恢复分发 %s
 
 @ Set the default agents: those a skill without agents of its own is linked into
 = 设置默认 agent：没有单独指定 agent 的 skill 会链接到这些 agent
@@ -1134,3 +1125,60 @@
 
 @ default agents: %s
 = 默认 agent：%s
+
+@ WHY
+= 原因
+
+@ skd trash restore <id|skill>   ·   skd trash empty
+= skd trash restore <id|skill>   ·   skd trash empty
+
+@ Put a parked directory back where it came from, selected and linked again
+= 把挪开的目录放回原处，并重新选中、重新链接
+
+@ selected again in skills.toml: %s
+= 已在 skills.toml 里重新选中：%s
+
+@ removed %s, the last skill of %s: the pack is dropped from skills.toml too
+= 已移除 %s；它是 %s 的最后一个 skill，这个来源也从 skills.toml 里去掉了
+
+@ removed %s
+= 已移除 %s
+
+@ its files are in the library trash as %s; `skd trash restore %s` puts everything back
+= 文件在资料库的回收站里（%s）；`skd trash restore %s` 可以全部恢复
+
+@ WAS AT
+= 原位置
+
+@ kept %d
+= 保持 %d 个
+
+@ skipped %d
+= 跳过 %d 个
+
+@ no pack %q; %s is a skill of %s: `skd list %s` shows it with its pack, `skd path %s` where its files are
+= 没有来源 %q；%s 是 %s 里的一个 skill：`skd list %s` 连同来源一起显示它，`skd path %s` 显示它的文件在哪里
+
+@ no pack %q; %s is a skill (%s): `skd list --all` shows it, `skd path %s` where its files are
+= 没有来源 %q；%s 是一个 skill（%s）：`skd list --all` 会列出它，`skd path %s` 显示它的文件在哪里
+
+@ no pack %q (`skd list` lists the packs; `skd list --all` every skill)
+= 没有来源 %q（`skd list` 列出所有来源，`skd list --all` 列出所有 skill）
+
+@ %s: %v; nothing to take off
+= %s：%v；没有可卸下的
+
+@ %s was not installed for %s; nothing to take off
+= %s 本来就没有装在 %s 上，没有可卸下的
+
+@ %s was already installed for %s
+= %s 已经装在 %s 上了
+
+@ %s is not installed on this machine: %s not linked there
+= 本机没有安装 %s：有 %s 没有链接到那里
+
+@ reads agents
+= 也读 agents
+
+@ reads agents: the agent also reads ~/.agents/skills, so a skill for every installed agent ("*") reaches it there, not twice
+= 也读 agents：这个 agent 也会读 ~/.agents/skills，所以装给“本机所有 agent”（"*"）的 skill 只从那里加载，不会加载两份

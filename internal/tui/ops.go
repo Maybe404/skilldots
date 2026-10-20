@@ -163,8 +163,8 @@ func applySummary(out *app.ApplyOutcome) string {
 	}
 	n := out.Counts()
 	var parts []string
-	if n["create"]+n["replace"]+n["remove"] > 0 {
-		parts = append(parts, fmt.Sprintf("+%d ↻%d −%d", n["create"], n["replace"], n["remove"]))
+	if sum := out.ChangeSummary(); sum != "" {
+		parts = append(parts, sum)
 	}
 	if n["skip"] > 0 {
 		var why []string
@@ -177,6 +177,14 @@ func applySummary(out *app.ApplyOutcome) string {
 	}
 	if len(out.Backups) > 0 {
 		parts = append(parts, i18n.Sprintf("%d moved to trash", len(out.Backups)))
+	}
+	if len(out.Absent) > 0 {
+		var agents []string
+		for a := range out.Absent {
+			agents = append(agents, a)
+		}
+		sort.Strings(agents)
+		parts = append(parts, i18n.Sprintf("not installed here, skipped: %s", strings.Join(agents, ", ")))
 	}
 	if len(out.Refused) > 0 {
 		parts = append(parts, i18n.Sprintf("%d not changed: %s", len(out.Refused), out.Refused[0]))
@@ -536,13 +544,20 @@ func (o *libOps) Restore(id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest, err := s.Restore(id)
+	out, err := s.RestoreEntry(id)
 	if err != nil {
 		return "", err
 	}
-	// Like `skd trash restore`, nothing is re-linked: the header shows
-	// what `A` would apply.
-	return i18n.Sprintf("restored %s", tildify(dest)), nil
+	// Like `skd trash restore`: what remove or purge took out is selected
+	// and linked again.
+	msg := i18n.Sprintf("restored %s", tildify(out.Path))
+	if out.Selected {
+		msg = i18n.Sprintf("restored %s; selected and linked again", strings.Join(out.Skills, ", "))
+	}
+	if out.Hint != "" {
+		return "", warning(msg + " · " + out.Hint)
+	}
+	return withSummary(msg, out.Apply), nil
 }
 
 func (o *libOps) EmptyTrash() (string, error) {

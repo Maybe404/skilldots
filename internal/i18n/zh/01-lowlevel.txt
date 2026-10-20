@@ -249,3 +249,24 @@
 
 @ skipped: %v
 = 已跳过：%v
+
+@ (git said: %s)
+= （git 的原始输出：%s）
+
+@ cannot find the repository %s on GitHub, or it is private (for a private repository use its SSH address: git@github.com:%s.git)
+= 在 GitHub 上找不到仓库 %s，或者它是私有仓库（私有仓库请用 SSH 地址：git@github.com:%s.git）
+
+@ there is no git repository at %s
+= %s 不是 git 仓库
+
+@ cannot find the repository %s, or it is private (for a private repository use its SSH address)
+= 找不到仓库 %s，或者它是私有仓库（私有仓库请用 SSH 地址）
+
+@ cannot read the repository %s: it does not exist, or your SSH key has no access to it
+= 读取不了仓库 %s：它不存在，或者你的 SSH 密钥没有权限访问它
+
+@ the repository %s has no branch or tag %q
+= 仓库 %s 里没有分支或标签 %q
+
+@ cannot reach %s: check the network connection
+= 连不上 %s：请检查网络连接

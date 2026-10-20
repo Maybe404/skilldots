@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -76,6 +77,12 @@ type overlay struct {
 	choices []choice
 	// noEnter keeps enter from picking the first choice (irreversible ones).
 	noEnter bool
+
+	// filter narrows a pick or list overlay to the items it matches
+	// (`/` starts typing it, enter keeps it, esc clears it); filtering is
+	// set while it is being typed.
+	filter    string
+	filtering bool
 }
 
 func inputOverlay(title, desc, placeholder, value string, t Theme, s surfaces, onInput func(string) (step, error)) *overlay {
@@ -180,9 +187,77 @@ func (o *overlay) values() []string {
 	return out
 }
 
+// matches reports whether item it is one the filter keeps: the filter's
+// words, ignoring case, each in its label, detail or group.
+func (o *overlay) matches(it pickItem) bool {
+	text := strings.ToLower(it.label + " " + it.detail + " " + it.group)
+	for _, w := range strings.Fields(strings.ToLower(o.filter)) {
+		if !strings.Contains(text, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// shown reports whether row i is drawn under the filter: an item it
+// matches, a heading with such an item in its group, and the info rows
+// of a shown item.
+func (o *overlay) shown(i int) bool {
+	if strings.TrimSpace(o.filter) == "" {
+		return true
+	}
+	it := o.items[i]
+	switch {
+	case it.info:
+		for j := i - 1; j >= 0; j-- {
+			if !o.items[j].info {
+				return o.shown(j)
+			}
+		}
+		return false
+	case it.header:
+		for _, x := range o.items {
+			if !x.header && !x.info && x.group == it.group && o.matches(x) {
+				return true
+			}
+		}
+		return false
+	}
+	return o.matches(it)
+}
+
+// visible are the indexes of the rows the filter shows.
+func (o *overlay) visible() []int {
+	var out []int
+	for i := range o.items {
+		if o.shown(i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// refilter puts the cursor on a row the filter shows: under a filter, on
+// the first item it matches rather than its heading.
+func (o *overlay) refilter() {
+	if o.cur < len(o.items) && o.selectable(o.cur) && (o.filter == "" || !o.items[o.cur].header) {
+		return
+	}
+	o.cur = o.firstSelectable()
+	if strings.TrimSpace(o.filter) == "" {
+		return
+	}
+	for i, it := range o.items {
+		if !it.header && o.selectable(i) {
+			o.cur = i
+			return
+		}
+	}
+}
+
 func (o *overlay) selectable(i int) bool {
 	it := o.items[i]
-	if it.info {
+	if it.info || !o.shown(i) {
 		return false
 	}
 	if o.kind == ovList {
@@ -238,24 +313,65 @@ func (o *overlay) toggle() {
 		}
 		return
 	}
+	// Under a filter, only the items it shows.
 	all := true
-	for _, x := range o.items {
-		if !x.header && !x.info && x.group == it.group && !x.locked && !x.on {
+	for i, x := range o.items {
+		if !x.header && !x.info && x.group == it.group && !x.locked && !x.on && o.shown(i) {
 			all = false
 		}
 	}
 	for i := range o.items {
 		x := &o.items[i]
-		if !x.header && !x.info && x.group == it.group && !x.locked {
+		if !x.header && !x.info && x.group == it.group && !x.locked && o.shown(i) {
 			x.on = !all
 		}
 	}
+}
+
+// filterKey handles a key while the filter is typed: text goes into it,
+// backspace takes the last character, ↑↓ move, enter keeps the filter
+// and esc clears it.
+func (o *overlay) filterKey(k tea.KeyMsg) {
+	switch k.Type {
+	case tea.KeyEsc:
+		o.filter, o.filtering = "", false
+	case tea.KeyEnter:
+		o.filtering = false
+	case tea.KeyBackspace:
+		if r := []rune(o.filter); len(r) > 0 {
+			o.filter = string(r[:len(r)-1])
+		}
+	case tea.KeyUp:
+		o.moveCur(-1)
+	case tea.KeyDown:
+		o.moveCur(1)
+	case tea.KeySpace:
+		o.filter += " "
+	case tea.KeyRunes:
+		o.filter += string(k.Runes)
+	}
+	o.refilter()
 }
 
 // update handles a key. It returns the overlay to keep (nil closes it) and
 // a job to start, if the user confirmed one.
 func (o *overlay) update(k tea.KeyMsg) (*overlay, *job, tea.Cmd) {
 	key := k.String()
+	if o.kind == ovPick || o.kind == ovList {
+		switch {
+		case o.filtering:
+			o.filterKey(k)
+			return o, nil, nil
+		case key == "/":
+			o.filtering = true
+			return o, nil, nil
+		case key == "esc" && o.filter != "":
+			// esc clears a filter first, as in the dashboard's columns.
+			o.filter = ""
+			o.refilter()
+			return o, nil, nil
+		}
+	}
 	if key == "esc" {
 		return nil, nil, nil
 	}
@@ -452,15 +568,33 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]stri
 				groups = append(groups, key(k, a.label))
 			}
 		}
-		groups = append(groups, key("esc", "cancel"))
+		groups = append(groups, key("/", "filter"), key("esc", "cancel"))
+		if o.filtering {
+			groups = [][]seg{key("enter", "keep the filter"), key("esc", "clear the filter"), key("↑↓", "move")}
+		}
+		vis := o.visible()
+		if o.filtering || o.filter != "" {
+			cursor := ""
+			if o.filtering {
+				cursor = "▏"
+			}
+			lines = append(lines, row(sgb("/ ", t.Accent), sg(o.filter+cursor, t.Text),
+				sg("  "+i18n.Sprintf("%d of %d shown", countItems(o.items, vis), countItems(o.items, nil)), t.Muted)))
+		}
 		avail := h - len(lines) - 3 - len(footRows())
 		if o.allowAll {
 			avail--
 		}
 		avail = max(1, avail)
+		pos := 0
+		for p, i := range vis {
+			if i == o.cur {
+				pos = p
+			}
+		}
 		off := 0
-		if o.cur >= avail {
-			off = o.cur - avail + 1
+		if pos >= avail {
+			off = pos - avail + 1
 		}
 		labelW := 0
 		for _, it := range o.items {
@@ -471,8 +605,11 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]stri
 		labelW = min(labelW, max(12, inner/2))
 		if len(o.items) == 0 {
 			lines = append(lines, row(sg(o.empty, t.Muted)))
+		} else if len(vis) == 0 {
+			lines = append(lines, row(sg(i18n.T("nothing matches the filter"), t.Muted)))
 		}
-		for i := off; i < len(o.items) && i < off+avail; i++ {
+		for p := off; p < len(vis) && p < off+avail; p++ {
+			i := vis[p]
 			it := o.items[i]
 			rbg := bg
 			mark := sg("  ", "")
@@ -515,7 +652,7 @@ func (o *overlay) renderDesc(w, h int, t Theme, s surfaces, desc string) ([]stri
 			}
 			lines = append(lines, paint(2, bg)+paint(w-2, rbg, segs...))
 		}
-		if n := len(o.items); n > avail {
+		if n := len(vis); n > avail {
 			lines = append(lines, row(sg(ansiRange(off, avail, n), t.Muted)))
 		}
 		if o.allowAll {
@@ -561,6 +698,21 @@ func (o *overlay) box(i int, t Theme) seg {
 		return sg("◉ ", t.OK)
 	}
 	return sg("○ ", t.Faint)
+}
+
+// countItems counts the rows of items that are items (not headings or
+// info rows), among the indexes in only (every row when nil).
+func countItems(items []pickItem, only []int) int {
+	n := 0
+	for i, it := range items {
+		if it.header || it.info {
+			continue
+		}
+		if only == nil || slices.Contains(only, i) {
+			n++
+		}
+	}
+	return n
 }
 
 // ansiRange describes a scroll window, e.g. "4–15 of 38".

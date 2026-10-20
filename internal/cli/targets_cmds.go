@@ -44,14 +44,18 @@ func targetsCmd() *cobra.Command {
 				Active bool
 				// Paused is an agent skills.toml lists in targets.disabled:
 				// skd links nothing there until it is resumed.
-				Paused     bool
-				Approvable bool   `json:",omitempty"`
-				Problem    string `json:",omitempty"`
+				// ReadsShared is set for an agent that also reads the shared
+				// directory ~/.agents/skills: "*" leaves it out while
+				// skills are linked there.
+				ReadsShared bool `json:",omitempty"`
+				Paused      bool
+				Approvable  bool   `json:",omitempty"`
+				Problem     string `json:",omitempty"`
 			}
 			var rows []row
 			for _, t := range c.reg.All() {
 				rows = append(rows, row{Name: t.Name, Path: t.Path, Mode: t.Mode, Present: fsutil.Exists(t.Path) || fsutil.Exists(filepath.Dir(t.Path)),
-					Default: def[t.Name], Builtin: t.Builtin, Active: true, Paused: slices.Contains(c.lib.Manifest.Targets.Disabled, t.Name)})
+					Default: def[t.Name], Builtin: t.Builtin, Active: true, Paused: slices.Contains(c.lib.Manifest.Targets.Disabled, t.Name), ReadsShared: t.ReadsShared})
 			}
 			for _, w := range c.reg.Withheld() {
 				p := w.Real
@@ -83,6 +87,9 @@ func targetsCmd() *cobra.Command {
 				if r.Default {
 					d = accent(i18n.T("default"))
 				}
+				if r.ReadsShared && !r.Default {
+					d = dim(i18n.T("reads agents"))
+				}
 				if r.Paused {
 					flag, d = dim("‖"), dim(i18n.T("paused"))
 				}
@@ -90,12 +97,13 @@ func targetsCmd() *cobra.Command {
 					flag, d = warn("!"), warn(i18n.T("not used"))
 					notes = append(notes, i18n.Sprintf("%s custom target %s is not used: %s", warn("!"), txt(r.Name), txt(r.Problem)))
 				}
-				t.Row(flag, txt(r.Name), d, dim(txt(r.Path)))
+				t.Row(flag, txt(r.Name), d, dim(txt(tildePath(r.Path))))
 			}
 			c.printf("%s\n", t.Render())
 			for _, n := range notes {
 				c.printf("%s\n", n)
 			}
+			c.printf("%s\n", dim(i18n.T("reads agents: the agent also reads ~/.agents/skills, so a skill for every installed agent (\"*\") reaches it there, not twice")))
 			if len(c.lib.Manifest.Targets.Disabled) > 0 {
 				c.printf("%s\n", dim(i18n.T("a paused agent gets no links; its skills keep it selected (skd targets resume <agent>)")))
 			}

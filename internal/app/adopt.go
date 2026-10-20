@@ -34,6 +34,15 @@ type Proposal struct {
 	// "enable" of something already in the library refers to.
 	Via   string `json:",omitempty"`
 	Entry string `json:",omitempty"`
+	// Upstream is the repository the entry came from, as another
+	// installer recorded it or as the clone it links into says, whatever
+	// Kind is. Differs is set when its content is not what that
+	// upstream has now (changed here, or an older version): it is then
+	// proposed as a skill of your own ("own"), never replaced by
+	// upstream's, and subscribing instead is the user's explicit choice
+	// (skd add <Upstream> --skill <name>).
+	Upstream string `json:",omitempty"`
+	Differs  bool   `json:",omitempty"`
 }
 
 // Actionable reports whether accepting p does anything.
@@ -95,6 +104,7 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 		seen[it.Name] = true
 		out = append(out, p)
 	}
+	s.checkUpstream(out)
 	// "own"/"pack" copies found in several agents: enable the extra agents too.
 	for _, it := range rep.Unmanaged() {
 		for _, p := range out {
@@ -108,12 +118,89 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 	return out
 }
 
+// checkUpstream compares every "pack" proposal with what its upstream has
+// now. One whose content differs is proposed as a skill of your own
+// instead: subscribing would link upstream's version in its place, and
+// the user's changes would no longer reach any agent. One that cannot be
+// compared (the repository cannot be fetched, or no longer has the
+// skill) is not proposed: skd cannot tell which version it would put in
+// its place.
+func (s *Session) checkUpstream(props []Proposal) {
+	type upstream struct {
+		hashes map[string]string
+		err    error
+	}
+	fetched := map[string]*upstream{}
+	for i := range props {
+		p := &props[i]
+		if p.Kind != "pack" {
+			continue
+		}
+		p.Upstream = p.Repo
+		up := fetched[p.Repo]
+		if up == nil {
+			up = &upstream{hashes: map[string]string{}}
+			up.err = s.upstreamHashes(p.Repo, up.hashes)
+			fetched[p.Repo] = up
+		}
+		if up.err != nil {
+			p.Kind, p.Label = "skip", i18n.Sprintf("cannot compare it with %s (%v); run skd adopt again when it can be fetched", p.Repo, firstLine(up.err.Error()))
+			continue
+		}
+		want, ok := up.hashes[p.Skill]
+		if !ok {
+			p.Kind, p.Label = "skip", i18n.Sprintf("%s has no skill %s now; copy it into skills/ by hand to keep it", p.Repo, p.Skill)
+			continue
+		}
+		have := p.Item.Hash
+		if p.Item.LinkTo != "" || have == "" {
+			src := p.Item.Path
+			if p.Item.LinkTo != "" {
+				src = p.Item.LinkTo
+			}
+			have, _ = fsutil.HashTree(src)
+		}
+		if have == want {
+			continue
+		}
+		p.Kind, p.Repo, p.Skill, p.Differs = "own", "", "", true
+		p.Label = i18n.Sprintf("differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead", p.Upstream, p.Upstream, p.Item.Name)
+	}
+}
+
+// upstreamHashes fetches repo and records the content hash of each of
+// its skills by name.
+func (s *Session) upstreamHashes(repo string, into map[string]string) error {
+	src, err := pack.ParseSource(repo)
+	if err != nil {
+		return err
+	}
+	if p := s.Lib.Manifest.FindPack(repo); p != nil {
+		src.Ref = p.Ref
+	}
+	defer pack.Hold(src.Repo)()
+	clone, _, err := pack.Fetch(src)
+	if err != nil {
+		return err
+	}
+	up, _, err := pack.Scan(clone)
+	if err != nil {
+		return err
+	}
+	for _, sk := range up {
+		if h, err := fsutil.HashTree(sk.Dir); err == nil {
+			into[sk.Name] = h
+		}
+	}
+	return nil
+}
+
 // gitRemote returns owner/repo when dir is inside a GitHub clone.
 func gitRemote(dir string) string {
 	if !fsutil.Exists(dir) {
 		return ""
 	}
-	url, err := library.Git(dir, "remote", "get-url", "origin")
+	url, err := library.Git(dir, "config", "--get", "remote.origin.url") // as configured, before url.insteadOf
 	if err != nil {
 		return ""
 	}
@@ -306,17 +393,29 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 	// A real directory is only replaced by a link when the library holds
 	// exactly its content; otherwise it may be the user's only copy of
 	// something, so it stays where it is.
+	// A link to a directory outside the library (a clone of upstream) is
+	// replaced only when that directory holds exactly what the library
+	// now has: it may hold the user's changes, which the library's copy
+	// would take the place of (the proposals were made before, and the
+	// directory may have changed since).
 	keep := map[string]bool{}
 	for _, p := range props {
-		if p.Kind == "skip" || p.Kind == "drop" || p.Item.LinkTo != "" {
+		if p.Kind == "skip" || p.Kind == "drop" {
 			continue
+		}
+		src := p.Item.Path
+		if p.Item.LinkTo != "" {
+			if kind := p.Kind; kind != "pack" && !(kind == "enable" && p.Via == "pack") {
+				continue
+			}
+			src = p.Item.LinkTo
 		}
 		e := entryFor(p)
 		if e == nil {
 			continue
 		}
 		h, err := fsutil.HashTree(e.Dir)
-		if err == nil && fsutil.Pristine(p.Item.Path, h) {
+		if err == nil && fsutil.Pristine(src, h) {
 			continue
 		}
 		keep[p.Item.Target+"/"+p.Item.Name] = true

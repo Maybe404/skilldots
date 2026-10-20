@@ -1,7 +1,10 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/Maybe404/skilldots/internal/engine"
+	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
 // ApplyOptions tunes Apply.
@@ -26,12 +29,34 @@ type ApplyOutcome struct {
 	// their target no longer led to the directory found (or approved)
 	// when the library was opened.
 	Refused []string `json:"refused,omitempty"`
+	// Absent maps each built-in agent not installed on this machine to
+	// the skills that want it: nothing is linked or made for it here,
+	// and what the lock records for it is kept.
+	Absent map[string][]string `json:"absent,omitempty"`
 	// Plan is what was (or, for a dry run, would be) done.
 	Plan engine.Plan `json:"-"`
 }
 
 // Counts tallies the plan by action.
 func (o *ApplyOutcome) Counts() map[string]int { return o.Plan.Counts() }
+
+// ChangeSummary says in words what the apply changes in agent
+// directories ("linked 2 · relinked 1 · unlinked 1"), leaving out what
+// is none; "" when it changes nothing.
+func (o *ApplyOutcome) ChangeSummary() string {
+	n := o.Counts()
+	var parts []string
+	if n["create"] > 0 {
+		parts = append(parts, i18n.Sprintf("linked %d", n["create"]))
+	}
+	if n["replace"] > 0 {
+		parts = append(parts, i18n.Sprintf("relinked %d", n["replace"]))
+	}
+	if n["remove"] > 0 {
+		parts = append(parts, i18n.Sprintf("unlinked %d", n["remove"]))
+	}
+	return strings.Join(parts, " · ")
+}
 
 // Plan computes what apply would do for entries.
 func (s *Session) Plan(entries []engine.Entry, force bool) engine.Plan {
@@ -58,6 +83,9 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 	}
 	plan := engine.MakePlanForce(s.Lib, entries, func(key string) bool { return o.Force || o.ForceKeys[key] })
 	out := &ApplyOutcome{DryRun: o.DryRun, Changes: plan.ChangeList(), Kept: plan.Counts()["keep"], Plan: plan}
+	if a := plan.Absent(); len(a) > 0 {
+		out.Absent = a
+	}
 	if o.DryRun {
 		return out, nil
 	}

@@ -20,7 +20,8 @@ import (
 // Op is one planned file-system change.
 type Op struct {
 	// Action: create, replace, remove, forget (drop a lock record only),
-	// skip, keep.
+	// skip, keep, absent (a built-in agent not installed on this machine:
+	// nothing is done, the record is kept).
 	Action string
 	Target targets.Target
 	Name   string
@@ -45,14 +46,27 @@ type Change struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// Changes lists the ops that do something (everything except "keep").
+// ChangeList lists the ops that do something (everything except "keep",
+// and "absent": an agent not installed here, see Absent).
 func (p Plan) ChangeList() []Change {
 	out := []Change{}
 	for _, o := range p.Ops {
-		if o.Action == "keep" {
+		if o.Action == "keep" || o.Action == "absent" {
 			continue
 		}
 		out = append(out, Change{o.Action, o.Target.Name, o.Name, o.Dest, o.Reason})
+	}
+	return out
+}
+
+// Absent maps each built-in agent the plan links nothing into because it
+// is not installed on this machine to the skills that want it.
+func (p Plan) Absent() map[string][]string {
+	out := map[string][]string{}
+	for _, o := range p.Ops {
+		if o.Action == "absent" {
+			out[o.Target.Name] = append(out[o.Target.Name], o.Name)
+		}
 	}
 	return out
 }
@@ -184,6 +198,14 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			}
 			plan.Ops = append(plan.Ops, Op{Action: "skip", Target: targets.Target{Name: n}, Name: e.LinkName,
 				Reason: why, entry: e})
+		}
+		for _, n := range e.Absent {
+			// Not installed here: no directory is made and nothing linked,
+			// and what is recorded for it is kept (another machine of the
+			// library has it).
+			desired[n+"/"+e.LinkName] = true
+			plan.Ops = append(plan.Ops, Op{Action: "absent", Target: targets.Target{Name: n}, Name: e.LinkName,
+				Reason: i18n.Sprintf("%s is not installed on this machine", n), entry: e})
 		}
 	}
 	// Anything in the lock no longer desired gets removed.

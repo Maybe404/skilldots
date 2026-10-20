@@ -241,10 +241,7 @@
 = 有些链接没有改动：%s
 
 @ %q is a %s skill; use `skd disable` to unlink it, or delete the directory to drop it
-= %q 是 %s 类的 skill；用 `skd disable` 取消链接，或删除它的目录来去掉它
-
-@ %s has no skills left; dropping the pack
-= %s 里没有剩下的 skill 了；移除这个来源
+= %q 是 %s 类的 skill；用 `skd disable` 把它从 agent 上卸下，或删除它的目录来去掉它
 
 @ %q is already yours (%s)
 = %q 已经是你自己的（%s）
@@ -290,3 +287,54 @@
 
 @  (path only)
 = （仅路径变化）
+
+@ skills.toml does not select it, so no agent gets it: `skd add <repository> --skill <name>` follows it again (the files restored are kept when they are what upstream has)
+= skills.toml 没有选中它，所以没有 agent 能用到：运行 `skd add <repository> --skill <name>` 重新订阅（恢复的文件与上游一致时会原样保留）
+
+@ skills.toml does not select it, so no agent gets it: `skd add %s --skill %s` follows it again
+= skills.toml 没有选中它，所以没有 agent 能用到：运行 `skd add %s --skill %s` 重新订阅
+
+@ no trash entry %q (give an id as `skd trash` lists it, or the name of a skill in the trash)
+= 没有回收站条目 %q（请给出 `skd trash` 列出的 ID，或回收站里某个 skill 的名字）
+
+@ %d trash entries hold %q: %s; restore one by its id
+= 回收站里有 %d 条都含有 %q：%s；请用 ID 指定要恢复哪一条
+
+@ the alias %q of %s is taken now; the pack is restored without it
+= %[2]s 的别名 %[1]q 现在已被占用；恢复这个来源时不带别名
+
+@ %s stays out of %s: skip = [%q] in skills.toml excludes it
+= %s 仍不在 %s 里：skills.toml 的 skip = [%q] 排除了它
+
+@ skd remove
+= skd remove（移除）
+
+@ skd purge
+= skd purge（清除）
+
+@ no longer selected
+= 不再选中
+
+@ had changes; an update replaced it
+= 有改动，更新时换成了上游的版本
+
+@ in the way in an agent directory
+= 挡在 agent 目录里
+
+@ linked %d
+= 新链接 %d 个
+
+@ relinked %d
+= 重新链接 %d 个
+
+@ unlinked %d
+= 取消链接 %d 个
+
+@ cannot compare it with %s (%v); run skd adopt again when it can be fetched
+= 无法和 %s 比较（%v）；等能拉取时再运行一次 skd adopt
+
+@ %s has no skill %s now; copy it into skills/ by hand to keep it
+= %s 现在没有 skill %s 了；要保留它，请手动复制到 skills/
+
+@ differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead
+= 和上游 %s 的内容不同（在本机改过，或是旧版本）：复制到 skills/，作为本地 skill；要改用上游的版本，运行 `skd add %s --skill %s`

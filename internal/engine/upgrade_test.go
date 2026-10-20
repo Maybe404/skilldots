@@ -22,6 +22,9 @@ func TestUpgradeOfATypicalLibraryChangesNothing(t *testing.T) {
 	lib, reg, home := newTestLib(t)
 	all := []string{"agents", "claude", "codex", "gemini", "grok"}
 	lib.Manifest.Targets.Default = all
+	for _, d := range []string{".codex", ".gemini", ".grok"} {
+		os.MkdirAll(filepath.Join(home, d), 0o755) // installed here
+	}
 	writeSkill(t, filepath.Join(lib.Root, "skills", "mine"), "mine")
 	writeSkill(t, filepath.Join(lib.Root, "private", "secret"), "secret")
 	os.MkdirAll(filepath.Join(lib.Root, "private", ".git"), 0o755)

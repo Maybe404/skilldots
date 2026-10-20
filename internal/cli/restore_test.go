@@ -25,6 +25,42 @@ func findDir(t *testing.T, root, name string) string {
 	return found
 }
 
+// skd remove of a pack's last skill says what it took out, once and
+// consistently, and how to undo it; skd trash lists the entry by the
+// skill's name and why; restoring it by that name brings the pack back,
+// selected and linked, with no apply.
+func TestRemoveThenRestoreByName(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.skill("up/skills/grill-me", "grill-me")
+	up := e.repo("up")
+	e.ok(lib, "add", up, "--skill", "grill-me")
+	out := e.ok(lib, "remove", "grill-me")
+	if strings.Contains(out, "unlink 0 links") || strings.Count(out, "grill-me") < 2 ||
+		!strings.Contains(out, "− agents     grill-me") || !strings.Contains(out, "the pack is dropped") || !strings.Contains(out, "skd trash restore") {
+		t.Fatalf("remove said:\n%s", out)
+	}
+	if list := e.ok(lib, "list"); strings.Contains(list, "up") && strings.Contains(list, "1 of 1") {
+		t.Fatalf("pack still listed:\n%s", list)
+	}
+	trash := e.ok(lib, "trash")
+	if !strings.Contains(trash, "grill-me") || !strings.Contains(trash, "skd remove") {
+		t.Fatalf("trash:\n%s", trash)
+	}
+	res := e.ok(lib, "trash", "restore", "grill-me")
+	if !strings.Contains(res, "selected again in skills.toml: grill-me") || !strings.Contains(res, "+ agents") {
+		t.Fatalf("restore said:\n%s", res)
+	}
+	isLink(t, e.p(".agents/skills/grill-me"), lib)
+	if list := e.ok(lib, "list", "--flat"); !strings.Contains(list, "grill-me") {
+		t.Fatalf("not listed after restore:\n%s", list)
+	}
+	if toml, _ := os.ReadFile(filepath.Join(lib, "skills.toml")); !strings.Contains(string(toml), "grill-me") {
+		t.Fatalf("skills.toml:\n%s", toml)
+	}
+}
+
 // Everything skd itself moves into the trash can be restored: what apply
 // --force and adopt move out of an agent's directory, what update moves
 // aside in vendor/, a removed vendored skill and a purged pack.
@@ -83,9 +119,19 @@ func TestRestoreWhatEachCommandParks(t *testing.T) {
 			t.Errorf("nothing in the trash from %s:\n%s", o, out)
 		}
 	}
-	// Newest first: the pack, then what was parked before it.
+	// Newest first: the pack, then what was parked before it. Restoring
+	// the pack puts it back as it was, linked: its a is in .agents/skills
+	// again, where the a apply --force moved aside was, and skd never
+	// overwrites, so that one goes back only once the pack's a is
+	// taken out of that agent.
 	restored := map[string]bool{}
 	for _, it := range items {
+		if it.Origin == e.p(".agents/skills/a") {
+			if _, errOut, code := e.skd(lib, "trash", "restore", it.ID); code == 0 || !strings.Contains(errOut, "already exists") {
+				t.Fatalf("restored over the pack's a: exit %d %s", code, errOut)
+			}
+			e.ok(lib, "disable", "a", "--agent", "agents")
+		}
 		if _, err := os.Lstat(it.Origin); err == nil {
 			continue // b's new copy came back with the pack
 		}

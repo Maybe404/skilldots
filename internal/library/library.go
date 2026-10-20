@@ -236,8 +236,16 @@ func Git(dir string, args ...string) (string, error) {
 // running after a second is killed. A ctx that can never be done runs
 // git exactly as Git always has.
 func GitContext(ctx context.Context, dir string, args ...string) (string, error) {
+	return GitEnvContext(ctx, dir, nil, args...)
+}
+
+// GitEnvContext is GitContext with env added to git's environment.
+func GitEnvContext(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	if ctx.Done() != nil {
 		cancelTree(cmd)
 		cmd.WaitDelay = time.Second
@@ -257,7 +265,7 @@ func GitContext(ctx context.Context, dir string, args ...string) (string, error)
 			// the same, as long as none of them up to "--" starts with "-"
 			// (commits from the lock are hex, checked when it is read).
 			if older, ok := withoutEndOfOptions(args); ok {
-				return GitContext(ctx, dir, older...)
+				return GitEnvContext(ctx, dir, env, older...)
 			}
 			if slices.Contains(args, "--end-of-options") {
 				msg += i18n.T("\n(skd needs git 2.24 or later: this git does not know --end-of-options)")

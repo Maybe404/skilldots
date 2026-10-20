@@ -3,7 +3,6 @@ package skillmd
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,7 +41,7 @@ func Read(dir string) (Meta, error) {
 	defer f.Close()
 
 	var front []string
-	size := 0
+	size, closed := 0, false
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for i := 0; sc.Scan(); i++ {
@@ -54,6 +53,7 @@ func Read(dir string) (Meta, error) {
 			continue
 		}
 		if strings.TrimSpace(line) == "---" {
+			closed = true
 			break
 		}
 		if size += len(line) + 1; size > maxFront {
@@ -61,10 +61,17 @@ func Read(dir string) (Meta, error) {
 		}
 		front = append(front, line)
 	}
-	m, ok := parseYAML(strings.Join(front, "\n"))
-	if !ok {
-		m = parseLines(front)
+	// Without its closing "---" the "frontmatter" runs into the body:
+	// only its top-level "key: value" lines are read, as before, never
+	// the body's indented lines as part of a value.
+	m, ok := Meta{}, false
+	if closed {
+		m, ok = parseYAML(strings.Join(front, "\n"), front)
 	}
+	if !ok {
+		m = parseLines(front, closed)
+	}
+	m.Name = strings.TrimSpace(oneLine(m.Name))
 	m.Description = safetext.Clean(oneLine(m.Description), 0)
 	m.License = safetext.Clean(oneLine(m.License), 0)
 	if m.Name == "" {
@@ -74,41 +81,86 @@ func Read(dir string) (Meta, error) {
 }
 
 // parseYAML reads the keys skilldots uses from YAML frontmatter; ok is
-// false when it is not a YAML mapping.
-func parseYAML(front string) (m Meta, ok bool) {
-	var raw map[string]any
-	if err := yaml.Unmarshal([]byte(front), &raw); err != nil || raw == nil {
+// false when it is not a YAML mapping. The document is read as a node
+// tree and only the top-level mapping is looked at: decoding into a Go
+// map checks every key against every other, which upstream text with
+// thousands of repeated keys turns into seconds of work and gigabytes.
+//
+// A scalar is taken as written (Node.Value), not resolved to a type:
+// "name: 1.0", "010", "0x1F", "1e3", "True", "null", "~" or a date stay
+// what they look like, the way the line reader and agents read them.
+// EmptyName is set only for a name key whose value is empty. A "#" after
+// a space starts a YAML comment and is dropped, as YAML-reading agents
+// do; text that is not valid YAML keeps it (parseLines).
+func parseYAML(front string, lines []string) (m Meta, ok bool) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(front), &doc); err != nil || doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
 		return Meta{}, false
 	}
-	name, hasName := raw["name"]
-	m.Name = scalar(name)
-	m.EmptyName = hasName && m.Name == ""
-	m.Description = scalar(raw["description"])
-	m.License = scalar(raw["license"])
+	top := doc.Content[0]
+	if top.Kind != yaml.MappingNode {
+		return Meta{}, false
+	}
+	hasName := false
+	var nameNode *yaml.Node
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		k, v := top.Content[i], top.Content[i+1]
+		if k.Kind != yaml.ScalarNode {
+			continue
+		}
+		// A key given twice: the last one, as the line reader takes it.
+		switch k.Value {
+		case "name":
+			hasName, nameNode = true, v
+		case "description":
+			m.Description = scalar(v)
+		case "license":
+			m.License = scalar(v)
+		}
+	}
+	if hasName {
+		if s, isScalar := scalarOK(nameNode); isScalar {
+			m.Name = s
+			m.EmptyName = strings.TrimSpace(s) == ""
+		} else {
+			// A list or a mapping is not a name: what the line says, which
+			// is no valid skill name, so the skill is refused, not renamed.
+			m.Name = parseLines(lines, true).Name
+		}
+	}
 	return m, true
 }
 
-// scalar is a YAML value as text: strings, numbers and booleans; anything
-// else (a list, a mapping) is not a name or a description.
-func scalar(v any) string {
-	switch v := v.(type) {
-	case string:
-		return v
-	case int, int64, uint64, float64, bool:
-		return fmt.Sprint(v)
+// scalar is a YAML value as text, as written; anything else (a list, a
+// mapping) is not a name or a description.
+func scalar(n *yaml.Node) string {
+	s, _ := scalarOK(n)
+	return s
+}
+
+func scalarOK(n *yaml.Node) (string, bool) {
+	if n != nil && n.Kind == yaml.AliasNode && n.Alias != nil {
+		n = n.Alias
 	}
-	return ""
+	if n == nil || n.Kind != yaml.ScalarNode {
+		return "", false
+	}
+	return n.Value, true
 }
 
 // parseLines is the forgiving reader for frontmatter that is not YAML:
 // "key: value" lines, with indented lines continuing the value (a block
-// scalar marker such as ">" or "|-" starts an empty one).
-func parseLines(front []string) Meta {
+// scalar marker such as ">" or "|-" starts an empty one) when cont is set;
+// a blank line does not end a value.
+func parseLines(front []string, cont bool) Meta {
 	m := Meta{}
 	cur := ""
 	for _, line := range front {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
-			if t := strings.TrimSpace(line); t != "" && (cur == "description" || cur == "license") {
+			if t := strings.TrimSpace(line); cont && t != "" && (cur == "description" || cur == "license") {
 				if cur == "description" {
 					m.Description += " " + t
 				} else {

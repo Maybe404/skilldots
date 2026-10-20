@@ -21,6 +21,9 @@ func newTestLib(t *testing.T) (*library.Library, *targets.Registry, string) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	SetPlacedFile(filepath.Join(home, "placed.json"))
+	// Claude Code is installed on this machine: built-in agents that are
+	// not are left out of every apply (see absent).
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
 	lib := &library.Library{Root: root, Manifest: manifest.New([]string{"agents"}),
 		Lock: &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{}}}
 	reg, err := targets.NewRegistry("", nil)

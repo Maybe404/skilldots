@@ -488,16 +488,16 @@
 = 移除 %s
 
 @ Unlink %s
-= 取消链接 %s
+= 卸下 %s
 
 @ Unlink it from every agent. Your files stay where they are:
-= 从所有 agent 取消链接。你的文件原地不动：
+= 从所有 agent 上卸下。你的文件原地不动：
 
 @ unlink
-= 取消链接
+= 卸下
 
 @ unlinking %s
-= 取消链接 %s
+= 正在卸下 %s
 
 @ Purge %s
 = 清除 %s
@@ -576,7 +576,7 @@
 = 已 fork %s → %s
 
 @ unlinked %s from every agent; its files stay in %s
-= 已从所有 agent 取消链接 %s；它的文件仍留在 %s
+= 已把 %s 从所有 agent 上卸下；它的文件仍留在 %s
 
 @ %s had no skills left · %s
 = %s 里没有剩下的 skill 了 · %s
@@ -667,7 +667,7 @@
 = 用编辑器打开 skill（引入的 skill 会先问你是否 fork）
 
 @ remove skill (to trash) · unlink yours · purge pack
-= 移除 skill（进回收站）· 取消你自己 skill 的链接 · 清除来源
+= 移除 skill（进回收站）· 卸下你自己的 skill · 清除来源
 
 @ new skill of your own in skills/ or private/
 = 在 skills/ 或 private/ 里新建你自己的 skill
@@ -679,7 +679,7 @@
 = 回收站：恢复 skd 挪开的东西，或清空它
 
 @ agent targets: p pauses or resumes one, D sets the defaults, a approves a custom target
-= agent target：p 暂停或恢复，D 设为默认，a 批准自定义 target
+= agent target：p 暂停或恢复分发，D 设为默认，a 批准自定义 target
 
 @ back up: commit and push the library
 = 备份：提交并推送资料库
@@ -974,13 +974,13 @@
 = 关闭 · 保留在资料库里
 
 @ source directory is missing
-= 来源目录不存在
+= 源目录不存在
 
 @ not linked: %s
 = 未链接：%s
 
 @ space toggle · e agents · d unlink · o open in your editor
-= 空格切换 · e 选 agent · d 取消链接 · o 用编辑器打开
+= 空格切换 · e 选 agent · d 卸下 · o 用编辑器打开
 
 @  · f fork
 =  · f fork
@@ -1055,34 +1055,34 @@
 = 默认 · %s
 
 @ paused · %s
-= 已暂停 · %s
+= 已暂停分发 · %s
 
 @ pause/resume
-= 暂停/恢复
+= 暂停/恢复分发
 
 @ Not in use: there is nothing to pause.
-= 未启用：没有可暂停的。
+= 未启用：没有可暂停分发的。
 
 @ resuming %s
-= 正在恢复 %s
+= 正在恢复分发 %s
 
 @ Pause %s
-= 暂停 %s
+= 暂停分发 %s
 
 @ skd takes out the links it made there and links nothing until it is resumed.
-= skd 撤掉自己在那里建的链接，恢复之前不再往那里链接。
+= skd 撤掉自己在那里建的链接，恢复分发之前不再往那里链接。
 
 @ Every skill keeps it selected; p again puts the links back.
-= 每个 skill 仍保留对它的选择；再按 p 恢复链接。
+= 每个 skill 仍保留对它的选择；再按 p 放回链接。
 
 @ The pause is kept in skills.toml, so it reaches every machine using the library.
 = 暂停状态记在 skills.toml 里，会同步到使用这个资料库的每台机器。
 
 @ pause
-= 暂停
+= 暂停分发
 
 @ pausing %s
-= 正在暂停 %s
+= 正在暂停分发 %s
 
 @ Not in use: approve it first.
 = 未启用：请先批准它。
@@ -1091,4 +1091,22 @@
 = 正在设置默认 agent
 
 @ ‖ paused: %s
-= ‖ 已暂停：%s
+= ‖ 已暂停分发：%s
+
+@ restored %s; selected and linked again
+= 已恢复 %s，并重新选中、重新链接
+
+@ keep the filter
+= 保留过滤
+
+@ clear the filter
+= 清除过滤
+
+@ %d of %d shown
+= 显示 %d / %d
+
+@ nothing matches the filter
+= 没有符合过滤条件的条目
+
+@ not installed here, skipped: %s
+= 本机没有安装，已跳过：%s

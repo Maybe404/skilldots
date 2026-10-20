@@ -48,6 +48,10 @@ type Entry struct {
 	// UnknownTargets are names in TargetNames the registry does not know.
 	// They are skipped; links already recorded for them are left alone.
 	UnknownTargets []string `json:",omitempty"`
+	// Absent are built-in agents in TargetNames that are not installed on
+	// this machine (targets.Installed): nothing is linked or made for
+	// them here, and what the lock records for them is kept.
+	Absent []string `json:",omitempty"`
 	// Missing is set when the source dir is absent (e.g. not vendored yet).
 	Missing bool
 	// LinkedVia is the symbolic link inside the library on the way to Dir,
@@ -97,7 +101,13 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 				e.Description = meta.Description
 			}
 		}
-		e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
+		if slices.Contains(lib.Manifest.Targets.Disabled, SharedTarget) {
+			// Nothing goes into the shared directory while it is paused:
+			// every agent that reads it gets its own link.
+			e.TargetNames = targets.ExpandNamesUnshared(e.TargetNames, lib.Manifest.Targets.Default, reg.Present())
+		} else {
+			e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
+		}
 		for _, n := range e.TargetNames {
 			if slices.Contains(lib.Manifest.Targets.Disabled, n) {
 				continue
@@ -110,6 +120,10 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 				} else {
 					unknown[n] = append(unknown[n], e.LinkName)
 				}
+				continue
+			}
+			if absent(t) {
+				e.Absent = append(e.Absent, n)
 				continue
 			}
 			e.Targets = append(e.Targets, t)
@@ -234,6 +248,19 @@ func collect(lib *library.Library) ([]Entry, []string) {
 		}
 	}
 	return out, warnings
+}
+
+// SharedTarget is the cross-agent directory ~/.agents/skills: skd makes it
+// on any machine, as the agents that read it are not told apart.
+const SharedTarget = targets.Shared
+
+// absent reports whether t is a built-in agent that is not installed on
+// this machine (neither its skill directory nor the one holding it is
+// there). skills.toml travels with the library: a target written on a
+// machine that has the agent, or "*" expanded there, must not make
+// ~/.claude/skills on one that does not.
+func absent(t targets.Target) bool {
+	return t.Builtin && t.Name != SharedTarget && !targets.Installed(t.Path)
 }
 
 // AllInstalled is targets.AllInstalled: the default targets and every

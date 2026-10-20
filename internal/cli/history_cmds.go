@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -114,8 +115,15 @@ func printRecord(c *ctx, r app.UpdateRecord) {
 	}
 }
 
+// tildePath writes a path in the home directory as ~/…, as `skd list`
+// shows the library.
 func tildePath(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || home == string(filepath.Separator) {
+		return p
+	}
+	home = strings.TrimSuffix(home, string(filepath.Separator))
+	if p == home || strings.HasPrefix(p, home+string(filepath.Separator)) {
 		return "~" + strings.TrimPrefix(p, home)
 	}
 	return p

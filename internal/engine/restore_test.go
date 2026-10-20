@@ -505,7 +505,8 @@ func TestTrashShowsNoUnsafeNames(t *testing.T) {
 // What skd moves to the trash is named so that `skd trash` shows it and
 // restores it by the ID it shows, whatever it was called: the vendored
 // directory of the pack owner/.github (skd remove of its last skill) is
-// listed as "github", and restored to vendor/owner/.github; other names
+// listed as "owner-.github", after its repository, and restored to
+// vendor/owner/.github; other names
 // a skill may not have are made into one.
 func TestTrashNamesWhatItMovesAsItShowsThem(t *testing.T) {
 	lib, reg, _ := restoreLib(t)
@@ -540,7 +541,7 @@ func TestTrashNamesWhatItMovesAsItShowsThem(t *testing.T) {
 	}
 	id := ""
 	for _, it := range items {
-		if it.Name == "github" {
+		if it.Name == "owner-.github" {
 			id = it.ID
 		}
 	}

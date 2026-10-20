@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/manifest"
@@ -12,9 +14,15 @@ type TargetsOutcome struct {
 	Label string
 	// Pack is set when a whole pack was edited.
 	Pack bool
-	// Targets is the new target list.
+	// Targets is the new target list, Before the one it replaced.
 	Targets []string
+	Before  []string
 	Apply   *ApplyOutcome
+	// NotThere are the agents Disable was asked to take it off that it
+	// was not on (nothing changed for them); AlreadyThere, those Enable
+	// was asked to put it on that it was already on.
+	NotThere     []string
+	AlreadyThere []string
 }
 
 // EditTargets replaces the targets of a skill (or, when r names no skill
@@ -35,6 +43,7 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 			return nil, err
 		}
 		if e != nil {
+			out.Before = append([]string(nil), e.TargetNames...)
 			next = nonNil(edit(append([]string(nil), e.TargetNames...)))
 			setEntryTargets(m, e, next)
 			out.Label = e.LinkName
@@ -60,6 +69,7 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 		}
 		// An edit names agents: "*" becomes the agents it stands for here.
 		cur = engine.ExpandTargets(cur, m.Targets.Default, s.Reg)
+		out.Before = append([]string(nil), cur...)
 		next = nonNil(edit(cur))
 		p.Targets = &next
 		out.Label, out.Pack = p.Repo, true
@@ -75,18 +85,38 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 
 // Enable adds agents (the manifest default when none) to r's targets.
 func (s *Session) Enable(r Ref, agents []string) (*TargetsOutcome, error) {
-	return s.EditTargets(r, func(cur []string) []string {
+	out, err := s.EditTargets(r, func(cur []string) []string {
 		if len(agents) == 0 {
 			return dedupe(append(cur, s.Lib.Manifest.Targets.Default...))
 		}
 		return dedupe(append(cur, agents...))
 	})
+	if out != nil {
+		for _, a := range agents {
+			if slices.Contains(out.Before, a) {
+				out.AlreadyThere = append(out.AlreadyThere, a)
+			}
+		}
+	}
+	return out, err
 }
 
 // Disable removes agents (all when none) from r's targets. The library
 // keeps the files.
 func (s *Session) Disable(r Ref, agents []string) (*TargetsOutcome, error) {
-	return s.EditTargets(r, func(cur []string) []string {
+	out, err := s.EditTargets(r, s.dropAgents(agents))
+	if out != nil {
+		for _, a := range agents {
+			if !slices.Contains(out.Before, a) {
+				out.NotThere = append(out.NotThere, a)
+			}
+		}
+	}
+	return out, err
+}
+
+func (s *Session) dropAgents(agents []string) func(cur []string) []string {
+	return func(cur []string) []string {
 		if len(agents) == 0 {
 			return []string{}
 		}
@@ -101,7 +131,7 @@ func (s *Session) Disable(r Ref, agents []string) (*TargetsOutcome, error) {
 			}
 		}
 		return out
-	})
+	}
 }
 
 // SetTargets sets r's targets to exactly agents; none keeps it in the
