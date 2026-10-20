@@ -1176,3 +1176,9 @@
 
 @ %s is not installed on this machine: %s not linked there
 = 本机没有安装 %s：有 %s 没有链接到那里
+
+@ reads agents
+= 也读 agents
+
+@ reads agents: the agent also reads ~/.agents/skills, so a skill for every installed agent ("*") reaches it there, not twice
+= 也读 agents：这个 agent 也会读 ~/.agents/skills，所以装给“本机所有 agent”（"*"）的 skill 只从那里加载，不会加载两份

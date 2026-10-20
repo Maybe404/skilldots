@@ -25,7 +25,15 @@ type Target struct {
 	// resolved): for a custom target, the directory a person approved.
 	// Writes into the target check that Path still leads there (Intact).
 	Real string `json:"-"`
+	// ReadsShared is set for a built-in agent whose own documentation or
+	// source says it also reads the shared directory ~/.agents/skills
+	// (Shared): linked into both, it would load a skill twice.
+	ReadsShared bool `json:",omitempty"`
 }
+
+// Shared is the built-in target of the cross-agent directory
+// ~/.agents/skills, which many agents read besides their own.
+const Shared = "agents"
 
 // Intact reports why Path no longer leads to Real, the directory the
 // registry found (and, for a custom target, a person approved): a
@@ -47,33 +55,57 @@ func (t Target) Intact() error {
 
 // builtin lists known agents by their global skill directory relative to $HOME.
 // "agents" is the cross-agent convention many tools read; it comes first.
-var builtin = []struct{ name, rel string }{
-	{"agents", ".agents/skills"},
-	{"claude", ".claude/skills"},
-	{"codex", ".codex/skills"},
-	{"gemini", ".gemini/skills"},
-	{"cursor", ".cursor/skills"},
-	{"opencode", ".config/opencode/skills"},
-	{"copilot", ".copilot/skills"},
-	{"windsurf", ".codeium/windsurf/skills"},
-	{"grok", ".grok/skills"},
-	{"kiro", ".kiro/skills"},
-	{"qwen", ".qwen/skills"},
-	{"trae", ".trae/skills"},
-	{"goose", ".config/goose/skills"},
-	{"antigravity", ".gemini/antigravity/skills"},
-	{"roo", ".roo/skills"},
-	{"kilocode", ".kilocode/skills"},
-	{"continue", ".continue/skills"},
-	{"augment", ".augment/skills"},
-	{"junie", ".junie/skills"},
-	{"iflow", ".iflow/skills"},
-	{"qoder", ".qoder/skills"},
-	{"codebuddy", ".codebuddy/skills"},
-	{"openhands", ".openhands/skills"},
-	{"crush", ".config/crush/skills"},
-	{"factory", ".factory/skills"},
-	{"pi", ".pi/agent/skills"},
+//
+// shared marks the agents that also read ~/.agents/skills, by their own
+// documentation or source (checked 2026-10): Codex (learn.chatgpt.com
+// docs/build-skills; ~/.codex/skills is its deprecated location),
+// Gemini CLI, Cursor, GitHub Copilot (CLI and VS Code), OpenCode,
+// Windsurf, Qwen Code (source: SKILL_PROVIDER_CONFIG_DIRS), Goose, Roo
+// Code, Kilo Code, Augment, Junie, Factory, pi, Crush (source), OpenHands
+// (source) and Grok. Claude Code, Kiro, Antigravity, Continue (source),
+// Qoder, CodeBuddy and iFlow list only their own directory; nothing
+// official says what Trae reads at the user level.
+var builtin = []struct {
+	name, rel string
+	shared    bool
+}{
+	{"agents", ".agents/skills", false},
+	{"claude", ".claude/skills", false},
+	{"codex", ".codex/skills", true},
+	{"gemini", ".gemini/skills", true},
+	{"cursor", ".cursor/skills", true},
+	{"opencode", ".config/opencode/skills", true},
+	{"copilot", ".copilot/skills", true},
+	{"windsurf", ".codeium/windsurf/skills", true},
+	{"grok", ".grok/skills", true},
+	{"kiro", ".kiro/skills", false},
+	{"qwen", ".qwen/skills", true},
+	{"trae", ".trae/skills", false},
+	{"goose", ".config/goose/skills", true},
+	{"antigravity", ".gemini/antigravity/skills", false},
+	{"roo", ".roo/skills", true},
+	{"kilocode", ".kilocode/skills", true},
+	{"continue", ".continue/skills", false},
+	{"augment", ".augment/skills", true},
+	{"junie", ".junie/skills", true},
+	{"iflow", ".iflow/skills", false},
+	{"qoder", ".qoder/skills", false},
+	{"codebuddy", ".codebuddy/skills", false},
+	{"openhands", ".openhands/skills", true},
+	{"crush", ".config/crush/skills", true},
+	{"factory", ".factory/skills", true},
+	{"pi", ".pi/agent/skills", true},
+}
+
+// SharedReaders are the built-in agents that read ~/.agents/skills too.
+func SharedReaders() []string {
+	var out []string
+	for _, b := range builtin {
+		if b.shared {
+			out = append(out, b.name)
+		}
+	}
+	return out
 }
 
 // Installed reports whether the agent whose skill directory is path looks
@@ -132,7 +164,7 @@ func NewRegistry(lib string, custom map[string]struct{ Path, Mode string }) (*Re
 	r := &Registry{home: home, lib: lib, custom: map[string]struct{ Path, Mode string }{}, targets: map[string]Target{}, withheld: map[string]Withheld{}}
 	for _, b := range builtin {
 		p := filepath.Join(home, filepath.FromSlash(b.rel))
-		r.targets[b.name] = Target{Name: b.name, Path: p, Mode: "link", Builtin: true, Real: fsutil.Resolve(p)}
+		r.targets[b.name] = Target{Name: b.name, Path: p, Mode: "link", Builtin: true, Real: fsutil.Resolve(p), ReadsShared: b.shared}
 	}
 	for name, c := range custom {
 		if c.Mode == "" {
@@ -240,7 +272,23 @@ const AllInstalled = "*"
 // ExpandNames replaces AllInstalled in names by defaults and the built-in
 // agents among present (Registry.Present, in its order), without
 // duplicates. Lists without it are returned as they are.
+//
+// When the list then has the shared directory (Shared), an installed agent
+// that reads it too (ReadsShared) is left out: it gets the skill from
+// there, and linked into its own directory as well it would load it
+// twice. An agent named in names or defaults is kept: that is a choice.
 func ExpandNames(names, defaults []string, present []Target) []string {
+	return expandNames(names, defaults, present, true)
+}
+
+// ExpandNamesUnshared is ExpandNames for a machine where nothing is linked
+// into the shared directory (it is paused): every installed agent is
+// kept.
+func ExpandNamesUnshared(names, defaults []string, present []Target) []string {
+	return expandNames(names, defaults, present, false)
+}
+
+func expandNames(names, defaults []string, present []Target, shared bool) []string {
 	if !slices.Contains(names, AllInstalled) {
 		return names
 	}
@@ -250,6 +298,7 @@ func ExpandNames(names, defaults []string, present []Target) []string {
 			out = append(out, n)
 		}
 	}
+	viaShared := shared && (slices.Contains(names, Shared) || slices.Contains(defaults, Shared))
 	for _, n := range names {
 		if n != AllInstalled {
 			add(n)
@@ -259,7 +308,7 @@ func ExpandNames(names, defaults []string, present []Target) []string {
 			add(d)
 		}
 		for _, t := range present {
-			if t.Builtin {
+			if t.Builtin && !(viaShared && t.ReadsShared) {
 				add(t.Name)
 			}
 		}

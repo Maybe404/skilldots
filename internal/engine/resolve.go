@@ -101,7 +101,13 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 				e.Description = meta.Description
 			}
 		}
-		e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
+		if slices.Contains(lib.Manifest.Targets.Disabled, SharedTarget) {
+			// Nothing goes into the shared directory while it is paused:
+			// every agent that reads it gets its own link.
+			e.TargetNames = targets.ExpandNamesUnshared(e.TargetNames, lib.Manifest.Targets.Default, reg.Present())
+		} else {
+			e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
+		}
 		for _, n := range e.TargetNames {
 			if slices.Contains(lib.Manifest.Targets.Disabled, n) {
 				continue
@@ -246,7 +252,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 
 // SharedTarget is the cross-agent directory ~/.agents/skills: skd makes it
 // on any machine, as the agents that read it are not told apart.
-const SharedTarget = "agents"
+const SharedTarget = targets.Shared
 
 // absent reports whether t is a built-in agent that is not installed on
 // this machine (neither its skill directory nor the one holding it is
