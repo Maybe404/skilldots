@@ -79,13 +79,20 @@ export function StatusBar() {
     left = (
       <span className="flex min-w-0 items-center truncate whitespace-pre">
         <span>{checking ? t("checking") : outdated ? t("checkedAgoShort", { ago: ago(outdated.checked, t) }) : t("neverChecked")}</span>
-        {sep}
-        {updatablePacks.length ? (
-          <Button variant="quiet" size="inline" className="no-underline hover:underline" onClick={() => navigate("sources")}>
-            {t("updatesAvailable", { n: updatablePacks.length })}
-          </Button>
-        ) : (
-          <span>{t("allUpToDate")}</span>
+        {/* Up to date only says something once the upstreams were checked. */}
+        {updatablePacks.length > 0 && (
+          <>
+            {sep}
+            <Button variant="quiet" size="inline" className="no-underline hover:underline" onClick={() => navigate("sources")}>
+              {t("updatesAvailable", { n: updatablePacks.length })}
+            </Button>
+          </>
+        )}
+        {!updatablePacks.length && outdated && !checking && (
+          <>
+            {sep}
+            <span>{t("allUpToDate")}</span>
+          </>
         )}
         {sep}
         <span>{status?.changes ? t("unsynced", { n: status.changes }) : t("synced")}</span>

@@ -41,7 +41,7 @@
 = 默认的 agent（%s）
 
 @ the pack's agents (%s)
-= 这个 pack 的 agent（%s）
+= 这个来源的 agent（%s）
 
 @ none ticked: %s
 = 一个都不勾选时：%s
@@ -62,7 +62,7 @@
 = 创建 %s
 
 @ skills/ is published with the library; private/ stays on this machine.
-= skills/ 会随库一起发布；private/ 只留在这台机器上。
+= skills/ 会随资料库一起发布；private/ 只留在这台机器上。
 
 @ in skills/
 = 放进 skills/
@@ -92,7 +92,7 @@
 = 把 %s fork 为 %s
 
 @ Copy it into your library so you can edit it.
-= 把它复制进你的库，这样你就能编辑它。
+= 把它复制进你的资料库，这样你就能编辑它。
 
 @ The upstream copy is deselected; updates no longer touch your fork.
 = 上游的那份会被取消选择；更新不会再动你的 fork。
@@ -111,16 +111,16 @@
 = 已停用 target 遗留的
 
 @ nothing to adopt · %s
-= 没有可接管的 · %s
+= 没有可收编的 · %s
 
 @ Scan · adopt
-= 扫描 · 接管
+= 扫描 · 收编
 
 @ %s · ticked entries are taken over; displaced directories go to the trash
-= %s · 勾选的条目会被接管；被替换的目录会进回收站
+= %s · 勾选的条目会被收编；被替换的目录会进回收站
 
 @ adopting %d
-= 接管 %d 项
+= 收编 %d 项
 
 # Trash
 @   cannot be restored
@@ -130,7 +130,7 @@
 = 恢复
 
 @ skd only puts back what it took from an agent's skill
-= skd 只会放回它从 agent 的 skill 目录或库的 vendor/ 里
+= skd 只会放回它从 agent 的 skill 目录或资料库的 vendor/ 里
 
 @ directory or the library's vendor/. Move it by hand if you trust it.
 = 拿走的东西。如果你信任它，请手动挪动。
@@ -237,7 +237,7 @@
 = 放回原处，使用 --force 时还会把挡路的东西挪进
 
 @ the library trash. Approve only a directory you meant for skills.
-= 库的回收站。请只批准你确实打算用来放 skill 的目录。
+= 资料库的回收站。请只批准你确实打算用来放 skill 的目录。
 
 @ approving %s
 = 批准 %s
@@ -283,7 +283,7 @@
 = 更新历史 · %s
 
 @ newest first · recorded in %s in the library (skd history)
-= 最新的在前 · 记录在库里的 %s（skd history）
+= 最新的在前 · 记录在资料库里的 %s（skd history）
 
 @ linking failed: %s · A applies again
 = 链接失败：%s · 按 A 重新应用
@@ -322,10 +322,10 @@
 = 更新
 
 @ nothing to update upstream · c checks again · u on a pack updates it anyway
-= 上游没有可更新的 · 按 c 再检查一次 · 在某个 pack 上按 u 可仍然更新它
+= 上游没有可更新的 · 按 c 再检查一次 · 在某个来源上按 u 可仍然更新它
 
 @ every pack is ticked · space unticks one · enter updates the ticked packs · recorded in the update history (h)
-= 所有 pack 都已勾选 · 空格取消勾选 · 回车更新已勾选的 pack · 会记录在更新历史里（按 h）
+= 所有来源都已勾选 · 空格取消勾选 · 回车更新已勾选的来源 · 会记录在更新历史里（按 h）
 
 @ select a skill to open
 = 请先选中要打开的 skill
@@ -395,7 +395,7 @@
 = 扫描 agent 目录
 
 @ Back up the library
-= 备份库
+= 备份资料库
 
 @ Commit everything in %s and push it to its git remote (skd sync).
 = 提交 %s 里的所有内容，并推送到它的 git 远程仓库（skd sync）。
@@ -416,7 +416,7 @@
 = 完成后再按 q · ctrl+c 在完成后退出
 
 @ no packs to update · a to add one
-= 没有可更新的 pack · 按 a 添加一个
+= 没有可更新的来源 · 按 a 添加一个
 
 @ checking upstream
 = 检查上游
@@ -440,19 +440,19 @@
 = 安装 %s
 
 @ disabling %s
-= 停用 %s
+= 正在卸下 %s
 
 @ no default agents in skills.toml · e to pick agents
 = skills.toml 里没有默认 agent · 按 e 选择 agent
 
 @ enabling %s
-= 启用 %s
+= 正在装上 %s
 
 @ Agents for every skill in %s
 = %s 里所有 skill 的 agent
 
 @ select a skill or a pack first
-= 请先选中一个 skill 或 pack
+= 请先选中一个 skill 或来源
 
 @ not found on this machine
 = 本机上没有找到
@@ -464,7 +464,7 @@
 = 本机上没有找到 agent 的 skill 目录
 
 @ only agents installed here are listed · none = keep in library, link nowhere
-= 只列出本机上装了的 agent · 都不选 = 留在库里，不链接到任何地方
+= 只列出本机上装了的 agent · 都不选 = 留在资料库里，不链接到任何地方
 
 @ linking
 = 链接
@@ -476,10 +476,10 @@
 = 移除 %s
 
 @ Unlink it from every agent and move its library directory to the trash.
-= 从所有 agent 取消链接，并将库中的目录移入回收站。
+= 从所有 agent 取消链接，并将资料库中的目录移入回收站。
 
 @ The files move to the library trash: t restores them.
-= 文件会移到库的回收站：按 t 可恢复。
+= 文件会移到资料库的回收站：按 t 可恢复。
 
 @ remove
 = 移除
@@ -506,10 +506,10 @@
 = 取消订阅，并从 agent 目录中移除 %d 个链接。
 
 @ vendor/%s moves to the library trash (t restores it).
-= vendor/%s 会移到库的回收站（按 t 可恢复）。
+= vendor/%s 会移到资料库的回收站（按 t 可恢复）。
 
 @ purge pack
-= 清除 pack
+= 清除来源
 
 @ purging %s
 = 清除 %s
@@ -555,7 +555,7 @@
 =  · 没有找到许可证：再分发之前请先确认
 
 @ no packs to update
-= 没有可更新的 pack
+= 没有可更新的来源
 
 @ 0 changed
 = 0 个变更
@@ -567,7 +567,7 @@
 = 变更 %s …… 还有 %d 个
 
 @ updated %d pack(s): %s · %d added · %d new upstream
-= 已更新 %d 个 pack：%s · 新增 %d 个 · 上游新增 %d 个
+= 已更新 %d 个来源：%s · 新增 %d 个 · 上游新增 %d 个
 
 @  · h shows what changed
 =  · 按 h 查看改了什么
@@ -582,10 +582,10 @@
 = %s 里没有剩下的 skill 了 · %s
 
 @ removed %s; its files are in the library trash (t)
-= 已移除 %s；它的文件在库的回收站里（按 t）
+= 已移除 %s；它的文件在资料库的回收站里（按 t）
 
 @ purged %s; vendor/%s is in the library trash (t)
-= 已清除 %s；vendor/%s 在库的回收站里（按 t）
+= 已清除 %s；vendor/%s 在资料库的回收站里（按 t）
 
 @ pushed to %s
 = 已推送到 %s
@@ -594,7 +594,7 @@
 = 没有配置远程仓库；请这样添加：skd sync --remote <git-url> · %s
 
 @ adopted %d
-= 已接管 %d 项
+= 已收编 %d 项
 
 @ restored %s
 = 已恢复 %s
@@ -637,19 +637,19 @@
 = 切换栏
 
 @ open the pack under the cursor
-= 打开光标所在的 pack
+= 打开光标所在的来源
 
 @ filter this column (esc clears)
 = 过滤这一栏（esc 清除）
 
 @ enable / disable the skill (installs an upstream one)
-= 启用 / 停用 skill（上游的 skill 会被安装）
+= 装上 / 卸下 skill（上游的 skill 会先引入）
 
 @ add a repository: pick skills or categories, alias, agents
 = 添加仓库：挑选 skill 或分类、别名、agent
 
 @ update this pack / every pack with upstream changes
-= 更新这个 pack / 所有上游有变化的 pack
+= 更新这个来源 / 所有上游有变化的来源
 
 @ update history: what each update changed, with upstream's commit messages
 = 更新历史：每次更新改了什么，附上游的 commit 信息
@@ -658,22 +658,22 @@
 = 重新检查上游有无变化（启动时会自动运行；skd outdated）
 
 @ choose agents for the skill or pack
-= 为 skill 或 pack 选择 agent
+= 为 skill 或来源选择 agent
 
 @ fork a vendored or app skill into your library (rename it there)
-= 把引入的或应用自带的 skill fork 进你的库（可在此改名）
+= 把引入的或应用自带的 skill fork 进你的资料库（可在此改名）
 
 @ open the skill in your editor (asks to fork a vendored one first)
 = 用编辑器打开 skill（引入的 skill 会先问你是否 fork）
 
 @ remove skill (to trash) · unlink yours · purge pack
-= 移除 skill（进回收站）· 取消你自己 skill 的链接 · 清除 pack
+= 移除 skill（进回收站）· 取消你自己 skill 的链接 · 清除来源
 
 @ new skill of your own in skills/ or private/
 = 在 skills/ 或 private/ 里新建你自己的 skill
 
 @ scan agent directories and adopt what skd does not manage
-= 扫描 agent 目录，接管 skd 尚未管理的东西
+= 扫描 agent 目录，收编 skd 尚未管理的东西
 
 @ trash: restore what skd set aside, or empty it
 = 回收站：恢复 skd 挪开的东西，或清空它
@@ -682,7 +682,7 @@
 = agent target：p 暂停或恢复，D 设为默认，a 批准自定义 target
 
 @ back up: commit and push the library
-= 备份：提交并推送库
+= 备份：提交并推送资料库
 
 @ apply pending link changes
 = 应用待处理的链接改动
@@ -703,7 +703,7 @@
 = 退出 · 忙碌时：完成后退出，按两次：立即停止
 
 @ Nothing is deleted outright: removed files go to <library>/.trash;
-= 不会直接删除任何东西：被移除的文件会进入 <库>/.trash；
+= 不会直接删除任何东西：被移除的文件会进入 <资料库>/.trash；
 
 @ t lists them and restores them. Emptying the trash asks twice.
 = 按 t 可以查看并恢复它们。清空回收站会确认两次。
@@ -799,7 +799,7 @@
 = skd：无法停止它的进程：%v\n
 
 @ stopped %s before it finished; run `skd` again to check the library (`git status` in it shows what was left half-way)
-= %s 在完成之前被停止了；请再运行一次 `skd` 检查库（在库里运行 `git status` 可看到做到一半的东西）
+= %s 在完成之前被停止了；请再运行一次 `skd` 检查资料库（在资料库里运行 `git status` 可看到做到一半的东西）
 
 # Screen
 @ window too small (%d×%d) · need %d×%d · q quits
@@ -815,10 +815,10 @@
 = ↑ %d 个待更新
 
 @ ↑ 1 pack has updates
-= ↑ 有 1 个 pack 有更新
+= ↑ 有 1 个来源有更新
 
 @ ↑ %d packs have updates
-= ↑ 有 %d 个 pack 有更新
+= ↑ 有 %d 个来源有更新
 
 @ %d check failed
 = %d 个检查失败
@@ -902,7 +902,7 @@
 =  · 修复后按 r 重新加载
 
 @ Your library is empty
-= 你的库是空的
+= 你的资料库是空的
 
 @ Press 
 = 按 
@@ -935,7 +935,7 @@
 = vendor/ 里缺失 · 按 u 重新拉取
 
 @ off · in library
-= 关闭 · 在库里
+= 关闭 · 在资料库里
 
 @   ↑ changed
 =   ↑ 已变更
@@ -962,7 +962,7 @@
 = 链接名 %s（上游名 %s）· %s
 
 @ your skill · skills/, published with the library
-= 你自己的 skill · skills/，随库一起发布
+= 你自己的 skill · skills/，随资料库一起发布
 
 @ private · this machine only, never pushed
 = 私有 · 仅本机，永远不推送
@@ -971,7 +971,7 @@
 = app · 随 %s 一起提供
 
 @ off · kept in library
-= 关闭 · 保留在库里
+= 关闭 · 保留在资料库里
 
 @ source directory is missing
 = 来源目录不存在
@@ -1025,7 +1025,7 @@
 = 清除
 
 @ MINE
-= 我的
+= 本地
 
 @ PRIVATE
 = 私有
@@ -1034,7 +1034,7 @@
 = 应用
 
 @ PACKS
-= PACKS
+= 来源
 
 @ reloaded
 = 已重新加载
@@ -1076,7 +1076,7 @@
 = 每个 skill 仍保留对它的选择；再按 p 恢复链接。
 
 @ The pause is kept in skills.toml, so it reaches every machine using the library.
-= 暂停状态记在 skills.toml 里，会同步到使用这个库的每台机器。
+= 暂停状态记在 skills.toml 里，会同步到使用这个资料库的每台机器。
 
 @ pause
 = 暂停

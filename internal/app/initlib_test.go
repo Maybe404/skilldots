@@ -33,6 +33,10 @@ func TestInitLibraryInstallsSelfSkillForDetectedAgents(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
 
 	root := filepath.Join(home, "lib")
+	// Claude Code is installed, so it is a default target from the start.
+	if got := app.DefaultTargets(); !slices.Equal(got, []string{"agents", "claude"}) {
+		t.Fatalf("default targets = %v, want [agents claude]", got)
+	}
 	if err := app.InitLibrary(root, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -65,8 +69,8 @@ func TestInitLibraryInstallsSelfSkillForDetectedAgents(t *testing.T) {
 		t.Fatal("a directory was made for an agent that is not installed")
 	}
 	// The defaults first: an older skd, which ignores "*", still links those.
-	if p := s.Lib.Manifest.FindPack(app.SelfRepo); p == nil || p.Targets == nil || !slices.Equal(*p.Targets, []string{"agents", "*"}) {
-		t.Fatalf("the skilldots pack should target [agents *], got %+v", p)
+	if p := s.Lib.Manifest.FindPack(app.SelfRepo); p == nil || p.Targets == nil || !slices.Equal(*p.Targets, []string{"agents", "claude", "*"}) {
+		t.Fatalf("the skilldots pack should target [agents claude *], got %+v", p)
 	}
 
 	// An agent installed later gets the skill at the next apply.
@@ -131,5 +135,15 @@ func TestHasSelfSkillCountsAFork(t *testing.T) {
 	}
 	if !s.HasSelfSkill() {
 		t.Fatal("a fork of skilldots in skills/ does not count")
+	}
+}
+
+// Without Claude Code a new library links into ~/.agents/skills only: no
+// ~/.claude is made for an agent that is not there.
+func TestDefaultTargetsWithoutClaude(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got := app.DefaultTargets(); !slices.Equal(got, []string{"agents"}) {
+		t.Fatalf("default targets = %v, want [agents]", got)
 	}
 }

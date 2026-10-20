@@ -1,4 +1,4 @@
-skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的库，并把它们链接到每个 agent 的 skill 目录。
+skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库，并把它们链接到每个 agent 的 skill 目录。
 
 用法：
   skd [flags]
@@ -8,38 +8,38 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的库，并
   add         订阅一个仓库，并挑选要引入的 skill
   adopt       把其他工具装的 skill 纳入 skilldots 管理
   apply       让 agent 目录与清单一致
-  clone       克隆一个库（你在另一台机器上的备份）并应用它
+  clone       克隆一个资料库（你在另一台机器上的备份）并应用它
   completion  为指定的 shell 生成自动补全脚本
   config      查看或修改设置（editor、theme、lang）
-  disable     从 agent 取消 skill（或 pack）的链接；库里仍保留
+  disable     从 agent 取消 skill（或来源）的链接；资料库里仍保留
   edit        用编辑器打开 skill 的目录
-  enable      把 skill（或整个 pack）链接到 agent
+  enable      把 skill（或整个来源）链接到 agent
   fork        把引入的 skill 复制到 skills/ 以便编辑；上游从此不再动它
   help        查看任意命令的帮助
   history     每次更新改了什么：commit、skill 以及上游的 commit 信息
-  init        创建库（默认 ~/.skilldots）
-  list        显示 pack 和 skill（除非展开，每个 pack 一行）
+  init        创建资料库（默认 ~/.skilldots）
+  list        显示来源和 skill（除非展开，每个来源一行）
   new         在 skills/（或 private/）里新建一个你自己的 skill 骨架
   outdated    检查所选 skill 在上游的变化，不做任何改动
-  path        打印 skill 的文件在库里的位置
-  purge       彻底清除一个 pack：清单、锁、vendor/ 和所有链接
-  remove      将库中的 skill 移入回收站，并从所有 agent 取消链接
+  path        打印 skill 的文件在资料库里的位置
+  purge       彻底清除一个来源：清单、锁、vendor/ 和所有链接
+  remove      将资料库中的 skill 移入回收站，并从所有 agent 取消链接
   scan        盘点本机上每个 agent 的 skill 目录
   show        列出一个仓库提供的 skill，不安装任何东西
-  sync        提交库并推送到它的 git 远程仓库（你的备份）
+  sync        提交资料库并推送到它的 git 远程仓库（你的备份）
   targets     列出已知的 agent target，以及它们在本机是否存在
   trash       skd 挪开的东西：列出、恢复或清空（清空只能由终端前的人来做）
-  update      拉取 pack 的上游改动，并重新引入所选的 skill
-  use         让 skd 从现在起使用一个已有的库目录
+  update      拉取来源的上游改动，并重新引入所选的 skill
+  use         让 skd 从现在起使用一个已有的资料库目录
 
 选项：
-  -h, --help              skd 的帮助
-      --json              机器可读的输出
-      --lang string       skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
-      --library skd use   库目录（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的库，或 ~/.skilldots）
-      --simple            使用问答式菜单，而不是全屏仪表盘
-      --theme string      配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
-  -v, --version           skd 的版本
-  -y, --yes               对所有提问回答"是"
+  -h, --help           skd 的帮助
+      --json           机器可读的输出
+      --lang string    skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
+      --library dir    资料库目录 dir（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的资料库，或 ~/.skilldots）
+      --simple         使用问答式菜单，而不是全屏仪表盘
+      --theme string   配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
+  -v, --version        skd 的版本
+  -y, --yes            对所有提问回答"是"
 
 使用 "skd [command] --help" 查看某个命令的更多信息。

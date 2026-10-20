@@ -28,10 +28,10 @@
 = %[2]q 中有未闭合的 %[1]c 引号
 
 @ %v; enable one with skd enable <name> --agent %s
-= %v；可以用 skd enable <name> --agent %s 启用其中一个
+= %v；可以用 skd enable <name> --agent %s 装上其中一个
 
 @ enable for %s (already in library)
-= 启用到 %s（库里已有）
+= 装到 %s（资料库里已有）
 
 @ broken link; move to the trash
 = 失效的链接；移入回收站
@@ -58,7 +58,7 @@
 = 复制到 skills/，成为你自己的（不知道上游）
 
 @ enable for %s
-= 启用到 %s
+= 装到 %s
 
 @ [[app]] %s already points at %s; not changing it to %s
 = [[app]] %s 已指向 %s；不改成 %s
@@ -88,7 +88,7 @@
 = %s 已存在；保持原样
 
 @ %s differs from the library's %s (%s); left in place — compare them and remove one by hand
-= %s 与库里的 %s（%s）不同；原样保留——请比较两者，再手动删掉其中一个
+= %s 与资料库里的 %s（%s）不同；原样保留——请比较两者，再手动删掉其中一个
 
 @ %s: not moved aside; it is no longer an entry of the %s target's directory
 = %s：未挪开；它已不是 %s target 目录里的条目
@@ -193,10 +193,10 @@
 = 已创建 %s
 
 @ %s goes through %s, a symbolic link inside the library; skd writes nothing through it (make it a directory of its own)
-= %s 经过 %s，这是库内的一个符号链接；skd 不会通过它写入任何东西（请把它改成独立的目录）
+= %s 经过 %s，这是资料库内的一个符号链接；skd 不会通过它写入任何东西（请把它改成独立的目录）
 
 @ no pack %q
-= 没有 pack %q
+= 没有来源 %q
 
 @ could not record the check: %v
 = 无法记录这次检查：%v
@@ -244,7 +244,7 @@
 = %q 是 %s 类的 skill；用 `skd disable` 取消链接，或删除它的目录来去掉它
 
 @ %s has no skills left; dropping the pack
-= %s 里没有剩下的 skill 了；移除这个 pack
+= %s 里没有剩下的 skill 了；移除这个来源
 
 @ %q is already yours (%s)
 = %q 已经是你自己的（%s）
@@ -253,7 +253,7 @@
 = %q：%s；skd 不会复制它
 
 @ %q: its directory goes through %s, a symbolic link inside the library; skd does not copy it
-= %q：它的目录经过 %s，这是库内的一个符号链接；skd 不会复制它
+= %q：它的目录经过 %s，这是资料库内的一个符号链接；skd 不会复制它
 
 @ --as: %w
 = --as：%w
@@ -265,7 +265,7 @@
 = 没有 skill %q
 
 @ no skill or pack %q
-= 没有 skill 或 pack %q
+= 没有 skill 或来源 %q
 
 @ %d to add
 = %d 个待新增

@@ -7,7 +7,7 @@ Declarative skill management for AI coding agents. One git-backed library, linke
 ```
 skd add mattpocock/skills          # pick skills from a repo; vendored into your library
 skd add trailofbits/skills -s differential-review
-skd add "npx skills add vercel-labs/agent-skills --skill frontend-design"   # pasted install line
+skd add "npx skills add vercel-labs/agent-skills --skill web-design-guidelines"   # pasted install line
 skd edit tdd                       # open a skill in your editor
 skd list                           # one line per repo, not one per skill
 skd update                         # show what changed upstream, update the packs you tick

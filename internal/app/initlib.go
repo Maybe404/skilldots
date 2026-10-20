@@ -22,8 +22,17 @@ const (
 	SelfSkill = "skilldots"
 )
 
-// DefaultTargets are the default targets of a new library.
-func DefaultTargets() []string { return []string{"agents"} }
+// DefaultTargets are the default targets of a new library: the shared
+// ~/.agents/skills, which most agents read, and Claude Code's own
+// directory when Claude Code is installed, since it does not read the
+// shared one. (Not on a machine without it: that would make ~/.claude.)
+func DefaultTargets() []string {
+	out := []string{"agents"}
+	if home, err := os.UserHomeDir(); err == nil && targets.Installed(filepath.Join(home, ".claude", "skills")) {
+		out = append(out, "claude")
+	}
+	return out
+}
 
 const gitignore = `.DS_Store
 # Machine-local skills: a separate git repository that is never pushed with this one.

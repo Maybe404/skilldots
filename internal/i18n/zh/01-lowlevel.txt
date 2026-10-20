@@ -37,10 +37,10 @@
 = %s 中没有 %s
 
 @ cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s
-= 找不到库：%w（它记录着库的位置）；请修复，或用 --library 或 $%s 指定库
+= 找不到资料库：%w（它记录着资料库的位置）；请修复，或用 --library 或 $%s 指定资料库
 
 @ no skilldots library found; run `skd init`, `skd clone <url>`, or `skd use <dir>`
-= 没有找到 skilldots 库；请运行 `skd init`、`skd clone <url>` 或 `skd use <dir>`
+= 没有找到 skilldots 资料库；请运行 `skd init`、`skd clone <url>` 或 `skd use <dir>`
 
 @ %s is a symbolic link %s; skd does not write through it (replace it with the file itself)
 = %s 是符号链接，%s；skd 不会通过它写入（请换成文件本身）
@@ -49,13 +49,13 @@
 = 指向的位置不存在
 
 @ to %s, outside the library
-= 指向 %s，在库之外
+= 指向 %s，在资料库之外
 
 @ to %s, not a file directly in the library's folder
-= 指向 %s，它不是库根目录下的文件
+= 指向 %s，它不是资料库根目录下的文件
 
 @ to %s, one of the library's hidden or own files
-= 指向 %s，它是库的隐藏文件或 skd 自己的文件
+= 指向 %s，它是资料库的隐藏文件或 skd 自己的文件
 
 @ to %s, which is not a file
 = 指向 %s，它不是文件
@@ -76,7 +76,7 @@
 = %s 是%w；skd 不会通过它建立 git 仓库（请把 private/ 改成它自己的目录）
 
 @ %s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line
-= %s：pack %q：commit %q 不是 commit 哈希；请恢复该文件（git checkout -- %s）或删除这一行
+= %s：来源 %q：commit %q 不是 commit 哈希；请恢复该文件（git checkout -- %s）或删除这一行
 
 @ %s has control characters; restore the file (git checkout -- %s) or remove the line
 = %s 含有控制字符；请恢复该文件（git checkout -- %s）或删除这一行
@@ -97,7 +97,7 @@
 = --alias %q 不能包含 "/"、"\\" 或 ":"；请选一个简短的名字，例如 "acme"
 
 @ --alias %q is the repository of a subscribed pack; pick another
-= --alias %q 是已订阅 pack 的仓库名；请换一个
+= --alias %q 是已订阅来源的仓库名；请换一个
 
 @ --alias %q is already the alias of %s; pick another
 = --alias %q 已是 %s 的别名；请换一个
@@ -157,7 +157,7 @@
 = 它的路径 %q 是 %s，它就是或包含 %s；skd 从不在那里写入
 
 @ its path %q is %s, which is, is inside or holds the library %s; skd never writes there
-= 它的路径 %q 是 %s，它就是、位于或包含库 %s；skd 从不在那里写入
+= 它的路径 %q 是 %s，它就是、位于或包含资料库 %s；skd 从不在那里写入
 
 @ its path %q is %s, which holds the %s agent's skill directory %s; skd never writes beside it
 = 它的路径 %q 是 %s，它包含 %s agent 的 skill 目录 %s；skd 从不在它旁边写入
@@ -216,7 +216,7 @@
 = auto；--lang 和 $SKILLDOTS_LANG 优先
 
 @ the library skd uses when none is given
-= 未指定时 skd 使用的库
+= 未指定时 skd 使用的资料库
 
 # Packs.
 

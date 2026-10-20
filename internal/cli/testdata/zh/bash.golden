@@ -27,8 +27,8 @@
       --no-descriptions   不显示补全项的描述
 
 全局选项：
-      --json              机器可读的输出
-      --lang string       skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
-      --library skd use   库目录（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的库，或 ~/.skilldots）
-      --theme string      配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
-  -y, --yes               对所有提问回答"是"
+      --json           机器可读的输出
+      --lang string    skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
+      --library dir    资料库目录 dir（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的资料库，或 ~/.skilldots）
+      --theme string   配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
+  -y, --yes            对所有提问回答"是"

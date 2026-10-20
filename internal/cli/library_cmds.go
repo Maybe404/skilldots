@@ -48,7 +48,7 @@ func initCmd() *cobra.Command {
 			if err := app.InitLibrary(root, defaults); err != nil {
 				return err
 			}
-			say("%s initialised library at %s\n  %s\n", ok("✓"), root, dim(i18n.Sprintf("default targets: %s  (skd enable <skill> --agent claude to add more)", strings.Join(defaults, ", "))))
+			say("%s initialised library at %s\n  %s\n", ok("✓"), root, dim(i18n.Sprintf("default targets: %s  (skd enable <skill> --agent <name> adds another agent)", strings.Join(defaults, ", "))))
 			result := map[string]any{"library": root, "defaults": defaults, "skill": false}
 			if noSkill {
 				jsonOut(result)

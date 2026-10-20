@@ -3,9 +3,12 @@ package skillmd
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
@@ -20,8 +23,17 @@ type Meta struct {
 	EmptyName bool
 }
 
+// maxFront bounds the frontmatter read: names and descriptions are short,
+// and a SKILL.md is upstream text.
+const maxFront = 64 * 1024
+
 // Read parses the frontmatter of dir/SKILL.md. Name falls back to the
 // directory name when the frontmatter has none.
+//
+// The frontmatter is read as YAML, so folded (>), literal (|) and
+// multi-line plain descriptions come out whole. Many SKILL.md files are not
+// valid YAML (an unquoted "description: Use when: …"); those are read line
+// by line instead, as agents read them.
 func Read(dir string) (Meta, error) {
 	f, err := os.Open(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
@@ -29,47 +41,118 @@ func Read(dir string) (Meta, error) {
 	}
 	defer f.Close()
 
-	m := Meta{}
+	var front []string
+	size := 0
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	inFront := false
 	for i := 0; sc.Scan(); i++ {
-		line := sc.Text()
+		line := strings.TrimSuffix(sc.Text(), "\r")
 		if i == 0 {
 			if strings.TrimSpace(line) != "---" {
 				break
 			}
-			inFront = true
 			continue
-		}
-		if !inFront {
-			break
 		}
 		if strings.TrimSpace(line) == "---" {
 			break
 		}
-		key, val, ok := strings.Cut(line, ":")
-		if !ok || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
-			continue
+		if size += len(line) + 1; size > maxFront {
+			break
 		}
-		val = strings.Trim(strings.TrimSpace(val), `"'`)
-		switch strings.TrimSpace(key) {
-		case "name":
-			m.Name = val
-			m.EmptyName = val == ""
-		case "description":
-			// Shown in every listing: upstream text, so no control
-			// characters (safetext.Clean), in --json too.
-			m.Description = safetext.Clean(val, 0)
-		case "license":
-			m.License = safetext.Clean(val, 0)
-		}
+		front = append(front, line)
 	}
+	m, ok := parseYAML(strings.Join(front, "\n"))
+	if !ok {
+		m = parseLines(front)
+	}
+	m.Description = safetext.Clean(oneLine(m.Description), 0)
+	m.License = safetext.Clean(oneLine(m.License), 0)
 	if m.Name == "" {
 		m.Name = filepath.Base(dir)
 	}
 	return m, nil
 }
+
+// parseYAML reads the keys skilldots uses from YAML frontmatter; ok is
+// false when it is not a YAML mapping.
+func parseYAML(front string) (m Meta, ok bool) {
+	var raw map[string]any
+	if err := yaml.Unmarshal([]byte(front), &raw); err != nil || raw == nil {
+		return Meta{}, false
+	}
+	name, hasName := raw["name"]
+	m.Name = scalar(name)
+	m.EmptyName = hasName && m.Name == ""
+	m.Description = scalar(raw["description"])
+	m.License = scalar(raw["license"])
+	return m, true
+}
+
+// scalar is a YAML value as text: strings, numbers and booleans; anything
+// else (a list, a mapping) is not a name or a description.
+func scalar(v any) string {
+	switch v := v.(type) {
+	case string:
+		return v
+	case int, int64, uint64, float64, bool:
+		return fmt.Sprint(v)
+	}
+	return ""
+}
+
+// parseLines is the forgiving reader for frontmatter that is not YAML:
+// "key: value" lines, with indented lines continuing the value (a block
+// scalar marker such as ">" or "|-" starts an empty one).
+func parseLines(front []string) Meta {
+	m := Meta{}
+	cur := ""
+	for _, line := range front {
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			if t := strings.TrimSpace(line); t != "" && (cur == "description" || cur == "license") {
+				if cur == "description" {
+					m.Description += " " + t
+				} else {
+					m.License += " " + t
+				}
+			}
+			continue
+		}
+		key, val, ok := strings.Cut(line, ":")
+		if !ok {
+			cur = ""
+			continue
+		}
+		cur = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		if blockMarker(val) {
+			val = ""
+		}
+		val = strings.Trim(val, `"'`)
+		switch cur {
+		case "name":
+			m.Name = val
+			m.EmptyName = val == ""
+		case "description":
+			m.Description = val
+		case "license":
+			m.License = val
+		}
+	}
+	return m
+}
+
+// blockMarker reports whether v starts a YAML block scalar: > or |, with
+// an optional chomping (+ -) and indentation digit.
+func blockMarker(v string) bool {
+	if v == "" || (v[0] != '>' && v[0] != '|') {
+		return false
+	}
+	return strings.Trim(v[1:], "+-0123456789") == ""
+}
+
+// oneLine joins the lines of a value with single spaces: names and
+// descriptions are shown on one line in every listing.
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // IsSkillDir reports whether dir contains a SKILL.md.
 func IsSkillDir(dir string) bool {

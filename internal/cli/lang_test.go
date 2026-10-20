@@ -245,15 +245,15 @@ func TestChineseOutput(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{[]string{"list"}, []string{"1 个 pack", "3 个 skill", "已链接 3 个", "SKILL 数", "全部 2", "默认"}},
-		{[]string{"list", "--all"}, []string{"分类", "描述", "skills/", "你自己的，随库一起发布", "测试驱动开发"}},
+		{[]string{"list"}, []string{"1 个来源", "3 个 skill", "已链接 3 个", "SKILL 数", "全部 2", "默认"}},
+		{[]string{"list", "--all"}, []string{"分类", "描述", "skills/", "你自己的，随资料库一起发布", "测试驱动开发"}},
 		{[]string{"list", "--agent", "agents"}, []string{"来源"}},
-		{[]string{"list", "nope"}, []string{"错误：没有 pack \"nope\""}},
+		{[]string{"list", "nope"}, []string{"错误：没有来源 \"nope\""}},
 		{[]string{"apply", "-n"}, []string{"已是最新，已链接 3 个"}},
 		{[]string{"outdated"}, []string{"已是最新", "一切都是最新的"}},
 		{[]string{"show", up}, []string{"2 个 skill", "安装：skd add", "测试驱动开发"}},
 		{[]string{"targets"}, []string{"TARGET", "路径", "默认"}},
-		{[]string{"scan"}, []string{"扫描", "个条目", "已管理", "未管理", "stranger", "副本", "用 skd adopt 接管这些"}},
+		{[]string{"scan"}, []string{"扫描", "个条目", "已管理", "未管理", "stranger", "副本", "用 skd adopt 收编这些"}},
 		{[]string{"adopt", "-n"}, []string{"复制到 skills/，成为你自己的", "去掉 --dry-run 运行即可应用"}},
 		{[]string{"history"}, []string{"还没有记录过更新"}},
 		{[]string{"trash"}, []string{"回收站是空的"}},

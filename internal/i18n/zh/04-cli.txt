@@ -76,7 +76,7 @@
 = 每次更新改了什么：commit、skill 以及上游的 commit 信息
 
 @ Every `skd update` records, per pack it moved, the old and new commit, the skills that changed, were added, moved, went away upstream or appeared there, and the subjects of the upstream commits that touched them (at most %d). The record is %s in the library: it is committed and pushed with it, so another machine sees it after a clone. Reading it needs no network.
-= 每次 `skd update` 都会为它更新的每个 pack 记录：新旧 commit，发生变更、新增、移动、在上游消失或在上游出现的 skill，以及涉及这些 skill 的上游 commit 的标题（最多 %d 条）。记录保存在库里的 %s：它随库一起提交和推送，所以另一台机器 clone 之后也能看到。读取它不需要网络。
+= 每次 `skd update` 都会为它更新的每个来源记录：新旧 commit，发生变更、新增、移动、在上游消失或在上游出现的 skill，以及涉及这些 skill 的上游 commit 的标题（最多 %d 条）。记录保存在资料库里的 %s：它随资料库一起提交和推送，所以另一台机器 clone 之后也能看到。读取它不需要网络。
 
 @ %s %s: %d line(s) could not be read and were skipped\n
 = %s %s：有 %d 行无法读取，已跳过\n
@@ -127,22 +127,22 @@
 = help 可以查看本程序任意命令的帮助。\n输入 %s help [命令路径] 即可看到完整说明。
 
 @ Create a library (default ~/.skilldots)
-= 创建库（默认 ~/.skilldots）
+= 创建资料库（默认 ~/.skilldots）
 
 @ %s already has a %s
 = %s 里已经有 %s
 
 @ %w; init records the library there, so fix or remove it first (nothing was created)
-= %w；init 要把库记录在那里，所以请先修复或删除它（没有创建任何东西）
+= %w；init 要把资料库记录在那里，所以请先修复或删除它（没有创建任何东西）
 
 @ %s is a symbolic link; skd does not set up private/ through it (make it a directory of its own; nothing was created)
 = %s 是符号链接；skd 不会通过它建立 private/（请把它改成独立的目录；没有创建任何东西）
 
 @ %s initialised library at %s\n  %s\n
-= %s 已在 %s 初始化库\n  %s\n
+= %s 已在 %s 初始化资料库\n  %s\n
 
-@ default targets: %s  (skd enable <skill> --agent claude to add more)
-= 默认 target：%s  （用 skd enable <skill> --agent claude 添加更多）
+@ default targets: %s  (skd enable <skill> --agent <name> adds another agent)
+= 默认 target：%s  （用 skd enable <skill> --agent <名字> 给 skill 加一个 agent）
 
 @   %s could not install the %s skill (%s); run `skd add %s --skill %s --agent '*'` later\n
 =   %s 没能安装 %s skill（%s）；稍后请运行 `skd add %s --skill %s --agent '*'`\n
@@ -151,7 +151,7 @@
 = 已安装 %s skill，让本机上的 agent 知道怎么使用 skd
 
 @ turn an existing directory into the library
-= 把已有的目录变成库
+= 把已有的目录变成资料库
 
 @ default targets (default: agents)
 = 默认 target（默认：agents）
@@ -160,10 +160,10 @@
 = 不为 agent 安装 skilldots skill
 
 @ Show packs and skills (one line per pack unless expanded)
-= 显示 pack 和 skill（除非展开，每个 pack 一行）
+= 显示来源和 skill（除非展开，每个来源一行）
 
 @ expand every pack
-= 展开每个 pack
+= 展开每个来源
 
 @ one line per skill
 = 每个 skill 一行
@@ -178,7 +178,7 @@
 =  · agent：%s
 
 @ PACK
-= PACK
+= 来源
 
 @ SKILLS
 = SKILL 数
@@ -196,7 +196,7 @@
 = 全部 %d
 
 @ yours, published with the library
-= 你自己的，随库一起发布
+= 你自己的，随资料库一起发布
 
 @ this machine only
 = 仅本机
@@ -262,7 +262,7 @@
 = 只显示计划，不做任何改动
 
 @ replace unmanaged or modified entries (they are moved to the library trash, not deleted)
-= 替换未受管理或已被修改的条目（它们会被移到库的回收站，不会被删除）
+= 替换未受管理或已被修改的条目（它们会被移到资料库的回收站，不会被删除）
 
 @ %d planned change(s) not made (listed above); the agent directories do not match skills.toml yet
 = 有 %d 项计划中的改动没有完成（见上方）；agent 目录与 skills.toml 还不一致
@@ -298,7 +298,7 @@
 = 创建在 private/ 下（永远不会推送）
 
 @ Point skd at an existing library directory from now on
-= 让 skd 从现在起使用一个已有的库目录
+= 让 skd 从现在起使用一个已有的资料库目录
 
 @ %s has no %s
 = %s 里没有 %s
@@ -367,16 +367,16 @@
 = 拉取上游的改动
 
 @ 1 pack has updates
-= 有 1 个 pack 有更新
+= 有 1 个来源有更新
 
 @ %d packs have updates
-= 有 %d 个 pack 有更新
+= 有 %d 个来源有更新
 
 @ Overview
 = 概览
 
 @ packs and skills at a glance
-= 一眼看清 pack 和 skill
+= 一眼看清来源和 skill
 
 @ Add
 = 添加
@@ -439,7 +439,7 @@
 = 备份
 
 @ commit and push the library
-= 提交并推送库
+= 提交并推送资料库
 
 @ Quit
 = 退出
@@ -472,13 +472,13 @@
 = 移除哪个 skill？
 
 @ Unlink from all agents, keep in library  (skd disable)
-= 从所有 agent 取消链接，保留在库里  （skd disable）
+= 从所有 agent 取消链接，保留在资料库里  （skd disable）
 
 @ Unlink and drop from the library           (skd remove)
-= 取消链接并从库中丢弃  （skd remove）
+= 取消链接并从资料库中丢弃  （skd remove）
 
 @ Delete the whole pack %s   (skd purge)
-= 清除整个 pack %s  （skd purge）
+= 清除整个来源 %s  （skd purge）
 
 @ Which skill?
 = 哪个 skill？
@@ -487,13 +487,13 @@
 = %s 的 agent
 
 @ only agents installed on this machine are listed · none = keep in library, link nowhere
-= 只列出本机上装了的 agent · 都不选 = 留在库里，不链接到任何地方
+= 只列出本机上装了的 agent · 都不选 = 留在资料库里，不链接到任何地方
 
 @ Adopt unmanaged entries now?
-= 现在接管未受管理的条目吗？
+= 现在收编未受管理的条目吗？
 
 @ Adopt
-= 接管
+= 收编
 
 @ Not now
 = 暂不
@@ -502,19 +502,19 @@
 = 没有可选的
 
 @ no library on this machine yet
-= 本机上还没有库
+= 本机上还没有资料库
 
 @ Where should your skills live?
 = 你的 skill 放在哪里？
 
 @ A library is a git repository holding your skills and a skills.toml manifest.
-= 库是一个 git 仓库，存放你的 skill 和一份 skills.toml 清单。
+= 资料库是一个 git 仓库，存放你的 skill 和一份 skills.toml 清单。
 
 @ Create a new library at %s
-= 在 %s 新建一个库
+= 在 %s 新建一个资料库
 
 @ Clone an existing library from git (e.g. your backup on GitHub)
-= 从 git 克隆一个已有的库（比如你在 GitHub 上的备份）
+= 从 git 克隆一个已有的资料库（比如你在 GitHub 上的备份）
 
 @ Use a directory that already has a skills.toml
 = 使用已经有 skills.toml 的目录
@@ -535,13 +535,13 @@
 = %s skd 现在使用 %s\n
 
 @ Clone a library (your backup from another machine) and apply it
-= 克隆一个库（你在另一台机器上的备份）并应用它
+= 克隆一个资料库（你在另一台机器上的备份）并应用它
 
 @ %q has control characters: not a git URL
 = %q 含有控制字符：不是 git URL
 
 @ %w; clone records the library there, so fix or remove it first (nothing was cloned)
-= %w；clone 要把库记录在那里，所以请先修复或删除它（没有克隆任何东西）
+= %w；clone 要把资料库记录在那里，所以请先修复或删除它（没有克隆任何东西）
 
 @ %s cloned into %s\n
 = %s 已克隆到 %s\n
@@ -550,7 +550,7 @@
 = %s %v；没有在那里设置任何东西，它下面的 skill 会被跳过\n
 
 @ Commit the library and push it to its git remote (your backup)
-= 提交库并推送到它的 git 远程仓库（你的备份）
+= 提交资料库并推送到它的 git 远程仓库（你的备份）
 
 @ %s committed in %s\n
 = %s 已在 %s 提交\n
@@ -616,10 +616,10 @@
 = 跟随所有 skill，包括上游以后新增的
 
 @ short name for the pack
-= pack 的简短别名
+= 来源的简短别名
 
 @ targets for this pack (default: manifest default)
-= 这个 pack 的 target（默认：清单里的默认值）
+= 这个来源的 target（默认：清单里的默认值）
 
 @ no terminal: pass --skill, --category or --all
 = 没有终端：请传 --skill、--category 或 --all
@@ -640,37 +640,37 @@
 = 空格切换 · 输入可过滤 · 回车确认
 
 @ %s %s: %q is already used in the library; linking it as %q (as in skills.toml)\n
-= %s %s：%q 在库里已被占用；改用 %q 作为链接名（skills.toml 里的 as）\n
+= %s %s：%q 在资料库里已被占用；改用 %q 作为链接名（skills.toml 里的 as）\n
 
 @ %s %s: no license found for %s — check before redistributing\n
 = %s %s：没有找到 %s 的许可证 —— 再分发之前请先确认\n
 
 @ Fetch upstream changes for packs and re-vendor selected skills
-= 拉取 pack 的上游改动，并重新引入所选的 skill
+= 拉取来源的上游改动，并重新引入所选的 skill
 
 @ At a terminal, update first checks upstream and lists what would change per pack (changed, new, gone, moved), all ticked; untick what you do not want, and only the ticked packs are updated. With --yes, --json or without a terminal it updates straight away (every pack when none are named), as scripts and agents expect. Every update is recorded: skd history.
-= 在终端里，update 会先检查上游，按 pack 列出会有哪些变化（变更、新增、消失、移动），默认全部勾选；取消勾选不想要的，只有勾选的 pack 会被更新。加了 --yes、--json 或没有终端时会直接更新（没指定 pack 就更新所有 pack），这是脚本和 agent 期望的行为。每次更新都会被记录：skd history。
+= 在终端里，update 会先检查上游，按来源列出会有哪些变化（变更、新增、消失、移动），默认全部勾选；取消勾选不想要的，只有勾选的来源会被更新。加了 --yes、--json 或没有终端时会直接更新（没指定来源就更新所有来源），这是脚本和 agent 期望的行为。每次更新都会被记录：skd history。
 
 @ recorded in %s · skd history shows what changed and why
 = 已记录在 %s · skd history 会显示改了什么、为什么改
 
 @ %d pack(s) failed: %s
-= 有 %d 个 pack 失败：%s
+= 有 %d 个来源失败：%s
 
 @ git commit and push the library when something changed
-= 有改动时 git commit 并推送库
+= 有改动时 git commit 并推送资料库
 
 @ checking upstream…
 = 正在检查上游……
 
 @ %d pack(s) could not be checked: %s
-= 有 %d 个 pack 无法检查：%s
+= 有 %d 个来源无法检查：%s
 
 @ ✓ nothing to update upstream
 = ✓ 上游没有可更新的
 
 @ · skd apply re-links · skd update <pack> re-vendors one anyway
-= · skd apply 重新链接 · skd update <pack> 仍可重新引入某个 pack
+= · skd apply 重新链接 · skd update <pack> 仍可重新引入某个来源
 
 @ ✓ nothing changed upstream for %s
 = ✓ %s 在上游没有变化
@@ -712,22 +712,22 @@
 = 查看改动：git -C %s diff -- vendor/%s
 
 @ Link a skill (or whole pack) into agents
-= 把 skill（或整个 pack）链接到 agent
+= 把 skill（或整个来源）链接到 agent
 
 @ targets to add (default: manifest default)
 = 要添加的 target（默认：清单里的默认值）
 
 @ Unlink a skill (or pack) from agents; the library keeps it
-= 从 agent 取消 skill（或 pack）的链接；库里仍保留
+= 从 agent 取消 skill（或来源）的链接；资料库里仍保留
 
 @ targets to remove (default: all)
 = 要移除的 target（默认：全部）
 
 @ Move a library skill to the trash and unlink it from every agent
-= 将库中的 skill 移入回收站，并从所有 agent 取消链接
+= 将资料库中的 skill 移入回收站，并从所有 agent 取消链接
 
 @ Delete a pack entirely: manifest, lock, vendor/ and every link
-= 彻底清除一个 pack：清单、锁、vendor/ 和所有链接
+= 彻底清除一个来源：清单、锁、vendor/ 和所有链接
 
 @ proceed?
 = 继续吗？
@@ -739,7 +739,7 @@
 = 清除
 
 @ Print where a skill's files live in the library
-= 打印 skill 的文件在库里的位置
+= 打印 skill 的文件在资料库里的位置
 
 @ Copy a vendored skill into skills/ so you can edit it; upstream no longer touches it
 = 把引入的 skill 复制到 skills/ 以便编辑；上游从此不再动它
@@ -763,7 +763,7 @@
 = 检查所选 skill 在上游的变化，不做任何改动
 
 @ Fetches each pack into the cache and compares it with what is vendored: skills that changed, appeared or disappeared upstream. vendor/, skills.lock and skills.toml are left alone; `skd update` applies the changes. The result is remembered for `skd list` and the menu.
-= 把每个 pack 拉取到缓存里，与已引入的内容比较：找出在上游发生变化、新出现或消失的 skill。vendor/、skills.lock 和 skills.toml 都不会被动；`skd update` 才会应用这些改动。检查结果会被记住，供 `skd list` 和菜单使用。
+= 把每个来源拉取到缓存里，与已引入的内容比较：找出在上游发生变化、新出现或消失的 skill。vendor/、skills.lock 和 skills.toml 都不会被动；`skd update` 才会应用这些改动。检查结果会被记住，供 `skd list` 和菜单使用。
 
 @ skd update
 = skd update
@@ -796,13 +796,13 @@
 = skilldots —— 声明式管理 AI agent 的 skill
 
 @ skd keeps every skill your agents use in one git-backed library and links them into each agent's skill directory.
-= skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的库，并把它们链接到每个 agent 的 skill 目录。
+= skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库，并把它们链接到每个 agent 的 skill 目录。
 
 @ use the question-and-answer menu instead of the full-screen dashboard
 = 使用问答式菜单，而不是全屏仪表盘
 
-@ library directory (default: $%s, nearest skills.toml, the one set by `skd use`, or ~/.skilldots)
-= 库目录（默认：$%s、最近的 skills.toml、`skd use` 设置的库，或 ~/.skilldots）
+@ the library's `dir` (default: $%s, nearest skills.toml, the one set by skd use, or ~/.skilldots)
+= 资料库目录 `dir`（默认：$%s、最近的 skills.toml、skd use 设置的资料库，或 ~/.skilldots）
 
 @ machine-readable output
 = 机器可读的输出
@@ -841,19 +841,19 @@
 = （未启用）
 
 @ take these over with: skd adopt
-= 用 skd adopt 接管这些
+= 用 skd adopt 收编这些
 
 @ left: links into the library, recorded for targets no longer in use; skd leaves them in place (they may be the user's own)
-= 遗留：指向库的链接，记录在已不再使用的 target 名下；skd 原样保留它们（它们可能是用户自己的）
+= 遗留：指向资料库的链接，记录在已不再使用的 target 名下；skd 原样保留它们（它们可能是用户自己的）
 
 @ managed
 = 已管理
 
 @ → library
-= → 库
+= → 资料库
 
 @ reaches the library via %s; not enabled for this agent yet
-= 经由 %s 指向库；尚未为这个 agent 启用
+= 经由 %s 指向资料库；还没给这个 agent 装上
 
 @ app
 = app
@@ -886,16 +886,16 @@
 = 把其他工具装的 skill 纳入 skilldots 管理
 
 @ adopt scans every agent directory and proposes how to take over each\nunmanaged entry: copies installed by "npx skills" become subscriptions to\ntheir upstream repository, links into application bundles become [[app]]\nentries, and anything else becomes a skill of your own under skills/.\nDisplaced directories are moved aside, never deleted.
-= adopt 会扫描每个 agent 目录，并为每个未受管理的条目提出接管方案：\n"npx skills" 装的副本会变成对其上游仓库的订阅，指向应用包的链接会变成\n[[app]] 条目，其余的都变成 skills/ 下你自己的 skill。\n被替换掉的目录只会被挪开，绝不会被删除。
+= adopt 会扫描每个 agent 目录，并为每个未受管理的条目提出收编方案：\n"npx skills" 装的副本会变成对其上游仓库的订阅，指向应用包的链接会变成\n[[app]] 条目，其余的都变成 skills/ 下你自己的 skill。\n被替换掉的目录只会被挪开，绝不会被删除。
 
 @ nothing to adopt
-= 没有可接管的
+= 没有可收编的
 
 @ run without --dry-run to apply (interactive) or with --yes
 = 去掉 --dry-run 运行即可应用（交互式），或加上 --yes
 
 @ no terminal: pass --yes to adopt everything, or --dry-run to see proposals
-= 没有终端：传 --yes 接管全部，或传 --dry-run 查看方案
+= 没有终端：传 --yes 收编全部，或传 --dry-run 查看方案
 
 @ show proposals only
 = 只显示方案
@@ -907,7 +907,7 @@
 = 列出已知的 agent target，以及它们在本机是否存在
 
 @ List the built-in agent targets and the custom ones of skills.toml.\n\nA custom target is used only after a person approves it on this machine\n(skd targets trust <name>, at a terminal), and never when its directory is\noutside your home directory, is your home directory, is or holds a\nsensitive place (~/.ssh, ~/.aws, ~/Library/LaunchAgents, ~/.vscode, …) or the\nlibrary, is inside a built-in target's directory, or is, is inside or holds\nanother custom target's directory.
-= 列出内置的 agent target 和 skills.toml 里的自定义 target。\n\n自定义 target 只有在本人于这台机器上批准后才会启用\n（在终端里运行 skd targets trust <name>），而且在以下情况永远不会启用：\n它的目录在你的主目录之外，就是你的主目录，就是或包含敏感位置\n（~/.ssh、~/.aws、~/Library/LaunchAgents、~/.vscode 等）或库，\n位于内置 target 的目录内，或者就是、位于或包含另一个自定义 target 的目录。
+= 列出内置的 agent target 和 skills.toml 里的自定义 target。\n\n自定义 target 只有在本人于这台机器上批准后才会启用\n（在终端里运行 skd targets trust <name>），而且在以下情况永远不会启用：\n它的目录在你的主目录之外，就是你的主目录，就是或包含敏感位置\n（~/.ssh、~/.aws、~/Library/LaunchAgents、~/.vscode 等）或资料库，\n位于内置 target 的目录内，或者就是、位于或包含另一个自定义 target 的目录。
 
 @ TARGET
 = TARGET
@@ -928,7 +928,7 @@
 = 在这台机器上批准 skills.toml 里的一个自定义 target（只能由终端前的本人操作）
 
 @ Show where a custom target of skills.toml leads and, when you agree, let skd\nwrite skills there on this machine. The approval names the target and its\ndirectory (symbolic links resolved) and its mode (link or copy); when\nskills.toml later points the target elsewhere or changes its mode it needs\napproving again. A directory not named skills is approved only by typing\nthe target's name. Approvals are kept beside the\nsettings file, never in a library. Only a person at a terminal can approve:\nwithout one, and with --yes or --json, skd refuses.
-= 显示 skills.toml 里的某个自定义 target 指向哪里，经你同意后，让 skd\n在这台机器上往那里写入 skill。批准记录包含 target 的名字、它的\n目录（符号链接已解析）和模式（link 或 copy）；之后 skills.toml 若把该\ntarget 指向别处或改了模式，就需要重新批准。目录名不是 skills 的，\n只有输入 target 的名字才能批准。批准记录保存在设置文件旁边，\n绝不会放进库里。只有终端前的本人才能批准：没有终端，\n或加了 --yes、--json 时，skd 会拒绝。
+= 显示 skills.toml 里的某个自定义 target 指向哪里，经你同意后，让 skd\n在这台机器上往那里写入 skill。批准记录包含 target 的名字、它的\n目录（符号链接已解析）和模式（link 或 copy）；之后 skills.toml 若把该\ntarget 指向别处或改了模式，就需要重新批准。目录名不是 skills 的，\n只有输入 target 的名字才能批准。批准记录保存在设置文件旁边，\n绝不会放进资料库里。只有终端前的本人才能批准：没有终端，\n或加了 --yes、--json 时，skd 会拒绝。
 
 @ skills.toml has no custom target %q (see `skd targets`)
 = skills.toml 里没有自定义 target %q（见 `skd targets`）
@@ -982,7 +982,7 @@
 = 放回原处，使用 --force 时还会把挡路的东西挪进
 
 @ library trash. Approve only a directory you meant for skills.
-= 库的回收站。请只批准你确实打算用来放 skill 的目录。
+= 资料库的回收站。请只批准你确实打算用来放 skill 的目录。
 
 @ ! This directory is not named skills. Whatever reads or runs files from
 = ! 这个目录的名字不是 skills。凡是会读取或运行
@@ -1000,7 +1000,7 @@
 = 批准
 
 @ %s this library defines %s: directories outside the agents' own skill directories that skd would write skills into\n
-= %s 这个库定义了 %s：位于 agent 自身 skill 目录之外、skd 会往里写 skill 的目录\n
+= %s 这个资料库定义了 %s：位于 agent 自身 skill 目录之外、skd 会往里写 skill 的目录\n
 
 @   %s %s (%s) is not used: %s\n
 =   %s %s（%s）未启用：%s\n
@@ -1027,10 +1027,10 @@
 = %s %q：请使用 light、dark 或 auto
 
 @ %d pack
-= %d 个 pack
+= %d 个来源
 
 @ %d packs
-= %d 个 pack
+= %d 个来源
 
 @ %d skill
 = %d 个 skill
@@ -1063,10 +1063,10 @@
 = 没有 agent
 
 @ no agents (kept in library)
-= 没有 agent（留在库里）
+= 没有 agent（留在资料库里）
 
 @ none (kept in library)
-= 无（留在库里）
+= 无（留在资料库里）
 
 # What cobra and pflag say of a command line.
 @ accepts %d arg(s), received %d
@@ -1112,7 +1112,7 @@
 = 暂停 agent：撤掉它里面的所有 skill 链接，但保留各 skill 对它的选择
 
 @ Pause agents: skd takes out the links it made in their skill directories and\nlinks nothing there until they are resumed. Every skill keeps the agents it\nwas given, so `skd targets resume` puts back exactly what was there. The\npause is kept in skills.toml (targets.disabled), so it reaches every machine\nthat uses the library. Nothing is deleted: what skd did not make stays.
-= 暂停 agent：skd 撤掉自己在它的 skill 目录里建的链接，恢复之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样恢复。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
+= 暂停 agent：skd 撤掉自己在它的 skill 目录里建的链接，恢复之前不再往那里链接。\n每个 skill 保留原来选的 agent，所以 `skd targets resume` 会原样恢复。\n暂停状态记在 skills.toml（targets.disabled）里，会同步到使用这个资料库的每台机器。\n不删除任何东西：不是 skd 建的都原样保留。
 
 @ paused %s
 = 已暂停 %s
@@ -1130,7 +1130,7 @@
 = 设置默认 agent：没有单独指定 agent 的 skill 会链接到这些 agent
 
 @ Set targets.default of skills.toml: the agents a skill, pack or app without\nagents of its own is linked into. Skills given their own agents keep them.\nskd applies at once: skills leave the agents taken out of the list.
-= 设置 skills.toml 的 targets.default：没有单独指定 agent 的 skill、pack 或 app\n会链接到这些 agent。单独指定过 agent 的 skill 保持不变。\nskd 会立即应用：从列表里去掉的 agent 中的 skill 链接会被撤掉。
+= 设置 skills.toml 的 targets.default：没有单独指定 agent 的 skill、来源或 app\n会链接到这些 agent。单独指定过 agent 的 skill 保持不变。\nskd 会立即应用：从列表里去掉的 agent 中的 skill 链接会被撤掉。
 
 @ default agents: %s
 = 默认 agent：%s

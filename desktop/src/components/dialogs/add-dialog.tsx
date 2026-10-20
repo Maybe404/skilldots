@@ -91,6 +91,9 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
     }
   }, [parsed, read])
 
+  // Names the pasted line asked for that the repository does not have (any more): said, not silently dropped.
+  const missing = preview && parsed ? parsed.skills.filter((n) => !preview.skills.some((s) => s.name === n)) : []
+
   const groups = React.useMemo(() => {
     const m = new Map<string, UpstreamSkill[]>()
     for (const s of preview?.skills ?? []) {
@@ -209,6 +212,11 @@ export function AddDialog({ initial, onClose }: { initial?: string; onClose: () 
                 <span>{preview.license ? t("licenseLabel", { license: preview.license }) : t("noLicense")}</span>
                 {preview.subscribed && <span>{t("alreadySubscribed")}</span>}
               </div>
+              {missing.length > 0 && (
+                <p role="status" className="mb-3 fs-body text-ink">
+                  {t("preselectMissing", { repo: parsed?.repo ?? "", names: missing.join(", ") })}
+                </p>
+              )}
 
               <label className="mb-3 flex items-start gap-2.5 fs-body text-ink">
                 <Checkbox checked={followAll} onCheckedChange={(v) => setFollowAll(!!v)} className="mt-0.5" />

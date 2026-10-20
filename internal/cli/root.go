@@ -197,7 +197,7 @@ func Root() *cobra.Command {
 	root.Args = rootArgs
 	root.SetFlagErrorFunc(flagError)
 	root.Flags().BoolVar(&simple, "simple", false, i18n.T("use the question-and-answer menu instead of the full-screen dashboard"))
-	root.PersistentFlags().StringVar(&flags.library, "library", "", i18n.Sprintf("library directory (default: $%s, nearest skills.toml, the one set by `skd use`, or ~/.skilldots)", library.EnvLibrary))
+	root.PersistentFlags().StringVar(&flags.library, "library", "", i18n.Sprintf("the library's `dir` (default: $%s, nearest skills.toml, the one set by skd use, or ~/.skilldots)", library.EnvLibrary))
 	root.PersistentFlags().BoolVar(&flags.json, "json", false, i18n.T("machine-readable output"))
 	root.PersistentFlags().BoolVarP(&flags.yes, "yes", "y", false, i18n.T("answer yes to prompts"))
 	root.PersistentFlags().StringVar(&flags.lang, "lang", "", i18n.Sprintf("language of skd's own text: en, zh or auto (default auto: the system's; also $%s, then the lang setting)", i18n.Env))

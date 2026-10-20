@@ -1,15 +1,15 @@
-在终端里，update 会先检查上游，按 pack 列出会有哪些变化（变更、新增、消失、移动），默认全部勾选；取消勾选不想要的，只有勾选的 pack 会被更新。加了 --yes、--json 或没有终端时会直接更新（没指定 pack 就更新所有 pack），这是脚本和 agent 期望的行为。每次更新都会被记录：skd history。
+在终端里，update 会先检查上游，按来源列出会有哪些变化（变更、新增、消失、移动），默认全部勾选；取消勾选不想要的，只有勾选的来源会被更新。加了 --yes、--json 或没有终端时会直接更新（没指定来源就更新所有来源），这是脚本和 agent 期望的行为。每次更新都会被记录：skd history。
 
 用法：
   skd update [pack...] [flags]
 
 选项：
-      --commit   有改动时 git commit 并推送库
+      --commit   有改动时 git commit 并推送资料库
   -h, --help     update 的帮助
 
 全局选项：
-      --json              机器可读的输出
-      --lang string       skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
-      --library skd use   库目录（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的库，或 ~/.skilldots）
-      --theme string      配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
-  -y, --yes               对所有提问回答"是"
+      --json           机器可读的输出
+      --lang string    skd 自身文字的语言：en、zh 或 auto（默认 auto：跟随系统；也可用 $SKILLDOTS_LANG，其次是 lang 设置）
+      --library dir    资料库目录 dir（默认：$SKILLDOTS_LIBRARY、最近的 skills.toml、skd use 设置的资料库，或 ~/.skilldots）
+      --theme string   配色：light、dark 或 auto（默认 auto：询问终端；也可用 $SKILLDOTS_THEME）
+  -y, --yes            对所有提问回答"是"

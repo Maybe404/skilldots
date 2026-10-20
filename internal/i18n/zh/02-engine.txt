@@ -4,7 +4,7 @@
 = 名称冲突：%s
 
 @ its directory goes through %s, a symbolic link inside the library
-= 它的目录经过 %s，这是库内的一个符号链接
+= 它的目录经过 %s，这是资料库内的一个符号链接
 
 @ source directory missing
 = 来源目录不存在
@@ -13,7 +13,7 @@
 = 来源已变化
 
 @ points at the previous library location %s
-= 指向库先前的位置 %s
+= 指向资料库先前的位置 %s
 
 @ modified since skilldots wrote it (--force)
 = 自 skilldots 写入后已被修改（--force）
@@ -22,7 +22,7 @@
 = 自 skilldots 写入后已被修改；请用 --force
 
 @ adopting existing link
-= 接管已有的链接
+= 收编已有的链接
 
 @ unmanaged entry (--force)
 = 未受管理的条目（--force）
@@ -46,7 +46,7 @@
 = 未启用（见 skd targets）
 
 @ target %q %s; %s is a link into this library; skd no longer manages it and leaves it in place: it may be the user's own
-= target %q %s；%s 是指向本库的链接；skd 不再管理它，原样保留：它可能是用户自己的
+= target %q %s；%s 是指向本资料库的链接；skd 不再管理它，原样保留：它可能是用户自己的
 
 @ target %q %s; forgetting the record (nothing on disk is touched)
 = target %q %s；忘掉这条记录（不会动磁盘上的任何东西）
@@ -55,10 +55,10 @@
 = 已经不在了
 
 @ a link to the previous library location %s, where nothing is any more
-= 指向库先前位置 %s 的链接，那里已经什么都没有了
+= 指向资料库先前位置 %s 的链接，那里已经什么都没有了
 
 @ a link to the previous library location %s, whose skills.lock records it
-= 指向库先前位置 %s 的链接，该处的 skills.lock 记录了它
+= 指向资料库先前位置 %s 的链接，该处的 skills.lock 记录了它
 
 @ no longer wanted, but skd cannot tell it made it (changed since, made by an older skd, or not made by skd); left in place: it may be the user's own
 = 已不再需要，但 skd 无法确认它是自己建的（之后被改过、由旧版 skd 建立，或并非 skd 所建）；原样保留：它可能是用户自己的
@@ -70,7 +70,7 @@
 = %s：未改动：%v
 
 @ %s: not changed: its source goes through %s, a symbolic link inside the library
-= %s：未改动：它的来源经过 %s，这是库内的一个符号链接
+= %s：未改动：它的来源经过 %s，这是资料库内的一个符号链接
 
 @ target %q: registry not initialised
 = target %q：登记表尚未初始化
@@ -79,7 +79,7 @@
 = [[app]] %s：%s；已跳过
 
 @ %s in the library is a symbolic link; skd does not link or copy skills through it (skipped: %s); make it a directory of its own
-= 库里的 %s 是符号链接；skd 不会通过它链接或复制 skill（已跳过：%s）；请把它改成独立的目录
+= 资料库里的 %s 是符号链接；skd 不会通过它链接或复制 skill（已跳过：%s）；请把它改成独立的目录
 
 @ unknown target %q (used by %s) is skipped; define it under [targets.custom] in skills.toml or fix the name
 = 未知的 target %q（%s 在使用）已跳过；请在 skills.toml 的 [targets.custom] 下定义它，或修正名字
@@ -97,13 +97,13 @@
 = %v；已跳过
 
 @ pack %s is in skills.toml but has not been fetched; run `skd update %s`
-= pack %s 在 skills.toml 里，但尚未拉取；请运行 `skd update %s`
+= 来源 %s 在 skills.toml 里，但尚未拉取；请运行 `skd update %s`
 
 @ pack %s: skill %q in skills.lock: %v; skipped
-= pack %s：skills.lock 里的 skill %q：%v；已跳过
+= 来源 %s：skills.lock 里的 skill %q：%v；已跳过
 
 @ pack %s: as for %s: %v; skipped
-= pack %s：%s 的 as：%v；已跳过
+= 来源 %s：%s 的 as：%v；已跳过
 
 @ [[app]] %v; skipped
 = [[app]] %v；已跳过
@@ -148,7 +148,7 @@
 = 回收站 %q：%w；skd 不会跟随它
 
 @ its name is not one skd gives what it sets aside, so it is not shown and skd does not restore it; look at it by hand in the library's %s
-= 它的名字不是 skd 给被挪开的东西起的名字，所以不显示，skd 也不会恢复它；请到库的 %s 里手动查看
+= 它的名字不是 skd 给被挪开的东西起的名字，所以不显示，skd 也不会恢复它；请到资料库的 %s 里手动查看
 
 @ it is a symbolic link; skd does not restore links: whether to put it back is the user's decision
 = 它是符号链接；skd 不恢复链接：是否放回去由用户决定
@@ -163,7 +163,7 @@
 = 没有回收站条目 %q（ID 的形式是 <批次>/<名称>，与 `skd trash` 列出的一致）
 
 @ trash entry %q is not named as skd names what it sets aside; skd does not restore it (look at it by hand in the library's %s)
-= 回收站条目 %q 的名字不符合 skd 给被挪开的东西起名的方式；skd 不会恢复它（请到库的 %s 里手动查看）
+= 回收站条目 %q 的名字不符合 skd 给被挪开的东西起名的方式；skd 不会恢复它（请到资料库的 %s 里手动查看）
 
 @ no trash entry %q
 = 没有回收站条目 %q
@@ -199,16 +199,16 @@
 = 记录的原位置在自定义 target %s 里，名字不是 skill 的名字
 
 @ the library's vendor/ %w
-= 库的 vendor/ %w
+= 资料库的 vendor/ %w
 
 @ its record of where it came from is neither in an agent's skill directory nor in the library's vendor/
-= 记录的原位置既不在 agent 的 skill 目录里，也不在库的 vendor/ 里
+= 记录的原位置既不在 agent 的 skill 目录里，也不在资料库的 vendor/ 里
 
 @ pack %q would be vendored at %s, outside %s
-= pack %q 会被引入到 %s，在 %s 之外
+= 来源 %q 会被引入到 %s，在 %s 之外
 
 @ %s goes through %s, a symbolic link inside the library; skd does not follow it (make it a directory of its own)
-= %s 经过 %s，这是库内的一个符号链接；skd 不会跟随它（请把它改成独立的目录）
+= %s 经过 %s，这是资料库内的一个符号链接；skd 不会跟随它（请把它改成独立的目录）
 
 @ %s is outside %s
 = %s 在 %s 之外
