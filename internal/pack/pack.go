@@ -207,7 +207,7 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 			return "", "", err
 		}
-		if _, err := library.GitContext(ctx, "", cloneArgs(src, dir)...); err != nil {
+		if _, err := library.GitEnvContext(ctx, "", gitFetchEnv, cloneArgs(src, dir)...); err != nil {
 			// CachePath already keeps dir one entry of the cache; this is
 			// a second guard (no test can reach it while CachePath holds)
 			// so a future change there cannot turn a failed clone into
@@ -215,7 +215,7 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			if fsutil.Within(library.CacheDir(), dir) {
 				os.RemoveAll(dir) // a clone git left half done, in skd's cache
 			}
-			return "", "", err
+			return "", "", fetchError(src, err)
 		}
 	} else {
 		ref := src.Ref
@@ -223,7 +223,7 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 			ref = "HEAD"
 		}
 		update := func() error {
-			if _, err := library.GitContext(ctx, dir, fetchArgs(ref)...); err != nil {
+			if _, err := library.GitEnvContext(ctx, dir, gitFetchEnv, fetchArgs(ref)...); err != nil {
 				return err
 			}
 			_, err := library.GitContext(ctx, dir, "reset", "-q", "--hard", "FETCH_HEAD")
@@ -239,7 +239,7 @@ func FetchContext(ctx context.Context, src Source) (dir, commit string, err erro
 		for try := 0; err != nil; try++ {
 			locks := lockPaths(dir, err.Error())
 			if ctx.Err() != nil || try == lockRetries || len(locks) == 0 || !ownsClone(src.Repo) || !clearLocks(ctx, locks) {
-				return "", "", err
+				return "", "", fetchError(src, err)
 			}
 			err = update()
 		}

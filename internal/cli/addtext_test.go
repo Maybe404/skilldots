@@ -91,3 +91,19 @@ func TestAddRefusesDashSources(t *testing.T) {
 		t.Fatalf("cache touched: %v", entries)
 	}
 }
+
+// A repository that is not there is said in plain words, in either
+// language, with git's own message after it.
+func TestAddMissingRepositorySaysSo(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	missing := e.p("nowhere/repo")
+	for lang, want := range map[string]string{"en": "there is no git repository at " + missing, "zh": missing + " 不是 git 仓库"} {
+		e.setLang(lang)
+		_, errOut, code := e.skd(lib, "add", missing)
+		if code == 0 || !strings.Contains(errOut, want) || !strings.Contains(errOut, "git clone") {
+			t.Errorf("%s: exit %d\n%s", lang, code, errOut)
+		}
+	}
+}
