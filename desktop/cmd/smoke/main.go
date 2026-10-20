@@ -21,6 +21,11 @@ func main() {
 	if home == "" || home != os.Getenv("SKILLDOTS_SMOKE_HOME") || len(os.Args) != 3 {
 		panic("isolated HOME and frontend/report paths required")
 	}
+	// The machine has Claude Code: the toggles below link into ~/.claude/skills,
+	// and skd links nothing into an agent that is not installed.
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		panic(err)
+	}
 	s := api.New("", api.Native{})
 	invoke := func(name string, args ...any) {
 		raw := []json.RawMessage{}
@@ -171,6 +176,16 @@ const titleBarSwitches = `
      const pause = ms => new Promise(r => setTimeout(r, ms));
      const headerButton = name => [...document.querySelectorAll("header button, header [role=radio]")].find(b => b.textContent.trim() === name);
      const press = name => async () => { const b = headerButton(name); if (!b) throw new Error("no button " + name + " in the top bar"); b.click(); };
+     // The style switch lives in Settings (not in the top bar): open it, then pick.
+     const style = name => async () => {
+       const settings = headerButton("设置") || headerButton("Settings");
+       if (!settings) throw new Error("no Settings in the top bar");
+       settings.click();
+       await pause(400);
+       const b = [...document.querySelectorAll("button, [role=radio]")].find(b => !b.closest("header") && b.textContent.trim() === name);
+       if (!b) throw new Error("no style " + name + " in Settings");
+       b.click();
+     };
      const pickLanguage = label => async () => {
        document.querySelector("button[aria-label='语言'], button[aria-label='Language']").click();
        await pause(300);
@@ -178,11 +193,11 @@ const titleBarSwitches = `
      };
      const startStyle = document.documentElement.dataset.style === "doodle" ? "涂鸦" : "简洁";
      const barSteps = [
-       ["style: doodle", press("涂鸦")], ["style: clean", press("简洁")], ["style: doodle again", press("涂鸦")], ["style: clean again", press("简洁")],
+       ["style: doodle", style("涂鸦")], ["style: clean", style("简洁")], ["style: doodle again", style("涂鸦")], ["style: clean again", style("简洁")],
        ["page: sources", press("来源")], ["page: agents", press("Agent")], ["page: skills", press("Skill")], ["page: settings", press("设置")],
        ["language: en", pickLanguage("English")],
-       ["en style: doodle", press("Doodle")], ["en style: clean", press("Clean")], ["en page: sources", press("Sources")], ["en page: skills", press("Skills")], ["en page: settings", press("Settings")],
-       ["language: zh", pickLanguage("简体中文")], ["zh page: skills", press("Skill")], ["restore style", press(startStyle)],
+       ["en style: doodle", style("Doodle")], ["en style: clean", style("Clean")], ["en page: sources", press("Sources")], ["en page: skills", press("Skills")], ["en page: settings", press("Settings")],
+       ["language: zh", pickLanguage("简体中文")], ["restore style", style(startStyle)], ["zh page: skills", press("Skill")],
      ];
      for (const [what, act] of barSteps) {
        await act();
