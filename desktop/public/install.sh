@@ -119,6 +119,9 @@ say ""
 if [ "$cli" = off ]; then
 	say "For the command line, turn on the skd command in skilldots → Settings → Agents (设置 → Agent 接入),"
 	say "then run \"skd init\" to create your library and \"skd add owner/repo\" to pick skills from a GitHub repository."
+elif [ "$cli" = other ]; then
+	say "For the command line: \"skd\" in $BIN_DIR is another program, so it would run instead of skilldots."
+	say "Remove it, then turn on the skd command in skilldots → Settings → Agents (设置 → Agent 接入)."
 else
 	skd=skd
 	case ":$PATH:" in

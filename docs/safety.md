@@ -6,7 +6,7 @@ skd is mostly run by agents, on libraries that may come from someone else (`skd 
 
 Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash, `<library>/.trash/`. `skd trash` lists it and `skd trash restore <id>` puts an entry back.
 
-`skd trash empty` is the one irreversible command, and it only runs for [a person at a terminal](#a-person-at-a-terminal). So an agent can do everything short of permanent deletion.
+`skd trash empty` is the one irreversible command, and it only runs for [a person at a terminal](#a-person-at-a-terminal). So an agent can do everything short of permanent deletion. The desktop app's Trash page can also delete for good, the whole trash or one entry, but only after a confirmation that names the entries and their size, and it refuses when the trash changed since that confirmation was shown.
 
 ### What skd removes outright
 

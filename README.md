@@ -62,7 +62,7 @@ Most of the time it is not a person running `skd` but the agent on their machine
 - **Agents learn skd.** `skd init` (and a new library in the desktop app) installs the [`skilldots` skill](skills/skilldots/SKILL.md) for every agent on the machine: through `~/.agents/skills`, which most agents read, and into the own directory of each installed agent that does not (Claude Code, Kiro, …), so no agent loads it twice. Each agent then knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
 - **No terminal needed.** Every command works when stdin or stdout is not a terminal, so `skd update | cat` never waits on a hidden prompt. Use `--json` for structured results, `--yes` for prompts, and `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
 - **Nothing is deleted.** `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. skd removes outright only what it can tell it made. The exact rules are in [docs/safety.md](docs/safety.md#the-trash).
-- **Permanent deletion is for people.** `skd trash empty` is the one irreversible command, and it only runs for a person at a terminal: stdin and stdout are terminals and, where it asks, the answer was typed. Approving a [custom target](#custom-targets) works the same way. This keeps out agents' ordinary tool calls, scripts, cron and `--yes`, so an agent can do everything short of permanent deletion.
+- **Permanent deletion is for people.** `skd trash empty` is the one irreversible command, and it only runs for a person at a terminal (in the desktop app, the Trash page deletes for good after a confirmation that names what goes): stdin and stdout are terminals and, where it asks, the answer was typed. Approving a [custom target](#custom-targets) works the same way. This keeps out agents' ordinary tool calls, scripts, cron and `--yes`, so an agent can do everything short of permanent deletion.
 - **One honest gap.** A program that drives a pseudo-terminal itself (`script`, `expect`, a terminal it controls) can answer like a person. skd cannot tell the difference; the bundled skill forbids agents to do that.
 - **Parse `--json`, never the words.** The text meant for people may be in Chinese (see [Language](#language)); `--json` is not, whatever the language.
 - **People can watch and veto.** The full-screen dashboard (`skd` with no arguments) does everything the commands do.
@@ -272,7 +272,7 @@ Or just check, and update by hand when `skd list` says so:
 
 skd is built to be run by agents on libraries that may come from someone else. In short:
 
-- Nothing is deleted for good without a person at a terminal. skd removes outright only links and copies it can tell it made; anything else in the way goes to the trash.
+- Nothing is deleted for good without a person: at a terminal (`skd trash empty`), or confirming it in the desktop app's Trash page. skd removes outright only links and copies it can tell it made; anything else in the way goes to the trash.
 - Custom targets need your approval on each machine, and some directories are refused even then.
 - Nothing skd prints for a person carries control characters or bidi controls from a repository, a library or an agent directory, so a hostile `SKILL.md` cannot rewrite your terminal.
 
