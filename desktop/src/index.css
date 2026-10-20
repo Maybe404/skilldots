@@ -186,7 +186,7 @@
     --cols: 28px minmax(0, 1fr) 110px minmax(0, 380px);
   }
   .skd-cols-trash {
-    --cols: 200px minmax(0, 1fr) 110px 220px 140px;
+    --cols: 240px minmax(0, 1fr) 110px 220px 140px;
   }
   @media (width < 1000px) {
     .skd-cols-sources {
@@ -203,7 +203,7 @@
       --cols: 28px minmax(0, 1fr) 88px minmax(0, 260px);
     }
     .skd-cols-trash {
-      --cols: 130px minmax(0, 1fr) 72px 150px 64px;
+      --cols: 200px minmax(0, 1fr) 72px 150px 64px;
     }
   }
 
@@ -325,6 +325,11 @@
     border: 1.5px dashed var(--ac);
     color: var(--ac);
     transform: var(--onRot);
+  }
+  /* chosen, but the agent is not installed here: nothing is linked */
+  .skd-cell[data-state="absent"] {
+    border: 1.5px dashed var(--ln);
+    color: var(--mut);
   }
   .skd-cell[data-state="removing"] {
     border: 1.5px dashed var(--mut);

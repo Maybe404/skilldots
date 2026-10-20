@@ -3,7 +3,7 @@ import { Check, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp } from "@/lib/app-state"
-import { agentLabel, tildify } from "@/lib/agents"
+import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
 import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
@@ -185,6 +185,9 @@ export function WireView({
             dash: pend || !a.enabled ? [6, 5] : undefined,
             z: f || pend ? 2 : af ? 1 : 0,
           })
+        } else if (st === "absent") {
+          // Chosen, but this Mac has no such agent: a faint dotted line, nothing is linked.
+          wires.push({ y1, k, seed, ink: "mut", width: 1.2, opacity: 0.35, dash: [2, 4], z: 0 })
         } else if (st === "removing") {
           wires.push({ y1, k, seed, ink: "mut", width: 1.4, opacity: 0.6, dash: [3, 5], z: 2 })
         }
@@ -407,10 +410,11 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
   const count = skills.filter((s) => isOn(s, a.name, pending)).length
   const selA = agentFocus === a.name
   const st = skill ? cellState(skill, a.name, pending) : "off"
-  const on = st === "on" || st === "adding"
+  const on = st === "on" || st === "adding" || st === "absent"
+  const away = isAbsentAgent(a)
   const pend = st === "adding" || st === "removing"
   const label = agentLabel(a)
-  const btnText = st === "adding" ? t("wireAdding") : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
+  const btnText = st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
   return (
     <div
       data-agent={a.name}
@@ -418,7 +422,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
         "group/agent relative flex h-[72px] items-center gap-3 border-b-row pr-3.5 pl-[22px] transition-opacity",
         (selA || dragging) && "rounded-ctl bg-row-on",
         selA && "shadow-row",
-        ((agentFocus && !selA) || !a.enabled) && "opacity-55",
+        ((agentFocus && !selA) || !a.enabled || away) && "opacity-55",
       )}
     >
       <span
@@ -438,6 +442,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
           <span className="flex items-center gap-1.5 font-heading fs-name leading-[1.1] font-semibold whitespace-nowrap text-ink">
             <span className="truncate">{label}</span>
             {!a.enabled && <Tag>{t("pausedTag")}</Tag>}
+            {away && <Tag>{t("notInstalled")}</Tag>}
             {claudeOff && <OffRing />}
           </span>
           <span className="mt-[3px] block truncate font-mono fs-meta text-mut">{tildify(a.path)}</span>
@@ -458,14 +463,14 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
               className={cn(
                 "relative z-[1] h-[26px]",
                 compact && "w-[26px] px-0",
-                on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
+                st === "absent" ? "border-[1.5px] border-dashed border-ln text-mut" : on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
                 pend ? "border-ac text-ac" : !on && "border-mut text-ink",
               )}
             >
-              {compact ? <Glyph aria-hidden strokeWidth={2.2} /> : btnText}
+              {compact ? <Glyph aria-hidden strokeWidth={2.2} /> : st === "absent" ? t("wireAbsent") : btnText}
             </Button>
           )
-          return compact ? <Hint label={btnText}>{button}</Hint> : button
+          return compact || st === "absent" ? <Hint label={btnText}>{button}</Hint> : button
         })()}
       <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>

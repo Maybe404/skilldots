@@ -80,8 +80,8 @@ export function AgentTargets({ value, onChange, className, label }: { value: Set
       />
       {agentLabel(a)}
       {a.name === "agents" && (
-        <Hint label={t("sharedDirNote")}>
-          <Info aria-label={t("sharedDirNote")} className="size-3.5 text-mut" strokeWidth={1.8} />
+        <Hint label={t("sharedDirFull")} wide>
+          <Info aria-label={t("sharedDirFull")} className="size-3.5 text-mut" strokeWidth={1.8} />
         </Hint>
       )}
     </label>

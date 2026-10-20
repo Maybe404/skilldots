@@ -2,7 +2,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { ArrowRight, Search } from "lucide-react"
 
-import { useApp } from "@/lib/app-state"
+import { absentFor, toastAbsent, useApp } from "@/lib/app-state"
 import { backend, type ParsedSource, type RepoPreview, type UpstreamSkill } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
 import { Mono, RefreshIcon, Sha, Tag } from "@/components/app/bits"
@@ -160,6 +160,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
     if (adjust) toast(t("adjustedToast", { repo, add: r.value?.linked.length ?? 0, remove: gone.length }))
     else toast(t("addedToast", { n: r.value?.linked.length ?? 0 }))
     for (const [from, to] of Object.entries(r.value?.renamed ?? {})) toast(t("renamedToast", { from, to }))
+    toastAbsent(t, allAgents, absentFor(r.value?.absent, r.value?.linked ?? []))
     onClose()
   }
 

@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { ArrowRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { errorText, hasUpdates, useApp } from "@/lib/app-state"
+import { errorText, hasUpdates, toastAbsent, useApp } from "@/lib/app-state"
 import { backend, type CliStatus, type PackStatus, type PlanItem, type SkillDiff, type UpdateDiff } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
 import { Mono, RefreshIcon, Sha, Tag, UpdateDot } from "@/components/app/bits"
@@ -264,6 +264,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
     if (!r.ok) return
     await reload()
     toast(t("applied", { linked: r.value.linked, unlinked: r.value.unlinked }))
+    toastAbsent(t, agents, r.value.absent)
     onClose()
   }
 

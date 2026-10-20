@@ -114,10 +114,11 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
                 <label htmlFor={id} className="flex min-w-0 flex-1 items-center gap-2 fs-body text-ink">
                   <span className="truncate">{agentLabel(a)}</span>
                   {!a.enabled && <Tag>{t("pausedTag")}</Tag>}
+                  {st === "absent" && <Tag>{t("notInstalled")}</Tag>}
                   {a.name === "claude" && claudeOff && <OffRing />}
                   {(st === "adding" || st === "removing") && <span className="fs-meta text-ac">{st === "adding" ? t("wireAdding") : t("wireRemoving")}</span>}
                 </label>
-                <Switch id={id} checked={st === "on" || st === "adding"} onCheckedChange={() => togglePending(skill, a.name)} />
+                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent"} title={st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
               </li>
             )
           })}

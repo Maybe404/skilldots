@@ -6,7 +6,7 @@ import { useApp } from "@/lib/app-state"
 import { agentLabel, tildify } from "@/lib/agents"
 import { backend, type Agent } from "@/lib/backend"
 import { isOn, pendingOnAgent } from "@/lib/pending"
-import { AgentMono, Page, TableHead, Tag } from "@/components/app/bits"
+import { AgentMono, Hint, Page, TableHead, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
@@ -115,8 +115,22 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
           {!a.enabled && <Tag tone="accent">{t("pausedLong")}</Tag>}
           {!a.detected && <Tag>{t("notOnMachine")}</Tag>}
         </div>
-        {/* ~/.agents/skills is not one agent's folder: say who reads it. */}
-        {a.name === "agents" && <p className="mt-0.5 truncate fs-meta text-mut" title={t("sharedDirNote")}>{t("sharedDirNote")}</p>}
+        {/* ~/.agents/skills is not one agent's folder: say who reads it (the full list on hover). */}
+        {a.name === "agents" && (
+          <Hint label={t("sharedDirFull")} wide>
+            <p tabIndex={0} className="mt-0.5 w-fit max-w-full cursor-help truncate rounded-seg fs-meta text-mut">
+              {t("sharedDirNote")}
+            </p>
+          </Hint>
+        )}
+        {/* An agent that reads the shared folder gets Agents' skills from there, not a link of its own. */}
+        {a.readsShared && (
+          <Hint label={t("viaSharedHint", { agent: label })}>
+            <p tabIndex={0} className="mt-0.5 w-fit max-w-full cursor-help truncate rounded-seg fs-meta text-mut">
+              {t("viaShared")}
+            </p>
+          </Hint>
+        )}
       </div>
       <div role="cell" className="truncate pr-3 font-mono fs-meta text-mut" title={a.path}>
         {tildify(a.path)}

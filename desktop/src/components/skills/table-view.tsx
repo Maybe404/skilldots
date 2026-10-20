@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Check, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
-import { agentLabel } from "@/lib/agents"
+import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn } from "@/lib/pending"
 import { Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
@@ -63,7 +63,7 @@ export function TableView({
         {columns.map((a) => (
           <div role="columnheader" key={a.name} className="grid place-items-center">
             {/* The agent's own name (two short lines at most), its count under it; the full name, and what the shared folder is, on hover. */}
-            <Hint label={a.name === "agents" ? `${agentLabel(a)} · ${t("sharedDirNote")}` : agentLabel(a)}>
+            <Hint label={a.name === "agents" ? `${agentLabel(a)} · ${t("sharedDirNote")}` : isAbsentAgent(a) ? `${agentLabel(a)} · ${t("notInstalled")}` : agentLabel(a)}>
               <button
                 type="button"
                 aria-pressed={agentFocus === a.name}
@@ -72,7 +72,7 @@ export function TableView({
                 className={cn(
                   "flex h-10 w-full flex-col items-center justify-center gap-px rounded-ctl px-0.5",
                   agentFocus === a.name && "bg-row-on shadow-[inset_0_-2px_0_var(--hue)]",
-                  !a.enabled && "opacity-50",
+                  (!a.enabled || isAbsentAgent(a)) && "opacity-50",
                 )}
               >
                 <span className="line-clamp-2 max-w-full text-center text-[11px] leading-[1.15] font-medium break-words text-ink">{agentLabel(a)}</span>
@@ -210,10 +210,10 @@ function Row({
       </div>
       {columns.map((a) => {
         const st = cellState(skill, a.name, pending)
-        const on = st === "on" || st === "adding"
+        const on = st === "on" || st === "adding" || st === "absent"
         const label = agentLabel(a)
         const title =
-          st === "on" ? t("cellOn", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : t("cellOff", { agent: label })
+          st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : t("cellOff", { agent: label })
         return (
           <div role="cell" key={a.name} className="relative grid place-items-center">
             <Hint label={title}>
