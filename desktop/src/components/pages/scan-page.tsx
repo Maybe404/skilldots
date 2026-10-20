@@ -1,5 +1,6 @@
 import * as React from "react"
 import { toast } from "sonner"
+import { ArrowRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
@@ -26,11 +27,13 @@ const STATE: Record<ScanItem["state"], MessageKey> = {
 
 /** 收编: scan the agent folders and adopt what skilldots does not manage yet. */
 export function ScanPage() {
-  const { t, runTask, reload, agents, skills, confirm } = useApp()
+  const { t, runTask, reload, agents, skills, confirm, navigate } = useApp()
   const [items, setItems] = React.useState<ScanItem[] | null>(null)
   const [failed, setFailed] = React.useState(false)
   const [scanning, setScanning] = React.useState(false)
   const [picked, setPicked] = React.useState<Set<string>>(new Set())
+  /** How many the last adopt took in: the page then offers the way back to the Skill page. */
+  const [done, setDone] = React.useState<number | null>(null)
 
   const scan = React.useCallback(
     async (announce: boolean) => {
@@ -44,6 +47,7 @@ export function ScanPage() {
       }
       setItems(r.value)
       setPicked(new Set(r.value.filter((x) => x.proposal !== "skip").map((x) => x.id)))
+      if (announce) setDone(null)
       if (announce) toast(r.value.length ? t("scanDone", { n: r.value.length }) : t("scanDoneNone"))
     },
     [runTask, t],
@@ -96,9 +100,22 @@ export function ScanPage() {
 
   const adopt = () => {
     const chosen = (items ?? []).filter((x) => picked.has(x.id))
+    // The table already says what happens to each one: the confirmation only counts them by kind.
+    const parts = (
+      [
+        ["pack", "adoptPartPack"],
+        ["own", "adoptPartOwn"],
+        ["enable", "adoptPartEnable"],
+        ["drop", "adoptPartDrop"],
+        ["app", "adoptPartApp"],
+      ] as const
+    )
+      .map(([kind, key]) => [chosen.filter((x) => x.proposal === kind).length, key] as const)
+      .filter(([n]) => n > 0)
+      .map(([n, key]) => t(key, { n }))
     confirm({
       title: t("adoptTitle", { n: chosen.length }),
-      body: chosen.map((x) => `${x.name}：${proposal(x)}`).join(t("listSepLong")) + t("adoptBodyTail"),
+      body: t("adoptConfirmBody", { parts: parts.join(t("listSep")) }),
       action: t("adoptAction"),
       run: async () => {
         const r = await runTask(t("adopting"), () => backend.adopt([...picked]))
@@ -106,6 +123,7 @@ export function ScanPage() {
         toast(t("adoptedToast", { n: r.value.adopted }))
         await reload()
         await scan(false)
+        setDone(r.value.adopted)
       },
     })
   }
@@ -139,6 +157,18 @@ export function ScanPage() {
         </footer>
       }
     >
+      {done !== null && (
+        <div role="status" className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card bg-row-hv px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-heading fs-name font-semibold text-ink">{t("adoptDoneTitle")}</p>
+            <p className="mt-0.5 fs-meta text-mut">{t("adoptDoneBody", { n: done })}</p>
+          </div>
+          <Button onClick={() => navigate("skills")}>
+            {t("backToSkills")}
+            <ArrowRight aria-hidden />
+          </Button>
+        </div>
+      )}
       {failed ? (
         <PageError onRetry={() => void scan(false)} />
       ) : items === null ? (

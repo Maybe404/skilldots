@@ -132,7 +132,7 @@ export function SkillsPage() {
           {filters.map(([value, label]) => (
             <ToggleGroupItem key={value} value={value}>
               {label}
-              <span className="font-mono fs-meta opacity-70">{skills.filter((s) => matchesFilter(s, value, updatable)).length}</span>
+              <span className="fs-meta tabular-nums opacity-70">{skills.filter((s) => matchesFilter(s, value, updatable)).length}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>

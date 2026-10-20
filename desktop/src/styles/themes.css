@@ -17,7 +17,8 @@
   --scrim: rgba(20, 18, 16, 0.35);
   /* text */
   --ink: #1a1a1a;
-  --mut: #8a8a85;
+  /* secondary text: 5.4:1 on white, 4.7:1 on the grey controls (WCAG AA for 12px) */
+  --mut: #6b6b66;
   /* the three hues: accent (pending, updates), hue (installed, links), ink */
   --ac: #e8622f;
   --acInk: #ffffff;
@@ -83,6 +84,9 @@
   /* wires (the wire view's curves) */
   --wireOp: 0.12;
   --wireW: 1.2;
+  /* diff rows (update review): added in the ink, removed in the accent */
+  --diffAdd: rgba(0, 0, 0, 0.05);
+  --diffDel: rgba(232, 98, 47, 0.1);
 }
 
 :root[data-style="doodle"] {
@@ -93,7 +97,8 @@
   --dialogBg: #fbf8f0;
   --scrim: rgba(20, 18, 16, 0.35);
   --ink: #3e3935;
-  --mut: #8a837a;
+  /* 5.2:1 on the paper */
+  --mut: #6a6359;
   --ac: #d88a3f;
   --acInk: #2a1c08;
   --acSoft: rgba(216, 138, 63, 0.3);
@@ -110,11 +115,12 @@
   --inBd: 1.5px solid rgba(62, 57, 53, 0.3);
   --btnRad: 9px 7px 11px 8px;
   --fh: "Gaegu", "Long Cang", "PingFang SC", cursive;
-  --fb: "Long Cang", "Gaegu", "PingFang SC", cursive;
+  /* Handwriting only in headings and names (--fh); body text, Chinese above all, stays PingFang to be read easily. */
+  --fb: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --fm: "Gaegu", "Long Cang", cursive;
   --fmCode: "JetBrains Mono", ui-monospace, monospace;
-  --fsSm: 13.5px;
-  --fs: 16px;
+  --fsSm: 12.5px;
+  --fs: 14px;
   --fsName: 19px;
   --fsH3: 21px;
   --fsH1: 34px;
@@ -148,6 +154,8 @@
   --tblRow: 1.1px dashed rgba(62, 57, 53, 0.35);
   --wireOp: 0.3;
   --wireW: 1.5;
+  --diffAdd: rgba(76, 88, 164, 0.12);
+  --diffDel: rgba(216, 138, 63, 0.18);
 }
 
 /*

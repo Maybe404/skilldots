@@ -159,7 +159,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
         </Button>
         <div className="ml-1 flex min-w-0 items-baseline gap-2">
           <h1 className="truncate font-heading fs-name font-semibold text-ink">{t("editorTitle", { name: skill.linkName })}</h1>
-          <span className="truncate font-mono fs-meta text-mut">{kindLabel(t, skill)}</span>
+          <span className="truncate fs-meta text-mut">{kindLabel(t, skill)}</span>
           {hasDirty && (
             <span className="flex items-center gap-1.5 fs-meta text-ink" role="status">
               <span className="size-1.5 rounded-full bg-ac" aria-hidden />
@@ -244,7 +244,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
               <>
                 {doc?.hasFrontmatter && (
                   <div className="mb-5 border-b-row pb-4">
-                    <p className="font-mono fs-meta text-mut">{doc.name}</p>
+                    <p className="fs-meta font-medium text-mut">{doc.name}</p>
                     <p className="mt-1 fs-body leading-relaxed text-ink">{doc.description}</p>
                   </div>
                 )}
@@ -356,7 +356,7 @@ function FrontmatterForm({
       <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left hover:bg-row-hv">
         <span className="min-w-0">
           <span className="block fs-meta text-mut">{t("frontmatter")}</span>
-          <span className="mt-0.5 block truncate font-mono fs-body text-ink">{name || skill.name}</span>
+          <span className="mt-0.5 block truncate fs-body text-ink">{name || skill.name}</span>
         </span>
         <ChevronDown className={cn("size-4 shrink-0 transition-transform motion-reduce:transition-none", open && "rotate-180")} aria-hidden />
       </CollapsibleTrigger>
@@ -364,7 +364,7 @@ function FrontmatterForm({
         <div className="grid gap-3 [border-top:var(--tblRow)] px-5 py-4 lg:grid-cols-[14rem_1fr]">
           <Field>
             <FieldLabel htmlFor="fm-name">{t("nameLabel")}</FieldLabel>
-            <Input id="fm-name" value={name || skill.name} readOnly className="bg-nav font-mono fs-body" aria-describedby="fm-name-hint" />
+            <Input id="fm-name" value={name || skill.name} readOnly className="bg-nav fs-body" aria-describedby="fm-name-hint" />
             <FieldDescription id="fm-name-hint" className="fs-meta">
               {t("nameReadonlyHint")}
             </FieldDescription>

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Check, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp } from "@/lib/app-state"
@@ -8,6 +9,7 @@ import { cellState, isOn } from "@/lib/pending"
 import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
+import { GroupBatchMenu } from "./group-batch"
 import { traceCubic, wireSeed } from "./wobble"
 import { AGENT_H, AGENTS_TOP, GROUP_H, LIST_TOP, ROW_H, type ListItem, type useSkillList } from "./model"
 
@@ -89,7 +91,7 @@ function readInks() {
     hueInk: v("--hueInk"),
     wireW: parseFloat(v("--wireW")) || 1.2,
     wireOp: parseFloat(v("--wireOp")) || 0.12,
-    font: v("--fm"),
+    font: v("--fb"),
   }
 }
 
@@ -338,19 +340,19 @@ export function WireView({
           <section ref={agentsRef} aria-label={t("agentsTitle")} className="absolute top-0 z-[2] pt-3" style={{ left: g.x2, width: g.agentsW }}>
             <div className="mb-1.5 flex h-[25px] items-baseline gap-2.5 border-b-row px-3.5 font-body fs-meta text-mut">
               <span className="font-semibold text-ink">Agent</span>
-              <span className="font-mono">{columns.length}</span>
+              <span className="tabular-nums">{columns.length}</span>
               <span className="flex-1" />
               <span className="truncate">{selSkill ? t("wireAgentHintSel") : t("wireAgentHint")}</span>
             </div>
             {columns.map((a) => (
-              <AgentRow key={a.name} agent={a} skill={selSkill} dragging={!!drag} claudeOff={!!selSkill && a.name === "claude" && overrides.has(selSkill.name)} />
+              <AgentRow key={a.name} agent={a} skill={selSkill} dragging={!!drag} compact={g.agentsW < 340} claudeOff={!!selSkill && a.name === "claude" && overrides.has(selSkill.name)} />
             ))}
           </section>
 
           <section aria-label="Skill" className="absolute top-0" style={{ left: g.padX, width: g.listW }}>
             <div className="mt-3 mb-1.5 flex h-[25px] items-baseline gap-2.5 border-b-row px-3.5 font-body fs-meta text-mut">
               <span className="font-semibold text-ink">Skill</span>
-              <span className="font-mono">{count}</span>
+              <span className="tabular-nums">{count}</span>
               <span className="flex-1" />
               <span className="max-w-[260px] truncate" aria-live="polite">
                 {focusText}
@@ -400,7 +402,7 @@ export function WireView({
   )
 }
 
-function AgentRow({ agent: a, skill, dragging, claudeOff }: { agent: Agent; skill: Skill | null; dragging: boolean; claudeOff: boolean }) {
+function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Agent; skill: Skill | null; dragging: boolean; claudeOff: boolean; compact: boolean }) {
   const { t, skills, pending, togglePending, agentFocus, setAgentFocus } = useApp()
   const count = skills.filter((s) => isOn(s, a.name, pending)).length
   const selA = agentFocus === a.name
@@ -425,7 +427,8 @@ function AgentRow({ agent: a, skill, dragging, claudeOff }: { agent: Agent; skil
         style={{ background: on || selA ? "var(--ac)" : "var(--hue)", boxShadow: dragging ? "0 0 0 4px var(--acSoft)" : "none" }}
       />
       <AgentMono agent={a} size={34} />
-      <Hint label={t("agentFocusHint", { agent: label })}>
+      {/* The shared folder says who reads it (several agents, not Claude Code). */}
+      <Hint label={a.name === "agents" ? `${t("sharedDirNote")} · ${t("agentFocusHint", { agent: label })}` : t("agentFocusHint", { agent: label })}>
         <button
           type="button"
           aria-pressed={selA}
@@ -440,24 +443,31 @@ function AgentRow({ agent: a, skill, dragging, claudeOff }: { agent: Agent; skil
           <span className="mt-[3px] block truncate font-mono fs-meta text-mut">{tildify(a.path)}</span>
         </button>
       </Hint>
-      {skill && (
-        // shadcn button without a fill: the design draws 已装 / 装上 / 待装上 / 待卸下 with its own borders.
-        <Button
-          variant={null}
-          size="default"
-          aria-pressed={on}
-          aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
-          onClick={() => togglePending(skill, a.name)}
-          className={cn(
-            "relative z-[1] h-[26px]",
-            on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
-            pend ? "border-ac text-ac" : !on && "border-mut text-ink",
-          )}
-        >
-          {btnText}
-        </Button>
-      )}
-      <span className="min-w-[30px] flex-none text-right font-mono text-[18px] leading-none font-medium text-hue-ink">{count}</span>
+      {skill &&
+        (() => {
+          // shadcn button without a fill: the design draws 已装 / 装上 / 待装上 / 待卸下 with its own borders.
+          // In a narrow column it keeps only its glyph, so the agent's name and folder keep the room.
+          const Glyph = st === "removing" ? Minus : on ? Check : Plus
+          const button = (
+            <Button
+              variant={null}
+              size="default"
+              aria-pressed={on}
+              aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
+              onClick={() => togglePending(skill, a.name)}
+              className={cn(
+                "relative z-[1] h-[26px]",
+                compact && "w-[26px] px-0",
+                on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
+                pend ? "border-ac text-ac" : !on && "border-mut text-ink",
+              )}
+            >
+              {compact ? <Glyph aria-hidden strokeWidth={2.2} /> : btnText}
+            </Button>
+          )
+          return compact ? <Hint label={btnText}>{button}</Hint> : button
+        })()}
+      <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>
   )
 }
@@ -465,7 +475,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff }: { agent: Agent; skil
 function GroupRow({ item, onToggle }: { item: Extract<ListItem, { type: "group" }>; onToggle: () => void }) {
   const { t } = useApp()
   return (
-    <div role="listitem" className="absolute inset-x-0" style={{ top: item.y, height: GROUP_H }}>
+    <div role="listitem" className="absolute inset-x-0 flex items-center" style={{ top: item.y, height: GROUP_H }}>
       <button
         type="button"
         aria-expanded={!item.collapsed}
@@ -473,10 +483,13 @@ function GroupRow({ item, onToggle }: { item: Extract<ListItem, { type: "group" 
         className="relative flex size-full items-center gap-2 rounded-ctl px-4 text-left"
       >
         <DisclosureChevron open={!item.collapsed} />
-        <span className="font-mono fs-meta text-ink">{item.name}</span>
+        <span className="fs-meta font-medium text-ink">{item.name}</span>
         <span className="font-body fs-meta text-mut">{t("groupCount", { n: item.skills.length })}</span>
         {item.collapsed && <span aria-hidden className="absolute top-1/2 -right-1.5 -mt-1.5 size-3 rounded-full bg-[var(--wire)]" />}
       </button>
+      <span className="absolute right-6">
+        <GroupBatchMenu group={item.name} skills={item.skills} />
+      </span>
     </div>
   )
 }
@@ -540,10 +553,10 @@ function SkillRow({
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
           </span>
-          <span className="mt-0.5 block truncate font-mono fs-meta text-mut">{sourceText}</span>
+          <span className="mt-0.5 block truncate fs-meta text-mut">{sourceText}</span>
         </span>
         <Hint label={t("installedOfTotal")}>
-          <span className="font-mono fs-meta whitespace-nowrap text-hue-ink">
+          <span className="fs-meta whitespace-nowrap text-hue-ink tabular-nums">
             {count}/{total}
           </span>
         </Hint>

@@ -26,6 +26,19 @@ export function ago(iso: string | undefined, t: T, now = Date.now()): string {
   return t("daysAgo", { n: Math.floor(s / 86400) })
 }
 
+/** "12 KB", "3.4 MB" (decimal units, as Finder shows them). */
+export function formatBytes(n: number): string {
+  if (n < 1000) return `${n} B`
+  const units = ["KB", "MB", "GB", "TB"]
+  let v = n
+  let u = -1
+  while (v >= 1000 && u < units.length - 1) {
+    v /= 1000
+    u++
+  }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[u]}`
+}
+
 /** "10 月 17 日 11:30" / "Oct 17, 11:30" */
 export function formatDate(iso: string, lang: Lang): string {
   const d = new Date(iso)

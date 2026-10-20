@@ -1,11 +1,11 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { Undo2 } from "lucide-react"
+import { Trash2, Undo2 } from "lucide-react"
 
 import { useApp } from "@/lib/app-state"
 import { backend, type TrashEntry } from "@/lib/backend"
-import { ago, type MessageKey } from "@/lib/i18n"
-import { EmptyNote, ExampleTag, Page, PageError, TableHead } from "@/components/app/bits"
+import { ago, formatBytes, type MessageKey } from "@/lib/i18n"
+import { EmptyNote, ExampleTag, Hint, Page, PageError, TableHead } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -18,17 +18,25 @@ const REASON: Record<NonNullable<TrashEntry["reason"]>, MessageKey> = {
   purge: "reasonPurge",
 }
 
-/** Trash: restore only. Emptying it is a terminal command (skd trash empty). */
+/**
+ * Trash: restore an entry, or delete it for good. Deleting (one entry or
+ * all) is the app's only permanent deletion: it always asks first, saying
+ * how many entries and how much space, and the backend refuses when the
+ * trash changed after that was shown.
+ */
 export function TrashPage() {
-  const { t, run, read, reload, trashCount, status } = useApp()
+  const { t, run, read, reload, trashCount, status, confirm } = useApp()
   const [items, setItems] = React.useState<TrashEntry[] | null>(null)
+  const [bytes, setBytes] = React.useState(0)
   const [failed, setFailed] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setFailed(false)
-    const r = await read(() => backend.trash())
-    if (r.ok) setItems(r.value)
-    else setFailed(true)
+    const r = await read(() => Promise.all([backend.trash(), backend.trashUsage()]))
+    if (r.ok) {
+      setItems(r.value[0])
+      setBytes(r.value[1].bytes)
+    } else setFailed(true)
   }, [read])
   React.useEffect(() => {
     void load()
@@ -39,6 +47,38 @@ export function TrashPage() {
     toast(t("restored", { name: e.name }))
     await reload()
   }
+
+  const emptyAll = async () => {
+    // Counted now, not from the list on screen: the confirmation names exactly what goes.
+    const u = await read(() => backend.trashUsage())
+    if (!u.ok || !u.value.count) return
+    const { count, bytes } = u.value
+    confirm({
+      title: t("emptyTrashTitle", { n: count }),
+      body: t("emptyTrashBody", { size: formatBytes(bytes) }),
+      action: t("deleteForever"),
+      run: async () => {
+        const r = await run(() => backend.emptyTrash({ count }))
+        if (!r.ok) return false
+        toast(t("emptiedToast", { n: r.value.deleted }))
+        await reload()
+        await load()
+      },
+    })
+  }
+
+  const deleteOne = (e: TrashEntry) =>
+    confirm({
+      title: t("deleteEntryTitle", { name: e.name }),
+      body: t("deleteEntryBody", { size: formatBytes(e.size ?? 0) }),
+      action: t("deleteForever"),
+      run: async () => {
+        if (!(await run(() => backend.deleteTrash(e.id))).ok) return false
+        toast(t("deletedToast", { name: e.name }))
+        await reload()
+        await load()
+      },
+    })
 
   // Older entries carry no reason: say where they came from instead.
   const why = (e: TrashEntry) => {
@@ -53,11 +93,14 @@ export function TrashPage() {
   return (
     <Page
       title={t("trashTitle")}
-      summary={
-        <>
-          {t("trashRestoreOnly")}
-          <code className="rounded-[4px] bg-nav px-1.5 py-px font-mono fs-meta text-ink">skd trash empty</code>
-        </>
+      summary={items?.length ? t("trashSummary", { n: items.length, size: formatBytes(bytes) }) : undefined}
+      actions={
+        items?.length ? (
+          <Button variant="outline" onClick={() => void emptyAll()}>
+            <Trash2 aria-hidden strokeWidth={1.8} />
+            {t("emptyTrash")}
+          </Button>
+        ) : undefined
       }
     >
       {failed ? (
@@ -93,11 +136,24 @@ export function TrashPage() {
               <div role="cell" className="truncate fs-meta text-mut" title={e.problem ?? why(e)}>
                 {e.restorable === false && e.problem ? e.problem : why(e)}
               </div>
-              <div role="cell" className="flex justify-end">
-                <Button variant="outline" size="sm" disabled={e.restorable === false} title={e.problem} onClick={() => restore(e)} aria-label={`${t("restore")} ${e.name}`}>
+              <div role="cell" className="flex justify-end gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={e.restorable === false}
+                  title={e.problem}
+                  onClick={() => restore(e)}
+                  aria-label={`${t("restore")} ${e.name}`}
+                  className="max-[999px]:w-[26px] max-[999px]:px-0"
+                >
                   <Undo2 aria-hidden strokeWidth={1.8} />
-                  {t("restore")}
+                  <span className="max-[999px]:hidden">{t("restore")}</span>
                 </Button>
+                <Hint label={t("deleteForever")}>
+                  <Button variant="ghost" size="icon-sm" disabled={e.unsafe} onClick={() => deleteOne(e)} aria-label={`${t("deleteForever")} ${e.name}`}>
+                    <Trash2 aria-hidden strokeWidth={1.8} />
+                  </Button>
+                </Hint>
               </div>
             </div>
           ))}

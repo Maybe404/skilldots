@@ -46,6 +46,7 @@ export function StatusBar() {
   const { t, pendingCount, applying, applyPending, revertPending, operation, outdated, checking, updatablePacks, status, plan, openDialog, navigate } = useApp()
   const columns = useColumnAgents()
   const keys = Math.min(9, columns.length)
+  const failed = outdated?.failed.length ?? 0
 
   let state: string
   let left: React.ReactNode
@@ -83,12 +84,22 @@ export function StatusBar() {
         {updatablePacks.length > 0 && (
           <>
             {sep}
-            <Button variant="quiet" size="inline" className="no-underline hover:underline" onClick={() => navigate("sources")}>
+            {/* Straight to the update dialog, where several sources can be picked at once. */}
+            <Button variant="quiet" size="inline" className="no-underline hover:underline" onClick={() => openDialog({ kind: "update" })}>
               {t("updatesAvailable", { n: updatablePacks.length })}
             </Button>
           </>
         )}
-        {!updatablePacks.length && outdated && !checking && (
+        {/* A failed check (offline, say) is not "up to date": it says so, and leads to the sources it is about. */}
+        {failed > 0 && !checking && (
+          <>
+            {sep}
+            <Button variant="quiet" size="inline" className="no-underline hover:underline" onClick={() => navigate("sources")}>
+              {t("checkFailedN", { n: failed })}
+            </Button>
+          </>
+        )}
+        {!updatablePacks.length && !failed && outdated && !checking && (
           <>
             {sep}
             <span>{t("allUpToDate")}</span>
@@ -114,7 +125,7 @@ export function StatusBar() {
         {left}
       </Effect>
       <span className="flex-1" />
-      <span aria-hidden className="font-mono fs-mono-xs whitespace-nowrap max-[1080px]:hidden">
+      <span aria-hidden className="fs-meta whitespace-nowrap max-[1080px]:hidden">
         {t("keysHint", { n: keys })}
       </span>
     </footer>

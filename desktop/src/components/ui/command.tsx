@@ -173,7 +173,7 @@ function CommandShortcut({
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto font-mono fs-mono-xs text-mut",
+        "ml-auto fs-mono-xs text-mut",
         className
       )}
       {...props}

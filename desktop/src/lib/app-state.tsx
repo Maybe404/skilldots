@@ -14,7 +14,7 @@ import {
   type Skill,
 } from "@/lib/backend"
 import { translator, type T } from "@/lib/i18n"
-import { changes, prune, toggle as togglePendingCell, type Pending } from "@/lib/pending"
+import { changes, prune, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
 
 export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
 /** The two interface styles of the design ("简洁" and "涂鸦"). */
@@ -45,7 +45,7 @@ export interface ConfirmRequest {
 }
 
 export type DialogState =
-  | { kind: "add"; initial?: string }
+  | { kind: "add"; initial?: string; adjust?: boolean }
   | { kind: "new" }
   | { kind: "fork"; ref: Ref; thenEdit?: boolean }
   | { kind: "update"; repos?: string[] }
@@ -132,6 +132,8 @@ interface AppContextValue {
   /** True while applyPending is writing links (the status bar shows progress). */
   applying: boolean
   togglePending: (skill: Skill, agent: string) => void
+  /** Wants every one of skills on or off for agent (a group header's switch). */
+  setPendingMany: (skills: Skill[], agent: string, want: boolean) => void
   revertPending: () => void
   applyPending: () => Promise<void>
 
@@ -424,6 +426,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPending((p) => togglePendingCell(p, skill, agent))
   }, [])
 
+  const setPendingMany = React.useCallback((list: Skill[], agent: string, want: boolean) => {
+    if (applyingRef.current) return
+    setPending((p) => setMany(p, list, agent, want))
+  }, [])
+
   const pendingCount = Object.keys(pending).length
 
   const applyPending = React.useCallback(async () => {
@@ -571,6 +578,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pendingCount,
     applying,
     togglePending,
+    setPendingMany,
     revertPending,
     applyPending,
     run,

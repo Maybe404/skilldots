@@ -55,7 +55,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           {updatable.has(skill.ref.key) && <UpdateDot />}
           {mine && <Tag>{t("kindMine")}</Tag>}
         </SheetTitle>
-        <SheetDescription className="truncate font-mono">{sourceText(t, skill)}</SheetDescription>
+        <SheetDescription className="truncate">{sourceText(t, skill)}</SheetDescription>
       </SheetHeader>
 
       <div ref={start} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 outline-none">
@@ -97,7 +97,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
             )}
             {moved && (
               <p className="mt-1.5 text-mut">
-                {t("upstreamMoved")}: <Mono>{moved.split(": ")[1]}</Mono>
+                {t("upstreamMoved")}: {moved.split(": ")[1]}
               </p>
             )}
           </div>
@@ -159,7 +159,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           )}
           <dt className="text-mut">{t("infoLinkName")}</dt>
           <dd>
-            <Mono className="text-ink">{skill.linkName}</Mono>
+            <span className="fs-meta text-ink">{skill.linkName}</span>
           </dd>
           <dt className="text-mut">{t("infoLocation")}</dt>
           <dd className="min-w-0 break-all">

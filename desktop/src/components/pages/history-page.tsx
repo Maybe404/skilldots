@@ -4,7 +4,7 @@ import { useApp } from "@/lib/app-state"
 import { backend, type HistoryEntry } from "@/lib/backend"
 import { formatDate, type MessageKey } from "@/lib/i18n"
 import { shortSha } from "@/lib/utils"
-import { EmptyNote, ExampleTag, Mono, Page, PageError, Sha, TableHead, UpdateDot } from "@/components/app/bits"
+import { EmptyNote, ExampleTag, Page, PageError, Sha, TableHead, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -72,7 +72,7 @@ function Row({ h }: { h: HistoryEntry }) {
 
   return (
     <div role="row" className="grid items-start border-b-row px-2.5 py-3 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
-      <div role="cell" className="flex items-center gap-2 pt-0.5 font-mono fs-meta text-mut">
+      <div role="cell" className="flex items-center gap-2 pt-0.5 fs-meta text-mut tabular-nums">
         <time dateTime={h.when}>{formatDate(h.when, config.lang)}</time>
         {fresh && <UpdateDot label={t("fresh")} />}
       </div>
@@ -87,7 +87,7 @@ function Row({ h }: { h: HistoryEntry }) {
         {kinds.map(([k, list]) => (
           <div key={k} className="flex gap-2 fs-body">
             <span className="flex-none text-mut">{t(k)}</span>
-            <Mono className="pt-px text-hue-ink">{list.join(", ")}</Mono>
+            <span className="pt-px fs-meta text-hue-ink">{list.join(", ")}</span>
           </div>
         ))}
         {h.commits.length > 0 && (

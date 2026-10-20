@@ -82,9 +82,10 @@ func TestDesktopDistributionRoundTrip(t *testing.T) {
 	if got := invoke(t, s, "readFile", r, "SKILL.md"); got != text+"\nEdited in the desktop.\n" {
 		t.Fatalf("restored content differs: %s", got)
 	}
+	// Permanent deletion needs what the confirmation showed (trash_test.go).
 	for _, name := range []string{"deleteForever", "emptyTrash"} {
 		if _, err := s.Invoke(context.Background(), name, nil); err == nil {
-			t.Fatalf("permanent deletion exposed: %s", name)
+			t.Fatalf("permanent deletion without confirmation: %s", name)
 		}
 	}
 }

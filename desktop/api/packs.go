@@ -69,9 +69,16 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 			return nil, err
 		}
 		s.previews[parsed.Repo] = f
+		// Names the input asked for that the repository does not have are
+		// reported with the preview, not as an error: the person then
+		// picks from what is there. Preselect also matches category/name
+		// and directory names, so the desktop takes both lists from here.
 		selected, missing := f.Preselect(h)
-		if len(missing) > 0 {
-			return nil, fmt.Errorf("skills not found: %s", strings.Join(missing, ", "))
+		if selected == nil {
+			selected = []string{}
+		}
+		if missing == nil {
+			missing = []string{}
 		}
 		src.Repo = parsed.Repo
 		src.Skills = selected
@@ -88,7 +95,7 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 			have = append(have, name)
 		}
 		slices.Sort(have)
-		return object{"source": src, "commit": f.Commit, "skills": skills, "rejected": rejected, "subscribed": f.Subscribed, "have": have}, nil
+		return object{"source": src, "commit": f.Commit, "skills": skills, "rejected": rejected, "subscribed": f.Subscribed, "have": have, "preselected": selected, "missing": missing}, nil
 	case "add":
 		preview, err := argument[struct {
 			Source source
@@ -117,6 +124,18 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 			renamed = o.Report.Renamed
 		}
 		return object{"repo": o.Repo, "linked": o.Linked, "renamed": renamed, "nothing": o.Nothing}, nil
+	case "updateDiff":
+		repo, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		latest := ""
+		if len(args) > 1 {
+			if latest, err = argument[string](args, 1); err != nil {
+				return nil, err
+			}
+		}
+		return ses.UpdateDiff(ctx, repo, latest)
 	case "update":
 		repos, err := argument[[]string](args, 0)
 		if err != nil {

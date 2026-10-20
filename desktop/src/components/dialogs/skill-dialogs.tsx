@@ -6,7 +6,9 @@ import { useApp, useEnabledAgents } from "@/lib/app-state"
 import { agentLabel } from "@/lib/agents"
 import { backend, type Ref } from "@/lib/backend"
 import { useSkillActions } from "@/lib/use-actions"
-import { RefreshIcon } from "@/components/app/bits"
+import { Info } from "lucide-react"
+import { Hint, RefreshIcon } from "@/components/app/bits"
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -52,29 +54,53 @@ function LocationField({ value, onChange }: { value: "public" | "private"; onCha
   )
 }
 
-/** Agent checkboxes for "install to" (new skill, add). */
-export function AgentTargets({ value, onChange, className }: { value: Set<string>; onChange: (v: Set<string>) => void; className?: string }) {
+/**
+ * Agent checkboxes for "install to" (new skill, add). The agents found on
+ * this Mac come first; the rest fold away (Animate UI collapsible). Which
+ * agents count as "here" is fixed when the box opens, so unticking one
+ * does not move it.
+ */
+export function AgentTargets({ value, onChange, className, label }: { value: Set<string>; onChange: (v: Set<string>) => void; className?: string; label?: string }) {
   const { t } = useApp()
   const enabled = useEnabledAgents()
+  const [shown] = React.useState(() => new Set(enabled.filter((a) => a.detected || value.has(a.name)).map((a) => a.name)))
+  const [showOthers, setShowOthers] = React.useState(false)
+  const here = enabled.filter((a) => shown.has(a.name))
+  const others = enabled.filter((a) => !shown.has(a.name))
+  const box = (a: (typeof enabled)[number]) => (
+    <label key={a.name} className="flex items-center gap-2 fs-body text-ink">
+      <Checkbox
+        checked={value.has(a.name)}
+        onCheckedChange={(v) => {
+          const n = new Set(value)
+          if (v) n.add(a.name)
+          else n.delete(a.name)
+          onChange(n)
+        }}
+      />
+      {agentLabel(a)}
+      {a.name === "agents" && (
+        <Hint label={t("sharedDirNote")}>
+          <Info aria-label={t("sharedDirNote")} className="size-3.5 text-mut" strokeWidth={1.8} />
+        </Hint>
+      )}
+    </label>
+  )
   return (
     <fieldset className={className}>
-      <legend className="mb-1.5 fs-meta font-medium text-ink">{t("installTo")}</legend>
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
-        {enabled.map((a) => (
-          <label key={a.name} className="flex items-center gap-2 fs-body text-ink">
-            <Checkbox
-              checked={value.has(a.name)}
-              onCheckedChange={(v) => {
-                const n = new Set(value)
-                if (v) n.add(a.name)
-                else n.delete(a.name)
-                onChange(n)
-              }}
-            />
-            {agentLabel(a)}
-          </label>
-        ))}
-      </div>
+      <legend className="mb-1.5 fs-meta font-medium text-ink">{label ?? t("installTo")}</legend>
+      <div className="flex flex-wrap gap-x-5 gap-y-2">{here.map(box)}</div>
+      {others.length > 0 && (
+        <Collapsible open={showOthers} onOpenChange={setShowOthers} className="mt-2">
+          <CollapsibleTrigger className="flex h-6 items-center gap-1.5 rounded-seg fs-meta text-mut hover:text-ink">
+            <DisclosureChevron open={showOthers} />
+            {t("otherAgentsHere", { n: others.length })}
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1.5 pb-0.5">{others.map(box)}</div>
+          </CollapsiblePanel>
+        </Collapsible>
+      )}
     </fieldset>
   )
 }
@@ -121,7 +147,7 @@ export function NewSkillDialog({ onClose }: { onClose: () => void }) {
           <div className="-mx-1 grid min-h-0 gap-4 overflow-y-auto px-1 py-1">
             <Field data-invalid={invalid || undefined}>
               <FieldLabel htmlFor="new-name">{t("nameLabel")}</FieldLabel>
-              <Input id="new-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} className="font-mono" spellCheck={false} aria-invalid={invalid || undefined} />
+              <Input id="new-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} aria-invalid={invalid || undefined} />
               {invalid ? <FieldError>{t("nameInvalid")}</FieldError> : <FieldDescription>{t("nameHint")}</FieldDescription>}
             </Field>
             <Field>
@@ -190,7 +216,7 @@ export function ForkDialog({ skillRef, thenEdit, onClose }: { skillRef: Ref; the
         >
           <Field data-invalid={invalid || undefined}>
             <FieldLabel htmlFor="fork-name">{t("nameLabel")}</FieldLabel>
-            <Input id="fork-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} className="font-mono" spellCheck={false} aria-invalid={invalid || undefined} />
+            <Input id="fork-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} aria-invalid={invalid || undefined} />
             {invalid ? <FieldError>{t("nameInvalid")}</FieldError> : <FieldDescription>{t("nameHint")}</FieldDescription>}
           </Field>
           <LocationField value={loc} onChange={setLoc} />

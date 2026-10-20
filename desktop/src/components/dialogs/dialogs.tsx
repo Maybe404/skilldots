@@ -26,7 +26,7 @@ export function Dialogs() {
 function render(d: NonNullable<DialogState>, closeDialog: () => void) {
   switch (d.kind) {
     case "add":
-      return <AddDialog initial={d.initial} onClose={closeDialog} />
+      return <AddDialog initial={d.initial} adjust={d.adjust} onClose={closeDialog} />
     case "new":
       return <NewSkillDialog onClose={closeDialog} />
     case "fork":

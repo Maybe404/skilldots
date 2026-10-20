@@ -73,7 +73,7 @@ export function agentMono(a: Pick<Agent, "name">): string {
   return (n.slice(0, 1).toUpperCase() + n.slice(1, 2)) || "?"
 }
 
-/** "/Users/maybe/.claude/skills" → "~/.claude/skills" */
+/** "/Users/<you>/.claude/skills" → "~/.claude/skills" */
 export function tildify(path: string): string {
   return path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~")
 }

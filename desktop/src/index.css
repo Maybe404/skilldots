@@ -174,7 +174,7 @@
      range syntax matches Tailwind's max-[1000px] (< 1000px), which hides the
      usage bar on the Sources page; a plain max-width would differ at 1000px. */
   .skd-cols-sources {
-    --cols: minmax(0, 1fr) 80px 190px 110px 150px 140px;
+    --cols: minmax(0, 1fr) 80px 190px 110px 150px 150px;
   }
   .skd-cols-agents {
     --cols: 40px minmax(0, 1fr) 220px 70px 100px 110px 120px;
@@ -186,11 +186,12 @@
     --cols: 28px minmax(0, 1fr) 110px minmax(0, 380px);
   }
   .skd-cols-trash {
-    --cols: 200px minmax(0, 1fr) 110px 220px 120px;
+    --cols: 200px minmax(0, 1fr) 110px 220px 140px;
   }
   @media (width < 1000px) {
     .skd-cols-sources {
-      --cols: minmax(0, 1fr) 72px 64px 92px 144px 128px;
+      /* the action buttons are icons here (sources-page), so the name and status keep their room */
+      --cols: minmax(0, 1fr) 76px 92px 100px 150px 64px;
     }
     .skd-cols-agents {
       --cols: 36px minmax(0, 1fr) 150px 44px 104px 104px 96px;
@@ -202,7 +203,7 @@
       --cols: 28px minmax(0, 1fr) 88px minmax(0, 260px);
     }
     .skd-cols-trash {
-      --cols: 130px minmax(0, 1fr) 72px 150px 100px;
+      --cols: 130px minmax(0, 1fr) 72px 150px 64px;
     }
   }
 
@@ -297,12 +298,12 @@
     background: var(--agBg);
     border: var(--agBd);
     color: var(--agFg);
-    font-family: var(--fm);
+    font-family: var(--fb);
     font-weight: 700;
     line-height: 1;
   }
 
-  /* One skill × agent cell of the table view. */
+  /* One skill × agent cell of the table view: a check when installed, + on hover when not, − while waiting to be removed. */
   .skd-cell {
     display: grid;
     place-items: center;
@@ -310,9 +311,6 @@
     height: 30px;
     box-sizing: border-box;
     border-radius: var(--onRad);
-    font-family: var(--fm);
-    font-size: 10.5px;
-    font-weight: 700;
     border: var(--offBd);
     color: transparent;
     background: transparent;
@@ -331,7 +329,6 @@
   .skd-cell[data-state="removing"] {
     border: 1.5px dashed var(--mut);
     color: var(--mut);
-    text-decoration: line-through;
   }
   .skd-cell:hover:not([data-state="on"]) {
     color: var(--mut);

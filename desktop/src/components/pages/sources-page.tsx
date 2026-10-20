@@ -1,11 +1,11 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Download, FileDiff, ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react"
 
 import { cn, shortSha } from "@/lib/utils"
 import { hasUpdates, isMine, useApp } from "@/lib/app-state"
 import { backend, type Pack, type PackStatus, type Skill } from "@/lib/backend"
-import { EmptyNote, Mono, Page, RefreshIcon, Sha, TableHead, Tag, UpdateDot } from "@/components/app/bits"
+import { EmptyNote, Hint, Mono, Page, RefreshIcon, Sha, TableHead, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -49,10 +49,18 @@ export function SourcesPage() {
       title={t("sourcesTitle")}
       summary={t("sourcesSummary", { n: packs.length, upd, used: totalUsed, all: totalAll })}
       actions={
-        <Button variant="outline" onClick={() => check()} disabled={checking}>
-          <RefreshIcon spinning={checking} />
-          {checking ? t("checking") : t("recheck")}
-        </Button>
+        <>
+          <Button variant="outline" onClick={() => check()} disabled={checking}>
+            <RefreshIcon spinning={checking} />
+            {checking ? t("checking") : t("recheck")}
+          </Button>
+          {upd > 0 && (
+            <Button onClick={() => openDialog({ kind: "update" })} disabled={checking}>
+              <Download aria-hidden strokeWidth={1.8} />
+              {t("updateAll")}
+            </Button>
+          )}
+        </>
       }
     >
       {packs.length === 0 ? (
@@ -64,7 +72,9 @@ export function SourcesPage() {
           <TableHead style={{ gridTemplateColumns: COLS }}>
             <div role="columnheader">{t("colSourceSkills")}</div>
             <div role="columnheader">{t("colVersion")}</div>
-            <div role="columnheader">{t("colUsedOf")}</div>
+            <div role="columnheader" className="truncate pr-2 whitespace-nowrap" title={t("colUsedOf")}>
+              {t("colUsedOf")}
+            </div>
             <div role="columnheader">{t("colLicense")}</div>
             <div role="columnheader">{t("colStatus")}</div>
             <div role="columnheader" />
@@ -85,7 +95,7 @@ export function SourcesPage() {
             <div role="columnheader" />
             <div role="columnheader" />
           </TableHead>
-          <LocalRow name={t("ownTitle")} hint={t("ownHint")} list={own} action={<Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "new" })}><Plus />{t("newSkill")}</Button>} />
+          <LocalRow name={t("ownTitle")} hint={t("ownHint")} list={own} action={<Hint label={t("newSkill")}><Button variant="ghost" size="sm" aria-label={t("newSkill")} className="max-[1099px]:w-[26px] max-[1099px]:px-0" onClick={() => openDialog({ kind: "new" })}><Plus /><span className="max-[1099px]:hidden">{t("newSkill")}</span></Button></Hint>} />
           {apps.map((app) => (
             <LocalRow key={app} name={app} hint={t("appsHint")} list={skills.filter((s) => s.kind === "app" && s.origin === app)} />
           ))}
@@ -98,14 +108,14 @@ export function SourcesPage() {
 function SkillLinks({ list }: { list: Skill[] }) {
   const { openDetail } = useApp()
   return (
-    <span className="block font-mono fs-meta text-mut [overflow-wrap:anywhere]">
+    <span className="block fs-meta text-mut [overflow-wrap:anywhere]">
       {list.map((s, i) => (
         <React.Fragment key={s.ref.key}>
           {i > 0 && ", "}
           <Button
             variant="quiet"
             size="inline"
-            className="inline rounded-seg font-mono whitespace-normal no-underline hover:underline"
+            className="inline rounded-seg whitespace-normal no-underline hover:underline"
             onClick={() => openDetail(s.ref.key)}
           >
             {s.linkName}
@@ -131,7 +141,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
           <div className="flex items-center gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
             <span className="truncate">{p.repo}</span>
             {p.followAll && <Tag>{t("followAll")}</Tag>}
-            {p.alias && <Mono className="font-normal text-mut">{p.alias}</Mono>}
+            {p.alias && <span className="fs-meta font-normal text-mut">{p.alias}</span>}
           </div>
           <div className="mt-0.5">{used.length ? <SkillLinks list={used} /> : <span className="fs-meta text-mut">{t("noneUsed")}</span>}</div>
         </div>
@@ -142,7 +152,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
           <span aria-hidden className="h-1 w-[70px] flex-none overflow-hidden rounded-[2px] bg-ln max-[1000px]:hidden">
             <span className="block h-full rounded-[2px] bg-hue" style={{ width: `${Math.max(4, Math.round((100 * used.length) / total))}%` }} />
           </span>
-          <span className="font-mono fs-meta text-ink">
+          <span className="fs-meta text-ink tabular-nums">
             {used.length} / {p.upstreamCount || "?"}
           </span>
         </div>
@@ -160,10 +170,13 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
           )}
         </div>
         <div role="cell" className="flex justify-end gap-1">
-          <Button variant="ghost" size="sm" title={t("chooseSkillsHint")} onClick={() => openDialog({ kind: "add", initial: p.repo })}>
-            <ListChecks />
-            {t("chooseSkills")}
-          </Button>
+          {/* Narrow windows keep the icon: the name column needs the room more. */}
+          <Hint label={t("chooseSkillsHint")}>
+            <Button variant="ghost" size="sm" aria-label={`${t("chooseSkills")} · ${p.repo}`} className="max-[1099px]:w-[26px] max-[1099px]:px-0" onClick={() => openDialog({ kind: "add", initial: p.repo, adjust: true })}>
+              <ListChecks />
+              <span className="max-[1099px]:hidden">{t("chooseSkills")}</span>
+            </Button>
+          </Hint>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("moreFor", { name: p.repo })} />}>
               <MoreHorizontal className="size-[15px]" />
@@ -192,7 +205,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
 
 /** The expanded update review of one source (design: commits on the left, impact and actions on the right). */
 function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus; used: Skill[]; onClose: () => void }) {
-  const { t, runTask, reload, navigate, operation } = useApp()
+  const { t, runTask, reload, navigate, operation, openDialog } = useApp()
   const [addNew, setAddNew] = React.useState<string[]>([])
   const usedNames = new Set(used.map((s) => s.name))
   const affected = [...st.changed, ...st.pending].filter((n) => usedNames.has(n))
@@ -240,7 +253,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
               {st.new.map((n) => (
                 <label key={n} className="flex items-center gap-2 fs-body text-ink">
                   <Checkbox checked={addNew.includes(n)} onCheckedChange={(v) => setAddNew((l) => (v ? [...l, n] : l.filter((x) => x !== n)))} />
-                  <Mono className="fs-body">{n}</Mono>
+                  <span className="font-medium">{n}</span>
                   <span className="fs-meta text-mut">{t("addNewToo")}</span>
                 </label>
               ))}
@@ -250,14 +263,14 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
       </div>
       <div>
         <div className="fs-meta text-mut">{t("affectsYours")}</div>
-        <div className="mt-1 font-mono fs-body text-hue-ink">{affected.length ? affected.join(", ") : t("affectsNone")}</div>
+        <div className="mt-1 fs-body font-medium text-hue-ink">{affected.length ? affected.join(", ") : t("affectsNone")}</div>
         <dl className="mt-2 space-y-0.5 fs-meta">
           {impact
             .filter(([, l]) => l.length)
             .map(([label, l]) => (
               <div key={label} className="flex gap-2">
                 <dt className="flex-none text-mut">{label}</dt>
-                <dd className="min-w-0 truncate font-mono text-ink">{l.join(", ")}</dd>
+                <dd className="min-w-0 truncate text-ink">{l.join(", ")}</dd>
               </div>
             ))}
         </dl>
@@ -269,6 +282,11 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
             {t("notNow")}
           </Button>
         </div>
+        {/* File by file, with the skills you edited marked, in the update dialog. */}
+        <Button variant="link" size="inline" className="mt-3 fs-meta" onClick={() => openDialog({ kind: "update", repos: [pack.repo] })}>
+          <FileDiff aria-hidden />
+          {t("seeFileChanges")}
+        </Button>
       </div>
     </div>
   )
@@ -278,16 +296,19 @@ function LocalRow({ name, hint, list, action }: { name: string; hint: string; li
   return (
     <div role="row" className="grid min-h-[60px] items-center border-b-row px-2.5 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
       <div role="cell" className="min-w-0 pr-4">
-        <div className="flex items-baseline gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
-          <span className="truncate">{name}</span>
-          <span className="truncate font-body fs-meta font-normal text-mut">{hint}</span>
+        {/* The name never truncates; the hint gives way, and goes below 1000px. */}
+        <div className="flex min-w-0 items-baseline gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
+          <span className="shrink-0 whitespace-nowrap">{name}</span>
+          <span className="min-w-0 truncate font-body fs-meta font-normal text-mut max-[999px]:hidden" title={hint}>
+            {hint}
+          </span>
         </div>
         <div className="mt-0.5">
           <SkillLinks list={list} />
         </div>
       </div>
       <div role="cell" />
-      <div role="cell" className="font-mono fs-meta text-ink">
+      <div role="cell" className="fs-meta text-ink tabular-nums">
         {list.length}
       </div>
       <div role="cell" />

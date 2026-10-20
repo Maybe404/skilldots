@@ -70,7 +70,8 @@ export function SettingsPage() {
             <Row label={t("styleLabel")}>
               <StyleSwitch className="h-[34px]" />
             </Row>
-            <Row label={t("mode")} hint={config.theme === "dark" ? t("darkPending") : undefined}>
+            {/* Light only until the dark variant exists: 深色 is shown, can't be chosen, and says so. */}
+            <Row label={t("mode")} hint={t("darkPending")}>
               <ToggleGroup
                 aria-label={t("mode")}
                 variant="seg"
@@ -78,22 +79,20 @@ export function SettingsPage() {
                 value={[config.theme]}
                 onValueChange={(v) => {
                   const next = v[0] as Theme | undefined
-                  if (!next) return
-                  if (next === "dark") {
-                    toast(t("darkPending"))
-                    return
-                  }
-                  void setConfig({ theme: next })
+                  if (next && next !== "dark") void setConfig({ theme: next })
                 }}
                 className="skd-seg h-[34px]"
                 spacing={2}
               >
                 <ToggleGroupItem value="system" className="h-7">{t("themeSystem")}</ToggleGroupItem>
                 <ToggleGroupItem value="light" className="h-7">{t("themeLight")}</ToggleGroupItem>
-                <ToggleGroupItem value="dark" className="h-7" aria-disabled title={t("darkPending")}>
+                <ToggleGroupItem value="dark" className="h-7 disabled:opacity-45" disabled aria-describedby="dark-pending">
                   {t("themeDark")}
                 </ToggleGroupItem>
               </ToggleGroup>
+              <span id="dark-pending" className="sr-only">
+                {t("darkPending")}
+              </span>
             </Row>
             <Row label={t("language")}>
               <Select value={config.lang} onValueChange={(v) => v && setConfig({ lang: v as Config["lang"] })} items={{ zh: "简体中文", en: "English" }}>

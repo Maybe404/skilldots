@@ -144,6 +144,14 @@ export interface RepoPreview {
   subscribed: boolean
   /** Upstream names the library already selects. */
   have: string[]
+  /**
+   * What the input named, as upstream skill names (matched by name,
+   * category/name, folder or link path). Both backends set this and
+   * `missing`; optional only so the sample catalogue can omit them.
+   */
+  preselected?: string[]
+  /** Names or paths the input asked for that the repository does not have. */
+  missing?: string[]
   license?: string
 }
 
@@ -204,6 +212,60 @@ export interface TrashEntry {
   example?: boolean
   restorable?: boolean
   problem?: string
+  /** Bytes on disk (links counted as themselves). */
+  size?: number
+  /** The name is not one skd gives what it sets aside: shown as data only. */
+  unsafe?: boolean
+}
+
+/** One line of a diff hunk: " " context, "-" removed, "+" added. */
+export interface DiffLine {
+  op: " " | "-" | "+"
+  text: string
+}
+
+export interface DiffHunk {
+  oldStart: number
+  oldLines: number
+  newStart: number
+  newLines: number
+  lines: DiffLine[]
+}
+
+/** One file of a skill that an update would change (app.FileDiff). */
+export interface FileDiff {
+  /** Relative to the skill folder. */
+  path: string
+  status: "added" | "removed" | "modified"
+  /** You changed this file in the library's copy. */
+  local?: boolean
+  binary?: boolean
+  tooLarge?: boolean
+  added: number
+  removed: number
+  hunks: DiffHunk[]
+}
+
+/** One skill an update would replace or bring in (app.SkillDiff). */
+export interface SkillDiff {
+  name: string
+  status: "changed" | "added" | "moved"
+  /** The library's copy has your edits: the whole folder goes to the trash before the upstream version is copied in. */
+  local: boolean
+  /** Files you changed, when known. */
+  localFiles: string[]
+  /** Edited, but which files is not known. */
+  localUnknown?: boolean
+  files: FileDiff[]
+  moreFiles?: number
+}
+
+/** app.UpdateDiff: what updating one source would change, before it runs. */
+export interface UpdateDiff {
+  repo: string
+  commit: string
+  latest: string
+  skills: SkillDiff[]
 }
 
 export interface LibraryStatus {
@@ -218,6 +280,8 @@ export interface LibraryStatus {
   unmanaged: number
   /** The library follows the skilldots skill (agents know how to use skd). */
   selfSkill?: boolean
+  /** The skilldots skill would come from this app's own copy (the packaged app); otherwise from GitHub, which needs the network. */
+  bundledSkill?: boolean
   /** initLibrary with the skill: why the skill could not be installed (the library was created). */
   skillError?: string
 }
@@ -345,6 +409,8 @@ export interface Backend {
   outdated(repos?: string[]): Promise<Outdated>
   /** Session.Update; addNew adds the listed new upstream skills too. */
   update(repos: string[], opts?: { addNew?: Record<string, string[]> }): Promise<HistoryEntry[]>
+  /** Session.UpdateDiff: file by file, what updating repo would change; nothing is written. latest: the commit last seen (no fetch when the cache is at it). */
+  updateDiff(repo: string, latest?: string): Promise<UpdateDiff>
   /** Update history kept in the library. */
   history(): Promise<HistoryEntry[]>
 
@@ -357,6 +423,12 @@ export interface Backend {
   // Trash -----------------------------------------------------------------
   trash(): Promise<TrashEntry[]>
   restore(id: string): Promise<void>
+  /** Entries and bytes the trash holds (what emptying it deletes). */
+  trashUsage(): Promise<{ count: number; bytes: number }>
+  /** Permanently deletes everything; count is what the person confirmed and must still match. */
+  emptyTrash(opts: { count: number }): Promise<{ deleted: number }>
+  /** Permanently deletes one entry. */
+  deleteTrash(id: string): Promise<void>
 
   // Sync ------------------------------------------------------------------
   /** Session.Backup (skd sync); private/ is never pushed. */
