@@ -1095,3 +1095,15 @@
 
 @ restored %s; selected and linked again
 = 已恢复 %s，并重新选中、重新链接
+
+@ keep the filter
+= 保留过滤
+
+@ clear the filter
+= 清除过滤
+
+@ %d of %d shown
+= 显示 %d / %d
+
+@ nothing matches the filter
+= 没有符合过滤条件的条目
