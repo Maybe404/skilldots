@@ -329,3 +329,12 @@
 
 @ unlinked %d
 = 取消链接 %d 个
+
+@ cannot compare it with %s (%v); run skd adopt again when it can be fetched
+= 无法和 %s 比较（%v）；等能拉取时再运行一次 skd adopt
+
+@ %s has no skill %s now; copy it into skills/ by hand to keep it
+= %s 现在没有 skill %s 了；要保留它，请手动复制到 skills/
+
+@ differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead
+= 和上游 %s 的内容不同（在本机改过，或是旧版本）：复制到 skills/，作为本地 skill；要改用上游的版本，运行 `skd add %s --skill %s`
