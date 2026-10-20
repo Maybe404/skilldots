@@ -5,6 +5,28 @@ The native window calls `api.Service.Invoke`, which uses the shared Go
 application layer. Browser-only previews use an in-memory mock; native errors
 never fall back to mock data.
 
+## The skd command
+
+The app's executable is also the command line tool: run under the name
+`skd` (`desktop/main.go`), it runs `skd`'s commands with no window and no
+Dock icon. Installing the command is a symbolic link,
+`/usr/local/bin/skd` → `skilldots.app/Contents/MacOS/skilldots`
+(`api/cli.go`), made by `install.sh` or by Settings → Agents (with
+macOS's administrator prompt when the directory needs it). Only a link to a
+skilldots.app is ever replaced or removed; another `skd` there is left
+alone. Updating the app updates the command. As `skd`, the version comes
+from the bundle's Info.plist, so mygo's backend (AppKit) never starts.
+
+## Releases
+
+Pushing a tag `v<version>` (matching `version` in `mygo.json`) runs
+`.github/workflows/release.yml`: a universal build on macOS, published as a
+GitHub release with the disk image and `skilldots-macos.zip` (plus its
+SHA-256). `public/install.sh`, served by the preview site at
+https://skilldots.maybe404.com/install.sh, installs the latest one. The app
+is signed ad hoc, not notarized; a download by curl is not quarantined, so
+the script's copy opens without Gatekeeper's prompt.
+
 ## Development
 
 ```sh
@@ -12,6 +34,7 @@ bun install
 bun run dev             # browser preview with mock data
 bun run desktop:dev     # native window with the real Go backend
 bun run desktop:build   # native application bundle under build/
+bun run desktop:release # the same for Apple silicon and Intel (build/darwin-universal/)
 bun run typecheck
 bun run lint
 bun run preview:deploy  # publish the browser preview to skilldots.maybe404.com

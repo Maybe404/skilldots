@@ -32,7 +32,7 @@ skilldots treats it like dotfiles:
 
 Most of the time it is not a person running `skd` but the agent on their machine — Claude Code, Codex, Cursor and friends. skilldots is designed around that:
 
-- `skd init` installs the [`skilldots` skill](skills/skilldots/SKILL.md) into the library, so every agent on the machine knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
+- `skd init` (and a new library in the desktop app) installs the [`skilldots` skill](skills/skilldots/SKILL.md) and links it into every agent found on the machine, not only the default targets (Claude Code does not read `~/.agents/skills`), so each knows how to add, update, fork and remove skills through `skd` instead of poking at directories.
 - Every command works without a terminal (stdin or stdout not a terminal, so `skd update | cat` never waits on a hidden prompt): `--json` for structured results, `--yes` for prompts, `skd show owner/repo --json` to inspect a repository before `skd add --skill …`.
 - Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash; `skd trash` lists and restores them. skd removes outright only what it can tell it made: a link into the library, or a link or copy exactly as its own record says it placed it (`placed.json` beside the settings file, never part of a library). Whatever `skills.lock` says, anything else in the way, your own directories and links included, goes to the trash (and `skills.toml`, `skills.lock` or the update history that is a link is read but written through only when it leads to a plain file directly in the library's folder, never outside the library, into `.git/` or to a hidden file), and an entry the manifest no longer wants that skd cannot tell it made is left in place, with `--force` too. `skd trash empty` is the one irreversible command and it only runs for a person at a terminal, so an agent can do everything short of permanent deletion. "A person at a terminal" means stdin and stdout are terminals (and, where it asks, the answer typed): it keeps out agents' ordinary tool calls, scripts, cron and `--yes`, not a program that drives a pseudo-terminal itself (`script`, `expect`, a terminal it controls), which can answer like a person. The bundled skill forbids agents to do that; skd cannot tell the difference. Approving a custom target (a directory `skills.toml` names for skd to write into) is likewise for a person at a terminal: see [skills.toml](#skillstoml).
 - The text meant for people may be in Chinese (see [Language](#language)); `--json` is not, whatever the language: parse that, never the words.
@@ -40,11 +40,23 @@ Most of the time it is not a person running `skd` but the agent on their machine
 
 ## Install
 
+On a Mac, the desktop app brings `skd` with it:
+
+```sh
+curl -fsSL https://skilldots.maybe404.com/install.sh | sh
+```
+
+The script installs skilldots.app (Apple silicon and Intel) from the latest [release](https://github.com/Maybe404/skilldots/releases), checks its SHA-256, and links `/usr/local/bin/skd` to the app (asking for your password only when that directory needs it). On first launch the app creates your library and installs the `skilldots` skill for every agent it finds, so Claude Code, Codex and the rest can manage skills through `skd` right away. Settings → Agents installs, repairs or removes either later.
+
+Prefer the disk image from the release page? The app is signed but not notarized: copy it to Applications, open it once, then choose **Open Anyway** in System Settings → Privacy & Security.
+
+Anywhere else, or for the command line only:
+
 ```sh
 go install github.com/Maybe404/skilldots/cmd/skd@latest
 ```
 
-Prebuilt binaries will follow. skd runs `git` for everything it fetches and commits; 2.24 or later is best. An older git does not know `--end-of-options`, which skd puts before arguments read from files (commits from `skills.lock`): skd then passes them without it, but only when none of them could be taken for an option, and otherwise fails saying it needs git 2.24.
+skd runs `git` for everything it fetches and commits; 2.24 or later is best. An older git does not know `--end-of-options`, which skd puts before arguments read from files (commits from `skills.lock`): skd then passes them without it, but only when none of them could be taken for an option, and otherwise fails saying it needs git 2.24.
 
 ## Library layout
 
@@ -169,7 +181,7 @@ name = "idea-config-maintainer"
 targets = ["agents"]
 ```
 
-Targets inherit: global default → pack → skill. `targets = []` keeps a skill in the library without linking it anywhere.
+Targets inherit: global default → pack → skill. `targets = []` keeps a skill in the library without linking it anywhere. `"*"` in a targets list stands for the default targets plus every built-in agent installed on the machine resolving the library (its skill directory, or the directory holding it, exists): each machine links into the agents it has, an agent installed later gets the skill at the next `skd apply`, and no directory is made for an agent that is not there. The `skilldots` skill is followed with the default targets of the day plus `"*"` (an older skd ignores `"*"` with a warning and keeps linking the defaults; a later change of `targets.default` does not reach it); editing a skill's agents (`skd enable`, `skd disable`, the app) turns `"*"` into the names it stands for.
 
 An `[[app]]` is linked (or copied) only when its `path` is a skill: a directory holding `SKILL.md` as a plain file, named by an absolute path (or one starting with `~/`; a relative path would be checked from wherever skd runs but read by the agent from its own directory). A relative path, a path without `SKILL.md`, one whose `SKILL.md` is a link, or a directory that is, is inside or holds a place of keys and credentials (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config/gh`, `~/Library/Keychains`, … or skd's own settings) is skipped with a warning, and is not forked either: a `skills.toml` from someone else's library could otherwise have skd link `~/.ssh` into every agent, or copy it into a copy target.
 

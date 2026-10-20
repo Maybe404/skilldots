@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "desktop:dev": "go run github.com/egoist/mygo/cmd/mygo@v0.5.5 dev",
     "desktop:build": "go run github.com/egoist/mygo/cmd/mygo@v0.5.5 build",
+    "desktop:release": "go run github.com/egoist/mygo/cmd/mygo@v0.5.5 build -platform darwin/universal",
     "preview:deploy": "bun run build && wrangler deploy"
   },
   "dependencies": {

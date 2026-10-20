@@ -1,0 +1,78 @@
+# Builds the macOS app (Apple silicon and Intel in one bundle) when a
+# version tag is pushed, and publishes a GitHub release with the disk image
+# and skilldots-macos.zip, which install.sh (served at
+# https://skilldots.maybe404.com/install.sh) downloads. The app is signed ad
+# hoc, not notarized: install.sh's download is not quarantined, and the
+# README explains how to open the disk image's copy.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # The tag names the version; mygo.json is what the app reports.
+      - name: Check the version
+        run: |
+          v=$(jq -r .version mygo.json)
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match mygo.json version $v" >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: bun run desktop:release
+
+      - name: Package
+        working-directory: desktop/build/darwin-universal
+        run: |
+          lipo -archs skilldots.app/Contents/MacOS/skilldots
+          ditto -c -k --keepParent skilldots.app skilldots-macos.zip
+          shasum -a 256 skilldots-macos.zip > skilldots-macos.zip.sha256
+          ls -l
+
+      - name: Publish
+        working-directory: desktop/build/darwin-universal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Install (macOS 12 or later, Apple silicon or Intel):
+
+          ```sh
+          curl -fsSL https://skilldots.maybe404.com/install.sh | sh
+          ```
+
+          It installs skilldots.app and the `skd` command, so the agents on your Mac can manage skills with it.
+
+          Prefer the disk image? The app is not notarized: after copying it to Applications, open it once, then choose **Open Anyway** in System Settings → Privacy & Security.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" --title "skilldots $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
+            ./*.dmg skilldots-macos.zip skilldots-macos.zip.sha256
