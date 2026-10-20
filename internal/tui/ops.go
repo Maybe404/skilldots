@@ -178,6 +178,14 @@ func applySummary(out *app.ApplyOutcome) string {
 	if len(out.Backups) > 0 {
 		parts = append(parts, i18n.Sprintf("%d moved to trash", len(out.Backups)))
 	}
+	if len(out.Absent) > 0 {
+		var agents []string
+		for a := range out.Absent {
+			agents = append(agents, a)
+		}
+		sort.Strings(agents)
+		parts = append(parts, i18n.Sprintf("not installed here, skipped: %s", strings.Join(agents, ", ")))
+	}
 	if len(out.Refused) > 0 {
 		parts = append(parts, i18n.Sprintf("%d not changed: %s", len(out.Refused), out.Refused[0]))
 	}

@@ -385,6 +385,9 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 			c.printf("%s\n", line)
 		}
 	}
+	for _, a := range sortedKeys(out.Absent) {
+		c.printf("  %s %s\n", dim("·"), dim(i18n.Sprintf("%s is not installed on this machine: %s not linked there", txt(a), plural(len(out.Absent[a]), "skill"))))
+	}
 	if !plan.Changes() {
 		msg := i18n.Sprintf("up to date, %d linked", counts["keep"])
 		if counts["skip"] > 0 {

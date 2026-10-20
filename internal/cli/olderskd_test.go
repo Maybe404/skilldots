@@ -18,6 +18,7 @@ import (
 func TestOlderAppLinksGoOnTheFirstCommand(t *testing.T) {
 	for _, first := range [][]string{{"disable", "x"}, {"disable", "x", "--agent", "claude"}, {"list", "apply"}, {"apply"}} {
 		e := newEnv(t)
+		e.installed(".claude")
 		lib := e.p("lib")
 		e.ok("", "init", "--no-skill", "--targets", "agents,claude", lib)
 		app := e.p("Apps/X.app/Skills/x")

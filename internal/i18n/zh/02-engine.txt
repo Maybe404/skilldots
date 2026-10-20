@@ -233,3 +233,6 @@
 
 @ upstream renamed %s to %s; renaming failed (%v) and restoring %s failed too (%v): move %s back by hand
 = 上游把 %s 改名为 %s；重命名失败（%v），恢复 %s 也失败了（%v）：请手动把 %s 移回去
+
+@ %s is not installed on this machine
+= 本机没有安装 %s

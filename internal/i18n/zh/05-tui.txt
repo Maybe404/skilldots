@@ -1107,3 +1107,6 @@
 
 @ nothing matches the filter
 = 没有符合过滤条件的条目
+
+@ not installed here, skipped: %s
+= 本机没有安装，已跳过：%s

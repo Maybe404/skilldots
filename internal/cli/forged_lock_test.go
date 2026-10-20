@@ -169,6 +169,7 @@ path = '`+e.p(".claude/skills/mine6")+`'
 // they are re-pointed. Nothing lands in the trash.
 func TestOwnLinksBehaveAsBefore(t *testing.T) {
 	e := newEnv(t)
+	e.installed(".claude")
 	lib := e.p("lib")
 	e.write("lib/skills.toml", "[targets]\ndefault = [\"agents\", \"claude\"]\n")
 	for _, n := range []string{"a", "b", "c"} {

@@ -295,6 +295,7 @@ func TestCloneAsksAboutCustomTargets(t *testing.T) {
 // approval is asked for or written.
 func TestBuiltinTargetsNeedNoApproval(t *testing.T) {
 	e := newEnv(t)
+	e.installed(".claude", ".codex", ".gemini", ".grok")
 	e.write("src/skills.toml", "[targets]\ndefault = [\"agents\", \"claude\", \"codex\", \"gemini\", \"grok\"]\n")
 	e.write("src/skills/tdd/SKILL.md", "---\nname: tdd\ndescription: d\n---\n")
 	repo := e.publish(e.p("src"))
@@ -342,6 +343,7 @@ func TestCustomTargetInsideABuiltinOneCannotReachThroughALink(t *testing.T) {
 	e := newEnv(t)
 	lib := e.p("lib")
 	e.ok("", "init", lib)
+	e.installed(".claude") // after init, which would make it a default target
 	for _, n := range []string{"foo", "bar", "id_rsa"} {
 		e.ok(lib, "new", n)
 	}

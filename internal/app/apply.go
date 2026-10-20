@@ -29,6 +29,10 @@ type ApplyOutcome struct {
 	// their target no longer led to the directory found (or approved)
 	// when the library was opened.
 	Refused []string `json:"refused,omitempty"`
+	// Absent maps each built-in agent not installed on this machine to
+	// the skills that want it: nothing is linked or made for it here,
+	// and what the lock records for it is kept.
+	Absent map[string][]string `json:"absent,omitempty"`
 	// Plan is what was (or, for a dry run, would be) done.
 	Plan engine.Plan `json:"-"`
 }
@@ -79,6 +83,9 @@ func (s *Session) Apply(o ApplyOptions) (*ApplyOutcome, error) {
 	}
 	plan := engine.MakePlanForce(s.Lib, entries, func(key string) bool { return o.Force || o.ForceKeys[key] })
 	out := &ApplyOutcome{DryRun: o.DryRun, Changes: plan.ChangeList(), Kept: plan.Counts()["keep"], Plan: plan}
+	if a := plan.Absent(); len(a) > 0 {
+		out.Absent = a
+	}
 	if o.DryRun {
 		return out, nil
 	}

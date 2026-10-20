@@ -1173,3 +1173,6 @@
 
 @ %s was already installed for %s
 = %s 已经装在 %s 上了
+
+@ %s is not installed on this machine: %s not linked there
+= 本机没有安装 %s：有 %s 没有链接到那里
