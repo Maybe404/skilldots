@@ -24,7 +24,7 @@ const NAV: [View, MessageKey][] = [
   ["settings", "navSettings"],
 ]
 
-/** The style switch (简洁 / 涂鸦), in the top bar and in Settings. */
+/** The style switch (简洁 / 涂鸦), in Settings. */
 export function StyleSwitch({ className, itemClassName }: { className?: string; itemClassName?: string }) {
   const { t, style, setStyle } = useApp()
   return (
@@ -48,11 +48,13 @@ export function StyleSwitch({ className, itemClassName }: { className?: string; 
  * In the native window this is also the title bar (.skd-titlebar): it drags
  * the window and leaves room for the traffic lights on its left.
  *
+ * The style switch (a rarely changed preference) lives in Settings only.
+ *
  * Narrow windows (the native left padding is 94px, English labels are wide):
  * the nav never shrinks, it only trims its item padding; the search box
- * gives way first (down to 132px), the library name truncates last, the
- * library name hides below 1180px and the style switch below 1060px (both
- * are also in Settings), and 添加 / Add becomes the + icon at 900px or less.
+ * gives way first (down to 132px), then the library name truncates (it
+ * hides only below 760px, where the window is a sliver), and 添加 / Add
+ * becomes the + icon at 900px or less.
  */
 export function Header() {
   const { t, view, navigate, query, setQuery, status, openDialog, updatablePacks, setPaletteOpen } = useApp()
@@ -61,7 +63,7 @@ export function Header() {
   return (
     <header className="skd-titlebar relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd max-[900px]:gap-2 pr-6 max-[760px]:pr-3 max-[760px]:[--bar-pad:12px]">
       <span className="shrink-0 font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
-      <span className="ml-1 min-w-0 max-w-[180px] shrink-[0.001] truncate font-mono fs-meta text-mut max-[1180px]:hidden" title={status?.root ?? ""}>
+      <span className="ml-1 min-w-[3.5rem] max-w-[180px] shrink truncate fs-meta text-mut max-[760px]:hidden" title={status?.root ?? ""}>
         {libName}
       </span>
       {/* Browser preview only; the native window has no such tag. */}
@@ -89,7 +91,6 @@ export function Header() {
         </Highlight>
       </nav>
       <span className="flex-1" />
-      <StyleSwitch className="h-8 shrink-0 max-[1069px]:hidden" itemClassName="h-[26px]" />
       <InputGroup variant="search" className="w-[246px] min-w-[132px] shrink font-body fs-body">
         <InputGroupAddon className="pl-3">
           <Search aria-hidden className="size-3.5" strokeWidth={1.8} />
