@@ -2,7 +2,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { Trash2, Undo2 } from "lucide-react"
 
-import { useApp } from "@/lib/app-state"
+import { absentFor, toastAbsent, useApp } from "@/lib/app-state"
 import { backend, type TrashEntry } from "@/lib/backend"
 import { ago, formatBytes, type MessageKey } from "@/lib/i18n"
 import { EmptyNote, ExampleTag, Hint, Page, PageError, TableHead } from "@/components/app/bits"
@@ -11,11 +11,16 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 const COLS = "var(--cols)"
 
-const REASON: Record<NonNullable<TrashEntry["reason"]>, MessageKey> = {
+// Why an entry is in the trash: the reasons skd records (remove, purge, …) and the sample's older names.
+const REASON: Record<Exclude<NonNullable<TrashEntry["reason"]>, "">, MessageKey> = {
   removed: "reasonRemoved",
+  remove: "reasonRemoved",
   update: "reasonUpdate",
+  replaced: "reasonUpdate",
   adopt: "reasonAdopt",
+  "in-the-way": "reasonInTheWay",
   purge: "reasonPurge",
+  deselected: "reasonDeselected",
 }
 
 /**
@@ -25,7 +30,7 @@ const REASON: Record<NonNullable<TrashEntry["reason"]>, MessageKey> = {
  * trash changed after that was shown.
  */
 export function TrashPage() {
-  const { t, run, read, reload, trashCount, status, confirm } = useApp()
+  const { t, run, read, reload, trashCount, status, confirm, agents } = useApp()
   const [items, setItems] = React.useState<TrashEntry[] | null>(null)
   const [bytes, setBytes] = React.useState(0)
   const [failed, setFailed] = React.useState(false)
@@ -42,9 +47,14 @@ export function TrashPage() {
     void load()
   }, [load, trashCount])
 
+  // The backend puts back what remove or purge took out of the library and links it again in one go.
   const restore = async (e: TrashEntry) => {
-    if (!(await run(() => backend.restore(e.id))).ok) return
-    toast(t("restored", { name: e.name }))
+    const r = await run(() => backend.restore(e.id))
+    if (!r.ok) return
+    const o = r.value
+    const name = o?.skills?.length ? o.skills.join(t("listSep")) : e.name
+    toast(o?.unused ? t("restoredUnused", { name }) : o?.linked ? t("restoredLinked", { name }) : t("restored", { name }))
+    toastAbsent(t, agents, absentFor(o?.absent, o?.skills ?? []))
     await reload()
   }
 
@@ -81,9 +91,11 @@ export function TrashPage() {
     })
 
   // Older entries carry no reason: say where they came from instead.
+  const holds = (e: TrashEntry) => (e.skills?.length && !(e.skills.length === 1 && e.skills[0] === e.name) ? t("trashHolds", { names: e.skills.join(t("listSep")) }) : "")
+
   const why = (e: TrashEntry) => {
-    if (e.reason === "update") {
-      const name = e.origin.match(/\/vendor\/[^/]+\/[^/]+\/([^/]+)\//)?.[1]
+    if (e.reason === "update" || e.reason === "replaced") {
+      const name = e.skills?.[0] ?? e.origin.match(/\/vendor\/[^/]+\/[^/]+\/([^/]+)\//)?.[1]
       if (name) return t("reasonUpdateOf", { name })
     }
     if (e.reason) return t(REASON[e.reason])
@@ -123,9 +135,17 @@ export function TrashPage() {
           </TableHead>
           {items.map((e) => (
             <div role="row" key={e.id} className="grid h-[57px] items-center border-b-row px-2.5 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
-              <div role="cell" className="flex min-w-0 items-center gap-2 pr-3">
-                <span className="truncate font-heading fs-name font-semibold text-ink">{e.name}</span>
-                {e.example && <ExampleTag />}
+              <div role="cell" className="min-w-0 pr-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-heading fs-name font-semibold text-ink">{e.name}</span>
+                  {e.example && <ExampleTag />}
+                </div>
+                {/* What it holds, when that is more than its folder's name says (a whole source, a renamed folder). */}
+                {(holds(e) || e.repo) && (
+                  <p className="mt-0.5 truncate fs-meta text-mut" title={[holds(e), e.repo && t("trashFromRepo", { repo: e.repo })].filter(Boolean).join(" · ")}>
+                    {[holds(e), e.repo && t("trashFromRepo", { repo: e.repo })].filter(Boolean).join(" · ")}
+                  </p>
+                )}
               </div>
               <div role="cell" className="truncate pr-3 text-left font-mono fs-meta text-mut [direction:rtl]" title={e.origin}>
                 <bdi>{e.origin}</bdi>
