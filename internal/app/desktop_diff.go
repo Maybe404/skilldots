@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -352,7 +351,7 @@ func gitTreeFiles(ctx context.Context, root, c, rel string) (map[string][]byte, 
 		}
 		f := strings.Fields(head)
 		if len(f) != 3 || f[1] != "blob" {
-			return nil, fmt.Errorf("git cat-file: unexpected %q", strings.TrimSpace(head))
+			return nil, i18n.Errorf("git cat-file answered %q, not a file's contents", strings.TrimSpace(head))
 		}
 		n, err := strconv.Atoi(f[2])
 		if err != nil {

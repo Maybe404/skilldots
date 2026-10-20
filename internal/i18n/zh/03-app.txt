@@ -338,3 +338,12 @@
 
 @ differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead
 = 和上游 %s 的内容不同（在本机改过，或是旧版本）：复制到 skills/，作为本地 skill；要改用上游的版本，运行 `skd add %s --skill %s`
+
+@ trash entry %q is not named as skd names what it sets aside; look at it by hand in the library's %s
+= 回收站条目 %q 的名字不符合 skd 给被挪开的东西起名的方式；请到资料库的 %s 里手动查看
+
+@ %s is not a directory; skd does not follow it
+= %s 不是目录；skd 不会跟随它
+
+@ git cat-file answered %q, not a file's contents
+= git cat-file 返回了 %q，而不是文件内容

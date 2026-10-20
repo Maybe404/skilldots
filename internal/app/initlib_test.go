@@ -74,12 +74,13 @@ func TestInitLibraryInstallsSelfSkillForDetectedAgents(t *testing.T) {
 	}
 
 	// An agent installed later gets the skill at the next apply.
-	os.MkdirAll(filepath.Join(home, ".gemini"), 0o755)
+	// Kiro does not read ~/.agents/skills, so "*" links into its own directory.
+	os.MkdirAll(filepath.Join(home, ".kiro"), 0o755)
 	s, _ = app.Open(root)
 	if _, err := s.Apply(app.ApplyOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".gemini", "skills", "skilldots", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".kiro", "skills", "skilldots", "SKILL.md")); err != nil {
 		t.Fatalf("an agent installed later did not get skilldots: %v", err)
 	}
 

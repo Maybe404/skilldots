@@ -33,6 +33,8 @@ func setup(t *testing.T) *Service {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	// Claude Code is installed: an agent that is not gets no links.
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
 	t.Setenv("SKILLDOTS_LIBRARY", "")
 	t.Setenv("SKILLDOTS_CACHE", filepath.Join(home, "cache"))
 	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(home, "gitconfig"))
