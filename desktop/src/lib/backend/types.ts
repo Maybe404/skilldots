@@ -216,6 +216,22 @@ export interface LibraryStatus {
   lastSync?: string
   /** Unmanaged skills found on this machine (for onboarding). */
   unmanaged: number
+  /** The library follows the skilldots skill (agents know how to use skd). */
+  selfSkill?: boolean
+  /** initLibrary with the skill: why the skill could not be installed (the library was created). */
+  skillError?: string
+}
+
+/** The skd command: a link on the PATH to the app's own executable. */
+export interface CliStatus {
+  /** Where the link goes: /usr/local/bin/skd. */
+  path: string
+  /** installed: links to this app; stale: to another copy or a moved app; other: another program, never replaced. */
+  state: "installed" | "stale" | "other" | "missing"
+  target: string
+  /** False when this app cannot be linked to: a development build ("dev"), or run from the disk image or moved aside by macOS ("move"). */
+  canInstall: boolean
+  reason: "" | "dev" | "move"
 }
 
 export type Theme = "system" | "light" | "dark"
@@ -248,8 +264,15 @@ export interface Backend {
   // Library ---------------------------------------------------------------
   /** session.Open + git status. */
   status(): Promise<LibraryStatus>
-  /** skd init [dir] */
-  initLibrary(dir: string): Promise<LibraryStatus>
+  /** skd init [dir]; withSkill also installs the skilldots skill for the agents on this machine. */
+  initLibrary(dir: string, withSkill?: boolean): Promise<LibraryStatus>
+  /** The skilldots skill for every agent on this machine, unless the library has it. */
+  installSelfSkill(): Promise<LibraryStatus>
+  /** The skd command on the PATH. */
+  cliStatus(): Promise<CliStatus>
+  /** Links skd (asks for an administrator password when needed). */
+  installCli(): Promise<CliStatus>
+  removeCli(): Promise<CliStatus>
   /** skd clone <url> [dir] */
   cloneLibrary(url: string, dir: string): Promise<LibraryStatus>
   /** skd use <dir> */

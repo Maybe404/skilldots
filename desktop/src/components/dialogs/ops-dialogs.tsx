@@ -3,8 +3,8 @@ import { toast } from "sonner"
 import { ArrowRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { hasUpdates, useApp } from "@/lib/app-state"
-import { backend, type PackStatus, type PlanItem } from "@/lib/backend"
+import { errorText, hasUpdates, useApp } from "@/lib/app-state"
+import { backend, type CliStatus, type PackStatus, type PlanItem } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
 import { Mono, RefreshIcon, Sha, UpdateDot } from "@/components/app/bits"
 import { agentLabel } from "@/lib/agents"
@@ -298,17 +298,49 @@ export function LibraryForm({
   const [dir, setDir] = React.useState(mode === "init" ? "~/.skilldots" : mode === "clone" ? "~/.skilldots" : "")
   const [url, setUrl] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  // So the agents can use the library right away: the skilldots skill and the skd command. The skill is on by
+  // default for a new library only: an existing one (perhaps someone else's, or one it was taken out of) is
+  // changed only when asked.
+  const [withSkill, setWithSkill] = React.useState(mode === "init")
+  const [withCli, setWithCli] = React.useState(true)
+  const [cli, setCli] = React.useState<CliStatus | null>(null)
+  React.useEffect(() => {
+    backend.cliStatus().then(setCli, () => setCli(null))
+  }, [])
+  const offerCli = !!cli && cli.canInstall && (cli.state === "missing" || cli.state === "stale")
   const expand = (p: string) => p.trim()
 
   const go = async () => {
     setBusy(true)
-    const r = await runTask(t("operating"), () =>
-      mode === "init" ? backend.initLibrary(expand(dir)) : mode === "clone" ? backend.cloneLibrary(url.trim(), expand(dir)) : backend.useLibrary(expand(dir)),
-    )
+    // The skill and the command are extras: when one fails the library still counts, with a note.
+    const notes: string[] = []
+    const r = await runTask(t("operating"), async () => {
+      const lib =
+        mode === "init"
+          ? await backend.initLibrary(expand(dir), withSkill)
+          : mode === "clone"
+            ? await backend.cloneLibrary(url.trim(), expand(dir))
+            : await backend.useLibrary(expand(dir))
+      if (withSkill && lib.skillError) notes.push(t("selfSkillFailed", { error: lib.skillError }))
+      else if (withSkill && !lib.selfSkill) {
+        await backend.installSelfSkill().catch((e: unknown) => notes.push(t("selfSkillFailed", { error: errorText(t, e) })))
+      }
+      return lib
+    })
+    if (r.ok && withCli && offerCli) {
+      // After the library: this may show the system's password prompt.
+      try {
+        await backend.installCli()
+      } catch (e) {
+        const msg = errorText(t, e)
+        notes.push(msg.includes("cancelled") ? t("cliSkipped") : t("cliFailed", { error: msg }))
+      }
+    }
     setBusy(false)
     if (!r.ok) return
     await reload()
     toast(t("libraryReady"))
+    notes.forEach((n) => toast.warning(n))
     onDone()
   }
 
@@ -341,6 +373,25 @@ export function LibraryForm({
         </div>
         {mode === "use" && <FieldDescription>{t("switchBody")}</FieldDescription>}
       </Field>
+      <div className="grid gap-3">
+        <label className="flex items-start gap-2.5 fs-body text-ink">
+          <Checkbox checked={withSkill} onCheckedChange={(v) => setWithSkill(!!v)} className="mt-0.5" />
+          <span>
+            <span className="block">{t("obSkill")}</span>
+            <span className="mt-0.5 block fs-meta text-mut">{t("obSkillHint")}</span>
+          </span>
+        </label>
+        {cli?.reason === "move" && cli.state !== "installed" && <p className="fs-meta text-mut">{t("cliMoveHint")}</p>}
+        {offerCli && (
+          <label className="flex items-start gap-2.5 fs-body text-ink">
+            <Checkbox checked={withCli} onCheckedChange={(v) => setWithCli(!!v)} className="mt-0.5" />
+            <span>
+              <span className="block">{t("obCli")}</span>
+              <span className="mt-0.5 block fs-meta text-mut">{t("obCliHint")}</span>
+            </span>
+          </label>
+        )}
+      </div>
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button type="button" variant="outline" size="lg" onClick={onCancel}>

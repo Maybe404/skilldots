@@ -4,12 +4,22 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/Maybe404/skilldots/desktop/api"
+	"github.com/Maybe404/skilldots/internal/cli"
 	"github.com/egoist/mygo"
 )
 
 func main() {
+	// Run as skd (the link the app installs on the PATH, see api/cli.go),
+	// this executable is the command line tool: no window, no Dock icon.
+	if filepath.Base(os.Args[0]) == "skd" {
+		if v := api.BundleVersion(); v != "" {
+			cli.Version = v
+		}
+		os.Exit(cli.Main())
+	}
 	service := api.New(os.Getenv("SKILLDOTS_LIBRARY"), api.Native{
 		Reveal: func(path string) error { mygo.Shell.ShowItemInFolder(path); return nil },
 		PickFolder: func(ctx context.Context) (string, error) {

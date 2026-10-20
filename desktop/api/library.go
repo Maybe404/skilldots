@@ -10,12 +10,14 @@ import (
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
-	"github.com/Maybe404/skilldots/internal/lock"
-	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/safetext"
 )
 
-func (s *Service) initLibrary(dir string) (any, error) {
+// initLibrary creates a library in an empty directory, the way `skd init`
+// does, and with withSkill also subscribes the skilldots skill for the
+// agents on this machine. That needs GitHub: when it fails the library
+// stays, and the status carries skillError.
+func (s *Service) initLibrary(dir string, withSkill bool) (any, error) {
 	dir, err := filepath.Abs(expand(dir))
 	if err != nil {
 		return nil, err
@@ -29,42 +31,41 @@ func (s *Service) initLibrary(dir string) (any, error) {
 	if len(entries) > 0 {
 		return nil, errors.New("choose an empty directory for the new library")
 	}
-	if _, err = config.Load(); err != nil {
-		return nil, err
-	}
-	for _, part := range []string{"skills", "private", "vendor"} {
-		p := filepath.Join(dir, part)
-		if fsutil.LinkOnPath(dir, p) != "" {
-			return nil, errors.New("library directories cannot be symbolic links")
-		}
-		if err = os.MkdirAll(p, 0755); err != nil {
-			return nil, err
-		}
-	}
-	m := manifest.New([]string{"agents"})
-	if err = m.Save(filepath.Join(dir, manifest.FileName)); err != nil {
-		return nil, err
-	}
-	l := &lock.Lock{Version: 1, Packs: map[string]*lock.Pack{}, Links: map[string]*lock.Link{}}
-	if err = l.Save(filepath.Join(dir, lock.FileName)); err != nil {
-		return nil, err
-	}
-	if err = os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/private/\n/.trash/\n.DS_Store\n.*.tmp-*\n"), 0644); err != nil {
-		return nil, err
-	}
-	if err = library.EnsureGit(dir); err != nil {
-		return nil, err
-	}
-	if err = library.EnsurePrivateGit(dir); err != nil {
-		return nil, err
-	}
-	if err = app.UseLibrary(dir); err != nil {
+	if err = app.InitLibrary(dir, nil); err != nil {
 		return nil, err
 	}
 	s.root = dir
 	s.previews = map[string]*app.Fetched{}
+	var skillErr error
+	if withSkill {
+		_, skillErr = s.installSelfSkill()
+	}
+	out, err := s.status()
+	if err != nil {
+		return nil, err
+	}
+	if skillErr != nil {
+		out.(object)["skillError"] = skillErr.Error()
+	}
+	return out, nil
+}
+
+// installSelfSkill subscribes the skilldots skill and links it into every
+// agent on this machine, unless the library already follows it.
+func (s *Service) installSelfSkill() (any, error) {
+	ses, err := s.session()
+	if err != nil {
+		return nil, err
+	}
+	if !ses.HasSelfSkill() {
+		_, o, err := ses.InstallSelfSkill()
+		if err = checkApply(o, err); err != nil {
+			return nil, err
+		}
+	}
 	return s.status()
 }
+
 func (s *Service) cloneLibrary(url, dir string) (any, error) {
 	if safetext.Has(url) || strings.HasPrefix(url, "-") || strings.TrimSpace(url) == "" {
 		return nil, errors.New("invalid repository URL")

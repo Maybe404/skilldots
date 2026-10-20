@@ -94,6 +94,16 @@ func checkApply(out *app.ApplyOutcome, err error) error {
 // Invoke is the desktop-only API. It deliberately has no permanent deletion
 // or custom-target trust operation. The CLI JSON protocol is not involved.
 func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMessage) (any, error) {
+	// The skd command touches no library and may wait on the password
+	// prompt: it runs outside the lock, so the rest of the app keeps going.
+	switch method {
+	case "cliStatus":
+		return cliStatus(), nil
+	case "installCli":
+		return installCLIHere()
+	case "removeCli":
+		return removeCLIHere()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch method {
@@ -102,7 +112,16 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		if err != nil {
 			return nil, err
 		}
-		return s.initLibrary(dir)
+		// The second argument is optional: without it no skill is installed.
+		withSkill := false
+		if len(args) > 1 {
+			if withSkill, err = argument[bool](args, 1); err != nil {
+				return nil, err
+			}
+		}
+		return s.initLibrary(dir, withSkill)
+	case "installSelfSkill":
+		return s.installSelfSkill()
 	case "cloneLibrary":
 		url, err := argument[string](args, 0)
 		if err != nil {
@@ -202,12 +221,12 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			}
 		}
 		for _, a := range ses.Reg.All() {
-			detected := fsutil.Exists(a.Path) || fsutil.Exists(filepath.Dir(a.Path))
+			detected := app.Detected(a.Path)
 			hidden, explicit := prefs.HiddenAgents[a.Name]
 			if !explicit {
 				hidden = !detected && !used[a.Name] && !slices.Contains(ses.Lib.Manifest.Targets.Default, a.Name)
 			}
-			out = append(out, object{"name": a.Name, "label": a.Name, "path": a.Path, "detected": fsutil.Exists(a.Path) || fsutil.Exists(filepath.Dir(a.Path)), "enabled": !slices.Contains(ses.Lib.Manifest.Targets.Disabled, a.Name), "isDefault": slices.Contains(ses.Lib.Manifest.Targets.Default, a.Name), "hidden": hidden, "builtin": a.Builtin})
+			out = append(out, object{"name": a.Name, "label": a.Name, "path": a.Path, "detected": detected, "enabled": !slices.Contains(ses.Lib.Manifest.Targets.Disabled, a.Name), "isDefault": slices.Contains(ses.Lib.Manifest.Targets.Default, a.Name), "hidden": hidden, "builtin": a.Builtin})
 		}
 		return out, nil
 	case "packs":
@@ -478,7 +497,7 @@ func (s *Service) status() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged())}, nil
+	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill()}, nil
 }
 func outdated(o *app.Outdated) any {
 	if o == nil {

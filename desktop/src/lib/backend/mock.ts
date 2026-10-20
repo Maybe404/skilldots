@@ -21,6 +21,7 @@ import { parseSource } from "./parse-source"
 import type {
   Agent,
   Backend,
+  CliStatus,
   Config,
   FileNode,
   HistoryEntry,
@@ -108,6 +109,9 @@ function emptyState(root: string): State {
 export function createMockBackend(): Backend {
   const fresh = typeof location !== "undefined" && new URLSearchParams(location.search).has("fresh")
   let st: State = fresh ? { ...sampleState(null), root: null } : sampleState(LIBRARY)
+  // The preview never touches /usr/local/bin: the command is only pretended.
+  let cli: CliStatus = { path: "/usr/local/bin/skd", state: "missing", target: "", canInstall: true, reason: "" }
+  const selfSkill = () => st.packs.some((p) => p.repo === "Maybe404/skilldots")
 
   const find = (ref: Ref): Skill => {
     const s = st.skills.find((x) => x.ref.key === ref.key)
@@ -135,6 +139,7 @@ export function createMockBackend(): Backend {
     changes: st.changes,
     lastSync: st.lastSync,
     unmanaged: 47,
+    selfSkill: selfSkill(),
   })
 
   const readConfig = (): Config => {
@@ -158,15 +163,49 @@ export function createMockBackend(): Backend {
     return skill
   }
 
+  // Like InstallSelfSkill: the skilldots skill, linked into every agent on this machine.
+  const installSelf = () => {
+    if (selfSkill()) return
+    st.packs.push({ repo: "Maybe404/skilldots", commit: sha("4c1e9a2"), followAll: false, upstreamCount: 1, license: "MIT", url: "https://github.com/Maybe404/skilldots" })
+    addSkill({
+      name: "skilldots",
+      kind: "vendor",
+      origin: "Maybe404/skilldots",
+      category: "",
+      description: "Manage the skills installed for AI agents on this machine.",
+      targets: st.agents.filter((a) => a.detected).map((a) => a.name),
+    })
+  }
+
   return {
     async status() {
       await wait(120)
       return status()
     },
-    async initLibrary(dir) {
+    async initLibrary(dir, withSkill) {
       await wait(500)
       st = emptyState(dir || `${"/Users/maybe"}/.skilldots`)
+      if (withSkill) installSelf()
       return status()
+    },
+    async installSelfSkill() {
+      await wait(600)
+      installSelf()
+      return status()
+    },
+    async cliStatus() {
+      await wait(60)
+      return { ...cli }
+    },
+    async installCli() {
+      await wait(700)
+      cli = { ...cli, state: "installed", target: "/Applications/skilldots.app/Contents/MacOS/skilldots" }
+      return { ...cli }
+    },
+    async removeCli() {
+      await wait(300)
+      cli = { ...cli, state: "missing", target: "" }
+      return { ...cli }
     },
     async cloneLibrary(url, dir) {
       await wait(1200)

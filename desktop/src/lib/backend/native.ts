@@ -7,7 +7,8 @@ function method<K extends keyof Backend>(name: K) {
 }
 
 export const nativeBackend: Backend = {
-  status: method("status"), initLibrary: method("initLibrary"),
+  status: method("status"), initLibrary: method("initLibrary"), installSelfSkill: method("installSelfSkill"),
+  cliStatus: method("cliStatus"), installCli: method("installCli"), removeCli: method("removeCli"),
   cloneLibrary: method("cloneLibrary"), useLibrary: method("useLibrary"),
   pickFolder: method("pickFolder"), skills: method("skills"), packs: method("packs"),
   agents: method("agents"), claudeOverrides: method("claudeOverrides"),

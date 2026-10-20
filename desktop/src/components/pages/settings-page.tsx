@@ -2,8 +2,8 @@ import * as React from "react"
 import { toast } from "sonner"
 import { CloudUpload } from "lucide-react"
 
-import { useApp } from "@/lib/app-state"
-import { backend, type Config, type Theme } from "@/lib/backend"
+import { errorText, useApp } from "@/lib/app-state"
+import { backend, type CliStatus, type Config, type Theme } from "@/lib/backend"
 import { ago } from "@/lib/i18n"
 import { Page } from "@/components/app/bits"
 import { StyleSwitch } from "@/components/app/header"
@@ -167,6 +167,8 @@ export function SettingsPage() {
             </div>
           </Section>
 
+          <AgentAccess />
+
           <Section title={t("backupSection")}>
             <div className="flex items-center gap-3.5 border-b-row py-3">
               <div className="min-w-0 flex-1">
@@ -195,5 +197,75 @@ export function SettingsPage() {
         </div>
       </div>
     </Page>
+  )
+}
+
+/** What lets the agents on this Mac use skilldots: the skd command and the skilldots skill. */
+function AgentAccess() {
+  const { t, status, runTask, reload } = useApp()
+  const [cli, setCli] = React.useState<CliStatus | null>(null)
+  const [busy, setBusy] = React.useState(false)
+  React.useEffect(() => {
+    backend.cliStatus().then(setCli, () => setCli(null))
+  }, [])
+
+  const cliAction = async (fn: () => Promise<CliStatus>, done: string) => {
+    setBusy(true)
+    try {
+      setCli(await fn())
+      toast(done)
+    } catch (e) {
+      const msg = errorText(t, e)
+      if (!msg.includes("cancelled")) toast.error(t("cliFailed", { error: msg }))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const installSkill = async () => {
+    const r = await runTask(t("operating"), () => backend.installSelfSkill())
+    if (!r.ok) return
+    await reload()
+    toast(t("selfSkillToast"))
+  }
+
+  const hint = !cli
+    ? undefined
+    : !cli.canInstall && cli.state !== "installed"
+      ? cli.reason === "move"
+        ? t("cliMoveHint")
+        : t("cliDevHint")
+      : cli.state === "installed"
+        ? t("cliInstalledHint", { path: cli.path })
+        : cli.state === "stale"
+          ? t("cliStaleHint", { path: cli.path })
+          : cli.state === "other"
+            ? t("cliOtherHint", { path: cli.path })
+            : t("cliMissingHint", { path: cli.path })
+
+  return (
+    <Section title={t("agentAccessSection")}>
+      <Row label={t("cliLabel")} hint={hint}>
+        {cli && cli.state === "installed" ? (
+          <Button variant="outline" disabled={busy} onClick={() => void cliAction(() => backend.removeCli(), t("cliRemovedToast"))}>
+            {busy && <Spinner />}
+            {t("cliRemove")}
+          </Button>
+        ) : cli && cli.canInstall && cli.state !== "other" ? (
+          <Button disabled={busy} onClick={() => void cliAction(() => backend.installCli(), t("cliInstalledToast"))}>
+            {busy && <Spinner />}
+            {cli.state === "stale" ? t("cliRepair") : t("cliInstall")}
+          </Button>
+        ) : null}
+      </Row>
+      <Row label={t("selfSkillLabel")} hint={t("selfSkillHint")}>
+        {status?.selfSkill ? (
+          <span className="fs-meta text-mut">{t("selfSkillInstalled")}</span>
+        ) : (
+          <Button variant="outline" onClick={() => void installSkill()}>
+            {t("selfSkillInstall")}
+          </Button>
+        )}
+      </Row>
+    </Section>
   )
 }
