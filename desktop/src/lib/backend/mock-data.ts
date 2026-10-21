@@ -473,6 +473,18 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
 
 /** Files of each skill for the in-app editor, keyed by ref key. */
 export function initialFiles(skills: Skill[]): Record<string, Record<string, string>> {
+  const out = pristineFiles(skills)
+  // Edited here and merged with upstream's update since (history h3).
+  const cli = out["kepano/obsidian-skills:obsidian-cli"]
+  if (cli?.["SKILL.md"]) cli["SKILL.md"] += "\nMy note: the vault is ~/Notes; never touch .obsidian/.\n"
+  // Edited here; yesterday's update is shelved until the conflicts are resolved: the folder still has your version.
+  const md = out[SHELVED.key]
+  if (md?.["SKILL.md"]) md["SKILL.md"] = SHELVED.local
+  return out
+}
+
+/** The files as they were vendored or created, before any of the sample's edits. */
+function pristineFiles(skills: Skill[]): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {}
   for (const s of skills) {
     out[s.ref.key] = { "SKILL.md": skillMd(s.name, s.description, bodyFor(s.name)) }
@@ -491,19 +503,55 @@ export function initialFiles(skills: Skill[]): Record<string, Record<string, str
   extra(out, "app:surge", {
     "scripts/status.sh": "#!/bin/sh\nsurge-cli --raw dump active | head\n",
   })
-  // Edited here and merged with upstream's update since (history h3).
-  const cli = out["kepano/obsidian-skills:obsidian-cli"]
-  if (cli?.["SKILL.md"]) cli["SKILL.md"] += "\nMy note: the vault is ~/Notes; never touch .obsidian/.\n"
-  // Edited here; yesterday's update is shelved until the conflicts are resolved: the folder still has your version.
-  const md = out[SHELVED.key]
-  if (md?.["SKILL.md"]) md["SKILL.md"] = SHELVED.local
   return out
 }
+
+/**
+ * The sample person is the GitHub user Maybe404: they can push to their own repositories, and open PRs
+ * anywhere (gh logged in, unless the preview URL says ?gh=missing or ?gh=logged-out).
+ */
+export const OWNER = "Maybe404"
+
+/** An open PR sent from your edits to obsidian-cli last week (lock contribution). */
+export const SAMPLE_PR = {
+  key: "kepano/obsidian-skills:obsidian-cli",
+  contribution: {
+    kind: "pr" as const,
+    url: "https://github.com/kepano/obsidian-skills/pull/12",
+    number: 12,
+    branch: "skilldots/obsidian-cli-20261014-1130",
+    state: "open" as const,
+  },
+}
+
+/**
+ * What the library's remote has that this Mac does not: another Mac changed the same lines of two of your
+ * skills, so the next sync is shelved until they are resolved. `local` is this Mac's line (an edit made here,
+ * see sampleState), `remote` the other Mac's, `base` what both started from.
+ */
+export const SYNC_REMOTE: { path: string; key: string; file: string; base: string; local: string; remote: string }[] = [
+  {
+    path: "skills/subagent/SKILL.md",
+    key: "skills:subagent",
+    file: "SKILL.md",
+    base: "1. The goal and how it will be checked",
+    local: "1. The goal and how the result will be checked",
+    remote: "1. The goal, and the test that proves it is done",
+  },
+  {
+    path: "skills/release-notes/SKILL.md",
+    key: "skills:release-notes",
+    file: "SKILL.md",
+    base: "2. Do the work.",
+    local: "2. Group commits by what users will notice.",
+    remote: "2. Group commits by feature, newest first.",
+  },
+]
 
 /** The sample's version of a skill before your edits (what the vendored copy was). */
 export function vendoredFiles(s: Skill): Record<string, string> {
   if (s.ref.key === SHELVED.key) return { "SKILL.md": SHELVED.base }
-  return { "SKILL.md": skillMd(s.name, s.description, bodyFor(s.name)) }
+  return pristineFiles([s])[s.ref.key]
 }
 
 const OMD_HEAD = skillMd("obsidian-markdown", "Create and edit Obsidian Flavored Markdown.", "").trimEnd()

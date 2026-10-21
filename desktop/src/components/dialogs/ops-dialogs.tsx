@@ -321,7 +321,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
 // Sync -----------------------------------------------------------------------
 
 export function SyncDialog({ onClose }: { onClose: () => void }) {
-  const { t, status, runTask, reload } = useApp()
+  const { t, status, syncLibrary } = useApp()
   const [remote, setRemote] = React.useState("")
   const [message, setMessage] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -329,12 +329,10 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
 
   const go = async () => {
     setBusy(true)
-    const r = await runTask(t("syncing"), () => backend.sync({ remote: needsRemote ? remote.trim() : undefined, message: message.trim() || undefined }))
+    // Synced, or shelved (its toast leads to resolving): either way the dialog is done.
+    const r = await syncLibrary({ remote: needsRemote ? remote.trim() : undefined, message: message.trim() || undefined })
     setBusy(false)
-    if (!r.ok) return
-    await reload()
-    toast(r.value.committed ? t("syncedToast", { remote: r.value.remote }) : t("nothingToSync"))
-    onClose()
+    if (r !== "failed") onClose()
   }
 
   return (

@@ -27,5 +27,7 @@ export const nativeBackend: Backend = {
   updateDiff: method("updateDiff"), historyDiff: method("historyDiff"),
   resolveStart: method("resolveStart"), resolveState: method("resolveState"), resolvePick: method("resolvePick"),
   resolveContinue: method("resolveContinue"), resolveAbort: method("resolveAbort"),
+  localChanges: method("localChanges"), contributeOptions: method("contributeOptions"),
+  contribute: method("contribute"), refreshContributions: method("refreshContributions"),
   sync: method("sync"), config: method("config"), setConfig: method("setConfig"),
 }

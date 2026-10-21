@@ -2,8 +2,9 @@ import * as React from "react"
 
 import { useApp, useColumnAgents } from "@/lib/app-state"
 import { ago } from "@/lib/i18n"
+import { SYNC_REF } from "@/lib/backend"
 import { Effect } from "@/components/animate-ui/primitives/effects/effect"
-import { RefreshIcon, RollingText } from "@/components/app/bits"
+import { ConflictMark, Hint, RefreshIcon, RollingText } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 
 /** Seconds since an operation started, ticking once a second. */
@@ -43,7 +44,7 @@ export function OperationText({ label, startedAt, mutedClassName = "text-mut" }:
  * and the pending count and the seconds roll (Animate UI sliding number).
  */
 export function StatusBar() {
-  const { t, pendingCount, applying, applyPending, revertPending, operation, outdated, checking, updatablePacks, status, plan, openDialog, navigate } = useApp()
+  const { t, pendingCount, applying, applyPending, revertPending, operation, outdated, checking, updatablePacks, status, plan, openDialog, navigate, syncLibrary, syncShelved, openResolve } = useApp()
   const columns = useColumnAgents()
   const keys = Math.min(9, columns.length)
   const failed = outdated?.failed.length ?? 0
@@ -106,7 +107,20 @@ export function StatusBar() {
           </>
         )}
         {sep}
-        <span>{status?.changes ? t("unsynced", { n: status.changes }) : t("synced")}</span>
+        {status?.syncing || syncShelved?.length ? (
+          // A shelved sync (or one being resolved) waits here until its conflicts are resolved.
+          <Button variant="quiet" size="inline" className="gap-1.5 text-ink no-underline hover:underline" onClick={() => openResolve(SYNC_REF)}>
+            <ConflictMark />
+            {status?.syncing ? t("syncResolvingBar") : t("syncShelvedBar")}
+          </Button>
+        ) : (
+          // 同步: commit, pull and merge, push (or set the remote first).
+          <Hint label={t("syncNow")}>
+            <Button variant="quiet" size="inline" className="no-underline hover:underline" onClick={() => (status?.remote ? void syncLibrary() : openDialog({ kind: "sync" }))}>
+              {status?.changes ? t("unsynced", { n: status.changes }) : t("synced")}
+            </Button>
+          </Hint>
+        )}
         {plan.length > 0 && (
           <>
             {sep}

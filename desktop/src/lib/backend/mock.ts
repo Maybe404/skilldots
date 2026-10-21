@@ -5,8 +5,11 @@ import {
   CLAUDE_OVERRIDES,
   HOME,
   LIBRARY,
+  OWNER,
   REMOTE,
+  SAMPLE_PR,
   SHELVED,
+  SYNC_REMOTE,
   initialAgents,
   initialFiles,
   initialHistory,
@@ -33,6 +36,8 @@ import type {
   Config,
   ConflictBlock,
   ConflictFile,
+  ContributeOptions,
+  Contribution,
   DiffHunk,
   DiffLine,
   FileDiff,
@@ -50,6 +55,7 @@ import type {
   SkillDiff,
   TrashEntry,
 } from "./types"
+import { SYNC_REF } from "./types"
 import { shortSha } from "@/lib/utils"
 
 const CONFIG_KEY = "skilldots.desktop.config"
@@ -83,6 +89,12 @@ interface State {
   touched: Set<string>
   /** Shelved updates by skill key (lock Shelved), and how far resolving them got. */
   shelved: Map<string, Shelf>
+  /** What was sent upstream, by skill key (lock contribution). */
+  contributions: Map<string, Contribution>
+  /** The library's remote has changes to the same lines as this Mac (SYNC_REMOTE): syncing conflicts until resolved. */
+  remoteAhead: boolean
+  /** A sync merge being resolved (`skd sync --resolve`): the conflicted files by path in the library, with markers. */
+  syncMerge: Record<string, string> | null
 }
 
 interface Shelf {
@@ -111,6 +123,10 @@ function sampleState(root: string | null): State {
   }
   edit("differential-review", (md) => md + "\nMy note: also check the migration files.\n")
   edit("skilldots", (md) => md.replace("1. Read the task.", "1. Read the task and the library's skills.toml."))
+  // Your own repository, up to date: both a PR and a direct push are possible.
+  edit("ui-arsenal", (md) => md.replace("3. Check the result.", "3. Check the result against the catalogue's licence column."))
+  // Edits to two of your own skills on this Mac; another Mac changed the same lines and synced first (SYNC_REMOTE).
+  for (const r of SYNC_REMOTE) if (files[r.key]?.[r.file]) files[r.key][r.file] = files[r.key][r.file].replace(r.base, r.local)
   // Yesterday's obsidian-skills update (history h3) merged your obsidian-cli and shelved your obsidian-markdown.
   touched.add("kepano/obsidian-skills:obsidian-cli")
   touched.add(SHELVED.key)
@@ -125,8 +141,8 @@ function sampleState(root: string | null): State {
   return {
     root,
     remote: REMOTE,
-    // Not backed up since two days ago: yesterday's removal and update.
-    changes: 2,
+    // Not synced since two days ago: yesterday's removal and update, and the edits to subagent and release-notes.
+    changes: 4,
     lastSync: new Date(now.getTime() - 2 * 24 * 3600 * 1000).toISOString(),
     skills,
     packs: initialPacks(),
@@ -139,6 +155,9 @@ function sampleState(root: string | null): State {
     scan: [...initialScan(skills), ...differs],
     touched,
     shelved,
+    contributions: new Map([[SAMPLE_PR.key, { ...SAMPLE_PR.contribution }]]),
+    remoteAhead: true,
+    syncMerge: null,
   }
 }
 
@@ -159,6 +178,9 @@ function emptyState(root: string | null): State {
     plan: [],
     touched: new Set(),
     shelved: new Map(),
+    contributions: new Map(),
+    remoteAhead: false,
+    syncMerge: null,
     // The same machine: what the agents have that differs from upstream is there before any library too.
     scan: [...initialScan([]), ...s.scan.filter((x) => x.differs)],
   }
@@ -207,19 +229,45 @@ export function createMockBackend(): Backend {
   }
   // Like the bridge's resolveState: each conflicted file parsed from the markers it has now.
   const conflictsOf = (key: string): { files: ConflictFile[] } => {
+    if (key === SYNC_REF.key) {
+      // The sync merge: paths relative to the library root.
+      const bases = Object.fromEntries(SYNC_REMOTE.map((r) => [r.local, r.base]))
+      return clone({ files: Object.entries(st.syncMerge ?? {}).map(([path, text]) => parseConflicts(path, text, bases)) })
+    }
     const shelf = st.shelved.get(key)
     const files = (shelf?.files ?? []).map((path): ConflictFile => {
-      const text = st.files[key]?.[path] ?? ""
-      const lines = text.split("\n")
-      const blocks = regions(lines).map(
-        (r, index): ConflictBlock => {
-          const local = lines.slice(r.start + 1, r.mid).join("\n")
-          return { index, local, upstream: lines.slice(r.mid + 1, r.end).join("\n"), base: shelf?.bases?.[local] }
-        },
-      )
-      return { path, binary: false, blocks: shelf?.backup ? blocks : [], text }
+      const f = parseConflicts(path, st.files[key]?.[path] ?? "", shelf?.bases ?? {})
+      return shelf?.backup ? f : { ...f, blocks: [] }
     })
     return clone({ files })
+  }
+  // Like app.ContributeOptions: your own repositories take a push, any GitHub repository a PR (gh permitting).
+  const contributeOptions = (s: Skill): ContributeOptions => {
+    if (s.kind !== "vendor") throw new Error(`${s.name} is not from a source; there is no upstream to send it to`)
+    if (!st.touched.has(s.ref.key)) throw new Error(`${s.name} has no edits to send`)
+    const zh = readConfig().lang === "zh"
+    const asked = typeof location !== "undefined" ? new URLSearchParams(location.search).get("gh") : null
+    const gh: ContributeOptions["gh"] = asked === "missing" || asked === "logged-out" ? asked : "ok"
+    const behind = st.shelved.has(s.ref.key) || !!st.outdated?.packs.find((p) => p.repo === s.origin)?.changed.includes(s.name)
+    const own = s.origin.startsWith(OWNER + "/")
+    const reasons: string[] = []
+    if (behind) reasons.push(zh ? `上游有更新的版本：先更新 ${s.origin}（有冲突就先解决），再提交。` : `Upstream has a newer version: update ${s.origin} (and resolve any conflicts) first.`)
+    else {
+      if (!own) reasons.push(zh ? `你没有 ${s.origin} 的推送权限，只能提 PR。` : `You cannot push to ${s.origin}; open a PR instead.`)
+      if (gh === "missing") reasons.push(zh ? "提 PR 需要 gh：brew install gh，再 gh auth login。" : "A PR needs gh: brew install gh, then gh auth login.")
+      if (gh === "logged-out") reasons.push(zh ? "gh 还没登录：在终端运行 gh auth login。" : "gh is not logged in: run gh auth login in a terminal.")
+    }
+    return {
+      repo: s.origin,
+      host: "github",
+      canPush: own && !behind,
+      canPR: gh === "ok" && !behind,
+      gh,
+      behind,
+      reason: reasons.join(" "),
+      defaultMessage: `Update ${s.name}\n\nEdited with skilldots`,
+      branch: "main",
+    }
   }
   const status = (): LibraryStatus => ({
     root: st.root,
@@ -231,6 +279,7 @@ export function createMockBackend(): Backend {
     selfSkill: selfSkill(),
     // The preview plays the packaged app, which carries the skill.
     bundledSkill: true,
+    syncing: !!st.syncMerge,
   })
 
   const readConfig = (): Config => {
@@ -335,6 +384,8 @@ export function createMockBackend(): Backend {
             shelved: !!shelf,
             resolving: !!shelf?.backup,
             conflictFiles: shelf?.files ?? [],
+            edited: s.kind === "vendor" && st.touched.has(s.ref.key),
+            contribution: st.contributions.get(s.ref.key) ?? null,
             absent: s.targets.filter((a) => away.includes(a)),
             viaShared: serves ? s.targets.filter((a) => SHARED_READERS.includes(a)) : [],
             sharedReach: serves ? readers : [],
@@ -717,6 +768,19 @@ export function createMockBackend(): Backend {
 
     async resolveStart(ref) {
       await wait(500)
+      if (ref.key === SYNC_REF.key) {
+        // Like skd sync --resolve: the merge is redone and left in the library with Git's markers.
+        if (!st.remoteAhead) throw new Error("no shelved sync to resolve; sync first")
+        if (!st.syncMerge) {
+          st.syncMerge = {}
+          for (const r of SYNC_REMOTE) {
+            const text = st.files[r.key]?.[r.file] ?? ""
+            const block = `<<<<<<< HEAD\n${r.local}\n=======\n${r.remote}\n>>>>>>> origin/main`
+            st.syncMerge[r.path] = text.includes(r.local) ? text.replace(r.local, block) : `${text.trimEnd()}\n${block}\n`
+          }
+        }
+        return conflictsOf(ref.key)
+      }
       const s = find(ref)
       const shelf = st.shelved.get(ref.key)
       if (!shelf) throw new Error(`${s.name} has no shelved update`)
@@ -732,30 +796,40 @@ export function createMockBackend(): Backend {
     },
     async resolveState(ref) {
       await wait(120)
-      find(ref)
+      if (ref.key !== SYNC_REF.key) find(ref)
       return conflictsOf(ref.key)
     },
     async resolvePick(ref, path, block, choice) {
       await wait(160)
+      if (ref.key === SYNC_REF.key) {
+        const text = st.syncMerge?.[path]
+        if (text === undefined) throw new Error(`${path} is not being resolved`)
+        st.syncMerge![path] = pickBlock(text, block, choice, path)
+        return
+      }
       const shelf = st.shelved.get(ref.key)
       const text = st.files[ref.key]?.[path]
       if (!shelf?.backup || text === undefined) throw new Error(`${path} is not being resolved`)
-      const lines = text.split("\n")
-      const r = regions(lines)[block]
-      if (!r) throw new Error(`${path} has no conflict ${block + 1}`)
-      const local = lines.slice(r.start + 1, r.mid)
-      const upstream = lines.slice(r.mid + 1, r.end)
-      const keep = choice === "local" ? local : choice === "upstream" ? upstream : [...local, ...upstream]
-      lines.splice(r.start, r.end - r.start + 1, ...keep)
-      st.files[ref.key][path] = lines.join("\n")
+      st.files[ref.key][path] = pickBlock(text, block, choice, path)
     },
     async resolveContinue(ref) {
       await wait(500)
+      if (ref.key === SYNC_REF.key) {
+        // Like skd sync --continue: refused while markers remain; then the merge is committed, pushed and applied.
+        if (!st.syncMerge) throw new Error("no sync merge is being resolved")
+        for (const [path, text] of Object.entries(st.syncMerge)) if (MARKER.test(text)) throw new Error(`${path} still has conflict markers`)
+        for (const r of SYNC_REMOTE) if (st.syncMerge[r.path] !== undefined && st.files[r.key]) st.files[r.key][r.file] = st.syncMerge[r.path]
+        st.syncMerge = null
+        st.remoteAhead = false
+        st.changes = 0
+        st.lastSync = new Date().toISOString()
+        return {}
+      }
       const s = find(ref)
       const shelf = st.shelved.get(ref.key)
       if (!shelf?.backup) throw new Error(`${s.name} is not being resolved`)
       for (const [path, text] of Object.entries(st.files[ref.key] ?? {})) {
-        if (regions(text.split("\n")).length || /^(<<<<<<<|=======|>>>>>>>)( |$)/m.test(text)) throw new Error(`${path} still has conflict markers`)
+        if (MARKER.test(text)) throw new Error(`${path} still has conflict markers`)
       }
       st.shelved.delete(ref.key)
       st.touched.add(ref.key)
@@ -770,12 +844,58 @@ export function createMockBackend(): Backend {
     },
     async resolveAbort(ref) {
       await wait(300)
+      if (ref.key === SYNC_REF.key) {
+        // Like skd sync --abort (git merge --abort): the library is as it was; the sync stays shelved.
+        if (!st.syncMerge) throw new Error("no sync merge is being resolved")
+        st.syncMerge = null
+        return
+      }
       const shelf = st.shelved.get(ref.key)
       if (!shelf?.backup) throw new Error(`${find(ref).name} is not being resolved`)
       st.files[ref.key] = shelf.backup
       st.trash = st.trash.filter((x) => x.id !== shelf.trashId)
       shelf.backup = undefined
       shelf.trashId = undefined
+    },
+
+    async localChanges(ref) {
+      await wait(300)
+      const s = find(ref)
+      if (s.kind !== "vendor") throw new Error(`${s.name} is not from a source`)
+      // Like app.LocalChanges: the upstream version your edits started from against the folder as it is.
+      const base = vendoredFiles(s)
+      const mine = st.files[ref.key] ?? base
+      const localFiles = changedPaths(base, mine)
+      return clone({ name: s.name, status: "changed" as const, local: localFiles.length > 0, localFiles, base: true, files: diffFiles(base, mine, new Set()) })
+    },
+    async contributeOptions(ref) {
+      await wait(450)
+      return clone(contributeOptions(find(ref)))
+    },
+    async contribute(ref, mode, message) {
+      await wait(1400)
+      const s = find(ref)
+      const o = contributeOptions(s)
+      if (o.behind || (mode === "pr" && !o.canPR) || (mode === "push" && !o.canPush)) throw new Error(o.reason || `cannot ${mode} to ${o.repo}`)
+      if (!message.trim()) throw new Error("a commit message is needed")
+      const d = new Date()
+      const p = (n: number) => String(n).padStart(2, "0")
+      const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+      if (mode === "pr") {
+        const number = 13 + [...st.contributions.values()].filter((c) => c.kind === "pr").length
+        const c: Contribution = { kind: "pr", url: `https://github.com/${o.repo}/pull/${number}`, number, branch: `skilldots/${s.name}-${stamp}`, state: "open" }
+        st.contributions.set(ref.key, c)
+        return { mode, url: c.url, number, branch: c.branch, pushed: false }
+      }
+      const c: Contribution = { kind: "push", url: `https://github.com/${o.repo}/commit/${sha(stamp + s.name)}`, number: 0, branch: o.branch, state: "pushed" }
+      st.contributions.set(ref.key, c)
+      return { mode, url: c.url, number: 0, branch: c.branch, pushed: true }
+    },
+    async refreshContributions() {
+      await wait(700)
+      // The sample's PR from last week was merged upstream since.
+      const c = st.contributions.get(SAMPLE_PR.key)
+      if (c?.number === SAMPLE_PR.contribution.number) c.state = "merged"
     },
 
     async scan() {
@@ -870,10 +990,14 @@ export function createMockBackend(): Backend {
       if (remote) st.remote = remote
       if (!st.remote) throw new Error("no remote: give a GitHub repository URL")
       void message
+      if (st.syncMerge) throw new Error("a sync merge is being resolved: finish it or shelve it first")
       const committed = st.changes > 0
+      // Like skd sync: commit, then fetch and merge before pushing. Another Mac changed the same lines: the merge is
+      // abandoned (the library stays as it was) and nothing is pushed until it is resolved.
+      if (st.remoteAhead) return { committed, pushed: false, remote: st.remote, pulled: false, conflicts: SYNC_REMOTE.map((r) => r.path) }
       st.changes = 0
       st.lastSync = new Date().toISOString()
-      return { committed, pushed: true, remote: st.remote }
+      return { committed, pushed: true, remote: st.remote, pulled: false, conflicts: [] }
     },
 
     async config() {
@@ -889,6 +1013,29 @@ export function createMockBackend(): Backend {
       return next
     },
   }
+}
+
+/** A file's conflicts, parsed from its markers like the bridge's resolveState (base: the ancestor by local side). */
+function parseConflicts(path: string, text: string, bases: Record<string, string>): ConflictFile {
+  const lines = text.split("\n")
+  const blocks = regions(lines).map((r, index): ConflictBlock => {
+    const local = lines.slice(r.start + 1, r.mid).join("\n")
+    return { index, local, upstream: lines.slice(r.mid + 1, r.end).join("\n"), base: bases[local] }
+  })
+  return { path, binary: false, blocks, text }
+}
+
+const MARKER = /^(<<<<<<<|=======|>>>>>>>)( |$)/m
+
+/** Replaces one conflict of text with one side or both (resolvePick). */
+function pickBlock(text: string, block: number, choice: "local" | "upstream" | "both", path: string): string {
+  const lines = text.split("\n")
+  const r = regions(lines)[block]
+  if (!r) throw new Error(`${path} has no conflict ${block + 1}`)
+  const local = lines.slice(r.start + 1, r.mid)
+  const upstream = lines.slice(r.mid + 1, r.end)
+  lines.splice(r.start, r.end - r.start + 1, ...(choice === "local" ? local : choice === "upstream" ? upstream : [...local, ...upstream]))
+  return lines.join("\n")
 }
 
 /** Where Git's conflict markers are in a file's lines: <<<<<<< start, ======= mid, >>>>>>> end. */
