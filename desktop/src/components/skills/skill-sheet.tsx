@@ -1,7 +1,7 @@
 import * as React from "react"
-import { Copy, FolderOpen, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
+import { Copy, FolderOpen, GitMerge, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
 
-import { PLACEHOLDER_DESC, isMine, kindLabel, sourceText, useApp, useColumnAgents } from "@/lib/app-state"
+import { PLACEHOLDER_DESC, hasConflicts, isMine, kindLabel, sourceText, useApp, useColumnAgents } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Skill } from "@/lib/backend"
 import { cellState } from "@/lib/pending"
@@ -24,7 +24,7 @@ export function SkillSheet({ returnFocus }: { returnFocus: () => HTMLElement | n
   const start = React.useRef<HTMLDivElement>(null)
   // Not over the editor: a detail opened while its unsaved-changes prompt holds the navigation waits for it.
   return (
-    <Sheet open={!!skill && view !== "editor"} onOpenChange={(o) => !o && closeDetail()}>
+    <Sheet open={!!skill && view !== "editor" && view !== "resolve"} onOpenChange={(o) => !o && closeDetail()}>
       {/*
         Focus lands on the panel body, not on its first switch: the key that
         opened the panel (Space) would otherwise toggle that switch on keyup.
@@ -38,7 +38,7 @@ export function SkillSheet({ returnFocus }: { returnFocus: () => HTMLElement | n
 }
 
 function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivElement | null> }) {
-  const { t, overrides, outdated, updatable, packs, openEditor, openDialog, pending, togglePending, pendingCount, applyPending, showSource, operation } = useApp()
+  const { t, overrides, outdated, updatable, packs, openEditor, openResolve, openDialog, pending, togglePending, pendingCount, applyPending, showSource, operation } = useApp()
   const columns = useColumnAgents()
   const { reveal, openInEditor } = useSkillActions()
   const status = outdated?.packs.find((p) => p.repo === skill.origin)
@@ -54,6 +54,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           <span className="truncate">{skill.linkName}</span>
           {updatable.has(skill.ref.key) && <UpdateDot />}
           {mine && <Tag>{t("kindMine")}</Tag>}
+          {hasConflicts(skill) && <Tag tone="accent">{t("conflictTag")}</Tag>}
         </SheetTitle>
         <SheetDescription className="truncate">{sourceText(t, skill)}</SheetDescription>
       </SheetHeader>
@@ -69,6 +70,8 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
         ) : (
           <p className="fs-body leading-relaxed text-pretty text-ink">{skill.description}</p>
         )}
+
+        {hasConflicts(skill) && <ConflictNote skill={skill} onResolve={() => openResolve(skill.ref)} />}
 
         {(updatable.has(skill.ref.key) || moved) && (
           <div className="mt-4 rounded-ctl bg-row-hv p-3 fs-meta [border-left:3px_solid_var(--ac)]">
@@ -198,5 +201,32 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
         )}
       </div>
     </>
+  )
+}
+
+const SLOT = "\u0001"
+
+/** A shelved update: which files conflict, and the way to resolve them. */
+function ConflictNote({ skill, onResolve }: { skill: Skill; onResolve: () => void }) {
+  const { t } = useApp()
+  const files = skill.conflictFiles ?? []
+  // Only the shelved note names the files ({files}); the resolving one is a sentence on its own.
+  const [before, after] = t(skill.resolving ? "resolvingNote" : "shelvedNote", { files: SLOT }).split(SLOT)
+  return (
+    <div className="mt-4 rounded-ctl bg-row-hv p-3 fs-meta leading-relaxed text-ink [border-left:3px_solid_var(--ac)]" role="note">
+      <p>
+        {before}
+        {after !== undefined && files.map((f, i) => (
+          <React.Fragment key={f}>
+            {i > 0 && t("listSep")}
+            <span className="font-mono">{f}</span>
+          </React.Fragment>
+        ))}
+        {after}
+      </p>
+      <Button size="sm" className="mt-2.5" onClick={onResolve}>
+        <GitMerge /> {t("resolveConflicts")}
+      </Button>
+    </div>
   )
 }

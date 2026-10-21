@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Check, CornerDownRight, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
+import { hasConflicts, isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn, keepsViaShared } from "@/lib/pending"
@@ -203,10 +203,11 @@ function Row({
             <span className="truncate">{skill.linkName}</span>
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
+            {hasConflicts(skill) && <Tag tone="accent">{t("conflictTag")}</Tag>}
           </span>
           <span className="mt-0.5 block truncate font-body fs-meta text-mut">{skill.description}</span>
         </button>
-        <RowActions skill={skill} shown={selected || focused} className={cn("absolute top-1/2 right-4 -translate-y-1/2 rounded-ctl pl-2", focused ? "bg-row-on" : "bg-bg")} />
+        <RowActions skill={skill} shown={selected || focused} tinted={focused} className="absolute top-1/2 right-4 -translate-y-1/2 rounded-ctl" />
       </div>
       <div role="cell" className="truncate pr-2.5 fs-meta text-mut" title={source}>
         {source}

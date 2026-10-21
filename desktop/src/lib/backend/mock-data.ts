@@ -251,6 +251,9 @@ export function initialHistory(now: Date): HistoryEntry[] {
         { id: sha("d1b7a35"), title: "Clarify callout syntax for nested blocks" },
       ],
       backups: [],
+      // You had edited both: obsidian-cli merged cleanly, obsidian-markdown changed in the same lines upstream (SHELVED).
+      merged: ["obsidian-cli"],
+      shelved: [SHELVED.name],
       example: true,
     },
     {
@@ -303,6 +306,8 @@ export function initialTrash(now: Date): TrashEntry[] {
   return [
     // Removed yesterday; the pack keeps its other skill, grill-me.
     entry("write-a-prd", `${LIBRARY}/vendor/mattpocock/skills/planning/write-a-prd`, ago(1, 40), "removed"),
+    // Your obsidian-cli as it was before yesterday's update merged upstream's changes into it (history h3).
+    entry("obsidian-cli", `${LIBRARY}/vendor/kepano/obsidian-skills/obsidian-cli`, daysAgoAt(now, 1), "merged"),
     // Your edit, set aside by the impeccable update (history h2).
     entry("typography.md", `${LIBRARY}/vendor/pbakaus/impeccable/impeccable/reference/typography.md`, daysAgoAt(now, 6), "update"),
     // The copy in Claude Code's folder, replaced by a link when pdf was adopted.
@@ -486,7 +491,46 @@ export function initialFiles(skills: Skill[]): Record<string, Record<string, str
   extra(out, "app:surge", {
     "scripts/status.sh": "#!/bin/sh\nsurge-cli --raw dump active | head\n",
   })
+  // Edited here and merged with upstream's update since (history h3).
+  const cli = out["kepano/obsidian-skills:obsidian-cli"]
+  if (cli?.["SKILL.md"]) cli["SKILL.md"] += "\nMy note: the vault is ~/Notes; never touch .obsidian/.\n"
+  // Edited here; yesterday's update is shelved until the conflicts are resolved: the folder still has your version.
+  const md = out[SHELVED.key]
+  if (md?.["SKILL.md"]) md["SKILL.md"] = SHELVED.local
   return out
+}
+
+/** The sample's version of a skill before your edits (what the vendored copy was). */
+export function vendoredFiles(s: Skill): Record<string, string> {
+  if (s.ref.key === SHELVED.key) return { "SKILL.md": SHELVED.base }
+  return { "SKILL.md": skillMd(s.name, s.description, bodyFor(s.name)) }
+}
+
+const OMD_HEAD = skillMd("obsidian-markdown", "Create and edit Obsidian Flavored Markdown.", "").trimEnd()
+const omd = (use: string, step: string) =>
+  `${OMD_HEAD}\n\n# obsidian-markdown\n\n## When to use\n\n${use}\n\n## Steps\n\n1. Read the task.\n${step}\n3. Check the result.\n`
+const OMD_USE = ["See the description above.", "Notes in my vault: wikilinks, callouts and embeds. Never rewrite the frontmatter.", "Writing Obsidian Flavored Markdown: wikilinks, embeds, callouts and properties."]
+const OMD_STEP = ["2. Do the work.", "2. Write the note; keep wikilinks relative to the vault root.", "2. Write the note, then check callout syntax for nested blocks."]
+const UPSTREAM_SHORT = "e52f8c0"
+
+/**
+ * The shelved sample: obsidian-markdown, edited here, and changed by upstream in the same two places
+ * (history h3). `markers` is what resolving writes into SKILL.md: the merge, with Git's conflict markers.
+ */
+export const SHELVED = {
+  key: "kepano/obsidian-skills:obsidian-markdown",
+  name: "obsidian-markdown",
+  repo: "kepano/obsidian-skills",
+  upstream: sha(UPSTREAM_SHORT),
+  base: omd(OMD_USE[0], OMD_STEP[0]),
+  local: omd(OMD_USE[1], OMD_STEP[1]),
+  theirs: omd(OMD_USE[2], OMD_STEP[2]),
+  /** Common ancestor of each conflict, by its local side. */
+  bases: { [OMD_USE[1]]: OMD_USE[0], [OMD_STEP[1]]: OMD_STEP[0] } as Record<string, string>,
+  markers: omd(
+    `<<<<<<< local\n${OMD_USE[1]}\n=======\n${OMD_USE[2]}\n>>>>>>> upstream ${UPSTREAM_SHORT}`,
+    `<<<<<<< local\n${OMD_STEP[1]}\n=======\n${OMD_STEP[2]}\n>>>>>>> upstream ${UPSTREAM_SHORT}`,
+  ),
 }
 
 function extra(out: Record<string, Record<string, string>>, key: string, files: Record<string, string>) {

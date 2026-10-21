@@ -3,9 +3,11 @@ import { toast } from "sonner"
 
 import {
   backend,
+  shelvedNames,
   type Absent,
   type Agent,
   type Config,
+  type HistoryEntry,
   type LibraryStatus,
   type Outdated,
   type Pack,
@@ -18,7 +20,14 @@ import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import { translator, type T } from "@/lib/i18n"
 import { changes, pendingKey, prune, readsViaShared, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
 
-export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
+export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor" | "resolve"
+
+/** Where the editor opens and what its 返回 goes back to (the resolve page opens a conflicted file). */
+export interface EditorTarget {
+  ref: Ref
+  file?: string
+  back?: View
+}
 /** The two interface styles of the design ("简洁" and "涂鸦"). */
 export type Style = "clean" | "doodle"
 export type SkillView = "wire" | "table"
@@ -95,8 +104,11 @@ interface AppContextValue {
 
   view: View
   navigate: (view: View) => void
-  editing: Ref | null
-  openEditor: (ref: Ref) => void
+  editing: EditorTarget | null
+  openEditor: (ref: Ref, opts?: { file?: string; back?: View }) => void
+  /** The skill whose shelved update the resolve page is resolving. */
+  resolving: Ref | null
+  openResolve: (ref: Ref) => void
   selected: string | null
   select: (key: string | null) => void
   detail: string | null
@@ -193,7 +205,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const operationId = React.useRef(0)
   const operations = React.useRef(new Map<number, ActiveOperation>())
   const [view, setView] = React.useState<View>("skills")
-  const [editing, setEditing] = React.useState<Ref | null>(null)
+  const [editing, setEditing] = React.useState<EditorTarget | null>(null)
+  const [resolving, setResolving] = React.useState<Ref | null>(null)
   const [selected, setSelected] = React.useState<string | null>(null)
   const [detail, setDetail] = React.useState<string | null>(null)
   const [dialog, setDialog] = React.useState<DialogState>(null)
@@ -406,17 +419,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView(v)
       setDetail(null)
       if (v !== "editor") setEditing(null)
+      // The resolve page keeps its skill while a conflicted file is open in the editor.
+      if (v !== "resolve" && v !== "editor") setResolving(null)
     }
     if (guard.current && !guard.current(go)) return
     go()
   }, [])
 
-  const openEditor = React.useCallback((ref: Ref) => {
+  const openEditor = React.useCallback((ref: Ref, opts?: { file?: string; back?: View }) => {
     const go = () => {
       guard.current = null
       setDetail(null)
-      setEditing(ref)
+      setEditing({ ref, ...opts })
       setView("editor")
+    }
+    if (guard.current && !guard.current(go)) return
+    go()
+  }, [])
+
+  const openResolve = React.useCallback((ref: Ref) => {
+    const go = () => {
+      guard.current = null
+      setDetail(null)
+      setEditing(null)
+      setResolving(ref)
+      setView("resolve")
     }
     if (guard.current && !guard.current(go)) return
     go()
@@ -602,6 +629,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     navigate,
     editing,
     openEditor,
+    resolving,
+    openResolve,
     selected,
     select: setSelected,
     detail,
@@ -732,6 +761,32 @@ export function sourceGroup(t: T, s: Skill): string {
 
 export function isMine(s: Skill): boolean {
   return s.kind === "skills" || s.kind === "private"
+}
+
+/** An update of this skill waits for its conflicts to be resolved (shelved, or being resolved). */
+export function hasConflicts(s: Skill): boolean {
+  return !!(s.shelved || s.resolving)
+}
+
+/**
+ * Says what an update did with the skills you had edited: merged, or shelved because of conflicts,
+ * with a way to resolve them ("2 个 skill 已与你的改动合并；1 个有冲突，已搁置").
+ */
+export function toastMergeOutcome(t: T, entries: HistoryEntry[], skills: Skill[], openResolve: (ref: Ref) => void) {
+  const merged = entries.reduce((n, h) => n + (h.merged?.length ?? 0), 0)
+  const shelved = entries.flatMap((h) => shelvedNames(h).map((name) => skills.find((s) => s.origin === h.repo && s.name === name)))
+  if (!merged && !shelved.length) return
+  const text = merged
+    ? shelved.length
+      ? t("updateMergedN", { n: merged }) + t("mergeSep") + t("updateShelvedTail", { n: shelved.length })
+      : t("updateMergedN", { n: merged })
+    : t("updateShelvedN", { n: shelved.length })
+  const first = shelved.find((s) => !!s)
+  toast(text, {
+    description: shelved.length ? t("shelvedKeepNote") : undefined,
+    duration: shelved.length ? 10000 : undefined,
+    action: first ? { label: t("resolveConflicts"), onClick: () => openResolve(first.ref) } : undefined,
+  })
 }
 
 export const PLACEHOLDER_DESC = "What this skill does and when an agent should use it."

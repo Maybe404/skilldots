@@ -24,6 +24,8 @@ export const nativeBackend: Backend = {
   outdated: method("outdated"), update: method("update"), history: method("history"),
   scan: method("scan"), adopt: method("adopt"), trash: method("trash"), restore: method("restore"),
   trashUsage: method("trashUsage"), emptyTrash: method("emptyTrash"), deleteTrash: method("deleteTrash"),
-  updateDiff: method("updateDiff"),
+  updateDiff: method("updateDiff"), historyDiff: method("historyDiff"),
+  resolveStart: method("resolveStart"), resolveState: method("resolveState"), resolvePick: method("resolvePick"),
+  resolveContinue: method("resolveContinue"), resolveAbort: method("resolveAbort"),
   sync: method("sync"), config: method("config"), setConfig: method("setConfig"),
 }

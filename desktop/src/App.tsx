@@ -11,6 +11,7 @@ import { OperationText } from "@/components/app/status-bar"
 import { Dialogs } from "@/components/dialogs/dialogs"
 import { AgentsPage } from "@/components/pages/agents-page"
 import { HistoryPage } from "@/components/pages/history-page"
+import { ResolvePage } from "@/components/pages/resolve-page"
 import { Onboarding } from "@/components/pages/onboarding"
 import { ScanPage } from "@/components/pages/scan-page"
 import { SettingsPage } from "@/components/pages/settings-page"
@@ -26,7 +27,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 
 // CodeMirror and the Markdown renderer load only when a skill is opened.
 const EditorPage = React.lazy(() => import("@/components/editor/editor-page").then((m) => ({ default: m.EditorPage })))
-
 export default function App() {
   return (
     <AppProvider>
@@ -123,7 +123,7 @@ function OperationPill() {
 }
 
 function Shell() {
-  const { view, editing, setPaletteOpen, paletteOpen, openDialog, navigate, dialog, selected } = useApp()
+  const { view, editing, resolving, setPaletteOpen, paletteOpen, openDialog, navigate, dialog, selected } = useApp()
 
   // Global shortcuts: ⌘K palette, ⌘N new skill, ⌘, settings, ⌘F search.
   React.useEffect(() => {
@@ -139,7 +139,7 @@ function Shell() {
       } else if (k === "," && !dialog) {
         e.preventDefault()
         navigate("settings")
-      } else if (k === "f" && !dialog && view !== "editor") {
+      } else if (k === "f" && !dialog && view !== "editor" && view !== "resolve") {
         e.preventDefault()
         document.getElementById(searchInputId)?.focus()
       }
@@ -167,9 +167,11 @@ function Shell() {
       case "editor":
         return editing ? (
           <React.Suspense fallback={null}>
-            <EditorPage skillRef={editing} />
+            <EditorPage skillRef={editing.ref} file={editing.file} back={editing.back} />
           </React.Suspense>
         ) : null
+      case "resolve":
+        return resolving ? <ResolvePage key={resolving.key} skillRef={resolving} /> : null
     }
   })()
 

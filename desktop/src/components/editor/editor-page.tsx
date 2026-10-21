@@ -6,7 +6,7 @@ import { useReducedMotion } from "motion/react"
 import { ArrowLeft, ChevronDown, FileCode2, FileText, FolderOpen, PanelRightClose, PanelRightOpen, Save } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { PLACEHOLDER_DESC, kindLabel, useApp } from "@/lib/app-state"
+import { PLACEHOLDER_DESC, hasConflicts, kindLabel, useApp, type View } from "@/lib/app-state"
 import { backend, type FileNode, type Ref, type Skill } from "@/lib/backend"
 import { parseSkillMd, serializeSkillMd } from "@/lib/frontmatter"
 import { useSkillActions } from "@/lib/use-actions"
@@ -37,7 +37,7 @@ interface Buffer {
 
 const isMarkdown = (p: string) => /\.(md|markdown)$/i.test(p)
 
-export function EditorPage({ skillRef }: { skillRef: Ref }) {
+export function EditorPage({ skillRef, file = "SKILL.md", back = "skills" }: { skillRef: Ref; file?: string; back?: View }) {
   const { t, skills, run, reload, navigate, setLeaveGuard, openDialog } = useApp()
   const { reveal } = useSkillActions()
   const skill = skills.find((s) => s.ref.key === skillRef.key)
@@ -48,7 +48,8 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
   const [metadataOpen, setMetadataOpen] = React.useState(false)
   const [cursor, setCursor] = React.useState({ line: 1, col: 1 })
   const [saving, setSaving] = React.useState(false)
-  const needsAck = skill?.kind === "vendor" || skill?.kind === "app"
+  // Resolving a merge edits the files with conflict markers: the vendored copy is already yours to change.
+  const needsAck = (skill?.kind === "vendor" || skill?.kind === "app") && !hasConflicts(skill)
   const [acked, setAcked] = React.useState(false)
   const [leaving, setLeaving] = React.useState<(() => void) | null>(null)
 
@@ -57,19 +58,24 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
     let live = true
     setTree(null)
     setBuffers({})
-    setActive("SKILL.md")
+    setActive(file)
     setAcked(false)
     ;(async () => {
       const r = await run(() => backend.files(skillRef))
       if (!live || !r.ok) return
       setTree(r.value)
-      const md = await run(() => backend.readFile(skillRef, "SKILL.md"))
-      if (live && md.ok) setBuffers({ "SKILL.md": { saved: md.value, current: md.value } })
+      const loaded: Record<string, Buffer> = {}
+      for (const path of new Set(["SKILL.md", file])) {
+        const f = await run(() => backend.readFile(skillRef, path))
+        if (!live) return
+        if (f.ok) loaded[path] = { saved: f.value, current: f.value }
+      }
+      setBuffers(loaded)
     })()
     return () => {
       live = false
     }
-  }, [skillRef, run])
+  }, [skillRef, file, run])
 
   const open = async (path: string) => {
     setActive(path)
@@ -154,7 +160,7 @@ export function EditorPage({ skillRef }: { skillRef: Ref }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-[46px] shrink-0 items-center gap-2 px-10 font-body fs-body max-[760px]:px-5">
-        <Button variant="ghost" onClick={() => navigate("skills")} className="-ml-2.5">
+        <Button variant="ghost" onClick={() => navigate(back)} className="-ml-2.5">
           <ArrowLeft /> {t("back")}
         </Button>
         <div className="ml-1 flex min-w-0 items-baseline gap-2">

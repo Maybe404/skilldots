@@ -6,6 +6,7 @@ import {
   HOME,
   LIBRARY,
   REMOTE,
+  SHELVED,
   initialAgents,
   initialFiles,
   initialHistory,
@@ -20,6 +21,7 @@ import {
   skillDir,
   trashBatch,
   upstreamDescription,
+  vendoredFiles,
 } from "./mock-data"
 import { SHARED_READERS } from "@/lib/agents"
 import { parseSource } from "./parse-source"
@@ -29,6 +31,8 @@ import type {
   Backend,
   CliStatus,
   Config,
+  ConflictBlock,
+  ConflictFile,
   DiffHunk,
   DiffLine,
   FileDiff,
@@ -41,10 +45,12 @@ import type {
   Ref,
   RepoPreview,
   ScanItem,
+  ShelvedSkill,
   Skill,
   SkillDiff,
   TrashEntry,
 } from "./types"
+import { shortSha } from "@/lib/utils"
 
 const CONFIG_KEY = "skilldots.desktop.config"
 const DEFAULT_CONFIG: Config = {
@@ -75,19 +81,40 @@ interface State {
   scan: ScanItem[]
   /** Vendored skills whose files the user edited ("edit anyway"). */
   touched: Set<string>
+  /** Shelved updates by skill key (lock Shelved), and how far resolving them got. */
+  shelved: Map<string, Shelf>
+}
+
+interface Shelf {
+  files: string[]
+  /** What resolving writes: the merge, conflicted files with Git's markers. */
+  merge: Record<string, string>
+  /** Common ancestor of each conflict, by its local side. */
+  bases?: Record<string, string>
+  /** Set while resolving: the files as they were (restored by abort) and the trash entry holding that copy. */
+  backup?: Record<string, string>
+  trashId?: string
 }
 
 function sampleState(root: string | null): State {
   const now = new Date()
   const skills = initialSkills()
   const files = initialFiles(skills)
-  // One vendored skill the user edited, so the update review can show what moves to the trash.
+  // Vendored skills the user edited, with updates waiting: one edit merges cleanly (a line in the middle), the other
+  // adds a note at the end, where upstream adds a section too, so updating shelves it with a conflict.
   const touched = new Set<string>()
-  const edited = skills.find((s) => s.kind === "vendor" && s.name === "differential-review")
-  if (edited && files[edited.ref.key]?.["SKILL.md"]) {
-    files[edited.ref.key]["SKILL.md"] += "\nMy note: also check the migration files.\n"
-    touched.add(edited.ref.key)
+  const edit = (name: string, change: (md: string) => string) => {
+    const s = skills.find((x) => x.kind === "vendor" && x.name === name)
+    if (!s || !files[s.ref.key]?.["SKILL.md"]) return
+    files[s.ref.key]["SKILL.md"] = change(files[s.ref.key]["SKILL.md"])
+    touched.add(s.ref.key)
   }
+  edit("differential-review", (md) => md + "\nMy note: also check the migration files.\n")
+  edit("skilldots", (md) => md.replace("1. Read the task.", "1. Read the task and the library's skills.toml."))
+  // Yesterday's obsidian-skills update (history h3) merged your obsidian-cli and shelved your obsidian-markdown.
+  touched.add("kepano/obsidian-skills:obsidian-cli")
+  touched.add(SHELVED.key)
+  const shelved = new Map<string, Shelf>([[SHELVED.key, { files: ["SKILL.md"], merge: { "SKILL.md": SHELVED.markers }, bases: SHELVED.bases }]])
   // A skill of yours also chosen for Kiro, which this Mac does not have: shown as chosen but not linked.
   skills.find((s) => s.name === "design-review")?.targets.push("kiro")
   // Copies another installer put in agent folders and that were changed since: adopted as your own, not replaced by upstream.
@@ -111,6 +138,7 @@ function sampleState(root: string | null): State {
     plan: initialPlan(),
     scan: [...initialScan(skills), ...differs],
     touched,
+    shelved,
   }
 }
 
@@ -129,6 +157,8 @@ function emptyState(root: string | null): State {
     history: [],
     trash: [],
     plan: [],
+    touched: new Set(),
+    shelved: new Map(),
     // The same machine: what the agents have that differs from upstream is there before any library too.
     scan: [...initialScan([]), ...s.scan.filter((x) => x.differs)],
   }
@@ -174,6 +204,22 @@ export function createMockBackend(): Backend {
       repo: note?.pack?.repo,
     })
     if (note) notes.set(id, clone(note))
+  }
+  // Like the bridge's resolveState: each conflicted file parsed from the markers it has now.
+  const conflictsOf = (key: string): { files: ConflictFile[] } => {
+    const shelf = st.shelved.get(key)
+    const files = (shelf?.files ?? []).map((path): ConflictFile => {
+      const text = st.files[key]?.[path] ?? ""
+      const lines = text.split("\n")
+      const blocks = regions(lines).map(
+        (r, index): ConflictBlock => {
+          const local = lines.slice(r.start + 1, r.mid).join("\n")
+          return { index, local, upstream: lines.slice(r.mid + 1, r.end).join("\n"), base: shelf?.bases?.[local] }
+        },
+      )
+      return { path, binary: false, blocks: shelf?.backup ? blocks : [], text }
+    })
+    return clone({ files })
   }
   const status = (): LibraryStatus => ({
     root: st.root,
@@ -283,8 +329,12 @@ export function createMockBackend(): Backend {
       return clone(
         st.skills.map((s) => {
           const serves = !!shared?.enabled && s.targets.includes("agents")
+          const shelf = st.shelved.get(s.ref.key)
           return {
             ...s,
+            shelved: !!shelf,
+            resolving: !!shelf?.backup,
+            conflictFiles: shelf?.files ?? [],
             absent: s.targets.filter((a) => away.includes(a)),
             viaShared: serves ? s.targets.filter((a) => SHARED_READERS.includes(a)) : [],
             sharedReach: serves ? readers : [],
@@ -549,15 +599,34 @@ export function createMockBackend(): Backend {
         const s = st.outdated?.packs.find((x) => x.repo === repo)
         const pack = st.packs.find((p) => p.repo === repo)
         if (!s || !pack) continue
-        const backups: string[] = []
+        const merged: string[] = []
+        const shelvedNow: ShelvedSkill[] = []
+        const title = s.commits[0]?.title ?? "Update"
         for (const name of s.changed) {
           const sk = st.skills.find((x) => x.origin === repo && x.name === name)
-          if (sk && st.touched.has(sk.ref.key)) {
-            backups.push(`${name}/SKILL.md`)
-            toTrash(name, sk.dir, "update")
-            st.touched.delete(sk.ref.key)
-            st.files[sk.ref.key] = initialFiles([sk])[sk.ref.key]
+          if (!sk) continue
+          const base = vendoredFiles(sk)
+          const mine = st.files[sk.ref.key] ?? base
+          if (!st.touched.has(sk.ref.key)) {
+            st.files[sk.ref.key] = upstreamVersion(base, title)
+            continue
           }
+          // Like engine.Sync: your edits merged with upstream's. Upstream's sample change adds a section at the end of
+          // SKILL.md, so an edit that added lines there too conflicts: the update is shelved and the folder left alone.
+          const md = base["SKILL.md"] ?? ""
+          const added = mine["SKILL.md"]?.startsWith(md) ? mine["SKILL.md"].slice(md.length).trim() : ""
+          if (added) {
+            const short = shortSha(s.latest)
+            const merge = upstreamVersion(base, title)
+            merge["SKILL.md"] = withUpstreamDescription(md).trimEnd() + `\n\n<<<<<<< local\n${added}\n=======\n${upstreamSection(title).trim()}\n>>>>>>> upstream ${short}\n`
+            st.shelved.set(sk.ref.key, { files: ["SKILL.md"], merge, bases: { [added]: "" } })
+            shelvedNow.push({ name, files: ["SKILL.md"] })
+            continue
+          }
+          // Clean: the folder as it was goes to the trash first. It stays edited, so the next update merges again.
+          toTrash(name, sk.dir, "merged")
+          st.files[sk.ref.key] = upstreamVersion(mine, title)
+          merged.push(name)
         }
         for (const mv of s.moved) {
           const [name, cats] = mv.split(": ")
@@ -583,7 +652,9 @@ export function createMockBackend(): Backend {
           gone: s.gone,
           moved: s.moved,
           commits: s.commits,
-          backups,
+          backups: [],
+          merged,
+          shelved: shelvedNow,
         }
         pack.commit = s.latest
         Object.assign(s, { commit: s.latest, changed: [], moved: [], new: [], gone: [], pending: [], commits: [] })
@@ -602,7 +673,7 @@ export function createMockBackend(): Backend {
       for (const name of s.changed) {
         const sk = st.skills.find((x) => x.origin === repo && x.name === name)
         if (!sk) continue
-        const vendored = initialFiles([sk])[sk.ref.key]
+        const vendored = vendoredFiles(sk)
         const mine = st.files[sk.ref.key] ?? vendored
         const upstream = upstreamVersion(vendored, title)
         const localFiles = changedPaths(vendored, mine)
@@ -619,6 +690,92 @@ export function createMockBackend(): Backend {
     async history() {
       await wait(100)
       return clone(st.history)
+    },
+    async historyDiff(repo, time) {
+      await wait(500)
+      const h = st.history.find((x) => x.repo === repo && x.when === time)
+      if (!h) throw new Error(`no update of ${repo} at ${time}`)
+      // Like app.HistoryDiff between the upstream snapshots before and after: upstream's changes, not yours.
+      const title = h.commits[0]?.title ?? "Update"
+      const before = (name: string): Record<string, string> => {
+        const sk = st.skills.find((x) => x.origin === repo && x.name === name)
+        return sk ? vendoredFiles(sk) : { "SKILL.md": `---\nname: ${name}\n---\n\n# ${name}\n` }
+      }
+      const skills: SkillDiff[] = []
+      for (const name of h.changed) {
+        const old = before(name)
+        const next = repo === SHELVED.repo && name === SHELVED.name ? { "SKILL.md": SHELVED.theirs } : upstreamVersion(old, title)
+        skills.push({ name, status: "changed", local: false, localFiles: [], files: diffFiles(old, next, new Set()) })
+      }
+      for (const name of h.added) skills.push({ name, status: "added", local: false, localFiles: [], files: diffFiles({}, before(name), new Set()) })
+      for (const mv of h.moved) {
+        const name = mv.split(": ")[0]
+        if (!skills.some((x) => x.name === name)) skills.push({ name, status: "moved", local: false, localFiles: [], files: [] })
+      }
+      return clone({ skills })
+    },
+
+    async resolveStart(ref) {
+      await wait(500)
+      const s = find(ref)
+      const shelf = st.shelved.get(ref.key)
+      if (!shelf) throw new Error(`${s.name} has no shelved update`)
+      if (!shelf.backup) {
+        // Like skd resolve: the folder as it is goes to the trash (abort brings it back), the merge with markers is written.
+        shelf.backup = clone(st.files[ref.key] ?? {})
+        toTrash(s.name, s.dir, "merged")
+        shelf.trashId = st.trash[0]?.id
+        st.files[ref.key] = { ...st.files[ref.key], ...shelf.merge }
+        changed()
+      }
+      return conflictsOf(ref.key)
+    },
+    async resolveState(ref) {
+      await wait(120)
+      find(ref)
+      return conflictsOf(ref.key)
+    },
+    async resolvePick(ref, path, block, choice) {
+      await wait(160)
+      const shelf = st.shelved.get(ref.key)
+      const text = st.files[ref.key]?.[path]
+      if (!shelf?.backup || text === undefined) throw new Error(`${path} is not being resolved`)
+      const lines = text.split("\n")
+      const r = regions(lines)[block]
+      if (!r) throw new Error(`${path} has no conflict ${block + 1}`)
+      const local = lines.slice(r.start + 1, r.mid)
+      const upstream = lines.slice(r.mid + 1, r.end)
+      const keep = choice === "local" ? local : choice === "upstream" ? upstream : [...local, ...upstream]
+      lines.splice(r.start, r.end - r.start + 1, ...keep)
+      st.files[ref.key][path] = lines.join("\n")
+    },
+    async resolveContinue(ref) {
+      await wait(500)
+      const s = find(ref)
+      const shelf = st.shelved.get(ref.key)
+      if (!shelf?.backup) throw new Error(`${s.name} is not being resolved`)
+      for (const [path, text] of Object.entries(st.files[ref.key] ?? {})) {
+        if (regions(text.split("\n")).length || /^(<<<<<<<|=======|>>>>>>>)( |$)/m.test(text)) throw new Error(`${path} still has conflict markers`)
+      }
+      st.shelved.delete(ref.key)
+      st.touched.add(ref.key)
+      // The update's record now counts it as merged.
+      const h = st.history.find((x) => x.repo === s.origin && (x.shelved ?? []).some((y) => (typeof y === "string" ? y : y.name) === s.name))
+      if (h) {
+        h.shelved = (h.shelved ?? []).filter((y) => (typeof y === "string" ? y : y.name) !== s.name)
+        h.merged = [...(h.merged ?? []), s.name]
+      }
+      changed()
+      return { absent: absentOf([s]) }
+    },
+    async resolveAbort(ref) {
+      await wait(300)
+      const shelf = st.shelved.get(ref.key)
+      if (!shelf?.backup) throw new Error(`${find(ref).name} is not being resolved`)
+      st.files[ref.key] = shelf.backup
+      st.trash = st.trash.filter((x) => x.id !== shelf.trashId)
+      shelf.backup = undefined
+      shelf.trashId = undefined
     },
 
     async scan() {
@@ -734,6 +891,20 @@ export function createMockBackend(): Backend {
   }
 }
 
+/** Where Git's conflict markers are in a file's lines: <<<<<<< start, ======= mid, >>>>>>> end. */
+function regions(lines: string[]): { start: number; mid: number; end: number }[] {
+  const out: { start: number; mid: number; end: number }[] = []
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith("<<<<<<<")) continue
+    const mid = lines.findIndex((l, k) => k > i && l.startsWith("======="))
+    const end = lines.findIndex((l, k) => k > mid && l.startsWith(">>>>>>>"))
+    if (mid < 0 || end < 0) break
+    out.push({ start: i, mid, end })
+    i = end
+  }
+  return out
+}
+
 /** A stable, plausible size for a sample trash entry. */
 function sampleSize(id: string): number {
   let h = 0
@@ -741,11 +912,13 @@ function sampleSize(id: string): number {
   return 2_000 + (h % 60_000)
 }
 
-/** The sample's "upstream" version of a skill: a changed description and a new section. */
+const withUpstreamDescription = (md: string) => md.replace(/^(description:.*?)\s*$/m, "$1 Also covers follow-up checks.")
+const upstreamSection = (title: string) => `\n## What changed upstream\n\n- ${title}\n`
+
+/** The sample's "upstream" version of a skill: a changed description and a new section at the end. */
 function upstreamVersion(files: Record<string, string>, title: string): Record<string, string> {
   const out = { ...files }
-  const md = out["SKILL.md"] ?? ""
-  out["SKILL.md"] = md.replace(/^(description:.*?)\s*$/m, "$1 Also covers follow-up checks.") + `\n## What changed upstream\n\n- ${title}\n`
+  out["SKILL.md"] = withUpstreamDescription(out["SKILL.md"] ?? "") + upstreamSection(title)
   out["references/checklist.md"] = "# Checklist\n\n- Read the diff once without commenting.\n- Note every assumption.\n"
   return out
 }
