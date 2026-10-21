@@ -69,6 +69,42 @@ func TestAdoptSaysWhatItLeaves(t *testing.T) {
 	}
 }
 
+// A pack added from a file:// URL is keyed by its path, and the name
+// shown, the URL, the path and the directory's name all find it: list,
+// update and purge take any of them. An older skd's key ("file////…")
+// is found by the URL too.
+func TestFileURLPackByAnyName(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.skill("demo-skills/skills/alpha", "alpha")
+	dir := e.repo("demo-skills")
+	url := "file://" + dir
+	e.ok(lib, "add", url, "--all")
+	if b, _ := os.ReadFile(filepath.Join(lib, "skills.toml")); !strings.Contains(string(b), "repo = '"+dir+"'") {
+		t.Fatalf("skills.toml:\n%s", b)
+	}
+	for _, name := range []string{dir, url, "demo-skills"} {
+		if out := e.ok(lib, "list", name); !strings.Contains(out, "alpha") {
+			t.Errorf("list %s:\n%s", name, out)
+		}
+	}
+	e.ok(lib, "update", url, "--yes")
+	e.ok(lib, "purge", url, "--yes")
+	if b, _ := os.ReadFile(filepath.Join(lib, "skills.toml")); strings.Contains(string(b), "[[pack]]") {
+		t.Fatalf("not purged:\n%s", b)
+	}
+	// The key an older skd wrote.
+	e.ok(lib, "trash", "restore", dir)
+	b, _ := os.ReadFile(filepath.Join(lib, "skills.toml"))
+	old := strings.Replace(string(b), "repo = '"+dir+"'", "repo = 'file///"+dir+"'", 1)
+	os.WriteFile(filepath.Join(lib, "skills.toml"), []byte(old), 0o644)
+	if out := e.ok(lib, "list", url); !strings.Contains(out, "file///") {
+		t.Errorf("list by URL of an older key:\n%s", out)
+	}
+	e.ok(lib, "purge", "file///"+dir, "--yes")
+}
+
 // A broken trash-notes.json is set aside the first time skd moves
 // something to the trash, and the command says so: the warning is not
 // lost on the way.

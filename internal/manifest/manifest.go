@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -165,7 +166,71 @@ func (m *Manifest) FindPack(key string) *Pack {
 			return p
 		}
 	}
+	// Other spellings of a repository: the URL it was added from
+	// (https://…, git@…:…, file://…), a local path, or the key an older
+	// skd wrote for file:// ("file///path").
+	want := repoSpellings(key)
+	for _, p := range m.Packs {
+		for _, r := range repoSpellings(p.Repo) {
+			if slices.Contains(want, r) {
+				return p
+			}
+		}
+	}
+	// The last segment of the repository, when one pack has it.
+	if key != "" && !strings.ContainsAny(key, `/\:`) {
+		var hit *Pack
+		for _, p := range m.Packs {
+			if lastSegment(p.Repo) == key {
+				if hit != nil {
+					return nil
+				}
+				hit = p
+			}
+		}
+		return hit
+	}
 	return nil
+}
+
+// repoSpellings are the forms a repository key or source may take, as
+// pack.ParseSource would key it: owner/repo for a GitHub URL, the URL
+// without its scheme and with ":" as "/" otherwise, a local path as it
+// is (file://path and an older skd's "file///path" too).
+func repoSpellings(s string) []string {
+	s = strings.TrimSuffix(strings.TrimSpace(s), "/")
+	out := []string{s}
+	add := func(v string) {
+		v = strings.TrimSuffix(strings.TrimSuffix(v, "/"), ".git")
+		if v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	for _, pre := range []string{"https://github.com/", "http://github.com/", "git@github.com:"} {
+		if rest, ok := strings.CutPrefix(s, pre); ok {
+			if parts := strings.Split(rest, "/"); len(parts) >= 2 {
+				add(parts[0] + "/" + strings.TrimSuffix(parts[1], ".git"))
+			}
+		}
+	}
+	if rest, ok := strings.CutPrefix(s, "file://"); ok {
+		add(rest)
+	}
+	if rest, ok := strings.CutPrefix(s, "file/"); ok && strings.HasPrefix(rest, "/") {
+		add("/" + strings.TrimLeft(rest, "/"))
+	}
+	g := s
+	for _, pre := range []string{"https://", "http://", "ssh://", "git://"} {
+		g = strings.TrimPrefix(g, pre)
+	}
+	add(strings.ReplaceAll(g, ":", "/"))
+	return out
+}
+
+// lastSegment is the last segment of a repository key, without ".git".
+func lastSegment(repo string) string {
+	r := strings.TrimRight(strings.ReplaceAll(repo, `\`, "/"), "/")
+	return strings.TrimSuffix(path.Base(r), ".git")
 }
 
 // CheckAlias reports why alias cannot name the pack whose repo is self
