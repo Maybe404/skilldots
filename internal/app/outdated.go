@@ -124,6 +124,10 @@ func (s *Session) OutdatedContext(ctx context.Context, repos []string, each func
 		}
 		packs = append(packs, p)
 	}
+	// The pull requests sent upstream, as GitHub has them now (best effort).
+	if err := s.RefreshContributions(ctx); err != nil {
+		s.logf(Warn, "could not record the state of the pull requests: %v", err)
+	}
 	out := &Outdated{Checked: time.Now(), Packs: []PackStatus{}, Failed: []Failure{}}
 	for _, p := range packs {
 		st, err := s.checkPack(ctx, p)

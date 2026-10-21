@@ -13,6 +13,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/skillmd"
 	"github.com/Maybe404/skilldots/internal/targets"
@@ -80,6 +81,12 @@ type Entry struct {
 	Shelved   string   `json:",omitempty"`
 	Resolving bool     `json:",omitempty"`
 	Conflicts []string `json:",omitempty"`
+	// Edited is set for a vendored skill whose files are not what skd
+	// vendored (the user changed them). Filled in by app.Session.MarkEdited,
+	// only where it is shown: it reads every file of the skill.
+	Edited bool `json:",omitempty"`
+	// Contribution is the change to it last sent upstream (skd contribute).
+	Contribution *lock.Contribution `json:",omitempty"`
 }
 
 // Resolve computes every entry declared by the library. Problems confined
@@ -203,7 +210,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 				continue
 			}
 			e := Entry{Name: name, LinkName: name, Kind: KindVendor, Origin: p.Repo, Category: ls.Category,
-				Dir: sd, TargetNames: packTargets, Shelved: ls.Shelved, Resolving: ls.Resolving, Conflicts: ls.Conflicts}
+				Dir: sd, TargetNames: packTargets, Shelved: ls.Shelved, Resolving: ls.Resolving, Conflicts: ls.Conflicts, Contribution: ls.Contribution}
 			if o := p.Override(name, false); o != nil {
 				if o.As != "" {
 					if err := manifest.CheckName(o.As); err != nil {

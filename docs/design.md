@@ -166,6 +166,12 @@ targets 继承：全局 default → pack → skill。`targets = []` 表示保留
 - **更新历史**：记录新增 `merged`、`shelved`、`snapFrom`、`snapTo`。`skd history --diff` 比较两个快照树；没有快照的旧记录用缓存克隆 `From..To`，缺的 commit 按 sha `fetch --depth=1`。
 - **更新前的 diff**（桌面端）：改过的 skill 找得到基准时展示“上游从基准到新版本改了什么”，标出用户改过的文件和预计冲突的文件（`base`、`conflicts`、文件上的 `conflict`）；找不到基准时退回“你的版本 → 上游”并标 `localUnknown`。
 
+## 我的改动、提交给上游、同步
+
+- **我的改动**：引入的 skill 只要文件和锁里的哈希对不上（`fsutil.Pristine` 为假）就算“改过”。`Session.MarkEdited` 只在列表里算（要读每个文件），不放进 `Resolve`。`Session.LocalChanges` 用合并同一套基准查找（`engine.FindBase`：快照历史，再资料库历史）比较基准和工作副本，返回 `SkillDiff`；找不到基准时 `base=false`，不猜。
+- **提交给上游**（`skd contribute`）：只有人发起才发送（CLI 无终端时要 `--yes`，桌面端先确认仓库、分支、方式和 diff）。在缓存里单独的工作克隆（`<repo>.contrib`，`--filter=blob:none`，不是更新用的浅克隆）里：重置到上游分支的最新提交，把 skill 的文件镜像到它在上游的目录（含删除，跳过引入时跳过的东西），用用户自己的 git 身份提交。前提：改过、没有搁置/解决中、基于上游当前版本（否则“先 skd update”）。`--push` 推到来源的分支（GitHub 用 gh 问权限，其他主机 `git push --dry-run`），被拒（保护分支、非快进）就停下建议 `--pr`。`--pr` 只支持 GitHub：有权限推分支 `skilldots/<skill>-<时间>` 到原仓库，没有就 `gh repo fork`（复用已有 fork）推到 fork，再 `gh pr create`。gh 的调用都在 `app.GitHub` 接口后面，测试换成假的（`SetGitHub`），推送用本地 bare 仓库。锁里每个 skill 记 `contribution = {kind, url, number, branch, state, at}`；更新后工作副本等于上游（改动已合入）时清掉，`skd contribute --refresh` 和 `skd outdated` 尽力刷新 PR 状态。
+- **同步**（`skd sync`）：提交后，分支有上游就先 fetch 再 `git merge --no-edit`（不 rebase），合并进来的内容 apply，再推送。冲突时 `git merge --abort`，资料库不变，报告冲突文件，退出码非零（同步搁置）；搁置的文件列表存在 `.git/skilldots/sync-shelved`（本机），重开应用后仍在（桌面端 `status.syncShelved`），直到下次同步成功；开始 `--resolve` 后改由 `syncing` 表示，`--abort` 后又回到搁置。桌面端用 `readFile`/`writeFile` 加 ref `{key: "@sync"}` 读写正在合并的冲突文件（只限冲突文件，路径相对资料库根目录，规则同 skill 文件，写完 `git add`）。`--resolve` 重做合并并保留 git 的冲突状态（标记、UU），冲突文件列表存在 `.git/skilldots/sync-conflicts`；`--continue` 有标记或仍未合并时拒绝，否则 add、提交合并、apply、推送；`--abort` 即 `git merge --abort`。合并进行中（`MERGE_HEAD`）提交和普通同步都拒绝。桌面端用 ref `{key: "@sync"}` 复用解决冲突的那组调用。
+
 ## 关键规则
 
 - **skill 根目录识别**：扫所有 `SKILL.md`，取其父目录为 skill 目录；跳过测试目录和隐藏目录（`.agents` 除外），但仓库里别处没有 skill 时再扫隐藏目录（只在 `.claude/skills` 等目录发布的仓库）。同名多份：内容相同的折叠为 AltDirs，内容不同的记为 Variants，取 `skills/`、`.agents/skills/` 优先的那份，`skd show` 列出

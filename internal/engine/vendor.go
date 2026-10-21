@@ -226,6 +226,12 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		rep.Warnings = append(rep.Warnings, i18n.Sprintf("%s is a symlink, not a file; it was not copied into vendor/", n))
 	}
 	wanted := map[string]bool{}
+	contributions := map[string]*lock.Contribution{}
+	for n, ls := range lp.Skills {
+		if ls != nil && ls.Contribution != nil {
+			contributions[n] = ls.Contribution
+		}
+	}
 	// oldCategory is the category a skill had before upstream moved it.
 	oldCategory := map[string]string{}
 	var selected []pack.Skill
@@ -395,6 +401,20 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		delete(lp.Skills, n)
 	}
 	pruneEmpty(lib, packDir)
+
+	// A change sent upstream (skd contribute) is remembered while the
+	// skill still differs from upstream; once an update brought upstream
+	// to what the user has, it landed and is forgotten.
+	for n, c := range contributions {
+		ls := lp.Skills[n]
+		if ls == nil {
+			continue
+		}
+		ls.Contribution = nil
+		if d, err := skillDir(packDir, ls.Category, n); err == nil && fsutil.Exists(d) && !fsutil.Pristine(d, ls.Hash) {
+			ls.Contribution = c
+		}
+	}
 
 	if repoLicense != "" && len(lp.Skills) > 0 {
 		if err := os.MkdirAll(packDir, 0o755); err != nil {

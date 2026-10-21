@@ -28,6 +28,9 @@ func (s *Session) Commit(msg string, push bool) (bool, error) {
 	if names := s.resolving(); len(names) > 0 {
 		return false, i18n.Errorf("not committing while %s is being resolved (its files hold conflict markers): finish with skd resolve --continue, or skd resolve --abort", strings.Join(names, ", "))
 	}
+	if s.Syncing() {
+		return false, i18n.New("a sync is being resolved: finish it with skd sync --continue, or skd sync --abort")
+	}
 	if _, err := lib.Git(append([]string{"add", "-A", "--"}, commitPaths...)...); err != nil {
 		return false, err
 	}
@@ -128,17 +131,33 @@ type BackupOutcome struct {
 	// PrivateUncommitted is set when private/ (a separate repository that
 	// is never pushed here) has uncommitted changes.
 	PrivateUncommitted bool `json:"privateUncommitted,omitempty"`
+	// Pulled is set when the remote had commits this library did not,
+	// merged in (and linked) before pushing.
+	Pulled bool `json:"pulled"`
+	// Conflicts are the files, relative to the library, both sides
+	// changed in ways that do not merge: the sync is shelved, the library
+	// is as it was and nothing was pushed (skd sync --resolve).
+	Conflicts []string `json:"conflicts"`
+	// Apply links what was pulled.
+	Apply *ApplyOutcome `json:"apply,omitempty"`
 }
 
 // DefaultBackupMessage is the commit message of a backup.
 const DefaultBackupMessage = "chore: update skills library"
 
-// Backup commits the library and pushes it to origin: `skd sync`. remote,
-// when set, becomes origin first.
+// Backup commits the library, merges what its remote has that it does
+// not (git merge, never rebase), links that, and pushes: `skd sync`.
+// remote, when set, becomes origin first. When the merge conflicts it is
+// aborted, the library stays as it was, nothing is pushed, and the
+// outcome lists the conflicting files (Conflicts); skd sync --resolve
+// redoes it for resolving (SyncResolve).
 func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 	lib := s.Lib
 	if safetext.Has(remote) {
 		return nil, i18n.Errorf("remote %q has control characters: not a git URL", remote)
+	}
+	if s.Syncing() {
+		return nil, i18n.New("a sync is being resolved: finish it with skd sync --continue, or skd sync --abort")
 	}
 	if remote != "" {
 		if _, err := lib.Git("remote", "get-url", "origin"); err == nil {
@@ -153,7 +172,7 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 	if msg == "" {
 		msg = DefaultBackupMessage
 	}
-	out := &BackupOutcome{}
+	out := &BackupOutcome{Conflicts: []string{}}
 	committed, err := s.Commit(msg, false)
 	if err != nil {
 		return nil, err
@@ -165,18 +184,36 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 			if _, err := lib.Git("push", "-q", "-u", "origin", "HEAD"); err != nil {
 				return out, err
 			}
-		} else if _, err := lib.Git("push", "-q"); err != nil {
-			return out, err
+		} else {
+			conflicts, err := s.pull(out, false)
+			if err != nil {
+				return out, err
+			}
+			if len(conflicts) > 0 {
+				out.Conflicts = conflicts
+				s.setSyncShelved(conflicts)
+				return out, nil
+			}
+			if _, err := lib.Git("push", "-q"); err != nil {
+				return out, err
+			}
 		}
 		out.Pushed = true
+		s.setSyncShelved(nil)
 		s.pushSnapshots()
 	}
-	// Not through a link inside the library: git status refreshes the
-	// index of whatever repository it names.
+	s.notePrivate(out)
+	return out, nil
+}
+
+// notePrivate sets PrivateUncommitted. Not through a link inside the
+// library: git status refreshes the index of whatever repository it
+// names.
+func (s *Session) notePrivate(out *BackupOutcome) {
+	lib := s.Lib
 	if library.PrivateLink(lib.Root) == "" && fsutil.Exists(filepath.Join(lib.PrivateDir(), ".git")) {
 		if st, _ := library.Git(lib.PrivateDir(), "status", "--short"); st != "" {
 			out.PrivateUncommitted = true
 		}
 	}
-	return out, nil
 }

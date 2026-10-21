@@ -130,7 +130,7 @@ None of these delete anything: files go to the library trash (`skd trash`), and 
 
 Two ways, ask the user which they want:
 
-- Edit the vendored files in place (the directory `skd path <skill>` prints). The edits are kept: each update merges upstream's changes into them, and shelves the update when they conflict (see above). Do not edit the files of a skill that is shelved or being resolved except to resolve it.
+- Edit the vendored files in place (the directory `skd path <skill>` prints). The edits are kept: each update merges upstream's changes into them, and shelves the update when they conflict (see above). Do not edit the files of a skill that is shelved or being resolved except to resolve it. `skd diff <skill>` shows them; `skd contribute` can send them upstream (below).
 - Fork it, when upstream should not touch it any more:
 ```bash
 skd fork <skill>            # copies it into skills/ as the user's own; upstream is deselected
@@ -149,13 +149,45 @@ skd new <name>              # skills/<name>/SKILL.md, linked immediately
 skd new <name> --private    # private/: this machine only, never pushed
 ```
 
-## Back up / sync
+## Your edits, contributing upstream, syncing your library
+
+Who owns what, and where it lives:
+
+| | what | where it lives | goes where |
+|---|---|---|---|
+| a vendored skill's files | upstream's, plus the user's edits | `vendor/<pack>/…` in the library | the library's git remote (`skd sync`); upstream only through `skd contribute` |
+| the user's edits | the diff against the upstream version they are based on | computed: `skd diff <skill>` | — |
+| upstream versions | every version vendored | `refs/skilldots/upstream/<pack>` in the library repository | pushed with `skd sync`, fetched by `skd clone` |
+| shelved / resolving state, contribution records | per skill | `skills.lock` (`shelved`, `resolving`, `contribution`) | with the library |
+| the user's own skills | theirs | `skills/` (published with the library), `private/` (this machine only) | `skd sync` (never `private/`) |
+
+**See the user's edits.** `skd list` marks an edited vendored skill with `✎` (`"Edited": true` in `skd list --json`). `skd diff <skill>` (`--json`: the file/hunk document) shows what the user changed against the upstream version the skill is based on — the same base an update merges against. When that version is not known (`"base": false`) skd says so and shows nothing; do not guess with `git diff`. Plain git: `git -C <library> diff -- vendor/<pack>/<category>/<skill>` shows only the uncommitted part, against the library's last commit, not against upstream.
+
+**Update.** See "Edits to vendored skills" above: `skd update` merges upstream's changes into the edits, shelves on conflicts, `skd resolve` finishes.
+
+**Contribute an edit upstream** — only when the user asks; skd never sends anything on its own:
 
 ```bash
-skd sync                    # commit the library and push to its git remote
-skd sync --remote <git-url> # set the remote first (ask the user for the URL)
+skd contribute <skill> --dry-run           # target repository, branch, what is possible (push / pull request, gh), and the diff
+skd contribute <skill> --pr --yes -m "<title>\n\n<body>"   # open a pull request (GitHub, through gh)
+skd contribute <skill> --push --yes -m "<message>"         # push straight to the pack's branch, when the user may
+skd contribute --json                      # the contributions on record and their state
+skd contribute --refresh --json            # ask GitHub for the pull requests' state
 ```
-Run `skd sync` after adding, updating or writing skills unless the user says otherwise. `private/` is a separate repository and is never pushed by `sync`. `sync` also pushes the upstream snapshots (`refs/skilldots/*`), and `skd clone` fetches them, so another machine can merge against them; it refuses while a skill is being resolved.
+
+Always run `--dry-run` first, show the user the repository, the branch, the mode and the diff, and get their go-ahead; then run with `--yes` (without a terminal skd refuses to send without it). The skill must be based on upstream's current version: if `--dry-run` says `behind` (or "skd update first"), update (and resolve) first. `--pr` needs `gh` installed and logged in (`gh auth login`, the user's step); without push rights skd forks with gh and pushes the branch `skilldots/<skill>-<time>` to the fork. `--push` is refused when the user may not push or the branch is protected or moved on — suggest `--pr`. Pull requests are GitHub only. The commit is made with the user's git identity in a work clone in skd's cache (`<cache>/<owner>__<repo>.contrib`), never in the library. The record (`contribution` in `skills.lock`: kind, url, number, branch, state open/merged/closed/pushed) stays until an update brings the change back from upstream; then the skill is no longer edited and the record goes. Plain git equivalent (what skd does): clone upstream, copy the skill's files over its directory there, commit, `git push origin HEAD:<branch>` or push a branch and `gh pr create --repo <owner>/<repo> --head <branch>`.
+
+**Sync the library with its remote** (the user's own backup, and other machines):
+
+```bash
+skd sync                    # commit, fetch, merge the remote's commits (git merge, not rebase), link them, push
+skd sync --remote <git-url> # set the remote first (ask the user for the URL)
+skd sync --resolve          # a shelved sync: redo the merge, leaving the conflicts in the library
+skd sync --continue         # finish: refuses while a conflict marker is left; commits the merge and pushes
+skd sync --abort            # give up (git merge --abort)
+```
+
+Run `skd sync` after adding, updating or writing skills unless the user says otherwise. When the remote and the library both changed the same lines, `skd sync` exits non-zero with the conflicting files (`conflicts` in `--json`) and changes nothing: the sync is shelved. Tell the user; with their go-ahead `skd sync --resolve` leaves git's merge state (`git -C <library> status` shows `UU`, the files hold markers, `git checkout --ours|--theirs -- <path>` and `git add <path>` work), then edit, `skd sync --continue`. Agents linked to skills among those files read the markers until it is finished. Plain git equivalent: `git -C <library> pull --no-rebase` then `git push`, then `skd apply`. `private/` is a separate repository and is never pushed by `sync`. `sync` also pushes the upstream snapshots (`refs/skilldots/*`), and `skd clone` fetches them; it refuses while a skill or a sync is being resolved.
 
 ## Take over skills installed by other tools
 

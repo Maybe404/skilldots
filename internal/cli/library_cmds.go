@@ -100,6 +100,7 @@ func listCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			c.MarkEdited(entries)
 			if c.jsonOut(entries) {
 				return nil
 			}
@@ -284,6 +285,12 @@ func printEntries(c *ctx, entries []engine.Entry) {
 		case e.Shelved != "":
 			name += " " + warn(i18n.T("shelved"))
 		}
+		if e.Edited {
+			name += " " + dim(EditedMark)
+		}
+		if c := e.Contribution; c != nil && c.Kind == "pr" && c.Number > 0 {
+			name += " " + dim(fmt.Sprintf("PR #%d", c.Number))
+		}
 		if e.ClaudeDisabled {
 			name += " " + warn(i18n.T("off in Claude Code"))
 		}
@@ -295,12 +302,21 @@ func printEntries(c *ctx, entries []engine.Entry) {
 	}
 	c.printf("%s\n", t.Render())
 	for _, e := range entries {
+		if e.Edited {
+			c.printf("%s\n", dim(i18n.Sprintf("%s you changed it, against upstream's version (skd diff <skill>; skd update merges upstream's changes in)", EditedMark)))
+			break
+		}
+	}
+	for _, e := range entries {
 		if e.ClaudeDisabled {
 			c.printf("%s\n", dim(i18n.T(ClaudeOffNote)))
 			break
 		}
 	}
 }
+
+// EditedMark marks a vendored skill the user changed.
+const EditedMark = "✎"
 
 // ClaudeOffNote explains "off in Claude Code" under a list that shows it.
 var ClaudeOffNote = i18n.M("off in Claude Code: turned off in Claude Code's own skill settings; skd still links it. " +

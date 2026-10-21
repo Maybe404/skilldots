@@ -11,6 +11,8 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库
   clone       克隆一个资料库（你在另一台机器上的备份）并应用它
   completion  为指定的 shell 生成自动补全脚本
   config      查看或修改设置（editor、theme、lang）
+  contribute  把你对引入 skill 的改动提交给上游：提 PR 或直接推送
+  diff        显示你对引入 skill 的改动（相对它所基于的上游版本）
   disable     从 agent 上卸下 skill（或来源）；资料库里仍保留
   edit        用编辑器打开 skill 的目录
   enable      把 skill（或整个来源）装到 agent 上
@@ -27,7 +29,7 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库
   resolve     解决已搁置更新的冲突，就像完成一次 git merge
   scan        盘点本机上每个 agent 的 skill 目录
   show        列出一个仓库提供的 skill，不引入也不装上任何东西
-  sync        提交资料库并推送到它的 git 远程仓库（你的备份）
+  sync        提交资料库，合并它的 git 远程仓库上的改动，再推送（你的备份）
   targets     列出已知的 agent target，以及它们在本机是否存在
   trash       skd 挪开的东西：列出、恢复或清空（清空只能由终端前的人来做）
   update      拉取来源的上游改动，并重新引入所选的 skill

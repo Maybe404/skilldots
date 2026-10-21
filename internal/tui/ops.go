@@ -456,7 +456,14 @@ func (o *libOps) Sync() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(out.Conflicts) > 0 {
+		return "", warning(i18n.Sprintf("sync shelved: the remote and this library both changed %s; nothing was merged or pushed", strings.Join(out.Conflicts, ", ")) +
+			i18n.T(" · skd sync --resolve at a terminal"))
+	}
 	var parts []string
+	if out.Pulled {
+		parts = append(parts, i18n.T("merged what the remote had"))
+	}
 	if out.Committed {
 		parts = append(parts, i18n.T("committed"))
 	} else {

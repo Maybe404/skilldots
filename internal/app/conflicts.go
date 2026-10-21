@@ -560,6 +560,12 @@ func (s *Session) ResolvePick(r Ref, path string, block int, choice string) erro
 		}
 		return pickWhole(f, kind, choice)
 	}
+	return pickBlock(f, path, block, choice)
+}
+
+// pickBlock settles conflict block of the file f (shown as path) with
+// choice.
+func pickBlock(f, path string, block int, choice string) error {
 	b, err := os.ReadFile(f)
 	if err != nil {
 		return err

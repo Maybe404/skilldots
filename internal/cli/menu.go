@@ -370,13 +370,75 @@ func cloneCmd() *cobra.Command {
 
 func syncCmd() *cobra.Command {
 	var remote, msg string
+	var resolve, cont, abort bool
 	cmd := &cobra.Command{
-		Use:   "sync",
-		Short: i18n.T("Commit the library and push it to its git remote (your backup)"),
+		Use:   "sync [--resolve | --continue | --abort]",
+		Short: i18n.T("Commit the library, merge what its git remote has, and push (your backup)"),
+		Long: i18n.T("sync commits the library, fetches its git remote and merges what the remote has that the library has not " +
+			"(git merge, never rebase; what the merge brings in is linked), then pushes, with the upstream snapshots. When " +
+			"both sides changed the same lines the sync is shelved: the merge is aborted, the library stays as it was, nothing " +
+			"is pushed, and the conflicting files are listed. sync --resolve redoes the merge and leaves git's conflict state " +
+			"in the library (conflict markers, files unmerged in the index: git status, git diff and git checkout " +
+			"--ours/--theirs work); agents linked to skills among them read the markers until it is finished. Edit the files, " +
+			"then sync --continue commits the merge and pushes (it refuses while a marker is left); sync --abort gives up " +
+			"(git merge --abort). private/ is a separate repository and is never pushed."),
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
+			}
+			n := 0
+			for _, b := range []bool{resolve, cont, abort} {
+				if b {
+					n++
+				}
+			}
+			if n > 1 {
+				return i18n.Errorf("--resolve, --continue and --abort: pick one")
+			}
+			switch {
+			case resolve:
+				res, err := c.SyncResolve()
+				if err != nil {
+					return err
+				}
+				if c.jsonOut(res) {
+					return nil
+				}
+				if res.Sync != nil {
+					say("%s %s\n", ok("✓"), i18n.T("merged without conflicts and pushed"))
+					return nil
+				}
+				say("%s %s\n", warn("!"), i18n.Sprintf("the sync is being resolved: %s with conflicts", plural(len(res.Files), "file")))
+				for _, f := range res.Files {
+					say("  %s %s\n", warn("✗"), txt(f.Path))
+				}
+				say("%s\n", dim(i18n.T("edit them (git checkout --ours/--theirs <file> takes one side; agents linked to these skills read the markers meanwhile), then skd sync --continue · skd sync --abort gives up")))
+				return nil
+			case cont:
+				out, err := c.SyncContinue()
+				var ue *app.SyncUnresolvedError
+				if errors.As(err, &ue) {
+					jsonOut(map[string]any{"unresolved": ue.Files})
+					return err
+				}
+				if out != nil && out.Apply != nil {
+					printApply(c, out.Apply)
+				}
+				if err != nil {
+					return err
+				}
+				say("%s %s\n", ok("✓"), i18n.T("merged and pushed"))
+				jsonOut(out)
+				return nil
+			case abort:
+				if err := c.SyncAbort(); err != nil {
+					return err
+				}
+				say("%s %s\n", ok("✓"), i18n.T("the merge is aborted: the library is as it was, the sync still shelved"))
+				jsonOut(map[string]any{"aborted": true})
+				return nil
 			}
 			out, err := c.Backup(remote, msg)
 			if out != nil {
@@ -385,9 +447,23 @@ func syncCmd() *cobra.Command {
 				} else {
 					say("%s\n", dim(i18n.T("nothing to commit")))
 				}
+				if out.Pulled {
+					say("%s %s\n", ok("✓"), i18n.T("merged what the remote had"))
+					if out.Apply != nil {
+						printApply(c, out.Apply)
+					}
+				}
 			}
 			if err != nil {
 				return err
+			}
+			if len(out.Conflicts) > 0 {
+				jsonOut(out)
+				say("%s %s\n", warn("!"), i18n.Sprintf("sync shelved: the remote and this library both changed %s; nothing was merged or pushed", plural(len(out.Conflicts), "file")))
+				for _, f := range out.Conflicts {
+					say("  %s %s\n", warn("✗"), txt(f))
+				}
+				return i18n.Errorf("sync shelved with conflicts; skd sync --resolve to resolve them")
 			}
 			if out.Remote == "" {
 				say("%s no remote configured; add one with: skd sync --remote <git-url>\n", warn("!"))
@@ -403,6 +479,9 @@ func syncCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&remote, "remote", "", i18n.T("set the git remote (origin) before pushing"))
 	cmd.Flags().StringVarP(&msg, "message", "m", "", i18n.T("commit message"))
+	cmd.Flags().BoolVar(&resolve, "resolve", false, i18n.T("redo a shelved sync's merge, leaving its conflicts in the library to resolve"))
+	cmd.Flags().BoolVar(&cont, "continue", false, i18n.T("finish a sync being resolved: commit the merge and push"))
+	cmd.Flags().BoolVar(&abort, "abort", false, i18n.T("give up a sync being resolved (git merge --abort)"))
 	return cmd
 }
 

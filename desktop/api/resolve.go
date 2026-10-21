@@ -73,6 +73,9 @@ func resolveOperation(ses *app.Session, method string, args []json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
+	if rf.Key == app.SyncRef {
+		return syncResolveOperation(ses, method, args)
+	}
 	r := rf.app()
 	switch method {
 	case "resolveStart":
@@ -118,4 +121,64 @@ func resolveOperation(ses *app.Session, method string, args []json.RawMessage) (
 		return nil, checkApply(o.Apply, err)
 	}
 	return nil, errors.New("unknown resolve operation")
+}
+
+// syncResolveOperation is a sync's conflicts through the resolve calls,
+// with the ref {key: "@sync"}: resolveStart is skd sync --resolve,
+// resolveContinue --continue (and pushes), resolveAbort --abort. Paths
+// are relative to the library's root.
+func syncResolveOperation(ses *app.Session, method string, args []json.RawMessage) (any, error) {
+	switch method {
+	case "resolveStart":
+		res, err := ses.SyncResolve()
+		if err != nil {
+			return nil, err
+		}
+		if res.Sync != nil {
+			return object{"files": []app.ConflictFile{}, "merged": true}, nil
+		}
+		return syncState(ses)
+	case "resolveState":
+		return syncState(ses)
+	case "resolvePick":
+		path, err := argument[string](args, 1)
+		if err != nil {
+			return nil, err
+		}
+		block, err := argument[int](args, 2)
+		if err != nil {
+			return nil, err
+		}
+		choice, err := argument[string](args, 3)
+		if err != nil {
+			return nil, err
+		}
+		return nil, ses.SyncPick(path, block, choice)
+	case "resolveContinue":
+		o, err := ses.SyncContinue()
+		if o == nil {
+			return nil, err
+		}
+		if err = checkApply(o.Apply, err); err != nil {
+			return nil, err
+		}
+		return object{"absent": absentOf(o.Apply)}, nil
+	case "resolveAbort":
+		return nil, ses.SyncAbort()
+	}
+	return nil, errors.New("unknown resolve operation")
+}
+
+func syncState(ses *app.Session) (any, error) {
+	files, err := ses.SyncConflictFiles()
+	if err != nil {
+		return nil, err
+	}
+	out := []app.ConflictFile{}
+	for _, f := range files {
+		if !f.Resolved {
+			out = append(out, f)
+		}
+	}
+	return object{"files": out}, nil
 }
