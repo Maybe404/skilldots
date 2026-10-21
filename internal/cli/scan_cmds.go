@@ -43,6 +43,16 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 	}
 	c.printf("%s  %s\n\n", bold(i18n.T("scan")), dim(i18n.Sprintf("%d entries · %d managed · %d unmanaged · %d broken",
 		len(rep.Items), counts[scan.Managed]+counts[scan.Unlinked], counts[scan.Copy]+counts[scan.ExtLink]+counts[scan.AppLink], counts[scan.Broken])))
+	// What adopt would leave to the user, said here rather than "skd adopt".
+	need := map[string]string{}
+	actionable := 0
+	for _, p := range c.ScanAdvice(rep) {
+		if p.Kind == "skip" {
+			need[p.Item.Path] = p.Label
+		} else {
+			actionable++
+		}
+	}
 	cur := ""
 	var t = newTable("", "SKILL", "STATE", "DETAIL")
 	flush := func() {
@@ -59,17 +69,23 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 			cur = it.Target
 			where := i18n.T("(not in use)")
 			if tgt, err := c.reg.Get(cur); err == nil {
-				where = tgt.Path
+				where = tildePath(tgt.Path)
 			}
 			c.printf("%s %s\n", accent(txt(cur)), dim(where))
 			t = newTable("", "SKILL", "STATE", "DETAIL")
 		}
 		mark, state, detail := scanRow(c, it)
+		if why := need[it.Path]; why != "" {
+			detail += "  " + warn(txt(why))
+		}
 		t.Row(mark, txt(it.Name), state, detail)
 	}
 	flush()
-	if counts[scan.Copy]+counts[scan.ExtLink]+counts[scan.AppLink]+counts[scan.Broken] > 0 {
+	if actionable > 0 {
 		c.printf("%s\n", dim(i18n.T("take these over with: skd adopt")))
+	}
+	if len(need) > 0 {
+		c.printf("%s %s\n", warn("!"), i18n.Count(len(need), "%d entry needs you: skd adopt leaves it as it is (why above)", "%d entries need you: skd adopt leaves them as they are (why above)"))
 	}
 	if counts[scan.Left] > 0 {
 		c.printf("%s\n", dim(i18n.T("left: links into the library, recorded for targets no longer in use; skd leaves them in place (they may be the user's own)")))
@@ -138,6 +154,12 @@ Displaced directories are moved aside, never deleted.`),
 					c.printf("%s\n", dim(i18n.T("run without --dry-run to apply (interactive) or with --yes")))
 				}
 				return nil
+			}
+			// What adopt leaves to the user is said, in every mode.
+			for _, p := range props {
+				if p.Kind == "skip" {
+					c.printf("%s %s  %s\n", warn("!"), txt(tildePath(p.Item.Path)), proposalLabel(p))
+				}
 			}
 			chosen := props
 			if !flags.yes {

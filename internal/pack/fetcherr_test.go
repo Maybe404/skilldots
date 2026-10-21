@@ -42,6 +42,14 @@ func TestFetchKindIsNotMisread(t *testing.T) {
 		{"ERROR: Repository not found.\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights", true, FetchNoAccess},
 		{"fatal: 'git@host:a/b.git' does not appear to be a git repository\nfatal: Could not read from remote repository.", true, FetchNoAccess},
 		{"Host key verification failed.\nfatal: Could not read from remote repository.", true, FetchHostKey},
+		// A connection that failed over SSH ends in the same last line as a
+		// missing repository: it is about the network, said first.
+		{"ssh: connect to host 127.0.0.1 port 1: Connection refused\r\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.", true, FetchOffline},
+		{"ssh: Could not resolve hostname nowhere.invalid: nodename nor servname provided, or not known\r\nfatal: Could not read from remote repository.", true, FetchOffline},
+		{"ssh: Could not resolve hostname x: Temporary failure in name resolution\r\nfatal: Could not read from remote repository.", true, FetchOffline},
+		{"ssh: connect to host github.com port 22: Network is unreachable\r\nfatal: Could not read from remote repository.", true, FetchOffline},
+		{"Connection closed by 140.82.112.3 port 22\r\nfatal: Could not read from remote repository.", true, FetchOffline},
+		{"kex_exchange_identification: read: Connection reset by peer\r\nfatal: Could not read from remote repository.", true, FetchOffline},
 		{"@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@\nHost key verification failed.", true, FetchHostKey},
 		{"remote: Invalid username or token.\nfatal: Authentication failed for 'https://github.com/a/b.git/'", false, FetchAuth},
 		{"fatal: unable to access 'https://github.com/a/b.git/': The requested URL returned error: 401", false, FetchAuth},

@@ -76,9 +76,10 @@ func ParseSource(s string) (Source, error) {
 		src.Repo = p
 		src.URL = s
 	default:
-		// Generic git URL: key by host/path.
+		// Generic git URL: key by host/path; a file:// URL by its path,
+		// like the path itself.
 		p := s
-		for _, pre := range []string{"https://", "http://", "ssh://", "git://"} {
+		for _, pre := range []string{"https://", "http://", "ssh://", "git://", "file://"} {
 			p = strings.TrimPrefix(p, pre)
 		}
 		p = strings.TrimSuffix(strings.ReplaceAll(p, ":", "/"), ".git")

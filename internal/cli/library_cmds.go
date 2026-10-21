@@ -322,11 +322,11 @@ func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
 	for _, e := range entries {
 		for _, et := range e.Targets {
 			if et.Name == t.Name {
-				tb.Row(e.LinkName, dim(engine.Describe(e)))
+				tb.Row(e.LinkName, dim(txt(app.Origin(e))))
 			}
 		}
 		if slices.Contains(e.ViaShared, t.Name) {
-			tb.Row(e.LinkName, dim(engine.Describe(e)+" "+i18n.T("(through agents)")))
+			tb.Row(e.LinkName, dim(txt(app.Origin(e))+" "+i18n.T("(through agents)")))
 		}
 	}
 	c.printf("%s\n", tb.Render())

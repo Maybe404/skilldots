@@ -186,7 +186,9 @@ func TestAdoptMovesAsideOnlyEntriesOfAnIntactTarget(t *testing.T) {
 					props = append(props, p)
 				}
 			}
-			if len(props) != 1 || props[0].Kind != "own" {
+			// The same content as newname: it is that skill, installed
+			// for agents already; this copy is moved aside.
+			if len(props) != 1 || props[0].Kind != "enable" {
 				t.Fatalf("proposals %+v", props)
 			}
 			victim := old

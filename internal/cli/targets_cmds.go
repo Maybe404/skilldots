@@ -26,6 +26,15 @@ func targetsCmd() *cobra.Command {
 			"library, is inside a built-in target's directory, or is, is inside or holds\n" +
 			"another custom target's directory."),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				var subs []string
+				for _, sc := range cmd.Commands() {
+					if sc.IsAvailableCommand() {
+						subs = append(subs, sc.Name())
+					}
+				}
+				return i18n.Errorf("unknown subcommand %q of skd targets (subcommands: %s)", args[0], strings.Join(subs, ", "))
+			}
 			c, err := open()
 			if err != nil {
 				return err
@@ -103,7 +112,7 @@ func targetsCmd() *cobra.Command {
 			for _, n := range notes {
 				c.printf("%s\n", n)
 			}
-			c.printf("%s\n", dim(i18n.T("reads agents: the agent also reads ~/.agents/skills, so a skill for every installed agent (\"*\") reaches it there, not twice")))
+			c.printf("%s\n", dim(i18n.T("reads agents: the agent also reads ~/.agents/skills, so a skill installed for agents reaches it there and gets no link of its own, whether installed for it by name or for every installed agent (\"*\"); while agents is paused, it gets its own link")))
 			if len(c.lib.Manifest.Targets.Disabled) > 0 {
 				c.printf("%s\n", dim(i18n.T("a paused agent gets no links; its skills keep it selected (skd targets resume <agent>)")))
 			}

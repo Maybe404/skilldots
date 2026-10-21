@@ -34,7 +34,7 @@
 = 装到 %s（资料库里已有）
 
 @ broken link; move to the trash
-= 失效的链接；移入回收站
+= 断链；移到回收站
 
 @ not a valid skill name (letters, digits, '.', '_' and '-'); rename it first
 = 不是有效的 skill 名称（只能用字母、数字、'.'、'_' 和 '-'）；请先改名
@@ -73,13 +73,13 @@
 = %s：%v；不移除它
 
 @ %s is no longer a broken link (something was put there since the scan); left in place
-= %s 已不是失效的链接（扫描之后那里放了别的东西）；原样保留
+= %s 已不是断链（扫描之后那里放了别的东西）；原样保留
 
 @ %s is no longer a broken link (it points at something now); left in place
-= %s 已不是失效的链接（它现在有指向了）；原样保留
+= %s 已不是断链（它现在有指向了）；原样保留
 
 @ moved broken link %s to %s
-= 已把失效的链接 %s 移到 %s
+= 已把断链 %s 移到 %s
 
 @ %s is not in %s any more; keeping your copy under skills/
 = %s 已不在 %s 里；保留你在 skills/ 下的副本
@@ -359,3 +359,24 @@
 
 @ no trash entry holds the pack %q (give an id as `skd trash` lists it, the repository of a purged pack, or the name of a skill in the trash)
 = 回收站里没有来源 %q 的条目（请给出 `skd trash` 列出的 ID、被清除的来源的仓库名，或回收站里某个 skill 的名字）
+
+@ already in the library as %s (%s), which %s reads from ~/.agents/skills; this copy goes to the trash
+= 资料库里已有，名为 %s（来自 %s），%s 会从 ~/.agents/skills 读到它；这份副本会移到回收站
+
+@ already in the library as %s (%s): install it for %s; this copy goes to the trash
+= 资料库里已有，名为 %s（来自 %s）：装到 %s 上即可；这份副本会移到回收站
+
+@ named %s, which %s already uses in the library; rename it (its directory or the name in its SKILL.md) first
+= 名字是 %s，而资料库里的 %s 已经用了这个名字；请先改名（目录名或 SKILL.md 里的 name）
+
+@ as %s: its SKILL.md name %s is taken by %s
+= 名为 %s：它 SKILL.md 里的名字 %s 已被 %s 占用
+
+@ as %s, the name in its SKILL.md
+= 名为 %s（它 SKILL.md 里的名字）
+
+@ app %s
+= 应用 %s
+
+@ broken link in an agent directory
+= agent 目录里的断链

@@ -126,6 +126,9 @@ func (m Model) view() string {
 
 func (m Model) spliceOverlay(body []string) []string {
 	w := min(m.w-4, 84)
+	if m.ov.wide {
+		w = min(m.w-4, 124)
+	}
 	h := len(body) - 2
 	ov := m.ov.render(w, h, m.theme, m.surf)
 	top := max(0, (len(body)-len(ov))/2)
@@ -391,7 +394,7 @@ func (m Model) packHeader(p Pack, w int) []string {
 	if !p.Upstream {
 		sel += i18n.T(" · upstream list unknown until u")
 	}
-	lines := append(m.problem(w), row(), row(title...), row(meta...), row(sg(i18n.T("agents "), t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint)))
+	lines := append(m.problem(w), row(), row(title...), row(meta...), row(sg(i18n.T("installed for "), t.Faint), sg(agents, t.Muted), sg(" · "+sel, t.Faint)))
 	if st, ok := m.outdated[p.Repo]; ok && st.HasUpdates() {
 		var what []string
 		for _, c := range []struct {
@@ -609,7 +612,7 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 		engine.KindPrivate: i18n.T("private · this machine only, never pushed"),
 		engine.KindApp:     i18n.Sprintf("app · shipped with %s", sk.Origin),
 	}[sk.Kind]
-	agents := []seg{sg(i18n.T("agents "), t.Faint)}
+	agents := []seg{sg(i18n.T("installed for "), t.Faint)}
 	if sk.Enabled() {
 		agents = append(agents, sg(strings.Join(sk.Agents, " "), t.Cyan))
 		if len(sk.ViaShared) > 0 {
@@ -637,9 +640,11 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 		out = append(out, row(sg(l, t.Text)))
 	}
 	out = append(out, row())
-	hints := i18n.T("space toggle · e agents · d unlink · o open in your editor")
+	// d removes a skill of the library (to the trash) and only unlinks an
+	// app's.
+	hints := i18n.T("space toggle · e agents · d remove · o open in your editor")
 	if sk.Kind == engine.KindApp {
-		hints += i18n.T(" · f fork")
+		hints = i18n.T("space toggle · e agents · d unlink · o open in your editor") + i18n.T(" · f fork")
 	}
 	out = append(out, row(sg(hints, t.Faint)))
 	return out

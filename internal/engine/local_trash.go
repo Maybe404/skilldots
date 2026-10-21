@@ -100,7 +100,8 @@ func forgetLocalTrashUnder(dir string) { forgetLocalTrash(dir, true) }
 // the trash entry at p: its note (trash-notes.json) and, for a skill of
 // the user's, its provenance record (local-trash.json). Called when the
 // entry is deleted for good, and before another takes its place.
-func ForgetTrashEntry(p string) {
-	DropTrashNote(p)
+func ForgetTrashEntry(p string) error {
+	err := DropTrashNote(p)
 	forgetLocalTrash(p, false)
+	return err
 }

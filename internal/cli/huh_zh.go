@@ -23,6 +23,9 @@ var zhKeyHelp = map[string]string{
 // keyMap is huh's key map with the hints in the language in use.
 func keyMap() *huh.KeyMap {
 	km := huh.NewDefaultKeyMap()
+	// Space toggles as well as x; the hint names space, as the prompts'
+	// own descriptions do ("space to toggle").
+	km.MultiSelect.Toggle.SetHelp("space", km.MultiSelect.Toggle.Help().Desc)
 	if i18n.Get() == i18n.ZH {
 		localizeBindings(reflect.ValueOf(km).Elem())
 	}

@@ -75,7 +75,7 @@ func (s *Session) RestoreEntry(key string) (*RestoreOutcome, error) {
 	if err != nil {
 		return nil, err
 	}
-	engine.DropTrashNote(p)
+	s.noteWarn(engine.DropTrashNote(p))
 	out := &RestoreOutcome{ID: id, Path: dest}
 	if note != nil {
 		out.Skills, out.Repo = note.Skills, note.Repo
@@ -314,6 +314,8 @@ func TrashReason(e engine.TrashEntry) string {
 		return i18n.T("had changes; an update replaced it")
 	case engine.ReasonInTheWay:
 		return i18n.T("in the way in an agent directory")
+	case engine.ReasonBroken:
+		return i18n.T("broken link in an agent directory")
 	}
 	return ""
 }
