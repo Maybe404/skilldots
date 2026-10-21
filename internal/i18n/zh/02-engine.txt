@@ -236,3 +236,6 @@
 
 @ %s is not installed on this machine
 = 本机没有安装 %s
+
+@ %s was not valid JSON (%v); it is kept as %s and a new one is started: entries set aside before are restored without being selected again
+= %s 不是有效的 JSON（%v）；原文件保留为 %s，并新建了一份：之前进回收站的条目恢复时不会自动重新选中

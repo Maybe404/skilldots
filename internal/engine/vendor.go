@@ -176,7 +176,9 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 		if to != "" {
 			rep.Backups = append(rep.Backups, lib.Rel(dest)+" → "+lib.Rel(to))
-			_ = SetTrashNote(to, &TrashNote{Reason: ReasonReplaced, Skills: []string{filepath.Base(dest)}, Repo: p.Repo})
+			if err := SetTrashNote(to, &TrashNote{Reason: ReasonReplaced, Skills: []string{filepath.Base(dest)}, Repo: p.Repo}); err != nil {
+				rep.Warnings = append(rep.Warnings, err.Error())
+			}
 		}
 		return nil
 	}
@@ -311,7 +313,9 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			// What restoring it needs to select it again.
 			was := &lock.Pack{Commit: lp.Commit, Ref: lp.Ref, Upstream: append([]string(nil), lp.Upstream...),
 				Skills: map[string]*lock.Skill{n: {Category: ls.Category, Hash: ls.Hash}}}
-			_ = SetTrashNote(to, &TrashNote{Reason: ReasonDeselected, Skills: []string{n}, Repo: p.Repo, Lock: was})
+			if err := SetTrashNote(to, &TrashNote{Reason: ReasonDeselected, Skills: []string{n}, Repo: p.Repo, Lock: was}); err != nil {
+				rep.Warnings = append(rep.Warnings, err.Error())
+			}
 		}
 		delete(lp.Skills, n)
 	}

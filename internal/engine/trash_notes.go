@@ -2,16 +2,20 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Maybe404/skilldots/internal/config"
 	"github.com/Maybe404/skilldots/internal/fsutil"
+	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/manifest"
+	"github.com/Maybe404/skilldots/internal/pack"
 )
 
 // Why a trash entry was set aside (TrashNote.Reason, TrashEntry.Reason).
@@ -49,12 +53,28 @@ type TrashNote struct {
 	Lock *lock.Pack     `json:"lock,omitempty"`
 }
 
+// trashNotesMu guards the notes in this process; a lock file beside them
+// (trash-notes.lock) guards them against other processes: the desktop
+// app and an agent's skd may set aside, restore or delete at once.
 var trashNotesMu sync.Mutex
 
 func trashNotesPath() string {
 	return filepath.Join(filepath.Dir(config.Path()), "trash-notes.json")
 }
 
+// BrokenNotesError is a notes file that was not valid JSON: it is kept
+// under Backup and a new one is started.
+type BrokenNotesError struct {
+	Path, Backup string
+	Err          error
+}
+
+func (e *BrokenNotesError) Error() string {
+	return i18n.Sprintf("%s was not valid JSON (%v); it is kept as %s and a new one is started: entries set aside before are restored without being selected again", e.Path, e.Err, e.Backup)
+}
+
+// readTrashNotes reads the notes. A file that is not valid JSON is an
+// error, and is left as it is.
 func readTrashNotes() (map[string]*TrashNote, error) {
 	m := map[string]*TrashNote{}
 	b, err := os.ReadFile(trashNotesPath())
@@ -65,7 +85,7 @@ func readTrashNotes() (map[string]*TrashNote, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
+		return nil, &BrokenNotesError{Path: trashNotesPath(), Err: err}
 	}
 	if m == nil {
 		m = map[string]*TrashNote{}
@@ -84,6 +104,38 @@ func writeTrashNotes(m map[string]*TrashNote) error {
 	return fsutil.WriteAtomic(trashNotesPath(), b)
 }
 
+// editTrashNotes reads the notes, lets edit change them (it reports
+// whether it did) and writes them back, all under both locks, so a note
+// another process writes meanwhile is not lost. A file that is not valid
+// JSON is never written over: it is renamed aside first, and the error
+// says where it went.
+func editTrashNotes(edit func(m map[string]*TrashNote) bool) error {
+	trashNotesMu.Lock()
+	defer trashNotesMu.Unlock()
+	defer pack.LockFile(strings.TrimSuffix(trashNotesPath(), ".json") + ".lock")()
+	m, err := readTrashNotes()
+	var broken *BrokenNotesError
+	if errors.As(err, &broken) {
+		broken.Backup = trashNotesPath() + ".broken-" + time.Now().Format("20060102-150405")
+		if rerr := os.Rename(trashNotesPath(), broken.Backup); rerr != nil {
+			return rerr
+		}
+		m, err = map[string]*TrashNote{}, nil
+	}
+	if err != nil {
+		return err
+	}
+	if edit(m) {
+		if werr := writeTrashNotes(m); werr != nil {
+			return werr
+		}
+	}
+	if broken != nil {
+		return broken
+	}
+	return nil
+}
+
 // noteKey is the key of the entry at p in the notes: its resolved path.
 func noteKey(p string) string { return fsutil.Resolve(p) }
 
@@ -91,14 +143,10 @@ func noteKey(p string) string { return fsutil.Resolve(p) }
 // it), replacing what was recorded. A note that cannot be written only
 // costs the restore its selection: the entry itself is in the trash.
 func SetTrashNote(path string, n *TrashNote) error {
-	trashNotesMu.Lock()
-	defer trashNotesMu.Unlock()
-	m, err := readTrashNotes()
-	if err != nil {
-		m = map[string]*TrashNote{}
-	}
-	m[noteKey(path)] = n
-	return writeTrashNotes(m)
+	return editTrashNotes(func(m map[string]*TrashNote) bool {
+		m[noteKey(path)] = n
+		return true
+	})
 }
 
 // TrashNoteFor is the note recorded for the trash entry at path, or nil.
@@ -112,37 +160,31 @@ func TrashNoteFor(path string) *TrashNote {
 	return m[noteKey(path)]
 }
 
-// DropTrashNote forgets the note of the entry at path (restored).
+// DropTrashNote forgets the note of the entry at path (restored, or
+// deleted for good).
 func DropTrashNote(path string) {
-	trashNotesMu.Lock()
-	defer trashNotesMu.Unlock()
-	m, err := readTrashNotes()
-	if err != nil || m[noteKey(path)] == nil {
-		return
-	}
-	delete(m, noteKey(path))
-	_ = writeTrashNotes(m)
+	_ = editTrashNotes(func(m map[string]*TrashNote) bool {
+		if m[noteKey(path)] == nil {
+			return false
+		}
+		delete(m, noteKey(path))
+		return true
+	})
 }
 
 // dropTrashNotesUnder forgets the notes of every entry in dir (the trash
 // of a library that was emptied).
 func dropTrashNotesUnder(dir string) {
-	trashNotesMu.Lock()
-	defer trashNotesMu.Unlock()
-	m, err := readTrashNotes()
-	if err != nil {
-		return
-	}
 	root := noteKey(dir)
-	n := len(m)
-	for k := range m {
-		if strings.HasPrefix(k, root+string(filepath.Separator)) {
-			delete(m, k)
+	_ = editTrashNotes(func(m map[string]*TrashNote) bool {
+		n := len(m)
+		for k := range m {
+			if strings.HasPrefix(k, root+string(filepath.Separator)) {
+				delete(m, k)
+			}
 		}
-	}
-	if len(m) != n {
-		_ = writeTrashNotes(m)
-	}
+		return len(m) != n
+	})
 }
 
 // TrashEntryPath is where the trash entry id is (see Restore for the

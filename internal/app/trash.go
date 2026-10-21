@@ -274,6 +274,14 @@ func indexOf(list []string, s string) int {
 	return -1
 }
 
+// noteWarn says, as a warning, why a trash note could not be kept as it
+// should (engine.SetTrashNote): the entry itself is in the trash either way.
+func (s *Session) noteWarn(err error) {
+	if err != nil {
+		s.logf(Warn, "%v", err)
+	}
+}
+
 // TrashReason says, for a person, why a trash entry was set aside ("" when
 // skd cannot tell).
 func TrashReason(e engine.TrashEntry) string {
