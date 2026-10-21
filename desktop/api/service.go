@@ -78,7 +78,22 @@ func skill(e engine.Entry) object {
 	if e.Kind == engine.KindVendor {
 		prefix = e.Origin
 	}
-	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "absent": append([]string{}, e.Absent...), "conflict": e.Conflict, "missing": e.Missing}
+	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "absent": append([]string{}, e.Absent...), "viaShared": append([]string{}, e.ViaShared...), "conflict": e.Conflict, "missing": e.Missing}
+}
+
+// sharedReach are the agents installed here that load e from the shared
+// directory ~/.agents/skills (engine.ReachesViaShared): those of its
+// targets left without a link of their own (e.ViaShared), and those that
+// are not its targets at all but read it there anyway. Turning e on for
+// one of them changes nothing it can see.
+func sharedReach(ses *app.Session, e *engine.Entry) []string {
+	out := []string{}
+	for _, t := range ses.Reg.All() {
+		if t.Builtin && t.ReadsShared && app.Detected(t.Path) && engine.ReachesViaShared(ses.Lib, e, t) {
+			out = append(out, t.Name)
+		}
+	}
+	return out
 }
 
 // absentOf is what an apply left out because the agent is not installed
@@ -197,7 +212,9 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		entries, err := ses.Resolve()
 		out := []object{}
 		for _, e := range entries {
-			out = append(out, skill(e))
+			o := skill(e)
+			o["sharedReach"] = sharedReach(ses, &e)
+			out = append(out, o)
 		}
 		return out, err
 	case "setAgentHidden":
