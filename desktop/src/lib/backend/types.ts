@@ -281,7 +281,7 @@ export interface TrashEntry {
    * (replaced by an update), "adopt" (replaced while adopting), "purge"
    * (a removed source). Optional; the UI falls back to where it came from.
    */
-  reason?: "removed" | "update" | "merged" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | "broken" | ""
+  reason?: "removed" | "update" | "merged" | "resolve-aborted" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | "broken" | ""
   /** The skills it holds and the source they came from, as recorded when it was set aside. */
   skills?: string[]
   repo?: string
@@ -315,6 +315,8 @@ export interface FileDiff {
   status: "added" | "removed" | "modified"
   /** You changed this file in the library's copy. */
   local?: boolean
+  /** With the skill's base found: upstream's change to this file is expected to conflict with yours. */
+  conflict?: boolean
   binary?: boolean
   tooLarge?: boolean
   added: number
@@ -332,6 +334,10 @@ export interface SkillDiff {
   localFiles: string[]
   /** Edited, but which files is not known. */
   localUnknown?: boolean
+  /** Edited, and the version your edits started from was found: files show upstream's change since then. */
+  base?: boolean
+  /** With base: the files the merge is expected to conflict on. */
+  conflicts?: string[]
   files: FileDiff[]
   moreFiles?: number
 }

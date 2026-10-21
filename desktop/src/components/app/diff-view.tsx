@@ -30,6 +30,19 @@ export function LocalEditNote({ diff, className }: { diff: SkillDiff; className?
   return (
     <div className={cn("rounded-ctl bg-ac/10 px-3 py-2 fs-meta text-ink", className)}>
       <p>{t("localEditedHint")}</p>
+      {/* What the files below compare: upstream's own change since your version's base, or (base not found) your version against upstream. */}
+      <p className="mt-1 text-mut">{diff.base ? t("diffFromBase") : t("diffNoBase")}</p>
+      {!!diff.conflicts?.length && (
+        <p className="mt-1 text-ac">
+          {t("expectConflicts", { files: "" })}
+          {diff.conflicts.map((f, i) => (
+            <React.Fragment key={f}>
+              {i > 0 && t("listSep")}
+              <span className="font-mono">{f}</span>
+            </React.Fragment>
+          ))}
+        </p>
+      )}
       <p className="mt-1 text-mut">
         {diff.localUnknown ? (
           t("localFilesUnknown")
@@ -77,6 +90,7 @@ function FileBlock({ file: f, defaultOpen, first }: { file: FileDiff; defaultOpe
         <span className="min-w-0 truncate font-mono fs-meta text-ink">{f.path}</span>
         <span className="sr-only">{t(label)}</span>
         {f.local && <Tag tone="accent">{t("fileLocal")}</Tag>}
+        {f.conflict && <Tag tone="accent">{t("fileConflict")}</Tag>}
         <span className="flex-1" />
         <span className="shrink-0 fs-meta text-mut tabular-nums">
           {f.added > 0 && <span className="text-ink">+{f.added}</span>}
