@@ -54,7 +54,7 @@ In `skd list --json`, `ClaudeDisabled: true` means the user turned the skill off
 Never update without asking. First check — `outdated` changes nothing in the library:
 
 ```bash
-skd outdated --json # per pack: changed, moved, new, gone, pending; "updates" = packs with updates
+skd outdated --json # per pack: changed, moved, new, gone, pending, shelved; "updates" = packs with updates
 ```
 
 Tell the user what it found, pack by pack: `changed` are selected skills whose upstream content differs, `pending` are selected skills not vendored yet, `new` appeared upstream since the last update or, for a pack never updated, since it was added (not installed unless the pack follows `"*"`, then they are in `pending` too; offer `skd add owner/repo --skill <name>`), `gone` disappeared upstream (update keeps the local copy), `moved` only changed directory upstream (not a reason to update; if the pack is updated anyway its vendored directories are renamed). Then ask which packs to update, and update only those, by name:
@@ -67,7 +67,40 @@ This also applies to scheduled or "keep my skills current" requests: report and 
 
 With `--json`, `update` prints `{packs, failed, apply, committed, history}` and exits non-zero if any pack could not be fetched — the others are still updated and linked; report the failures. When the update was saved but linking (or `--commit`) failed, the same document also has `error`; fix the cause and run `skd apply`. "upstream new" (`UpstreamNew`) lists only unselected skills that appeared since the previous `skd update`; offer to add them with `skd add owner/repo --skill <name>`. After an update, summarise what changed for the user.
 
-Every update is recorded in the library (`skills.history.jsonl`, committed with it): `skd history [pack] --json` lists, per update, the old and new commit, the skills changed / added / moved / gone / new upstream and the subjects of the upstream commits that touched them. Use it to answer "what changed in my skills?" — it works offline. A record with `applyError` was saved but not linked: run `skd apply` (once an apply succeeds, `applyError` is removed from the records). Commit subjects are cleaned of control characters and cut to 200 characters; a record of a very large update keeps part of its skill lists and says in `omitted` how many names were left out. Upstream changes are also visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
+Every update is recorded in the library (`skills.history.jsonl`, committed with it): `skd history [pack] --json` lists, per update, the old and new commit, the skills changed / added / moved / gone / new upstream, `merged` and `shelved` (below) and the subjects of the upstream commits that touched them. Use it to answer "what changed in my skills?" — it works offline. To see the change itself, `skd history <pack> --diff [n] [--skill <name>]` prints what upstream changed in the newest record of the pack (or the n-th newest) as a unified diff (`--json`: `{record, skills, source}`, the same file/hunk shape as the desktop's diffs). It reads the upstream versions the library recorded, offline; only a record from before skd kept them is read from the pack's cache clone, which may need the network. A record with `applyError` was saved but not linked: run `skd apply` (once an apply succeeds, `applyError` is removed from the records). Commit subjects are cleaned of control characters and cut to 200 characters; a record of a very large update keeps part of its skill lists and says in `omitted` how many names were left out. Upstream changes are also visible with `git -C <library> diff -- vendor/`. To undo an update: `git -C <library> checkout -- vendor skills.lock && skd apply`.
+
+## Edits to vendored skills: merge, shelved, resolve
+
+The library is a git repository and upstream is like a remote: editing a vendored skill's files and saving them is like staging (the desktop app runs `git add` on save; `skd sync` commits), and `skd update` is like a pull that merges.
+
+- **Merged.** When upstream changed a skill the user edited, `update` merges upstream's changes into the user's copy, three-way, file by file, against the upstream version the edits were made on (skd records every vendored upstream version as a commit on `refs/skilldots/upstream/<pack>` in the library repository). The copy as it was goes to the trash first (reason `merged`; `skd trash restore` swaps it back). In `--json` the pack's report lists it in `Changed` and `Merged`. Uncommitted edits are fine: the merge reads the files as they are.
+- **Shelved.** When both sides changed the same lines (or one removed a file the other changed, or a non-text file changed on both sides) the update of that skill is shelved: its directory and its `skills.lock` hash stay exactly as they were, the lock records `shelved = "<upstream commit>"` and the conflicted files, and the rest of the pack is updated (the pack's commit moves on). The report lists it under `Shelved` (`[{Name, Files}]`), not `Changed`; `skd list` marks it `shelved` and `skd outdated` still counts it as an update. Tell the user which skills were shelved and which files conflict.
+
+Resolving is finishing a git merge. Ask the user before starting, then:
+
+```bash
+skd resolve --json             # {skills: [{repo, name, upstream, resolving, files}]}: what is shelved
+skd resolve <skill> --json     # writes the merge into the skill's files with conflict markers
+```
+
+`skd resolve <skill>` moves the skill's directory to the trash (its `backup` ID), writes the merged files into the skill's directory with git's markers — `<<<<<<< local`, `=======`, `>>>>>>> upstream <commit>` — and puts the conflicted files into the library's git index as unmerged (stages 1 base, 2 local, 3 upstream). So in the library (`skd path` is inside it; `git -C <library> …`) plain git works as in a merge:
+
+```bash
+git -C <library> status                                   # "both modified: vendor/<pack>/…/<file>"
+git -C <library> diff -- vendor/<pack>                    # the combined diff of the conflicts
+git -C <library> checkout --theirs -- <path>              # take upstream's version of a file
+git -C <library> checkout --ours -- <path>                # keep the local version
+git -C <library> add -- <path>                            # mark one file resolved
+```
+
+Or edit the files and remove the markers yourself, keeping what the user wants from both sides (ask when it is not obvious). Files that cannot hold markers: a non-text file changed on both sides keeps the local file with upstream's beside it as `<file>.upstream`; a file the user removed and upstream changed stays removed with upstream's as `<file>.upstream`; a file upstream removed and the user changed stays, marked by an empty `<file>.upstream-deleted`. Keep one side: rename or delete so that no `.upstream` / `.upstream-deleted` file is left. Then:
+
+```bash
+skd resolve --continue [<skill>] --json   # refuses (non-zero, {skill, unresolved}) while a marker or such a file is left
+skd resolve --abort [<skill>] --json      # gives up: the skill comes back as it was, its update stays shelved
+```
+
+`--continue` runs `git add` on the skill's directory, records upstream's version as merged in `skills.lock`, links the skill again and adds a history record with it under `merged`; then `skd sync` commits. `--abort` moves the half-resolved files to the trash, puts the copy from before back and restores the index entries. While a skill is being resolved its files hold the conflict markers, and **every agent linked to it reads them** — finish or abort promptly. `skd sync` and `update --commit` refuse to commit meanwhile, and `update` leaves that skill alone. A later update of a shelved (not yet resolving) skill merges again against the newest upstream version, and clears the shelf when it merges cleanly.
 
 ## Enable or disable per agent
 
@@ -95,11 +128,15 @@ None of these delete anything: files go to the library trash (`skd trash`), and 
 
 ## Change a third-party skill
 
-Never edit `vendor/`; the next update overwrites it. Instead:
+Two ways, ask the user which they want:
+
+- Edit the vendored files in place (the directory `skd path <skill>` prints). The edits are kept: each update merges upstream's changes into them, and shelves the update when they conflict (see above). Do not edit the files of a skill that is shelved or being resolved except to resolve it.
+- Fork it, when upstream should not touch it any more:
 ```bash
 skd fork <skill>            # copies it into skills/ as the user's own; upstream is deselected
 ```
-Then edit the directory `skd path <skill>` prints. You edit files yourself; `skd edit <skill>` is for opening a skill in the user's editor when they ask for that. For a vendored skill it refuses without a terminal: ask the user whether to fork it (`skd edit <skill> --fork`) or open the vendored files anyway (`--force`, lost on the next update).
+
+You edit files yourself; `skd edit <skill>` is for opening a skill in the user's editor when they ask for that, and stages nothing (`git add` or `skd sync` does). For a vendored skill it refuses without a terminal: ask the user whether to fork it (`skd edit <skill> --fork`) or open the vendored files in place (`--force`).
 
 ## Settings
 
@@ -118,7 +155,7 @@ skd new <name> --private    # private/: this machine only, never pushed
 skd sync                    # commit the library and push to its git remote
 skd sync --remote <git-url> # set the remote first (ask the user for the URL)
 ```
-Run `skd sync` after adding, updating or writing skills unless the user says otherwise. `private/` is a separate repository and is never pushed by `sync`.
+Run `skd sync` after adding, updating or writing skills unless the user says otherwise. `private/` is a separate repository and is never pushed by `sync`. `sync` also pushes the upstream snapshots (`refs/skilldots/*`), and `skd clone` fetches them, so another machine can merge against them; it refuses while a skill is being resolved.
 
 ## Take over skills installed by other tools
 

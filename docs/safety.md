@@ -6,6 +6,8 @@ skd is mostly run by agents, on libraries that may come from someone else (`skd 
 
 Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash, `<library>/.trash/`. `skd trash` lists it and `skd trash restore <id|skill|owner/repo>` puts an entry back.
 
+Merging works the same way. Before an update (or `skd resolve`) writes a merge into a vendored skill you edited, the skill's directory as it was goes to the trash, with the reason `merged`; anything in it that is not one of the skill's files (a `.git`, `node_modules`, a link) stays in that copy. Restoring it swaps it back: the merged directory goes to the trash in its place (restorable the same way), and `skills.lock` goes back to what it recorded before the merge, so the next update merges again. Restoring the copy a skill being resolved started from is `skd resolve --abort`. A shelved update changes nothing in the skill at all. `skd resolve --abort` moves the half-resolved files to the trash too (reason `resolve-aborted`) before putting the copy back, and puts the library's git index back as it was. The upstream snapshots skd records (`refs/skilldots/upstream/*`) are written with a temporary index: the library's own index, work tree and branches are not touched.
+
 `skd trash empty` is the one irreversible command, and it only runs for [a person at a terminal](#a-person-at-a-terminal). So an agent can do everything short of permanent deletion. The desktop app's Trash page can also delete for good, the whole trash or one entry, but only after a confirmation that names the entries and their size, and it refuses when the trash changed since that confirmation was shown.
 
 ### What skd removes outright
