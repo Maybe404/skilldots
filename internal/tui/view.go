@@ -422,7 +422,8 @@ func (m Model) packHeader(p Pack, w int) []string {
 			label string
 			fg    lipgloss.Color
 			names []string
-		}{{i18n.M("changed"), t.Accent, rep.Changed}, {i18n.M("added"), t.OK, rep.Added}, {i18n.M("upstream new"), t.Cyan, rep.UpstreamNew},
+		}{{i18n.M("changed"), t.Accent, rep.Replaced()}, {i18n.M("merged"), t.OK, rep.Merged}, {i18n.M("shelved"), t.Warn, rep.ShelvedNames()},
+			{i18n.M("added"), t.OK, rep.Added}, {i18n.M("upstream new"), t.Cyan, rep.UpstreamNew},
 			{i18n.M("upstream gone"), t.Warn, rep.UpstreamGone}, {i18n.M("dropped"), t.Err, rep.Dropped}} {
 			if len(r.names) == 0 {
 				if r.label == "changed" || r.label == "added" || r.label == "upstream new" {

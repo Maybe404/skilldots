@@ -113,11 +113,11 @@ func TestResolveThroughTheBridge(t *testing.T) {
 	}
 
 	hist := roundTrip[[]struct {
-		When   time.Time
-		Repo   string
-		Merged []string
+		When            time.Time
+		Repo, From, To  string
+		Merged, Changed []string
 	}](t, invoke(t, s, "history"))
-	if len(hist) != 2 || !slices.Equal(hist[0].Merged, []string{"tdd"}) {
+	if len(hist) != 2 || !slices.Equal(hist[0].Merged, []string{"tdd"}) || len(hist[0].Changed) != 0 || hist[0].From == hist[0].To {
 		t.Fatalf("history: %+v", hist)
 	}
 	// The diff of the update that shelved it: upstream's change.

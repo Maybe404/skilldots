@@ -45,6 +45,32 @@ func SetAsideMerged(lib *library.Library, repo, dest, name string, lp *lock.Pack
 	return to, nil
 }
 
+// Replaced are the Changed skills that were not merged: replaced with
+// upstream's version as it is. Front ends list them as changed and the
+// Merged ones under merged, so a skill shows once.
+func (r *SyncReport) Replaced() []string {
+	var out []string
+	for _, n := range r.Changed {
+		merged := false
+		for _, m := range r.Merged {
+			merged = merged || m == n
+		}
+		if !merged {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// ShelvedNames are the names of the Shelved skills.
+func (r *SyncReport) ShelvedNames() []string {
+	var out []string
+	for _, s := range r.Shelved {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
 // filesChanged reports whether the files of dir (as HashTree sees them)
 // are not the ones hash records.
 func filesChanged(dir, hash string) bool {

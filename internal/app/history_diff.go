@@ -53,7 +53,7 @@ func (s *Session) FindRecord(repo string, at time.Time) (*UpdateRecord, error) {
 			continue
 		}
 		r := &recs[i]
-		if len(r.Changed)+len(r.Added)+len(r.Moved)+len(r.Shelved) > 0 {
+		if len(r.Changed)+len(r.Merged)+len(r.Added)+len(r.Moved)+len(r.Shelved) > 0 {
 			return r, nil
 		}
 		if found == nil {
@@ -67,7 +67,9 @@ func (s *Session) FindRecord(repo string, at time.Time) (*UpdateRecord, error) {
 }
 
 // HistoryDiff is the upstream diff of record r, per skill it names
-// (changed, added, moved or shelved; only skill when set). It reads the
+// (changed, merged, added, moved or shelved; only skill when set). The
+// record of a finished resolve goes from the version the local changes
+// were made on to the one merged in. It reads the
 // upstream snapshots the record names when the library has them;
 // otherwise the pack's cache clone, fetching the record's commits when
 // the clone lacks them (that needs the network, and fails without it).
@@ -78,7 +80,7 @@ func (s *Session) HistoryDiff(ctx context.Context, r *UpdateRecord, skill string
 	for _, l := range []struct {
 		names  []string
 		status string
-	}{{r.Changed, "changed"}, {r.Shelved, "changed"}, {r.Added, "added"}, {r.Moved, "moved"}} {
+	}{{r.Changed, "changed"}, {r.Merged, "changed"}, {r.Shelved, "changed"}, {r.Added, "added"}, {r.Moved, "moved"}} {
 		for _, n := range l.names {
 			if status[n] == "" && (skill == "" || n == skill) {
 				status[n] = l.status

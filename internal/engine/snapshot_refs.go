@@ -227,9 +227,15 @@ func commitDate(dir, commit string) string {
 	return out
 }
 
+// treeAt is a tree of a skill and the newest of the commits it is in.
+type treeAt struct{ tree, commit string }
+
 // skillTrees is the tree of path in each of commits (missing ones left
 // out), in their order, without repeating a tree.
-func skillTrees(root string, commits []string, paths []string) []string {
+func skillTrees(root string, commits []string, paths []string) []treeAt {
+	if len(paths) == 0 {
+		return nil
+	}
 	var in bytes.Buffer
 	for _, c := range commits {
 		for _, p := range paths {
@@ -240,42 +246,37 @@ func skillTrees(root string, commits []string, paths []string) []string {
 	if err != nil {
 		return nil
 	}
-	var trees []string
+	var trees []treeAt
 	seen := map[string]bool{}
-	for _, l := range strings.Split(out, "\n") {
+	// One line answers each line asked, in order.
+	for i, l := range strings.Split(out, "\n") {
 		f := strings.Fields(l)
-		if len(f) == 2 && f[1] == "tree" && !seen[f[0]] {
+		if len(f) == 2 && f[1] == "tree" && !seen[f[0]] && i/len(paths) < len(commits) {
 			seen[f[0]] = true
-			trees = append(trees, f[0])
+			trees = append(trees, treeAt{f[0], commits[i/len(paths)]})
 		}
 	}
 	return trees
 }
 
-// findTree is the first of trees whose files hash to hash, read whole.
-func findTree(root string, trees []string, hash string) FileSet {
+// findTree is the first of trees whose files hash to hash, read whole,
+// and the commit it was found in.
+func findTree(root string, trees []treeAt, hash string) (FileSet, string) {
 	for _, t := range trees {
-		files, err := ReadGitFileSet(context.Background(), root, t, "")
+		files, err := ReadGitFileSet(context.Background(), root, t.tree, "")
 		if err == nil && len(files) > 0 && files.Hash() == hash {
-			return files
+			return files, t.commit
 		}
 	}
-	return nil
+	return nil, ""
 }
 
-// FindBase is the version of a vendored skill whose content hash is
-// hash (the lock's: what was vendored before the local changes): from
-// repo's snapshots, else from the library's own history of the skill's
-// directory (vendor/<repo>/<category>/<name>, for each category the skill
-// may have had). nil when neither has it.
-func FindBase(lib *library.Library, repo, name string, categories []string, hash string) FileSet {
-	if hash == "" || !KeepsSnapshots(lib) {
-		return nil
-	}
-	var inPack, inLib []string
+// skillPaths are where a skill may be in a snapshot (category/name for
+// each category) and in the library (vendor/<repo>/category/name).
+func skillPaths(lib *library.Library, repo, name string, categories []string) (inPack, inLib []string) {
 	packDir, err := PackDir(lib, repo)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	seen := map[string]bool{}
 	for _, c := range categories {
@@ -290,16 +291,68 @@ func FindBase(lib *library.Library, repo, name string, categories []string, hash
 		inPack = append(inPack, p)
 		inLib = append(inLib, lib.Rel(filepath.Join(packDir, filepath.FromSlash(p))))
 	}
-	if tip := SnapshotTip(lib, repo); tip != "" {
-		if out, err := library.Git(lib.Root, "rev-list", "--max-count="+strconv.Itoa(maxSnapshots), tip); err == nil {
-			if f := findTree(lib.Root, skillTrees(lib.Root, strings.Fields(out), inPack), hash); f != nil {
-				return f
-			}
-		}
+	return inPack, inLib
+}
+
+// inSnapshots finds the version of a skill whose content hash is hash
+// among repo's snapshots: its files and the newest snapshot holding it.
+func inSnapshots(lib *library.Library, repo string, inPack []string, hash string) (FileSet, string) {
+	tip := SnapshotTip(lib, repo)
+	if tip == "" {
+		return nil, ""
+	}
+	out, err := library.Git(lib.Root, "rev-list", "--max-count="+strconv.Itoa(maxSnapshots), tip)
+	if err != nil {
+		return nil, ""
+	}
+	return findTree(lib.Root, skillTrees(lib.Root, strings.Fields(out), inPack), hash)
+}
+
+// SnapshotWith is the newest snapshot of repo holding the version of the
+// skill name whose content hash is hash; "" when none does.
+func SnapshotWith(lib *library.Library, repo, name string, categories []string, hash string) string {
+	if hash == "" || !KeepsSnapshots(lib) {
+		return ""
+	}
+	inPack, _ := skillPaths(lib, repo, name, categories)
+	_, c := inSnapshots(lib, repo, inPack, hash)
+	return c
+}
+
+// SnapshotCommit is the upstream commit a snapshot was made from (its
+// message is "upstream <repo> <commit>"); "" when it cannot be read.
+func SnapshotCommit(lib *library.Library, snapshot string) string {
+	msg, err := library.Git(lib.Root, "log", "-1", "--format=%s", snapshot)
+	if err != nil {
+		return ""
+	}
+	f := strings.Fields(msg)
+	if len(f) < 3 || f[0] != "upstream" {
+		return ""
+	}
+	return f[len(f)-1]
+}
+
+// FindBase is the version of a vendored skill whose content hash is
+// hash (the lock's: what was vendored before the local changes): from
+// repo's snapshots, else from the library's own history of the skill's
+// directory (vendor/<repo>/<category>/<name>, for each category the skill
+// may have had). nil when neither has it.
+func FindBase(lib *library.Library, repo, name string, categories []string, hash string) FileSet {
+	if hash == "" || !KeepsSnapshots(lib) {
+		return nil
+	}
+	inPack, inLib := skillPaths(lib, repo, name, categories)
+	if f, _ := inSnapshots(lib, repo, inPack, hash); f != nil {
+		return f
+	}
+	if len(inLib) == 0 {
+		return nil
 	}
 	args := append([]string{"log", "-n", strconv.Itoa(baseCommits), "--format=%H", "--"}, inLib...)
 	if out, err := library.Git(lib.Root, args...); err == nil && out != "" {
-		return findTree(lib.Root, skillTrees(lib.Root, strings.Fields(out), inLib), hash)
+		f, _ := findTree(lib.Root, skillTrees(lib.Root, strings.Fields(out), inLib), hash)
+		return f
 	}
 	return nil
 }
