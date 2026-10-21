@@ -18,6 +18,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/library"
+	"github.com/Maybe404/skilldots/internal/lock"
 	"github.com/Maybe404/skilldots/internal/pack"
 )
 
@@ -81,7 +82,18 @@ func skill(e engine.Entry) object {
 	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "absent": append([]string{}, e.Absent...), "viaShared": append([]string{}, e.ViaShared...), "conflict": e.Conflict, "missing": e.Missing,
 		// An update waits for its conflicts (skd resolve): shelved also
 		// while it is being resolved.
-		"shelved": e.Shelved != "" || e.Resolving, "resolving": e.Resolving, "conflictFiles": append([]string{}, e.Conflicts...)}
+		"shelved": e.Shelved != "" || e.Resolving, "resolving": e.Resolving, "conflictFiles": append([]string{}, e.Conflicts...),
+		// The user changed it (vendored only; set by Session.MarkEdited),
+		// and the change last sent upstream.
+		"edited": e.Edited, "contribution": contribution(e.Contribution)}
+}
+
+// contribution is a skill's contribution for the desktop, or nil.
+func contribution(c *lock.Contribution) any {
+	if c == nil {
+		return nil
+	}
+	return object{"kind": c.Kind, "url": c.URL, "number": c.Number, "branch": c.Branch, "state": c.State}
 }
 
 // sharedReach are the agents installed here that load e from the shared
@@ -213,6 +225,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 	switch method {
 	case "skills":
 		entries, err := ses.Resolve()
+		ses.MarkEdited(entries)
 		out := []object{}
 		for _, e := range entries {
 			o := skill(e)
@@ -312,6 +325,8 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		return historyRows(rows, nil, shelvedFiles(ses, nil)), err
 	case "historyDiff":
 		return historyDiff(ctx, ses, args)
+	case "localChanges", "contributeOptions", "contribute", "refreshContributions":
+		return contributeOperation(ctx, ses, method, args)
 	case "resolveStart", "resolveState", "resolvePick", "resolveContinue", "resolveAbort":
 		return resolveOperation(ses, method, args)
 	case "trash", "trashUsage", "emptyTrash", "deleteTrash":
@@ -507,7 +522,9 @@ func findSkill(s *app.Session, r app.Ref) (any, error) {
 	if e == nil {
 		return nil, errors.New("skill no longer exists")
 	}
-	return skill(*e), nil
+	one := []engine.Entry{*e}
+	s.MarkEdited(one)
+	return skill(one[0]), nil
 }
 func expand(p string) string {
 	if p == "~" || strings.HasPrefix(p, "~/") {
@@ -566,7 +583,9 @@ func (s *Service) status() (any, error) {
 	if sh, err := ses.Shelved(); err == nil {
 		shelved = len(sh)
 	}
-	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill(), "bundledSkill": bundledSkill(), "shelved": shelved}, nil
+	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill(), "bundledSkill": bundledSkill(), "shelved": shelved,
+		// A sync's merge is being resolved (skd sync --resolve).
+		"syncing": ses.Syncing()}, nil
 }
 func outdated(o *app.Outdated) any {
 	if o == nil {
