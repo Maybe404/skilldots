@@ -350,7 +350,7 @@ export function initialScan(library: Skill[]): ScanItem[] {
       out.push({ ...f, path, proposal: "enable", sharedCopy: second, label })
     } else if (f.state === "broken") out.push({ ...f, path, proposal: "drop", label: "broken link; move to the trash" })
     else if (f.source) out.push({ ...f, path, proposal: "pack", repo: f.source, label: `subscribe to ${f.source}` })
-    else out.push({ ...f, path, proposal: "own", label: "copy into skills/ as your own (no known upstream)" })
+    else out.push({ ...f, path, proposal: "own", as: f.name, label: "copy into skills/ as your own (no known upstream)" })
   }
   return out
 }

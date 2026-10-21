@@ -261,14 +261,21 @@ func (s *Service) scanOperation(ses *app.Session, method string, args []json.Raw
 	out := []object{}
 	for _, it := range rep.Unmanaged() {
 		kind, label, repo, upstream, differs, sharedCopy := "skip", "", "", "", false, false
+		// as: the name an "own" copy gets in skills/; inLibrary: the
+		// library skill an "enable" installs (another name when the copy
+		// was found by its content).
+		as, inLibrary := "", ""
 		for _, p := range props {
 			if p.Item.Path == it.Path {
-				kind, label, repo, upstream, differs = p.Kind, p.Label, p.Repo, p.Upstream, p.Differs
+				kind, label, repo, upstream, differs, as = p.Kind, p.Label, p.Repo, p.Upstream, p.Differs, p.As
+				if p.Entry != "" {
+					inLibrary = p.Entry[strings.LastIndex(p.Entry, ":")+1:]
+				}
 				sharedCopy = p.Kind == "enable" && secondCopy(ses, entries, p)
 				break
 			}
 		}
-		out = append(out, object{"id": it.Target + "/" + it.Name, "agent": it.Target, "name": it.Name, "path": it.Path, "state": it.State, "linkTo": it.LinkTo, "source": it.Source, "proposal": kind, "label": label, "repo": repo, "upstream": upstream, "differs": differs, "sharedCopy": sharedCopy})
+		out = append(out, object{"id": it.Target + "/" + it.Name, "agent": it.Target, "name": it.Name, "path": it.Path, "state": it.State, "linkTo": it.LinkTo, "source": it.Source, "proposal": kind, "label": label, "repo": repo, "upstream": upstream, "differs": differs, "sharedCopy": sharedCopy, "as": as, "inLibrary": inLibrary})
 	}
 	return out, nil
 }

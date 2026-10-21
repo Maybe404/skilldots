@@ -92,8 +92,8 @@ function sampleState(root: string | null): State {
   skills.find((s) => s.name === "design-review")?.targets.push("kiro")
   // Copies another installer put in agent folders and that were changed since: adopted as your own, not replaced by upstream.
   const differs: ScanItem[] = [
-    { id: "claude/tdd", agent: "claude", name: "tdd", path: `${HOME}/.claude/skills/tdd`, state: "copy", source: "mattpocock/skills", proposal: "own", label: "", upstream: "mattpocock/skills", differs: true },
-    { id: "cursor/code-review", agent: "cursor", name: "code-review", path: `${HOME}/.cursor/skills/code-review`, state: "copy", source: "mattpocock/skills", proposal: "own", label: "", upstream: "mattpocock/skills", differs: true },
+    { id: "claude/write-a-prd", agent: "claude", name: "write-a-prd", path: `${HOME}/.claude/skills/write-a-prd`, state: "copy", source: "mattpocock/skills", proposal: "own", label: "", upstream: "mattpocock/skills", differs: true, as: "write-a-prd" },
+    { id: "cursor/ubiquitous-language", agent: "cursor", name: "ubiquitous-language", path: `${HOME}/.cursor/skills/ubiquitous-language`, state: "copy", source: "mattpocock/skills", proposal: "own", label: "", upstream: "mattpocock/skills", differs: true, as: "ubiquitous-language" },
   ]
   return {
     root,
@@ -646,8 +646,8 @@ export function createMockBackend(): Backend {
           }
           toTrash(it.name, it.path, "adopt")
         } else if (it.proposal === "own") {
-          const taken = st.skills.some((s) => s.linkName === it.name)
-          const name = taken ? `${it.name}-${it.agent}` : it.name
+          // The name the core chose (app.Proposal.As); a clash on both names is never proposed.
+          const name = it.as ?? it.name
           addSkill({ name, kind: "skills", origin: "", category: "", description: "", targets: [it.agent] })
           toTrash(it.name, it.path, "adopt")
         } else if (it.proposal === "enable" && it.sharedCopy) {
@@ -661,7 +661,7 @@ export function createMockBackend(): Backend {
           // The copy makes way for the link, like any adopted copy.
           if (it.state === "copy") toTrash(it.name, it.path, "adopt")
         } else if (it.proposal === "drop") {
-          toTrash(it.name, it.path, "adopt")
+          toTrash(it.name, it.path, "broken")
         }
         st.scan = st.scan.filter((x) => x.id !== id)
         adopted++

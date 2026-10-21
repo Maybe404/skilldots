@@ -67,11 +67,15 @@ export function ScanPage() {
         return t("propPack", { repo: it.repo ?? "", name: it.name })
       case "own":
         // Changed since it was installed from upstream: kept as yours; the upstream version is an explicit add.
-        if (it.differs && it.upstream) return t("propOwnDiffers", { repo: it.upstream })
+        if (it.differs && it.upstream) return t("propOwnDiffers", { repo: it.upstream }) + (it.as && it.as !== it.name ? ` ${t("propNamed", { name: it.as })}` : "")
+        // The core picks the name (SKILL.md's, else the folder's when that is taken); an older sample has none.
+        if (it.as) return it.as === it.name ? t("propOwn") : t("propOwnAs", { name: it.as })
         return skills.some((s) => s.linkName === it.name) ? t("propOwnRename") : t("propOwn")
       case "enable":
         // The agent already reads the library's copy from ~/.agents/skills: this one is a second copy it would load.
-        if (it.sharedCopy) return t("propSharedCopy", { agent: label(it.agent), name: it.name })
+        if (it.sharedCopy) return t("propSharedCopy", { agent: label(it.agent), name: it.inLibrary || it.name })
+        // Found by its content under another name: the library's skill goes in, this copy to the trash.
+        if (it.inLibrary && it.inLibrary !== it.name) return t("propSameAs", { agent: label(it.agent), name: it.inLibrary })
         return t("propEnable", { agent: label(it.agent), name: it.name })
       case "drop":
         return t("propDrop")

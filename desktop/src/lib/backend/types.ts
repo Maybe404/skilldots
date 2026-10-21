@@ -199,11 +199,14 @@ export interface ScanItem {
   state: "managed" | "unrecorded" | "app" | "link" | "copy" | "broken" | "other" | "left"
   linkTo?: string
   source?: string
-  /** pack | app | own | enable | drop | skip */
   /** pack | app | own | enable | drop | skip, or a kind the core added since: the UI then shows label. */
   proposal: "pack" | "app" | "own" | "enable" | "drop" | "skip" | (string & {})
   /** An "enable" for a copy the agent does not need: it reads the library's from ~/.agents/skills, so adopting moves this copy to the trash. */
   sharedCopy?: boolean
+  /** An "own" copy's name in skills/: its SKILL.md name, or its folder name when that one is taken. */
+  as?: string
+  /** The library skill an "enable" installs; another name than the copy's when it was found by its content. */
+  inLibrary?: string
   /** The repository it came from (as recorded by its installer, or its link). */
   upstream?: string
   /** Its content differs from what upstream has now: proposed as your own skill ("own"). */
@@ -224,7 +227,7 @@ export interface TrashEntry {
    * (replaced by an update), "adopt" (replaced while adopting), "purge"
    * (a removed source). Optional; the UI falls back to where it came from.
    */
-  reason?: "removed" | "update" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | ""
+  reason?: "removed" | "update" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | "broken" | ""
   /** The skills it holds and the source they came from, as recorded when it was set aside. */
   skills?: string[]
   repo?: string

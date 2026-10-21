@@ -22,6 +22,7 @@ const REASON: Record<Exclude<NonNullable<TrashEntry["reason"]>, "">, MessageKey>
   "in-the-way": "reasonInTheWay",
   purge: "reasonPurge",
   deselected: "reasonDeselected",
+  broken: "reasonBroken",
 }
 
 /**
