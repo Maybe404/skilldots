@@ -29,6 +29,9 @@ func (s *Service) fileOperation(ses *app.Session, method string, args []json.Raw
 	if err != nil {
 		return nil, err
 	}
+	if r.Key == app.SyncRef {
+		return syncFileOperation(ses, method, args)
+	}
 	entries, err := ses.Resolve()
 	if err != nil {
 		return nil, err

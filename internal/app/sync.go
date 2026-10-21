@@ -56,6 +56,67 @@ func (s *Session) syncConflictsPath() (string, error) {
 	return s.Lib.Abs(p), nil
 }
 
+// syncShelvedPath keeps the files of a shelved sync, so that it is still
+// known after the app or the terminal is closed: in the repository's git
+// directory, this machine's.
+func (s *Session) syncShelvedPath() (string, error) {
+	p, err := s.Lib.Git("rev-parse", "--git-path", "skilldots/sync-shelved")
+	if err != nil {
+		return "", err
+	}
+	return s.Lib.Abs(p), nil
+}
+
+// setSyncShelved records a shelved sync's files (none: no sync is
+// shelved).
+func (s *Session) setSyncShelved(files []string) {
+	p, err := s.syncShelvedPath()
+	if err != nil {
+		return
+	}
+	if len(files) == 0 {
+		os.Remove(p)
+		return
+	}
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	if err := os.WriteFile(p, []byte(strings.Join(files, "\x00")), 0o644); err != nil {
+		s.logf(Warn, "could not record the shelved sync: %v", err)
+	}
+}
+
+// SyncShelved lists the files of the last sync, shelved because they
+// conflict, until a sync goes through; empty while one is being resolved
+// (Syncing says so then) or when none is shelved.
+func (s *Session) SyncShelved() []string {
+	out := []string{}
+	if s.Syncing() {
+		return out
+	}
+	p, err := s.syncShelvedPath()
+	if err != nil {
+		return out
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return out
+	}
+	for _, l := range strings.Split(string(b), "\x00") {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// SyncConflictPaths are the files a sync being resolved conflicts on
+// (none when no sync is).
+func (s *Session) SyncConflictPaths() []string {
+	if !s.Syncing() {
+		return nil
+	}
+	return s.syncConflicts()
+}
+
 func (s *Session) syncConflicts() []string {
 	p, err := s.syncConflictsPath()
 	if err != nil {
@@ -165,6 +226,7 @@ func (s *Session) SyncResolve() (*SyncResolveOutcome, error) {
 			return nil, err
 		}
 		out.Pushed = true
+		s.setSyncShelved(nil)
 		s.pushSnapshots()
 		return &SyncResolveOutcome{Files: []ConflictFile{}, Sync: out}, nil
 	}
@@ -329,6 +391,7 @@ func (s *Session) SyncContinue() (*BackupOutcome, error) {
 		return out, err
 	}
 	out.Pushed = true
+	s.setSyncShelved(nil)
 	s.pushSnapshots()
 	s.notePrivate(out)
 	return out, nil
@@ -352,11 +415,14 @@ func (s *Session) SyncAbort() error {
 	if !s.Syncing() {
 		return i18n.New("no sync is being resolved")
 	}
+	files := s.syncConflicts()
 	if _, err := s.Lib.Git("merge", "--abort"); err != nil {
 		return err
 	}
 	if p, err := s.syncConflictsPath(); err == nil {
 		os.Remove(p)
 	}
+	// Shelved again, until a sync goes through.
+	s.setSyncShelved(files)
 	return nil
 }

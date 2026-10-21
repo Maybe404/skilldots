@@ -95,6 +95,23 @@ func TestSyncConflictShelves(t *testing.T) {
 	if gitOut(t, remote, "rev-parse", "HEAD") != remoteHead {
 		t.Error("pushed")
 	}
+	// Remembered, opened again too, until a sync goes through.
+	s, _ := app.Open(b)
+	if got := s.SyncShelved(); len(got) != 1 || got[0] != "skills/mine/SKILL.md" {
+		t.Errorf("shelved %v", got)
+	}
+	if _, err := s.SyncResolve(); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.SyncShelved(); len(got) != 0 {
+		t.Errorf("shelved while resolving %v", got)
+	}
+	if err := s.SyncAbort(); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.SyncShelved(); len(got) != 1 {
+		t.Errorf("shelved after abort %v", got)
+	}
 }
 
 func TestSyncResolveContinue(t *testing.T) {
@@ -128,6 +145,9 @@ func TestSyncResolveContinue(t *testing.T) {
 	}
 	if s.Syncing() {
 		t.Error("still merging")
+	}
+	if got := s.SyncShelved(); len(got) != 0 {
+		t.Errorf("still shelved %v", got)
 	}
 	got := gitOut(t, remote, "show", "HEAD:skills/mine/SKILL.md")
 	if !strings.Contains(got, "three from b") || !strings.Contains(got, "three from a") {

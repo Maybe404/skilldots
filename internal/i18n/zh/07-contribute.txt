@@ -218,3 +218,6 @@
 
 @  · skd sync --resolve at a terminal
 =  · 在终端里运行 skd sync --resolve
+
+@ could not record the shelved sync: %v
+= 没能记录被搁置的同步：%v

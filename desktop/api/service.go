@@ -145,6 +145,13 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 	// The skd command touches no library and may wait on the password
 	// prompt: it runs outside the lock, so the rest of the app keeps going.
 	switch method {
+	// No library needed: an https:// address in the browser.
+	case "openUrl":
+		u, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		return nil, openURL(u)
 	case "cliStatus":
 		return cliStatus(), nil
 	case "installCli":
@@ -584,8 +591,10 @@ func (s *Service) status() (any, error) {
 		shelved = len(sh)
 	}
 	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill(), "bundledSkill": bundledSkill(), "shelved": shelved,
-		// A sync's merge is being resolved (skd sync --resolve).
-		"syncing": ses.Syncing()}, nil
+		// A sync's merge is being resolved (skd sync --resolve); the
+		// files of a sync shelved because they conflict, until a sync goes
+		// through ([] while one is being resolved: syncing says so).
+		"syncing": ses.Syncing(), "syncShelved": ses.SyncShelved()}, nil
 }
 func outdated(o *app.Outdated) any {
 	if o == nil {

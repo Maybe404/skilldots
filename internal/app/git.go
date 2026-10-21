@@ -191,6 +191,7 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 			}
 			if len(conflicts) > 0 {
 				out.Conflicts = conflicts
+				s.setSyncShelved(conflicts)
 				return out, nil
 			}
 			if _, err := lib.Git("push", "-q"); err != nil {
@@ -198,6 +199,7 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 			}
 		}
 		out.Pushed = true
+		s.setSyncShelved(nil)
 		s.pushSnapshots()
 	}
 	s.notePrivate(out)

@@ -124,6 +124,13 @@ func TestSyncConflictThroughTheBridge(t *testing.T) {
 	if c, _ := res["conflicts"].([]any); len(c) != 1 || c[0] != "skills/mine/SKILL.md" || res["pushed"] != false {
 		t.Fatalf("sync: %v", res)
 	}
+	// Shelved, and still known by the app opened again.
+	for _, svc := range []*Service{s, New("", Native{})} {
+		st := roundTrip[map[string]any](t, invoke(t, svc, "status"))
+		if sh, _ := st["syncShelved"].([]any); len(sh) != 1 || sh[0] != "skills/mine/SKILL.md" || st["syncing"] != false {
+			t.Fatalf("status: %v", st)
+		}
+	}
 	syncRef := ref{Key: "@sync"}
 	state := roundTrip[struct {
 		Files []struct {
@@ -134,10 +141,25 @@ func TestSyncConflictThroughTheBridge(t *testing.T) {
 	if len(state.Files) != 1 || state.Files[0].Path != "skills/mine/SKILL.md" || len(state.Files[0].Blocks) != 1 {
 		t.Fatalf("resolveStart: %+v", state)
 	}
-	if st := roundTrip[map[string]any](t, invoke(t, s, "status")); st["syncing"] != true {
+	if st := roundTrip[map[string]any](t, invoke(t, s, "status")); st["syncing"] != true || len(st["syncShelved"].([]any)) != 0 {
 		t.Fatalf("status: %v", st)
 	}
-	invoke(t, s, "resolvePick", syncRef, "skills/mine/SKILL.md", 0, "local")
+	// The conflicted file, read and written by hand; nothing else.
+	if text := invoke(t, s, "readFile", syncRef, "skills/mine/SKILL.md").(string); !strings.Contains(text, "<<<<<<<") {
+		t.Fatalf("readFile: %q", text)
+	}
+	for _, p := range []string{"skills.toml", "../outside", "skills/mine/../../skills.toml", "/etc/passwd"} {
+		if _, err := s.Invoke(context.Background(), "readFile", mustArgs(t, syncRef, p)); err == nil {
+			t.Errorf("readFile %s", p)
+		}
+		if _, err := s.Invoke(context.Background(), "writeFile", mustArgs(t, syncRef, p, "x")); err == nil {
+			t.Errorf("writeFile %s", p)
+		}
+	}
+	w := roundTrip[map[string]any](t, invoke(t, s, "writeFile", syncRef, "skills/mine/SKILL.md", "---\nname: mine\ndescription: from here, by hand\n---\n"))
+	if w["staged"] != true || strings.Contains(gitOutput(t, lib, "status", "--porcelain"), "UU ") {
+		t.Fatalf("writeFile: %v\n%s", w, gitOutput(t, lib, "status", "--porcelain"))
+	}
 	if st := roundTrip[struct{ Files []any }](t, invoke(t, s, "resolveState", syncRef)); len(st.Files) != 0 {
 		t.Fatalf("left: %+v", st)
 	}
@@ -148,7 +170,30 @@ func TestSyncConflictThroughTheBridge(t *testing.T) {
 	if st := roundTrip[map[string]any](t, invoke(t, s, "status")); st["syncing"] != false {
 		t.Fatalf("status after: %v", st)
 	}
-	if got := gitOutput(t, remote, "show", "HEAD:skills/mine/SKILL.md"); !strings.Contains(got, "from here") {
+	if got := gitOutput(t, remote, "show", "HEAD:skills/mine/SKILL.md"); !strings.Contains(got, "from here, by hand") {
 		t.Errorf("remote:\n%s", got)
+	}
+	if st := roundTrip[map[string]any](t, invoke(t, s, "status")); len(st["syncShelved"].([]any)) != 0 {
+		t.Errorf("status after: %v", st)
+	}
+}
+
+// openUrl opens https:// addresses only.
+func TestOpenURL(t *testing.T) {
+	var opened []string
+	prev := launchURL
+	launchURL = func(u string) error { opened = append(opened, u); return nil }
+	t.Cleanup(func() { launchURL = prev })
+	s := New("", Native{})
+	if _, err := s.Invoke(context.Background(), "openUrl", mustArgs(t, "https://github.com/acme/skills/pull/3")); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []string{"http://example.com", "file:///etc/passwd", "javascript:alert(1)", "-a Calculator", "https://", "https://x/\x1b[31m", "https://a b", "https://user@evil.example/", "ssh://github.com/x"} {
+		if _, err := s.Invoke(context.Background(), "openUrl", mustArgs(t, u)); err == nil {
+			t.Errorf("opened %q", u)
+		}
+	}
+	if len(opened) != 1 {
+		t.Errorf("opened %v", opened)
 	}
 }
