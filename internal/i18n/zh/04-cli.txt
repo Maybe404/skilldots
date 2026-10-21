@@ -75,8 +75,8 @@
 @ What each update changed: commits, skills, and upstream's commit messages
 = 每次更新改了什么：commit、skill 以及上游的 commit 信息
 
-@ Every `skd update` records, per pack it moved, the old and new commit, the skills that changed, were added, moved, went away upstream or appeared there, and the subjects of the upstream commits that touched them (at most %d). The record is %s in the library: it is committed and pushed with it, so another machine sees it after a clone. Reading it needs no network.
-= 每次 `skd update` 都会为它更新的每个来源记录：新旧 commit，发生变更、新增、移动、在上游消失或在上游出现的 skill，以及涉及这些 skill 的上游 commit 的标题（最多 %d 条）。记录保存在资料库里的 %s：它随资料库一起提交和推送，所以另一台机器 clone 之后也能看到。读取它不需要网络。
+@ Every `skd update` records, per pack it moved, the old and new commit, the skills that changed, were added, moved, went away upstream or appeared there, and the subjects of the upstream commits that touched them (at most %d). The record is %s in the library: it is committed and pushed with it, so another machine sees it after a clone. Reading it needs no network.\n\nWith --diff it shows what upstream changed in one recorded update, as a unified diff, skill by skill: the newest record of the pack, or the n-th newest (skd history <pack> --diff 2), only one skill with --skill. It reads the upstream versions the library recorded (refs/skilldots/upstream/*, no network); for a record made before skd kept them it reads the pack's cache clone, fetching the commits it lacks.
+= 每次 `skd update` 都会为它更新的每个来源记录：新旧 commit，发生变更、新增、移动、在上游消失或在上游出现的 skill，以及涉及这些 skill 的上游 commit 的标题（最多 %d 条）。记录保存在资料库里的 %s：它随资料库一起提交和推送，所以另一台机器 clone 之后也能看到。读取它不需要网络。\n\n加上 --diff 时，它以统一 diff 格式逐个 skill 显示某次更新里上游改了什么：默认是该来源最新的一条记录，也可以指定倒数第 n 条（skd history <来源> --diff 2），用 --skill 只看一个 skill。它读取资料库记下的上游版本（refs/skilldots/upstream/*，不需要网络）；对于 skd 开始记录这些版本之前的记录，则读取该来源的缓存 clone，并拉取缺少的 commit。
 
 @ %s %s: %d line(s) could not be read and were skipped\n
 = %s %s：有 %d 行无法读取，已跳过\n

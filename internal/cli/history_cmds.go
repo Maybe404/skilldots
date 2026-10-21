@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,18 +16,30 @@ import (
 
 func historyCmd() *cobra.Command {
 	var n int
+	var diff bool
+	var skill string
 	cmd := &cobra.Command{
-		Use:   "history [pack]",
+		Use:   "history [pack] [--diff [n]]",
 		Short: i18n.T("What each update changed: commits, skills, and upstream's commit messages"),
 		Long: i18n.Sprintf("Every `skd update` records, per pack it moved, the old and new commit, the skills that changed, were added, "+
 			"moved, went away upstream or appeared there, and the subjects of the upstream commits that touched them (at most "+
 			"%d). The record is %s in the library: it is committed and pushed with it, "+
-			"so another machine sees it after a clone. Reading it needs no network.", app.MaxCommits, app.HistoryFile),
-		Args: maximumNArgs(1),
+			"so another machine sees it after a clone. Reading it needs no network.\n\n"+
+			"With --diff it shows what upstream changed in one recorded update, as a unified diff, skill by skill: the newest "+
+			"record of the pack, or the n-th newest (skd history <pack> --diff 2), only one skill with --skill. It reads the "+
+			"upstream versions the library recorded (refs/skilldots/upstream/*, no network); for a record made before skd kept "+
+			"them it reads the pack's cache clone, fetching the commits it lacks.", app.MaxCommits, app.HistoryFile),
+		Args: maximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
+			}
+			if diff {
+				return historyDiff(c, args, skill)
+			}
+			if len(args) > 1 {
+				return i18n.Errorf("accepts at most %d arg(s), received %d", 1, len(args))
 			}
 			p := ""
 			if len(args) == 1 {
@@ -58,7 +73,85 @@ func historyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVarP(&n, "number", "n", 20, i18n.T("show at most this many records (0: all)"))
+	cmd.Flags().BoolVar(&diff, "diff", false, i18n.T("show what upstream changed in a record (the newest, or the n-th newest), as a diff"))
+	cmd.Flags().StringVar(&skill, "skill", "", i18n.T("with --diff: only this skill"))
 	return cmd
+}
+
+// historyDiff is `skd history [pack] --diff [n]`.
+func historyDiff(c *ctx, args []string, skill string) error {
+	p, n := "", 1
+	if len(args) > 0 {
+		p = args[0]
+	}
+	if len(args) == 2 {
+		v, err := strconv.Atoi(args[1])
+		if err != nil || v < 1 {
+			return i18n.Errorf("%q is not a record number (1 is the newest)", args[1])
+		}
+		n = v
+	}
+	r, err := c.HistoryRecord(p, n)
+	if err != nil {
+		return err
+	}
+	d, err := c.HistoryDiff(context.Background(), r, skill)
+	if err != nil {
+		return err
+	}
+	if c.jsonOut(d) {
+		return nil
+	}
+	printRecord(c, *r)
+	if len(d.Skills) == 0 {
+		c.printf("\n%s\n", dim(i18n.T("no skill's files changed upstream in this update")))
+		return nil
+	}
+	for _, sd := range d.Skills {
+		for _, f := range sd.Files {
+			printFileDiff(c, sd.Name, f)
+		}
+		if sd.MoreFiles > 0 {
+			c.printf("%s\n", dim(i18n.Sprintf("… %d more files of %s not shown", sd.MoreFiles, sd.Name)))
+		}
+	}
+	return nil
+}
+
+// printFileDiff prints one file's diff as git does, coloured like it.
+func printFileDiff(c *ctx, skill string, f app.FileDiff) {
+	a, b := "a/"+skill+"/"+f.Path, "b/"+skill+"/"+f.Path
+	c.printf("\n%s\n", bold(txt("diff --git "+a+" "+b)))
+	switch f.Status {
+	case "added":
+		c.printf("%s\n", bold(i18n.T("new file")))
+		a = "/dev/null"
+	case "removed":
+		c.printf("%s\n", bold(i18n.T("deleted file")))
+		b = "/dev/null"
+	}
+	switch {
+	case f.Binary:
+		c.printf("%s\n", i18n.Sprintf("Binary files %s and %s differ", txt(a), txt(b)))
+		return
+	case f.TooLarge:
+		c.printf("%s\n", dim(i18n.T("too large to compare line by line")))
+		return
+	}
+	c.printf("%s\n%s\n", bold(txt("--- "+a)), bold(txt("+++ "+b)))
+	for _, h := range f.Hunks {
+		c.printf("%s\n", cyan(fmt.Sprintf("@@ -%d,%d +%d,%d @@", h.OldStart, h.OldLines, h.NewStart, h.NewLines)))
+		for _, l := range h.Lines {
+			line := l.Op + txt(l.Text)
+			switch l.Op {
+			case "-":
+				line = bad(line)
+			case "+":
+				line = ok(line)
+			}
+			c.printf("%s\n", line)
+		}
+	}
 }
 
 // historyJSON keeps the CLI contract stable while the desktop bridge exposes
@@ -83,6 +176,18 @@ func historyJSON(recs []app.UpdateRecord, skipped int) map[string]any {
 		}
 		if r.Omitted != 0 {
 			row["omitted"] = r.Omitted
+		}
+		if len(r.Merged) > 0 {
+			row["merged"] = r.Merged
+		}
+		if len(r.Shelved) > 0 {
+			row["shelved"] = r.Shelved
+		}
+		if r.SnapFrom != "" {
+			row["snapFrom"] = r.SnapFrom
+		}
+		if r.SnapTo != "" {
+			row["snapTo"] = r.SnapTo
 		}
 		rows = append(rows, row)
 	}

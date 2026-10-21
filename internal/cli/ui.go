@@ -238,6 +238,7 @@ var plurals = map[string][2]string{
 	"parked directory": {i18n.M("%d parked directory"), i18n.M("%d parked directorys")},
 	"link":             {i18n.M("%d link"), i18n.M("%d links")},
 	"custom target":    {i18n.M("%d custom target"), i18n.M("%d custom targets")},
+	"file":             {i18n.M("%d file"), i18n.M("%d files")},
 }
 
 // plural returns "1 skill" / "3 skills".

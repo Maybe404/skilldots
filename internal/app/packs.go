@@ -283,7 +283,7 @@ func (s *Session) Update(repos []string, each func(repo string, rep *engine.Sync
 			continue
 		}
 		out.Reports = append(out.Reports, rep)
-		out.Changed = out.Changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped) > 0 || len(rep.Renamed) > 0
+		out.Changed = out.Changed || len(rep.Changed)+len(rep.Added)+len(rep.Dropped)+len(rep.Shelved) > 0 || len(rep.Renamed) > 0
 		updated[p.Repo] = rep.NewCommit
 		if r := newRecord(rep, now); r != nil {
 			unlock := pack.Hold(p.Repo)

@@ -391,6 +391,8 @@ func printReport(c *ctx, r *engine.SyncReport) {
 		}
 	}
 	row(i18n.T("changed"), accent, r.Changed)
+	row(i18n.T("merged"), ok, r.Merged)
+	printShelved(c, r)
 	row(i18n.T("added"), ok, r.Added)
 	row(i18n.T("dropped"), bad, r.Dropped)
 	row(i18n.T("moved"), dim, r.Moved)
@@ -778,6 +780,9 @@ func outdatedJSON(out *app.Outdated) map[string]any {
 			"changed": p.Changed, "moved": p.Moved, "new": p.New,
 			"gone": p.Gone, "pending": p.Pending, "checked": p.Checked,
 		})
+		if len(p.Shelved) > 0 {
+			packs[len(packs)-1]["shelved"] = p.Shelved
+		}
 	}
 	return map[string]any{"checked": out.Checked, "packs": packs, "failed": out.Failed, "updates": out.Updates()}
 }
@@ -826,5 +831,6 @@ func printStatus(c *ctx, st *app.PackStatus) {
 	}
 	row(i18n.T("upstream new"), cyan, offered, "skd add "+st.Repo+" --skill <name>")
 	row(i18n.T("upstream gone"), warn, st.Gone, i18n.T("kept by update"))
+	row(i18n.T("shelved"), warn, st.Shelved, i18n.T("conflicts with your changes · skd resolve <skill>"))
 	moved()
 }

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -47,6 +49,9 @@ type PackStatus struct {
 	Gone []string `json:"gone"`
 	// Pending are selected skills not vendored yet: `update` vendors them.
 	Pending []string `json:"pending"`
+	// Shelved are Changed skills whose update waits for conflicts with
+	// the local changes to be resolved (skd resolve).
+	Shelved []string `json:"shelved,omitempty"`
 	// Commits are the upstream commits affecting the selected skills since
 	// the vendored commit. They are bounded like update history.
 	Commits        []UpstreamCommit `json:"commits,omitempty"`
@@ -198,6 +203,9 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 			switch {
 			case h != ls.Hash:
 				st.Changed = append(st.Changed, u.Name)
+				if ls.Shelved != "" || ls.Resolving {
+					st.Shelved = append(st.Shelved, u.Name)
+				}
 			case ls.Category != u.Category:
 				st.Moved = append(st.Moved, u.Name)
 			}
@@ -342,6 +350,15 @@ func (s *Session) refreshRecorded(commits map[string]string) error {
 	for _, repo := range sortedRepos(commits) {
 		fresh := PackStatus{Repo: repo, Commit: commits[repo], Latest: commits[repo], Checked: now,
 			Changed: []string{}, Moved: []string{}, New: []string{}, Gone: []string{}, Pending: []string{}}
+		// A shelved skill still has its update to come.
+		if lp := s.Lib.Lock.Packs[repo]; lp != nil {
+			for _, n := range slices.Sorted(maps.Keys(lp.Skills)) {
+				if ls := lp.Skills[n]; ls.Shelved != "" || ls.Resolving {
+					fresh.Changed = append(fresh.Changed, n)
+					fresh.Shelved = append(fresh.Shelved, n)
+				}
+			}
+		}
 		if e := rec.Find(repo); e != nil {
 			*e = fresh
 		} else {
@@ -394,7 +411,12 @@ func (s *Session) RecordedOutdated() *Outdated {
 		}
 		r := *e
 		has := func(n string) bool { return vendored[n] != nil }
-		r.Changed = filter(e.Changed, has)
+		// A shelved skill whose resolve finished since is up to date.
+		settled := func(n string) bool {
+			return slices.Contains(e.Shelved, n) && (vendored[n] == nil || vendored[n].Shelved == "" && !vendored[n].Resolving)
+		}
+		r.Changed = filter(e.Changed, func(n string) bool { return has(n) && !settled(n) })
+		r.Shelved = filter(e.Shelved, func(n string) bool { return has(n) && !settled(n) })
 		r.Moved = filter(e.Moved, has)
 		r.Gone = filter(e.Gone, has)
 		r.New = filter(e.New, func(n string) bool { return !has(n) })

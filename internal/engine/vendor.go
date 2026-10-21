@@ -45,6 +45,27 @@ type SyncReport struct {
 	// Trashed maps each Dropped skill to where in the trash its
 	// directory went.
 	Trashed map[string]string `json:"-"`
+	// Merged are Changed skills the user had changed: upstream's changes
+	// were merged into the local copy (the copy as it was went to the
+	// trash first).
+	Merged []string `json:",omitempty"`
+	// Shelved are skills upstream changed whose local changes conflict
+	// with upstream's: they were left as they are, waiting for `skd
+	// resolve`. They are not in Changed.
+	Shelved []ShelvedSkill `json:",omitempty"`
+	// SnapFrom and SnapTo are the upstream snapshots (commits of the
+	// library repository) before and after the update; empty when the
+	// library keeps none.
+	SnapFrom string `json:"-"`
+	SnapTo   string `json:"-"`
+}
+
+// ShelvedSkill is a skill whose update waits for its conflicts to be
+// resolved.
+type ShelvedSkill struct {
+	Name string
+	// Files are the conflicted files, relative to the skill's directory.
+	Files []string
 }
 
 // PackDir returns where a pack is vendored, refusing repo keys that would
@@ -205,6 +226,14 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		rep.Warnings = append(rep.Warnings, i18n.Sprintf("%s is a symlink, not a file; it was not copied into vendor/", n))
 	}
 	wanted := map[string]bool{}
+	// oldCategory is the category a skill had before upstream moved it.
+	oldCategory := map[string]string{}
+	var selected []pack.Skill
+	for _, s := range upstream {
+		if p.Selected(s.Name, s.Category) {
+			selected = append(selected, s)
+		}
+	}
 	for _, s := range upstream {
 		if !p.Selected(s.Name, s.Category) {
 			continue
@@ -238,7 +267,10 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 				}
 				pruneEmpty(lib, filepath.Dir(old))
 				rep.Moved = append(rep.Moved, fmt.Sprintf("%s: %q → %q", s.Name, prev.Category, s.Category))
-				prev = &lock.Skill{Category: s.Category, Hash: prev.Hash}
+				oldCategory[s.Name] = prev.Category
+				moved := *prev
+				moved.Category = s.Category
+				prev = &moved
 				lp.Skills[s.Name] = prev
 			}
 		}
@@ -261,8 +293,45 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			continue
 		case prev == nil:
 			rep.Added = append(rep.Added, s.Name)
+		case prev.Resolving && fsutil.Exists(dest):
+			// Being resolved (skd resolve): the directory holds the merge
+			// with its conflict markers; it is left to finish.
+			rep.Shelved = append(rep.Shelved, ShelvedSkill{Name: s.Name, Files: nonNil(prev.Conflicts)})
+			continue
 		case prev.Hash == newHash && prev.Category == s.Category && fsutil.Exists(dest):
+			if prev.Shelved != "" {
+				// Upstream went back to the version the local changes
+				// were made on: nothing waits any more.
+				lp.Skills[s.Name] = &lock.Skill{Category: prev.Category, Hash: prev.Hash}
+			}
 			rep.Unchanged = append(rep.Unchanged, s.Name)
+			continue
+		case fsutil.Exists(dest) && !fsutil.Pristine(dest, prev.Hash) && filesChanged(dest, prev.Hash):
+			// The user changed its files: merge upstream's changes in.
+			// (A copy that only gained what is not a file of it, a .git
+			// or a link, is replaced below, that set aside.)
+			cats := []string{s.Category, oldCategory[s.Name]}
+			m, err := mergeSkill(lib, p.Repo, s, dest, prev, cats, commit)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", s.Name, err)
+			}
+			if !m.Clean() {
+				rep.Shelved = append(rep.Shelved, ShelvedSkill{Name: s.Name, Files: m.ConflictPaths()})
+				lp.Skills[s.Name] = &lock.Skill{Category: prev.Category, Hash: prev.Hash,
+					Shelved: commit, Upstream: newHash, Conflicts: LockPaths(m.ConflictPaths())}
+				continue
+			}
+			to, err := SetAsideMerged(lib, p.Repo, dest, s.Name, lp, prev)
+			if err != nil {
+				return nil, err
+			}
+			rep.Backups = append(rep.Backups, lib.Rel(dest)+" → "+lib.Rel(to))
+			if err := WriteFileSet(dest, m.Files, nil); err != nil {
+				return nil, err
+			}
+			rep.Changed = append(rep.Changed, s.Name)
+			rep.Merged = append(rep.Merged, s.Name)
+			lp.Skills[s.Name] = &lock.Skill{Category: s.Category, Hash: newHash}
 			continue
 		default:
 			rep.Changed = append(rep.Changed, s.Name)
@@ -301,6 +370,12 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			continue
 		}
 		rep.Dropped = append(rep.Dropped, n)
+		if old, err := skillDir(packDir, ls.Category, n); err == nil && ls.Resolving {
+			// Its conflicts go with it.
+			if err := UnstageConflicts(lib, old, ls.Conflicts); err != nil {
+				rep.Warnings = append(rep.Warnings, err.Error())
+			}
+		}
 		if old, err := skillDir(packDir, ls.Category, n); err == nil && fsutil.Lexists(old) {
 			to, err := Trash(lib, old)
 			if err != nil {
@@ -330,8 +405,21 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 	}
 	lp.Commit, lp.Ref = commit, p.Ref
-	for _, l := range [][]string{rep.Changed, rep.Added, rep.Unchanged, rep.UpstreamGone, rep.Dropped} {
+	for _, l := range [][]string{rep.Changed, rep.Added, rep.Unchanged, rep.UpstreamGone, rep.Dropped, rep.Merged} {
 		sort.Strings(l)
+	}
+	sort.Slice(rep.Shelved, func(i, j int) bool { return rep.Shelved[i].Name < rep.Shelved[j].Name })
+
+	// The upstream version vendored, as the next merge's base.
+	if KeepsSnapshots(lib) {
+		from, to, err := writeSnapshot(lib, p.Repo, commit, commitDate(clone, commit), selected, repoLicense)
+		if err != nil {
+			rep.Warnings = append(rep.Warnings, i18n.Sprintf("could not record upstream's version in the library's git repository (%v); the next update of a skill you changed may report more conflicts", err))
+		} else {
+			rep.SnapFrom, rep.SnapTo = from, to
+		}
+	} else if len(rep.Merged)+len(rep.Shelved) > 0 {
+		rep.Warnings = append(rep.Warnings, i18n.T("the library is not a git repository, so upstream's versions are not recorded: merging a skill you changed finds no common version and reports every file both sides changed as a conflict (skd init or git init makes it one)"))
 	}
 	return rep, nil
 }

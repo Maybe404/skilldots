@@ -320,6 +320,11 @@ func cloneCmd() *cobra.Command {
 				return err
 			}
 			say("%s cloned into %s\n", ok("✓"), dir)
+			// The upstream snapshots pushed with it: the merge base of the
+			// next update of a skill changed there.
+			if err := app.FetchSnapshots(dir); err != nil {
+				say("%s could not fetch upstream's versions (%s): %v\n", warn("!"), engine.SnapshotRefs, err)
+			}
 			if err := library.EnsurePrivateGit(dir); errors.Is(err, library.ErrPrivateLink) {
 				// Someone else's library: nothing is set up through the
 				// link, and the skills under it are not linked (Resolve).
