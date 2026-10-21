@@ -147,7 +147,13 @@ func (s *Session) pull(out *BackupOutcome, keep bool) ([]string, error) {
 	if n, err := lib.Git("rev-list", "--count", "HEAD..@{u}"); err != nil || n == "0" {
 		return nil, err
 	}
-	if _, err := lib.Git("merge", "--no-edit", "-q", "@{u}"); err != nil {
+	// Merged by its name (origin/main), which git writes into the conflict
+	// markers: "@{u}" there would tell nobody which side is the remote.
+	theirs := "@{u}"
+	if up, err := lib.Git("rev-parse", "--abbrev-ref", "@{u}"); err == nil && up != "" {
+		theirs = up
+	}
+	if _, err := lib.Git("merge", "--no-edit", "-q", theirs); err != nil {
 		conflicts := s.unmerged()
 		if len(conflicts) == 0 || !keep {
 			if s.Syncing() {
