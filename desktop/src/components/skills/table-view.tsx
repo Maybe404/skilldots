@@ -77,7 +77,7 @@ export function TableView({
                 )}
               >
                 <span className="line-clamp-2 max-w-full text-center text-[11px] leading-[1.15] font-medium break-words text-ink">{agentLabel(a)}</span>
-                <span className="text-[10px] leading-none text-mut tabular-nums">{skills.filter((s) => isOn(s, a.name, pending)).length}</span>
+                <span className="text-[10px] leading-none text-mut tabular-nums">{a.enabled ? skills.filter((s) => isOn(s, a.name, pending)).length : t("pausedTag")}</span>
               </button>
             </Hint>
           </div>
@@ -216,7 +216,7 @@ function Row({
         // Off for an agent this Mac does not have: it cannot be turned on (app-state refuses and says why).
         const locked = st === "off" && isAbsentAgent(a)
         const title =
-          st === "via" ? t(skill.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: label }) : st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t(keepsViaShared(skill, a.name, pending) ? "cellViaCancel" : "cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
+          st === "via" ? t(skill.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: label }) : st === "on" ? t(a.enabled ? "cellOn" : "cellPaused", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t(keepsViaShared(skill, a.name, pending) ? "cellViaCancel" : "cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
         return (
           <div role="cell" key={a.name} className="relative grid place-items-center">
             <Hint label={title}>

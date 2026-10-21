@@ -197,7 +197,7 @@
       --cols: 36px minmax(0, 1fr) 150px 44px 104px 104px 96px;
     }
     .skd-cols-history {
-      --cols: 104px fit-content(260px) 130px minmax(0, 1fr);
+      --cols: 104px fit-content(300px) 130px minmax(0, 1fr);
     }
     .skd-cols-adopt {
       --cols: 28px minmax(0, 1fr) 88px minmax(0, 260px);

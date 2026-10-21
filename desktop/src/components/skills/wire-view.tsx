@@ -347,7 +347,9 @@ export function WireView({
               <span className="font-semibold text-ink">Agent</span>
               <span className="tabular-nums">{columns.length}</span>
               <span className="flex-1" />
-              <span className="truncate">{selSkill ? t("wireAgentHintSel") : t("wireAgentHint")}</span>
+              <span className="truncate" title={selSkill ? t("wireAgentHintSel") : t("wireAgentHint")}>
+                {selSkill ? t("wireAgentHintSel") : t("wireAgentHint")}
+              </span>
             </div>
             {columns.map((a) => (
               <AgentRow key={a.name} agent={a} skill={selSkill} dragging={!!drag} compact={g.agentsW < 340} claudeOff={!!selSkill && a.name === "claude" && overrides.has(selSkill.name)} />
@@ -359,7 +361,7 @@ export function WireView({
               <span className="font-semibold text-ink">Skill</span>
               <span className="tabular-nums">{count}</span>
               <span className="flex-1" />
-              <span className="max-w-[260px] truncate" aria-live="polite">
+              <span className="min-w-0 truncate" aria-live="polite" title={focusText}>
                 {focusText}
               </span>
             </div>
@@ -422,7 +424,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
   const locked = st === "off" && away
   const pend = st === "adding" || st === "removing"
   const label = agentLabel(a)
-  const btnText = via ? t(skill?.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? (skill && keepsViaShared(skill, a.name, pending) ? t("cellViaCancel", { agent: label }) : t("wireRemoving")) : t("wireOff")
+  const btnText = via ? t(skill?.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? (a.enabled ? t("wireOn") : t("cellPaused", { agent: label })) : st === "removing" ? (skill && keepsViaShared(skill, a.name, pending) ? t("cellViaCancel", { agent: label }) : t("wireRemoving")) : t("wireOff")
   return (
     <div
       data-agent={a.name}
@@ -476,10 +478,10 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
                 pend ? "border-ac text-ac" : !on && !locked && "border-mut text-ink",
               )}
             >
-              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : via ? t("viaShort") : st === "absent" || locked ? t("wireAbsent") : st === "removing" ? t("wireRemoving") : btnText}
+              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : via ? t("viaShort") : st === "absent" || locked ? t("wireAbsent") : st === "removing" ? t("wireRemoving") : st === "on" && !a.enabled ? t("pausedTag") : btnText}
             </Button>
           )
-          return compact || via || st === "absent" || locked || st === "removing" ? <Hint label={btnText}>{button}</Hint> : button
+          return compact || via || st === "absent" || locked || st === "removing" || !a.enabled ? <Hint label={btnText}>{button}</Hint> : button
         })()}
       <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>
