@@ -19,7 +19,7 @@ export const nativeBackend: Backend = {
   remove: method("remove"), purge: method("purge"), fork: method("fork"),
   newSkill: method("newSkill"), reveal: method("reveal"), revealLibrary: method("revealLibrary"),
   openInEditor: method("openInEditor"), files: method("files"),
-  readFile: method("readFile"), writeFile: method("writeFile"),
+  readFile: method("readFile"), writeFile: method("writeFile"), openUrl: method("openUrl"),
   plan: method("plan"), apply: method("apply"), recordedOutdated: method("recordedOutdated"),
   outdated: method("outdated"), update: method("update"), history: method("history"),
   scan: method("scan"), adopt: method("adopt"), trash: method("trash"), restore: method("restore"),

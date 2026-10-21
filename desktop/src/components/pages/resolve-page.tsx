@@ -10,7 +10,9 @@ import { useSkillActions } from "@/lib/use-actions"
 import { EmptyNote, Hint, RefreshIcon, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 
 /*
  * Resolving conflicts, as a full page like the editor: a shelved update of a
@@ -36,8 +38,10 @@ interface Subject {
   useTheirs: string
   /** Said once no conflicts are left. */
   ready: string
-  /** Opens a conflicted file in the in-app editor; none for a sync. */
+  /** Opens a conflicted file in the in-app editor (a skill's files). */
   edit?: (path: string) => void
+  /** Edits a conflicted file in a dialog here instead (a sync's files, which the editor does not open). */
+  inlineEdit?: boolean
   reveal: () => void
   finished: (note: ApplyNote | void) => void
   shelve: { title: string; body: string; hint: string; done: () => void }
@@ -66,6 +70,7 @@ export function ResolvePage({ skillRef }: { skillRef: Ref }) {
       theirs: t("sideRemote"),
       useTheirs: t("useRemote"),
       ready: t("allResolvedSync"),
+      inlineEdit: true,
       reveal: revealLibrary,
       finished: () => {
         setSyncShelved(null)
@@ -157,6 +162,7 @@ function Resolver({ subject }: { subject: Subject }) {
   const [failed, setFailed] = React.useState(false)
   const [active, setActive] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState<string | null>(null)
+  const [editing, setEditing] = React.useState<string | null>(null)
   // Files in the order first seen: one the bridge stops listing once resolved stays in the list, marked resolved.
   const [order, setOrder] = React.useState<string[]>(() => subject.files)
   const started = React.useRef(false)
@@ -230,13 +236,26 @@ function Resolver({ subject }: { subject: Subject }) {
   const remaining = files.reduce((n, f) => n + left(f), 0)
   const current = active ? byPath.get(active) : undefined
   const ready = !!state && remaining === 0
-  // A skill's file opens in the editor; a sync's files are shown in Finder (the library root).
+  // A skill's file opens in the editor; a sync's file in a dialog here (readFile/writeFile with @sync).
   const handEdit = subject.edit
     ? { icon: PencilLine, label: t("editManually"), go: (path: string) => subject.edit!(path) }
-    : { icon: FolderOpen, label: t("revealInFinder"), go: () => subject.reveal() }
+    : subject.inlineEdit
+      ? { icon: PencilLine, label: t("editManually"), go: (path: string) => setEditing(path) }
+      : { icon: FolderOpen, label: t("revealInFinder"), go: () => subject.reveal() }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {editing && (
+        <SyncFileDialog
+          refKey={ref}
+          path={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null)
+            await refresh()
+          }}
+        />
+      )}
       <TopBar title={subject.title} meta={subject.meta} onBack={() => navigate("skills")}>
         {state && (
           <span className="flex shrink-0 items-center gap-1.5 fs-meta text-ink" role="status">
@@ -468,4 +487,65 @@ function Code({ text, className }: { text: string; className?: string }) {
   const { t } = useApp()
   if (!text) return <p className={cn("fs-meta italic", className)}>{t("emptySide")}</p>
   return <pre className={cn("m-0 max-h-[18rem] overflow-auto font-[family-name:var(--fmCode)] text-[11.5px] leading-[1.6] break-words whitespace-pre-wrap", className)}>{text}</pre>
+}
+
+/**
+ * A conflicted file of a shelved sync, edited in place: the file as it is,
+ * markers and all, saved back (and staged) with writeFile. The in-app editor
+ * opens a skill's files only; these are the library's, relative to its root.
+ */
+function SyncFileDialog({ refKey, path, onClose, onSaved }: { refKey: Ref; path: string; onClose: () => void; onSaved: () => void }) {
+  const { t, read, run } = useApp()
+  const [text, setText] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  React.useEffect(() => {
+    let live = true
+    void read(() => backend.readFile(refKey, path)).then((r) => {
+      if (live) {
+        if (r.ok) setText(r.value)
+        else onClose()
+      }
+    })
+    return () => {
+      live = false
+    }
+  }, [read, refKey, path, onClose])
+  const save = async () => {
+    if (text === null) return
+    setSaving(true)
+    const r = await run(() => backend.writeFile(refKey, path, text))
+    setSaving(false)
+    if (r.ok) onSaved()
+  }
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(46rem,calc(100svh-4rem))] w-[760px] flex-col gap-0 p-0">
+        <DialogHeader className="px-6 pt-[22px] pb-3">
+          <DialogTitle className="font-mono">{path}</DialogTitle>
+          <DialogDescription>{t("syncEditHint")}</DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-auto px-6 pb-4">
+          {text === null ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <Textarea
+              aria-label={path}
+              value={text}
+              spellCheck={false}
+              onChange={(e) => setText(e.target.value)}
+              className="min-h-72 font-mono fs-meta leading-relaxed [field-sizing:fixed]"
+            />
+          )}
+        </div>
+        <DialogFooter className="m-0 items-center px-6 py-3.5 [border-top:var(--tblRow)]">
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button onClick={() => void save()} disabled={text === null || saving}>
+            {t("save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }

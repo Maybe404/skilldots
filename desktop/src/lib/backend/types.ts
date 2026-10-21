@@ -413,6 +413,8 @@ export interface LibraryStatus {
   skillError?: string
   /** A sync merge is being resolved (`skd sync --resolve`): the library has conflict markers until it is finished. */
   syncing?: boolean
+  /** A sync shelved on conflicts (files relative to the library root), remembered across launches; [] when none. */
+  syncShelved?: string[]
 }
 
 /** The skd command: a link on the PATH to the app's own executable. */
@@ -550,6 +552,8 @@ export interface Backend {
   files(ref: Ref): Promise<FileNode[]>
   readFile(ref: Ref, path: string): Promise<string>
   writeFile(ref: Ref, path: string, content: string): Promise<void>
+  /** Opens an https page in the system browser (a PR, a commit). */
+  openUrl(url: string): Promise<void>
 
   // Apply -----------------------------------------------------------------
   /** Session.Plan (skd apply -n) */

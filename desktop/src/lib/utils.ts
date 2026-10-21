@@ -8,9 +8,3 @@ export { cn } from "cn"
 export function shortSha(id: string): string {
   return /^[0-9a-f]{8,}$/i.test(id) ? id.slice(0, 7) : id
 }
-
-/** Opens a web page (a PR, a commit) in the browser, outside the app; only https links. */
-export function openExternal(url: string) {
-  if (!/^https:\/\//.test(url)) return
-  window.open(url, "_blank", "noopener,noreferrer")
-}

@@ -307,6 +307,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const reload = React.useCallback(async () => {
     const st = await backend.status()
     setStatus(st)
+    // The bridge remembers a shelved sync across launches; the preview keeps it in this window only.
+    if (st.syncShelved) setSyncShelved(st.syncShelved.length ? st.syncShelved : null)
     if (!st.root) return
     const [s, p, a, o, out, pl, tr] = await Promise.all([
       backend.skills(),

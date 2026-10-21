@@ -575,14 +575,29 @@ export function createMockBackend(): Backend {
       await wait(120)
       return tree(Object.keys(st.files[ref.key] ?? {}))
     },
+    async openUrl(url) {
+      // The browser preview opens a new tab; the app asks the system browser (Service.openUrl).
+      window.open(url, "_blank", "noopener,noreferrer")
+    },
     async readFile(ref, path) {
       await wait(60)
+      // A shelved sync's conflicted file (Service: readFile with @sync), markers and all.
+      if (ref.key === SYNC_REF.key) {
+        const text = st.syncMerge?.[path]
+        if (text === undefined) throw new Error(`${path} is not a conflicted file of this sync`)
+        return text
+      }
       const f = st.files[ref.key]?.[path]
       if (f === undefined) throw new Error(`no file ${path}`)
       return f
     },
     async writeFile(ref, path, content) {
       await wait(200)
+      if (ref.key === SYNC_REF.key) {
+        if (st.syncMerge?.[path] === undefined) throw new Error(`${path} is not a conflicted file of this sync`)
+        st.syncMerge[path] = content
+        return
+      }
       const s = find(ref)
       st.files[ref.key][path] = content
       if (path === "SKILL.md") {
