@@ -63,7 +63,9 @@ name = "release-notes"
 targets = ["agents"]
 ```
 
-targets 继承：全局 default → pack → skill。`targets = []` 表示保留在库里但不启用到任何 agent。
+targets 继承：全局 default → pack → skill。`targets = []` 表示保留在资料库里但不装到任何 agent。
+
+`"*"` 表示本机已安装的全部内置 agent 加默认目标，在每台机器上解析时各自展开。会读 `~/.agents/skills` 的 agent（Codex、Gemini CLI、Cursor、Copilot 等，`targets` 包里标 `ReadsShared`）：某个 skill 链进了 agents（agents 没有暂停，且那一侧是 skd 管理的链接或空位）时，不再给它们单独链接，记在 `Entry.ViaShared`，避免同一个 agent 加载两份；agents 暂停分发、或那一侧是用户自己的目录时，它们各自链接。本机没装的内置 agent（agents 除外）不建目录，apply 只提示（`absent`）。
 
 **自定义 target 先由人批准（首次信任）**：`skills.toml` 可能来自别人的库（`skd clone`），自定义 target 的路径由对方决定，而 skd 会往 target 里建链接或拷贝、把回收站条目恢复到那里、`--force` 时把挡路的东西挪进回收站。所以自定义 target 只在两个条件都满足时生效，否则在 apply、enable、add、update、restore、clone、`skd targets`、仪表盘里都当作不存在（`Registry` 不收录，`Get`/`All`/`Present` 看不到，记在 `Withheld` 里）：
 

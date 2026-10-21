@@ -4,7 +4,7 @@ skd is mostly run by agents, on libraries that may come from someone else (`skd 
 
 ## The trash
 
-Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash, `<library>/.trash/`. `skd trash` lists it and `skd trash restore <id>` puts an entry back.
+Nothing is deleted. `remove`, `purge` and `apply --force` move files into the library's trash, `<library>/.trash/`. `skd trash` lists it and `skd trash restore <id|skill|owner/repo>` puts an entry back.
 
 `skd trash empty` is the one irreversible command, and it only runs for [a person at a terminal](#a-person-at-a-terminal). So an agent can do everything short of permanent deletion. The desktop app's Trash page can also delete for good, the whole trash or one entry, but only after a confirmation that names the entries and their size, and it refuses when the trash changed since that confirmation was shown.
 
@@ -37,7 +37,7 @@ It only puts a directory back where skd takes them from:
 - a place inside the library's `vendor/`;
 - a skill directory of the library's `skills/` or `private/` that `skd remove` moved there on this machine. skd records that beside the settings file, in `local-trash.json`, never in the library, so a cloned library's trash cannot put files into your `skills/`.
 
-What `remove` and `purge` took out of `skills.toml` and `skills.lock` is recorded the same way, in `trash-notes.json` beside the settings file, so restoring their entry also puts the manifest and lock back and relinks. An entry from before that record, or from another machine, gets its files back and a hint naming the `skd add` that follows it again.
+What `remove` and `purge` took out of `skills.toml` and `skills.lock` is recorded the same way, in `trash-notes.json` beside the settings file (written under `trash-notes.lock`, so a desktop app and an agent's `skd` running at once lose nothing; a damaged file is kept as `trash-notes.json.broken-<time>` and a fresh one started; deleting an entry for good forgets its record), so restoring their entry also puts the manifest and lock back and relinks. An entry from before that record, or from another machine, gets its files back and a hint naming the `skd add` that follows it again.
 
 A trash entry recorded as coming from anywhere else, or reached through a symbolic link, is listed as not restorable, with the reason, and left for you to move by hand. A library cloned from someone else carries their `.trash/` too, so such a record, and where a link entry leads, is never shown: it may be anyone's text.
 

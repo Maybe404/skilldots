@@ -187,11 +187,12 @@ Deletes a pack from the manifest, the lock, `vendor/` and every agent directory.
 
 Takes over unmanaged entries found by `skd scan`: subscribes to their repository, registers apps, copies the rest in as your own, and enables each for the agents it was found in.
 
+- A copy in the own directory of an agent that reads `~/.agents/skills`, of a skill the library already links into `agents`, is redundant: when it is the same as the library's, it goes to the trash (that agent keeps reading the library's copy through `agents`); when it differs, it is left in place with a note.
 - A copy whose repository skd knows is compared with upstream first (one fetch per repository). If you changed it, it is copied in as your own skill rather than replaced by upstream's; the proposal names the repository and the `skd add` that would follow upstream instead (`Upstream` and `Differs` in `--json`).
 
-### `skd trash [restore <id|skill> | empty]`
+### `skd trash [restore <id|skill|owner/repo> | empty]`
 
-Lists what skd set aside, with the skills in each entry and why; `restore` takes an ID or a skill name (several matches are listed, never guessed) and puts the entry back, undoing `remove` and `purge` entirely (manifest, lock and links); `empty` deletes everything for good, interactively, and only for a person at a terminal ([safety.md](safety.md#the-trash)).
+Lists what skd set aside, with the skills in each entry and why (`!` marks an entry skd will not restore, with the reason under the table); `restore` takes an ID, a skill name or, for a purged pack, `owner/repo` (several matches are listed, never guessed) and puts the entry back, undoing `remove` and `purge` entirely (manifest, lock and links); `empty` deletes everything for good, interactively, and only for a person at a terminal ([safety.md](safety.md#the-trash)).
 
 ## Settings
 
