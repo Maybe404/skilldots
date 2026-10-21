@@ -58,7 +58,14 @@ func (p Proposal) Actionable() bool { return p.Kind != "skip" }
 // copies installed by "npx skills" become subscriptions to their upstream
 // repository, links into application bundles become [[app]] entries, and
 // anything else becomes a skill of the user's own under skills/.
-func (s *Session) Proposals(rep scan.Report) []Proposal {
+func (s *Session) Proposals(rep scan.Report) []Proposal { return s.proposals(rep, true) }
+
+// ScanAdvice is Proposals without fetching anything: what `skd scan` says
+// about each unmanaged entry, a "skip" one (the user has to act) in
+// particular. A subscription it proposes is not compared with upstream.
+func (s *Session) ScanAdvice(rep scan.Report) []Proposal { return s.proposals(rep, false) }
+
+func (s *Session) proposals(rep scan.Report, fetch bool) []Proposal {
 	entries, _ := s.Resolve()
 	hashes := map[int]string{}
 	seen := map[string]bool{}
@@ -132,7 +139,9 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 		seen[it.Name] = true
 		out = append(out, p)
 	}
-	s.checkUpstream(out)
+	if fetch {
+		s.checkUpstream(out)
+	}
 	s.nameOwn(out, entries)
 	// "own"/"pack" copies found in several agents: enable the extra agents too.
 	for _, it := range rep.Unmanaged() {

@@ -1203,3 +1203,6 @@
 
 @ see changes
 = 查看改动
+
+@ %d entries need you: skd adopt leaves them as they are (why above)
+= 有 %d 个条目需要你处理：skd adopt 不会动它们（原因见上）

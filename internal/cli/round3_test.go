@@ -45,6 +45,30 @@ func TestAdoptRenamedCopies(t *testing.T) {
 	}
 }
 
+// A copy that differs from the library's skill, in an agent that reads
+// the library's from ~/.agents/skills, is the user's to settle: adopt
+// says so in every mode, and scan says so instead of "skd adopt".
+func TestAdoptSaysWhatItLeaves(t *testing.T) {
+	e := newEnv(t)
+	e.installed(".gemini")
+	lib := e.p("lib")
+	e.ok("", "init", lib, "--no-skill")
+	e.ok(lib, "targets", "default", "agents")
+	e.ok(lib, "new", "gamma")
+	e.write(".gemini/skills/gamma/SKILL.md", "---\nname: gamma\ndescription: mine\n---\nother\n")
+	const why = "differs from the library's gamma, which gemini already reads from ~/.agents/skills"
+	if out := e.ok(lib, "adopt", "--yes"); !strings.Contains(out, why) {
+		t.Errorf("adopt --yes:\n%s", out)
+	}
+	out := e.ok(lib, "scan")
+	if !strings.Contains(out, why) || !strings.Contains(out, "1 entry needs you") || strings.Contains(out, "take these over with") {
+		t.Errorf("scan:\n%s", out)
+	}
+	if _, err := os.Stat(e.p(".gemini/skills/gamma/SKILL.md")); err != nil {
+		t.Fatal("the copy was touched")
+	}
+}
+
 // A broken trash-notes.json is set aside the first time skd moves
 // something to the trash, and the command says so: the warning is not
 // lost on the way.
