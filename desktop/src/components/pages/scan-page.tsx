@@ -70,13 +70,18 @@ export function ScanPage() {
         if (it.differs && it.upstream) return t("propOwnDiffers", { repo: it.upstream })
         return skills.some((s) => s.linkName === it.name) ? t("propOwnRename") : t("propOwn")
       case "enable":
+        // The agent already reads the library's copy from ~/.agents/skills: this one is a second copy it would load.
+        if (it.sharedCopy) return t("propSharedCopy", { agent: label(it.agent), name: it.name })
         return t("propEnable", { agent: label(it.agent), name: it.name })
       case "drop":
         return t("propDrop")
       case "app":
         return t("propApp")
-      default:
+      case "skip":
         return `${t("propSkip")}: ${it.label}`
+      default:
+        // A kind this app does not know yet: the core's own words.
+        return it.label
     }
   }
 
@@ -103,18 +108,23 @@ export function ScanPage() {
   const adopt = () => {
     const chosen = (items ?? []).filter((x) => picked.has(x.id))
     // The table already says what happens to each one: the confirmation only counts them by kind.
+    const kindOf = (x: ScanItem) => (x.proposal === "enable" && x.sharedCopy ? "second" : x.proposal)
     const parts = (
       [
         ["pack", "adoptPartPack"],
         ["own", "adoptPartOwn"],
         ["enable", "adoptPartEnable"],
+        ["second", "adoptPartSecond"],
         ["drop", "adoptPartDrop"],
         ["app", "adoptPartApp"],
       ] as const
     )
-      .map(([kind, key]) => [chosen.filter((x) => x.proposal === kind).length, key] as const)
+      .map(([kind, key]) => [chosen.filter((x) => kindOf(x) === kind).length, key] as const)
       .filter(([n]) => n > 0)
       .map(([n, key]) => t(key, { n }))
+    // Kinds this app does not know yet still count.
+    const other = chosen.filter((x) => !["pack", "own", "enable", "drop", "app", "skip"].includes(x.proposal)).length
+    if (other) parts.push(t("adoptPartOther", { n: other }))
     confirm({
       title: t("adoptTitle", { n: chosen.length }),
       body: t("adoptConfirmBody", { parts: parts.join(t("listSep")) }),
@@ -236,7 +246,7 @@ export function ScanPage() {
                         </div>
                       </div>
                       <div role="cell" className={cn("fs-meta", it.state === "broken" ? "font-semibold text-ac" : "text-mut")}>
-                        {it.proposal === "enable" ? t("stateInLibrary") : it.differs ? t("stateDiffers") : t(STATE[it.state])}
+                        {it.sharedCopy ? t("stateSecondCopy") : it.proposal === "enable" ? t("stateInLibrary") : it.differs ? t("stateDiffers") : (STATE[it.state] ? t(STATE[it.state]) : it.state)}
                       </div>
                       <div role="cell" className="line-clamp-3 min-w-0 fs-body leading-snug text-ink" title={proposal(it)}>
                         {proposal(it)}

@@ -66,7 +66,16 @@ export function AgentsPage() {
 }
 
 function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
-  const { t, agents, run, reload, confirm, pending } = useApp()
+  const { t, agents, skills, run, reload, confirm, pending } = useApp()
+  // Pausing Agents also takes away what the agents reading ~/.agents/skills got only from there: say who and how many.
+  const sharedLoss = (() => {
+    if (a.name !== "agents") return ""
+    const lost = agents
+      .filter((x) => x.readsShared && x.enabled && !isAbsentAgent(x))
+      .map((x) => [x, skills.filter((s) => s.sharedReach?.includes(x.name) && !s.targets.includes(x.name)).length] as const)
+      .filter(([, n]) => n > 0)
+    return lost.length ? t("pauseAgentsReaders", { list: lost.map(([x, n]) => t("pauseLossItem", { agent: agentLabel(x), n })).join(t("listSep")) }) : ""
+  })()
   const label = agentLabel(a)
   const defaults = agents.filter((x) => x.isDefault)
   const lastDefault = a.isDefault && defaults.length === 1
@@ -159,7 +168,7 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
             a.enabled
               ? confirm({
                   title: t("pauseTitle", { agent: label }),
-                  body: t("pauseBody", { agent: label, n: count }),
+                  body: t("pauseBody", { agent: label, n: count }) + sharedLoss,
                   action: t("pauseAgent"),
                   run: () => setEnabled(false),
                 })

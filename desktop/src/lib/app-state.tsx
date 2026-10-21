@@ -440,13 +440,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return a ? agentLabel(a) : name
   }, [agents])
 
-  // Taking a skill off Agents also takes it away from the agents that read it there: said when it is marked.
+  // Taking a skill off Agents: the agents that only read it there lose it; those chosen for it as well (in its
+  // targets) get a link of their own instead, as the engine does. Said when the change is marked.
   const warnSharedLost = React.useCallback(
     (list: Skill[]) => {
-      const lost = [...new Set(list.flatMap((s) => s.sharedReach ?? []))]
-      if (!lost.length) return
+      const lost = new Set<string>()
+      const relinked = new Set<string>()
+      for (const s of list) {
+        for (const a of s.sharedReach ?? []) (s.targets.includes(a) ? relinked : lost).add(a)
+        for (const a of s.viaShared ?? []) relinked.add(a)
+      }
       const skill = list.length === 1 ? list[0].linkName : t("groupCount", { n: list.length })
-      toast(t("viaSharedLost", { agents: lost.map(label).join(t("listSep")), skill }))
+      const names = (set: Set<string>) => [...set].map(label).join(t("listSep"))
+      if (lost.size) toast(t("viaSharedLost", { agents: names(lost), skill }))
+      if (relinked.size) toast(t("viaSharedRelink", { agents: names(relinked), skill }))
     },
     [label, t],
   )
@@ -455,9 +462,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (skill: Skill, agent: string) => {
       if (applyingRef.current) return
       const k = pendingKey(skill.ref.key, agent)
-      // Read from the shared folder: nothing to link or unlink here; say so instead of recording a change.
       if (!(k in pending) && readsViaShared(skill, agent, pending)) {
-        toast(t("viaSharedAlready", { agent: label(agent), skill: skill.linkName }))
+        // Read from the shared folder. Not chosen for it: turning it on would change nothing it can see (and the
+        // choice can still be made when Agents loses the skill: the cell then offers it). Chosen for it as well:
+        // taking that choice off is allowed, it still reads the skill through Agents.
+        if (!skill.targets.includes(agent)) {
+          toast(t("viaSharedAlready", { agent: label(agent), skill: skill.linkName }))
+          return
+        }
+        toast(t("viaCancelOwn", { agent: label(agent) }))
+        setPending((p) => togglePendingCell(p, skill, agent))
         return
       }
       const turningOn = !(k in pending) && !skill.targets.includes(agent)
@@ -472,8 +486,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (list: Skill[], agent: string, want: boolean) => {
       if (applyingRef.current) return
       if (want && refuseAbsent(agent)) return
-      // Skills the agent reads from the shared folder are left as they are, either way.
-      const own = list.filter((s) => !readsViaShared(s, agent, pending))
+      // Turning on leaves alone the skills the agent already reads from the shared folder; turning off still takes
+      // off the agent's own choice (setMany only touches skills whose targets have it).
+      const own = want ? list.filter((s) => !readsViaShared(s, agent, pending)) : list
       if (!own.length) {
         toast(t("viaSharedAlready", { agent: label(agent), skill: t("groupCount", { n: list.length }) }))
         return

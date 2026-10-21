@@ -200,7 +200,10 @@ export interface ScanItem {
   linkTo?: string
   source?: string
   /** pack | app | own | enable | drop | skip */
-  proposal: "pack" | "app" | "own" | "enable" | "drop" | "skip"
+  /** pack | app | own | enable | drop | skip, or a kind the core added since: the UI then shows label. */
+  proposal: "pack" | "app" | "own" | "enable" | "drop" | "skip" | (string & {})
+  /** An "enable" for a copy the agent does not need: it reads the library's from ~/.agents/skills, so adopting moves this copy to the trash. */
+  sharedCopy?: boolean
   /** The repository it came from (as recorded by its installer, or its link). */
   upstream?: string
   /** Its content differs from what upstream has now: proposed as your own skill ("own"). */

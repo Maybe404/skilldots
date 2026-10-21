@@ -119,7 +119,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
                   {a.name === "claude" && claudeOff && <OffRing />}
                   {(st === "adding" || st === "removing") && <span className="fs-meta text-ac">{st === "adding" ? t("wireAdding") : t("wireRemoving")}</span>}
                 </label>
-                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent" || st === "via"} disabled={(st === "off" && isAbsentAgent(a)) || st === "via"} title={st === "via" ? t("cellVia", { agent: agentLabel(a) }) : st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
+                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent" || st === "via"} disabled={(st === "off" && isAbsentAgent(a)) || (st === "via" && !skill.targets.includes(a.name))} title={st === "via" ? t(skill.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: agentLabel(a) }) : st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
               </li>
             )
           })}
@@ -134,7 +134,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
         {pendingCount > 0 && (
           <div className="mt-3 flex items-center gap-3 fs-body text-ink">
             <span aria-hidden className="size-[7px] rounded-full bg-ac" />
-            {t("pendingN", { n: pendingCount })}
+            {t(pendingCount === 1 ? "pendingOne" : "pendingN", { n: pendingCount })}
             <Button variant="accent" size="default" className="ml-auto" disabled={!!operation} onClick={() => void applyPending()}>
               {t("apply")}
             </Button>

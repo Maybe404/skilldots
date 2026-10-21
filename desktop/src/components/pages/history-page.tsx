@@ -78,7 +78,9 @@ function Row({ h }: { h: HistoryEntry }) {
         {fresh && <UpdateDot label={t("fresh")} />}
       </div>
       <div role="cell" className="flex min-w-0 items-center gap-2 pr-3">
-        <span className="truncate font-heading fs-name font-semibold text-ink">{h.repo}</span>
+        <span className="truncate font-heading fs-name font-semibold text-ink" title={h.repo}>
+          {h.repo}
+        </span>
         {h.example && <ExampleTag />}
       </div>
       <div role="cell" className="min-w-0 pt-0.5 font-mono fs-meta text-mut" title={`${h.from} → ${h.to}`}>
