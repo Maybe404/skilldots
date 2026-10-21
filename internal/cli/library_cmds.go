@@ -144,7 +144,7 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 		}
 	}
 	c.printf("%s  %s\n", brand(), dim(tildePath(c.lib.Root)))
-	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(i18n.Sprintf("%d linked", linked))+dim(i18n.Sprintf(" · agents: %s", strings.Join(m.Targets.Default, ", ")))+pausedNote(m.Targets.Disabled))
+	c.printf("%s\n", cyan(plural(len(m.Packs), "pack"))+dim(" · ")+cyan(plural(len(entries), "skill"))+dim(" · ")+cyan(i18n.Sprintf("%d in agents", linked))+dim(i18n.Sprintf(" · agents: %s", strings.Join(m.Targets.Default, ", ")))+pausedNote(m.Targets.Disabled))
 	rec := c.RecordedOutdated()
 	if line := updatesLine(rec, time.Now()); line != "" {
 		c.printf("%s\n", line)
@@ -304,7 +304,12 @@ func targetList(e engine.Entry) string {
 	for i, t := range e.Targets {
 		names[i] = t.Name
 	}
-	return strings.Join(names, ", ")
+	out := strings.Join(names, ", ")
+	if len(e.ViaShared) > 0 {
+		// Agents that read ~/.agents/skills get it there.
+		out += dim(" " + i18n.Sprintf("(+ %s through agents)", strings.Join(e.ViaShared, ", ")))
+	}
+	return out
 }
 
 func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
@@ -319,6 +324,9 @@ func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
 			if et.Name == t.Name {
 				tb.Row(e.LinkName, dim(engine.Describe(e)))
 			}
+		}
+		if slices.Contains(e.ViaShared, t.Name) {
+			tb.Row(e.LinkName, dim(engine.Describe(e)+" "+i18n.T("(through agents)")))
 		}
 	}
 	c.printf("%s\n", tb.Render())
@@ -370,26 +378,47 @@ func refusedError(out *app.ApplyOutcome) error {
 
 // printApply prints what an apply did (or, for a dry run, would do).
 func printApply(c *ctx, out *app.ApplyOutcome) {
+	if !flags.json {
+		printOps(c, out.Plan)
+	}
+	printApplySummary(c, out)
+}
+
+// printOps lists the changes of plan, one line each: a link made (+),
+// taken out (−), replaced (relink), a record forgotten, or a skip (!).
+func printOps(c *ctx, plan engine.Plan) {
+	marks := map[string]string{"create": "+", "replace": i18n.T("relink"), "remove": "−", "skip": "!", "forget": i18n.T("forget")}
+	styles := map[string]func(string) string{"create": ok, "replace": accent, "remove": bad, "skip": warn, "forget": dim}
+	markW, targetW := 1, 10
+	for _, op := range plan.Ops {
+		if op.Action == "keep" || marks[op.Action] == "" {
+			continue
+		}
+		markW = max(markW, i18n.Width(marks[op.Action]))
+		targetW = max(targetW, i18n.Width(txt(op.Target.Name)))
+	}
+	for _, op := range plan.Ops {
+		if op.Action == "keep" || marks[op.Action] == "" {
+			continue
+		}
+		line := fmt.Sprintf("  %s %s %s", styles[op.Action](pad(marks[op.Action], markW)), dim(pad(txt(op.Target.Name), targetW)), txt(op.Name))
+		if op.Reason != "" {
+			line += "  " + dim(txt(op.Reason))
+		}
+		c.printf("%s\n", line)
+	}
+}
+
+// printApplySummary prints what printApply says after the changes: agents
+// not installed here, what was moved aside or refused, and the totals.
+func printApplySummary(c *ctx, out *app.ApplyOutcome) {
 	plan := out.Plan
 	counts := plan.Counts()
-	if !flags.json {
-		for _, op := range plan.Ops {
-			if op.Action == "keep" {
-				continue
-			}
-			mark := map[string]string{"create": ok("+"), "replace": accent("↻"), "remove": bad("−"), "skip": warn("!"), "forget": dim("?")}[op.Action]
-			line := fmt.Sprintf("  %s %-10s %s", mark, dim(txt(op.Target.Name)), txt(op.Name))
-			if op.Reason != "" {
-				line += "  " + dim(txt(op.Reason))
-			}
-			c.printf("%s\n", line)
-		}
-	}
 	for _, a := range sortedKeys(out.Absent) {
 		c.printf("  %s %s\n", dim("·"), dim(i18n.Sprintf("%s is not installed on this machine: %s not linked there", txt(a), plural(len(out.Absent[a]), "skill"))))
 	}
 	if !plan.Changes() {
-		msg := i18n.Sprintf("up to date, %d linked", counts["keep"])
+		msg := i18n.Sprintf("up to date, %d links", counts["keep"])
 		if counts["skip"] > 0 {
 			msg += i18n.Sprintf(", %d skipped", counts["skip"])
 		}
@@ -405,10 +434,10 @@ func printApply(c *ctx, out *app.ApplyOutcome) {
 		return
 	}
 	for _, b := range out.Backups {
-		c.printf("  %s %s\n", dim(i18n.T("moved aside")), txt(b))
+		c.printf("  %s %s\n", dim(i18n.T("moved aside")), txt(tildeIn(b)))
 	}
 	for _, r := range out.Refused {
-		c.printf("  %s %s\n", warn(i18n.T("! skipped")), txt(r))
+		c.printf("  %s %s\n", warn(i18n.T("! skipped")), txt(tildeIn(r)))
 	}
 	if out.Applied && len(out.Refused) > 0 {
 		c.printf("%s %s\n", warn("!"), dim(i18n.Sprintf("applied · %s · %d not changed", summary, len(out.Refused))))
@@ -495,6 +524,9 @@ func trashCmd() *cobra.Command {
 				t.Row(id, strings.Join(txts(it.Skills), ", "), dim(trashReason(it)), dim(txt(tildePath(it.Origin))), dim(it.When.Format("2006-01-02 15:04")))
 			}
 			c.printf("%s\n", t.Render())
+			if len(refused) > 0 {
+				c.printf("%s\n", dim(i18n.T("! marks an entry skd does not restore; why:")))
+			}
 			for _, r := range refused {
 				c.printf("%s\n", r)
 			}

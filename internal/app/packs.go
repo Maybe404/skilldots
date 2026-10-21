@@ -445,7 +445,7 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 		if err != nil {
 			return nil, err
 		}
-		_ = engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}})
+		s.noteWarn(engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}}))
 		// Keep local overrides so restoring the directory restores its selections.
 		ap, err := s.Apply(ApplyOptions{})
 		return &RemoveOutcome{Entry: *e, Apply: ap, Trash: engine.TrashID(s.Lib, to)}, err
@@ -481,7 +481,7 @@ func (s *Session) Remove(r Ref) (*RemoveOutcome, error) {
 			lp = &lock.Pack{Commit: wasLock.Commit, Ref: wasLock.Ref, Upstream: wasLock.Upstream,
 				Skills: map[string]*lock.Skill{e.Name: wasLock.Skills[e.Name]}}
 		}
-		_ = engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}, Repo: p.Repo, Pack: was, Lock: lp})
+		s.noteWarn(engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonRemove, Skills: []string{e.Name}, Repo: p.Repo, Pack: was, Lock: lp}))
 		out.Trash = engine.TrashID(s.Lib, to)
 	}
 	out.Apply, err = s.saveAndApply()
@@ -581,7 +581,7 @@ func (s *Session) purge(p *manifest.Pack, links []string, note *engine.TrashNote
 	}
 	out := &PurgeOutcome{Repo: p.Repo, Unlinked: links, Apply: ap}
 	if to != "" {
-		_ = engine.SetTrashNote(to, note)
+		s.noteWarn(engine.SetTrashNote(to, note))
 		out.Trash = engine.TrashID(s.Lib, to)
 	}
 	return out, nil

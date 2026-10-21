@@ -115,6 +115,17 @@ func printRecord(c *ctx, r app.UpdateRecord) {
 	}
 }
 
+// tildeIn writes every path in the home directory that s holds as ~/…
+// (a line such as "<path> → <path>").
+func tildeIn(s string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || home == string(filepath.Separator) {
+		return s
+	}
+	home = strings.TrimSuffix(home, string(filepath.Separator))
+	return strings.ReplaceAll(s, home+string(filepath.Separator), "~"+string(filepath.Separator))
+}
+
 // tildePath writes a path in the home directory as ~/…, as `skd list`
 // shows the library.
 func tildePath(p string) string {

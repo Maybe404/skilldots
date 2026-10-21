@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -10,6 +11,16 @@ import (
 // (placed.json, local-trash.json, trash-notes.json), which must never be
 // the real user's.
 func TestMain(m *testing.M) {
+	// A writer process of TestTrashNotesAcrossProcesses.
+	if prefix := os.Getenv("SKD_NOTES_WRITER"); prefix != "" {
+		for i := 0; i < notesPerWriter; i++ {
+			if err := SetTrashNote(fmt.Sprintf("/trash/%s-%d", prefix, i), &TrashNote{Reason: ReasonRemove}); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
+		os.Exit(0)
+	}
 	home, err := os.MkdirTemp("", "skd-engine-home")
 	if err != nil {
 		panic(err)

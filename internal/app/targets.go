@@ -23,30 +23,49 @@ type TargetsOutcome struct {
 	// was asked to put it on that it was already on.
 	NotThere     []string
 	AlreadyThere []string
+	// SharedBefore and SharedAfter are the agents that read the skill (or
+	// the pack's skills) through the shared directory ~/.agents/skills
+	// before and after the edit (engine.Entry.ViaShared): no link of
+	// their own is made or kept for them.
+	SharedBefore []string
+	SharedAfter  []string
 }
 
 // EditTargets replaces the targets of a skill (or, when r names no skill
 // but a pack, of the pack) with edit(current), saves and re-links.
 // Targets inherit: manifest default → pack → skill; a skill's current
-// list is what it resolved to, a pack's is its own or the default.
+// list is what it resolved to, a pack's is its own or the default, "*"
+// written out as the agents it stands for here (engine.ExpandTargets, the
+// same expansion Resolve uses).
 func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*TargetsOutcome, error) {
+	return s.editTargets(r, func(_, expanded []string) []string { return edit(expanded) })
+}
+
+// editTargets is EditTargets whose edit also gets the list as written
+// (raw, with "*" when it has it), so an edit that only adds an agent can
+// keep "*" rather than write out the agents it stands for.
+func (s *Session) editTargets(r Ref, edit func(raw, expanded []string) []string) (*TargetsOutcome, error) {
 	m := s.Lib.Manifest
 	var next []string
 	out := &TargetsOutcome{}
+	var affected func(e engine.Entry) bool
+	entries, err := s.Resolve()
+	if err != nil {
+		return nil, err
+	}
 	if r.Pack == "" {
-		entries, err := s.Resolve()
-		if err != nil {
-			return nil, err
-		}
 		e, err := s.Entry(entries, r)
 		if err != nil {
 			return nil, err
 		}
 		if e != nil {
+			raw := rawTargets(m, e)
 			out.Before = append([]string(nil), e.TargetNames...)
-			next = nonNil(edit(append([]string(nil), e.TargetNames...)))
+			next = nonNil(edit(raw, append([]string(nil), e.TargetNames...)))
 			setEntryTargets(m, e, next)
 			out.Label = e.LinkName
+			kind, origin, name := e.Kind, e.Origin, e.Name
+			affected = func(x engine.Entry) bool { return x.Kind == kind && x.Origin == origin && x.Name == name }
 		} else if r.Kind != "" {
 			return nil, i18n.Errorf("no skill %q", r.String())
 		}
@@ -63,33 +82,93 @@ func (s *Session) EditTargets(r Ref, edit func(cur []string) []string) (*Targets
 			}
 			return nil, i18n.Errorf("no skill or pack %q", key)
 		}
-		cur := append([]string(nil), m.Targets.Default...)
+		raw := append([]string(nil), m.Targets.Default...)
 		if p.Targets != nil {
-			cur = append([]string(nil), *p.Targets...)
+			raw = append([]string(nil), *p.Targets...)
 		}
-		// An edit names agents: "*" becomes the agents it stands for here.
-		cur = engine.ExpandTargets(cur, m.Targets.Default, s.Reg)
+		cur := engine.ExpandTargets(raw, m.Targets.Default, s.Reg)
 		out.Before = append([]string(nil), cur...)
-		next = nonNil(edit(cur))
+		next = nonNil(edit(raw, cur))
 		p.Targets = &next
 		out.Label, out.Pack = p.Repo, true
+		repo := p.Repo
+		affected = func(x engine.Entry) bool { return x.Kind == engine.KindVendor && x.Origin == repo }
 	}
+	out.SharedBefore = viaShared(entries, affected)
 	out.Targets = next
 	ap, err := s.saveAndApply()
 	if err != nil {
 		return nil, err
 	}
 	out.Apply = ap
+	if after, err := s.Resolve(); err == nil {
+		out.SharedAfter = viaShared(after, affected)
+	}
 	return out, nil
 }
 
-// Enable adds agents (the manifest default when none) to r's targets.
-func (s *Session) Enable(r Ref, agents []string) (*TargetsOutcome, error) {
-	out, err := s.EditTargets(r, func(cur []string) []string {
-		if len(agents) == 0 {
-			return dedupe(append(cur, s.Lib.Manifest.Targets.Default...))
+// viaShared are the agents that read the entries for which in is true
+// through the shared directory (engine.Entry.ViaShared).
+func viaShared(entries []engine.Entry, in func(engine.Entry) bool) []string {
+	var out []string
+	for _, e := range entries {
+		if in(e) {
+			for _, a := range e.ViaShared {
+				if !slices.Contains(out, a) {
+					out = append(out, a)
+				}
+			}
 		}
-		return dedupe(append(cur, agents...))
+	}
+	return out
+}
+
+// rawTargets is e's target list as skills.toml has it, inherited and with
+// "*" not expanded.
+func rawTargets(m *manifest.Manifest, e *engine.Entry) []string {
+	list := m.Targets.Default
+	switch e.Kind {
+	case engine.KindVendor:
+		if p := m.FindPack(e.Origin); p != nil {
+			if p.Targets != nil {
+				list = *p.Targets
+			}
+			if o := p.Override(e.Name, false); o != nil && o.Targets != nil {
+				list = *o.Targets
+			}
+		}
+	case engine.KindApp:
+		for _, a := range m.Apps {
+			if a.Name == e.Name && a.Targets != nil {
+				list = *a.Targets
+			}
+		}
+	default:
+		for _, l := range m.Locals {
+			if l.Name == e.Name && l.Targets != nil {
+				list = *l.Targets
+			}
+		}
+	}
+	return append([]string(nil), list...)
+}
+
+// Enable adds agents (the manifest default when none) to r's targets. Only
+// those agents are added: a list with "*" keeps it, and an agent "*"
+// already stands for changes nothing.
+func (s *Session) Enable(r Ref, agents []string) (*TargetsOutcome, error) {
+	want := agents
+	if len(want) == 0 {
+		want = s.Lib.Manifest.Targets.Default
+	}
+	out, err := s.editTargets(r, func(raw, expanded []string) []string {
+		next := raw
+		for _, a := range want {
+			if !slices.Contains(expanded, a) {
+				next = append(next, a)
+			}
+		}
+		return dedupe(next)
 	})
 	if out != nil {
 		for _, a := range agents {
@@ -102,7 +181,8 @@ func (s *Session) Enable(r Ref, agents []string) (*TargetsOutcome, error) {
 }
 
 // Disable removes agents (all when none) from r's targets. The library
-// keeps the files.
+// keeps the files. A list with "*" is written out as the agents it stands
+// for, all of them but those removed.
 func (s *Session) Disable(r Ref, agents []string) (*TargetsOutcome, error) {
 	out, err := s.EditTargets(r, s.dropAgents(agents))
 	if out != nil {

@@ -51,11 +51,11 @@
 @ subscribe to %s (link target is a clone of it)
 = 订阅 %s（链接指向它的克隆）
 
-@ copy into skills/ as your own
-= 复制到 skills/，成为你自己的
+@ copy into skills/ as a local skill
+= 复制到 skills/，作为本地 skill
 
-@ copy into skills/ as your own (no known upstream)
-= 复制到 skills/，成为你自己的（不知道上游）
+@ copy into skills/ as a local skill (no known upstream)
+= 复制到 skills/，作为本地 skill（不知道上游）
 
 @ enable for %s
 = 装到 %s
@@ -336,7 +336,7 @@
 @ %s has no skill %s now; copy it into skills/ by hand to keep it
 = %s 现在没有 skill %s 了；要保留它，请手动复制到 skills/
 
-@ differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead
+@ differs from %s upstream (changed here, or an older version): copy into skills/ as a local skill; `skd add %s --skill %s` takes upstream's instead
 = 和上游 %s 的内容不同（在本机改过，或是旧版本）：复制到 skills/，作为本地 skill；要改用上游的版本，运行 `skd add %s --skill %s`
 
 @ trash entry %q is not named as skd names what it sets aside; look at it by hand in the library's %s
@@ -347,3 +347,15 @@
 
 @ git cat-file answered %q, not a file's contents
 = git cat-file 返回了 %q，而不是文件内容
+
+@ %s already reads the library's copy from ~/.agents/skills; this second copy goes to the trash
+= %s 已经从 ~/.agents/skills 读到资料库里的这份；这份多出来的副本会移到回收站
+
+@ differs from the library's %s, which %s already reads from ~/.agents/skills; compare them and remove one by hand
+= 和资料库里的 %s 内容不同，而 %s 已经从 ~/.agents/skills 读到资料库里的那份；请比较后手动去掉其中一份
+
+@ %s differs from the library's %s, which %s reads from ~/.agents/skills; left in place — compare them and remove one by hand
+= %s 和资料库里的 %s 内容不同，而 %s 会从 ~/.agents/skills 读到资料库里的那份；已原样保留——请比较后手动去掉其中一份
+
+@ no trash entry holds the pack %q (give an id as `skd trash` lists it, the repository of a purged pack, or the name of a skill in the trash)
+= 回收站里没有来源 %q 的条目（请给出 `skd trash` 列出的 ID、被清除的来源的仓库名，或回收站里某个 skill 的名字）

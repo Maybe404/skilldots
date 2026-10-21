@@ -97,6 +97,9 @@ func (s *Session) DeleteTrashEntry(id string) error {
 		return err
 	}
 	os.Remove(p + ".origin")
+	// What skd remembered about it goes with it: a later entry of the same
+	// name in that batch must not look like this one.
+	engine.ForgetTrashEntry(p)
 	if items, err := os.ReadDir(filepath.Dir(p)); err == nil && len(items) == 0 {
 		os.Remove(filepath.Dir(p))
 	}

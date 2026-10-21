@@ -20,9 +20,10 @@ import (
 // other link, and disabling the app then removes its links outright.
 func TestUpgradeOfATypicalLibraryChangesNothing(t *testing.T) {
 	lib, reg, home := newTestLib(t)
-	all := []string{"agents", "claude", "codex", "gemini", "grok"}
+	// Agents that do not read ~/.agents/skills: each gets links of its own.
+	all := []string{"agents", "claude", "kiro", "qoder", "iflow"}
 	lib.Manifest.Targets.Default = all
-	for _, d := range []string{".codex", ".gemini", ".grok"} {
+	for _, d := range []string{".kiro", ".qoder", ".iflow"} {
 		os.MkdirAll(filepath.Join(home, d), 0o755) // installed here
 	}
 	writeSkill(t, filepath.Join(lib.Root, "skills", "mine"), "mine")

@@ -407,10 +407,10 @@ func printReport(c *ctx, r *engine.SyncReport) {
 		c.printf("  %s %s\n", warn(pad(i18n.T("rejected"), 13)), rj)
 	}
 	for _, b := range r.Backups {
-		c.printf("  %s %s\n", dim(pad(i18n.T("moved aside"), 13)), txt(b))
+		c.printf("  %s %s\n", dim(pad(i18n.T("moved aside"), 13)), txt(tildeIn(b)))
 	}
 	if len(r.Changed) > 0 {
-		c.printf("  %s\n", dim(i18n.Sprintf("see changes: git -C %s diff -- vendor/%s", c.lib.Root, r.Repo)))
+		c.printf("  %s %s\n", dim(pad(i18n.T("see changes"), 13)), dim(fmt.Sprintf("git -C %s diff -- vendor/%s", tildePath(c.lib.Root), r.Repo)))
 	}
 }
 
@@ -432,7 +432,7 @@ func enableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return targetsDone(c)(c.Enable(app.KeyRef(args[0]), agents))
+			return targetsDone(c, agents, true)(c.Enable(app.KeyRef(args[0]), agents))
 		},
 	}
 	cmd.Flags().StringSliceVar(&agents, "agent", nil, i18n.T("targets to add (default: manifest default)"))
@@ -450,15 +450,16 @@ func disableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return targetsDone(c)(c.Disable(app.KeyRef(args[0]), agents))
+			return targetsDone(c, agents, false)(c.Disable(app.KeyRef(args[0]), agents))
 		},
 	}
 	cmd.Flags().StringSliceVar(&agents, "agent", nil, i18n.T("targets to remove (default: all)"))
 	return cmd
 }
 
-// targetsDone reports a targets edit like `skd apply`.
-func targetsDone(c *ctx) func(*app.TargetsOutcome, error) error {
+// targetsDone reports a targets edit like `skd apply`; agents are the ones
+// the user named, put on (on) or taken off.
+func targetsDone(c *ctx, agents []string, on bool) func(*app.TargetsOutcome, error) error {
 	return func(out *app.TargetsOutcome, err error) error {
 		if err != nil {
 			return err
@@ -472,6 +473,16 @@ func targetsDone(c *ctx) func(*app.TargetsOutcome, error) error {
 		}
 		for _, a := range out.AlreadyThere {
 			c.printf("%s %s\n", dim("·"), i18n.Sprintf("%s was already installed for %s", txt(out.Label), txt(a)))
+		}
+		// An agent that reads ~/.agents/skills gets the skill there, not
+		// from a link of its own.
+		for _, a := range agents {
+			switch {
+			case on && slices.Contains(out.SharedAfter, a):
+				c.printf("%s %s\n", dim("·"), i18n.Sprintf("%s reads %s from the shared directory ~/.agents/skills (agents): no second link in its own directory", txt(a), txt(out.Label)))
+			case !on && slices.Contains(out.SharedBefore, a) && !slices.Contains(agents, "agents"):
+				c.printf("%s %s\n", warn("!"), i18n.Sprintf("%s still reads %s from the shared directory ~/.agents/skills: take it off agents too (skd disable %s --agent agents) to keep it from %s", txt(a), txt(out.Label), txt(out.Label), txt(a)))
+			}
 		}
 		printApply(c, out.Apply)
 		c.jsonOut(out.Apply)
@@ -534,13 +545,27 @@ func purgeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printApply(c, out.Apply)
+			// The links were listed above; the rest of the plan (skips)
+			// and the totals follow.
+			printOps(c, skipsOnly(out.Apply.Plan))
+			printApplySummary(c, out.Apply)
 			printUndo(c, out.Trash)
 			c.jsonOut(out)
 			return nil
 		},
 	}
 	return cmd
+}
+
+// skipsOnly is plan with its skips only.
+func skipsOnly(plan engine.Plan) engine.Plan {
+	var out engine.Plan
+	for _, op := range plan.Ops {
+		if op.Action == "skip" {
+			out.Ops = append(out.Ops, op)
+		}
+	}
+	return out
 }
 
 // printUndo says where in the trash the files went and how to put them

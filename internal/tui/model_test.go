@@ -330,7 +330,7 @@ func TestViewLayout(t *testing.T) {
 		all := strings.Join(lines, "\n")
 		for _, want := range []string{
 			"◆ skilldots", "v1.2.3", "agent-skills", "main", "synced", // header
-			"PACKS", "MINE", "PRIVATE", "APPS", "mattpocock/skills", "subagent", "html-document", "surge", // left
+			"PACKS", "LOCAL", "PRIVATE", "APPS", "mattpocock/skills", "subagent", "html-document", "surge", // left
 			"49dd158", "3 days ago", "MIT", "grill-me", "productivity", "agents claude", "not installed", // right
 			"a add", "q quit", // footer
 		} {
@@ -418,7 +418,7 @@ func TestNavigation(t *testing.T) {
 	if p := m.currentPack(); p == nil || p.Repo != "kepano/obsidian-skills" {
 		t.Fatalf("down: %+v", p)
 	}
-	m, _ = press(t, m, "j", "j") // past the last pack, over the blank and header, onto MINE
+	m, _ = press(t, m, "j", "j") // past the last pack, over the blank and header, onto LOCAL
 	if r := m.currentLeft(); r == nil || r.kind != rowSkill || r.skill.Name != "subagent" {
 		t.Fatalf("j skips headers: %+v", r)
 	}

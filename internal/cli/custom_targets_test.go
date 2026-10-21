@@ -294,16 +294,17 @@ func TestCloneAsksAboutCustomTargets(t *testing.T) {
 // A library that uses only built-in targets works as it always has: no
 // approval is asked for or written.
 func TestBuiltinTargetsNeedNoApproval(t *testing.T) {
+	// Agents that do not read ~/.agents/skills: each gets links of its own.
 	e := newEnv(t)
-	e.installed(".claude", ".codex", ".gemini", ".grok")
-	e.write("src/skills.toml", "[targets]\ndefault = [\"agents\", \"claude\", \"codex\", \"gemini\", \"grok\"]\n")
+	e.installed(".claude", ".kiro", ".qoder", ".iflow")
+	e.write("src/skills.toml", "[targets]\ndefault = [\"agents\", \"claude\", \"kiro\", \"qoder\", \"iflow\"]\n")
 	e.write("src/skills/tdd/SKILL.md", "---\nname: tdd\ndescription: d\n---\n")
 	repo := e.publish(e.p("src"))
 	out, errOut, code := e.skd("", "clone", repo, e.p("lib"))
 	if code != 0 || strings.Contains(out+errOut, "custom target") || strings.Contains(out+errOut, "warning") {
 		t.Fatalf("clone: exit %d\n%s\n%s", code, out, errOut)
 	}
-	for _, d := range []string{".agents", ".claude", ".codex", ".gemini", ".grok"} {
+	for _, d := range []string{".agents", ".claude", ".kiro", ".qoder", ".iflow"} {
 		isLink(t, e.p(d+"/skills/tdd"), e.p("lib"))
 	}
 	if _, err := os.Stat(e.approvals()); err == nil {
@@ -314,8 +315,8 @@ func TestBuiltinTargetsNeedNoApproval(t *testing.T) {
 	// (to their dotfiles) is used as before.
 	lib := e.p("lib")
 	os.MkdirAll(e.p("dotfiles"), 0o755)
-	os.Rename(e.p(".codex/skills"), e.p("dotfiles/codex-skills"))
-	os.Symlink(e.p("dotfiles/codex-skills"), e.p(".codex/skills"))
+	os.Rename(e.p(".kiro/skills"), e.p("dotfiles/kiro-skills"))
+	os.Symlink(e.p("dotfiles/kiro-skills"), e.p(".kiro/skills"))
 	for _, args := range [][]string{{"apply"}, {"apply", "--force"}, {"apply", "--force", "--yes"}} {
 		o, eo, code := e.skd(lib, args...)
 		if code != 0 || !strings.Contains(o, "up to date") || strings.Contains(o+eo, "skipped") || strings.Contains(o+eo, "warning") || strings.Contains(o+eo, "custom target") {
@@ -323,10 +324,10 @@ func TestBuiltinTargetsNeedNoApproval(t *testing.T) {
 		}
 	}
 	e.ok(lib, "new", "notes")
-	for _, d := range []string{".agents", ".claude", ".codex", ".gemini", ".grok"} {
+	for _, d := range []string{".agents", ".claude", ".kiro", ".qoder", ".iflow"} {
 		isLink(t, e.p(d+"/skills/notes"), lib)
 	}
-	isLink(t, e.p("dotfiles/codex-skills/notes"), lib)
+	isLink(t, e.p("dotfiles/kiro-skills/notes"), lib)
 	if m, _ := filepath.Glob(filepath.Join(lib, ".trash", "*")); len(m) != 0 {
 		t.Errorf("trash: %v", m)
 	}

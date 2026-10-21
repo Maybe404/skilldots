@@ -188,7 +188,7 @@ func scanFixture() *ScanResult {
 		Proposals: []app.Proposal{
 			{Item: it("agents", "dup", scan.Copy), Kind: "skip", Label: "resolve by hand"},
 			{Item: it("claude", "gone", scan.Broken), Kind: "drop", Label: "broken link; move to the trash"},
-			{Item: it("agents", "x", scan.Copy), Kind: "own", Label: "copy into skills/ as your own"},
+			{Item: it("agents", "x", scan.Copy), Kind: "own", Label: "copy into skills/ as a local skill"},
 			{Item: it("claude", "x", scan.Copy), Kind: "enable", Label: "enable for claude", Via: "own"},
 		},
 	}

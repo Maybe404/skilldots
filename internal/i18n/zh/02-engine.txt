@@ -15,8 +15,8 @@
 @ points at the previous library location %s
 = 指向资料库先前的位置 %s
 
-@ modified since skilldots wrote it (--force)
-= 自 skilldots 写入后已被修改（--force）
+@ changed since skd wrote it; it goes to the trash first
+= skd 写入后又被改过；先移到回收站
 
 @ modified since skilldots wrote it; use --force
 = 自 skilldots 写入后已被修改；请用 --force
@@ -24,8 +24,8 @@
 @ adopting existing link
 = 收编已有的链接
 
-@ unmanaged entry (--force)
-= 未受管理的条目（--force）
+@ not made by skd; it goes to the trash first
+= 不是 skd 建的；先移到回收站
 
 @ exists and not managed by skilldots; use --force
 = 已存在，且不受 skilldots 管理；请用 --force
@@ -236,3 +236,6 @@
 
 @ %s is not installed on this machine
 = 本机没有安装 %s
+
+@ %s was not valid JSON (%v); it is kept as %s and a new one is started: entries set aside before are restored without being selected again
+= %s 不是有效的 JSON（%v）；原文件保留为 %s，并新建了一份：之前进回收站的条目恢复时不会自动重新选中

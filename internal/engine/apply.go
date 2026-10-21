@@ -171,7 +171,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 			case prev != nil:
 				// We placed it, but it was modified or replaced since.
 				if forceKey(key) {
-					op.Action, op.Reason = "replace", i18n.T("modified since skilldots wrote it (--force)")
+					op.Action, op.Reason = "replace", i18n.T("changed since skd wrote it; it goes to the trash first")
 				} else {
 					op.Action, op.Reason = "skip", i18n.T("modified since skilldots wrote it; use --force")
 				}
@@ -180,7 +180,7 @@ func MakePlanForce(lib *library.Library, entries []Entry, forceKey func(key stri
 				if isLinkTo(dest, e.Dir) {
 					op.Action, op.Reason = "create", i18n.T("adopting existing link")
 				} else if forceKey(key) {
-					op.Action, op.Reason = "replace", i18n.T("unmanaged entry (--force)")
+					op.Action, op.Reason = "replace", i18n.T("not made by skd; it goes to the trash first")
 				} else {
 					op.Action, op.Reason = "skip", i18n.T("exists and not managed by skilldots; use --force")
 				}

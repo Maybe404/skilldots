@@ -177,6 +177,30 @@ func HoldContext(ctx context.Context, repo string) (unlock func(), err error) {
 	}
 }
 
+// LockFile takes an exclusive lock on the file at path (made when it is
+// not there) against other processes, waiting while one holds it, and
+// returns the unlock function. When the file cannot be made or locked (a
+// read-only folder, a file system without locks) it returns at once and
+// the caller goes on without it, as Hold does.
+func LockFile(path string) (unlock func()) {
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return func() {}
+	}
+	for {
+		ok, err := tryLock(f)
+		if err != nil {
+			f.Close()
+			return func() {}
+		}
+		if ok {
+			return func() { unlockFile(f); f.Close() }
+		}
+		time.Sleep(holdPoll)
+	}
+}
+
 func setOwned(repo string, v bool) {
 	holdMu.Lock()
 	defer holdMu.Unlock()

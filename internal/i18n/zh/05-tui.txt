@@ -11,7 +11,7 @@
 = 拉取 %s
 
 @ installed
-= 已安装
+= 已引入
 
 @ (no category)
 = （无分类）
@@ -74,7 +74,7 @@
 = 请先选中要 fork 的 skill
 
 @ %s is not installed · space installs it, then fork
-= %s 尚未安装 · 按空格安装，然后再 fork
+= %s 还没有引入 · 按空格引入并装上，然后再 fork
 
 @ %s is already yours · edit it in %s
 = %s 已经是你自己的 · 请直接到 %s 编辑
@@ -331,7 +331,7 @@
 = 请先选中要打开的 skill
 
 @ %s is not installed · space installs it
-= %s 尚未安装 · 按空格安装
+= %s 还没有引入 · 按空格引入并装上
 
 @ opening %s
 = 打开 %s
@@ -437,7 +437,7 @@
 = 这里没有可切换的
 
 @ installing %s
-= 安装 %s
+= 正在引入 %s
 
 @ disabling %s
 = 正在卸下 %s
@@ -470,7 +470,7 @@
 = 链接
 
 @ %s is not installed; nothing to remove
-= %s 尚未安装；没有可移除的
+= %s 还没有引入；没有可移除的
 
 @ Remove %s
 = 移除 %s
@@ -926,7 +926,7 @@
 = 还没有引入任何 skill · 按 u 拉取上游
 
 @ not installed
-= 未安装
+= 未引入
 
 @ name conflict · not linked
 = 名称冲突 · 未链接
@@ -1024,7 +1024,7 @@
 @ clear
 = 清除
 
-@ MINE
+@ LOCAL
 = 本地
 
 @ PRIVATE
@@ -1110,3 +1110,6 @@
 
 @ not installed here, skipped: %s
 = 本机没有安装，已跳过：%s
+
+@ %s through agents
+= %s 经 agents 读到

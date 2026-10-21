@@ -197,7 +197,7 @@ func TestOwnLinksBehaveAsBefore(t *testing.T) {
 	}
 	// Links made by an older skd, which kept no record.
 	os.Remove(placed)
-	if out := e.ok(lib, "apply"); !strings.Contains(out, "up to date, 6 linked") {
+	if out := e.ok(lib, "apply"); !strings.Contains(out, "up to date, 6 links") {
 		t.Fatalf("apply: %s", out)
 	}
 	e.ok(lib, "disable", "a")

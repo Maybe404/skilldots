@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -75,6 +76,18 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 			if enabled {
 				continue
 			}
+			if t, err := s.Reg.Get(it.Target); err == nil && engine.ReachesViaShared(s.Lib, e, t) {
+				// The agent reads the library's copy from ~/.agents/skills
+				// already: this one is a second copy it loads.
+				if sameContent(it, e.Dir) {
+					out = append(out, Proposal{Item: it, Kind: "enable", Entry: engine.Qualified(*e),
+						Label: i18n.Sprintf("%s already reads the library's copy from ~/.agents/skills; this second copy goes to the trash", it.Target)})
+				} else {
+					out = append(out, Proposal{Item: it, Kind: "skip",
+						Label: i18n.Sprintf("differs from the library's %s, which %s already reads from ~/.agents/skills; compare them and remove one by hand", e.LinkName, it.Target)})
+				}
+				continue
+			}
 			out = append(out, Proposal{Item: it, Kind: "enable", Label: i18n.Sprintf("enable for %s (already in library)", it.Target), Entry: engine.Qualified(*e)})
 			continue
 		}
@@ -96,10 +109,10 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 			if repo := gitRemote(it.LinkTo); repo != "" {
 				p.Kind, p.Repo, p.Skill, p.Label = "pack", repo, it.Name, i18n.Sprintf("subscribe to %s (link target is a clone of it)", repo)
 			} else {
-				p.Kind, p.Label = "own", i18n.T("copy into skills/ as your own")
+				p.Kind, p.Label = "own", i18n.T("copy into skills/ as a local skill")
 			}
 		default:
-			p.Kind, p.Label = "own", i18n.T("copy into skills/ as your own (no known upstream)")
+			p.Kind, p.Label = "own", i18n.T("copy into skills/ as a local skill (no known upstream)")
 		}
 		seen[it.Name] = true
 		out = append(out, p)
@@ -164,7 +177,7 @@ func (s *Session) checkUpstream(props []Proposal) {
 			continue
 		}
 		p.Kind, p.Repo, p.Skill, p.Differs = "own", "", "", true
-		p.Label = i18n.Sprintf("differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead", p.Upstream, p.Upstream, p.Item.Name)
+		p.Label = i18n.Sprintf("differs from %s upstream (changed here, or an older version): copy into skills/ as a local skill; `skd add %s --skill %s` takes upstream's instead", p.Upstream, p.Upstream, p.Item.Name)
 	}
 }
 
@@ -483,10 +496,56 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		// link changes), not logged here as well.
 		ap.Backups = append(ap.Backups, p.Item.Path+" → "+lib.Rel(to))
 	}
+	// An agent that reads ~/.agents/skills gets an adopted skill from there
+	// (engine.Entry.ViaShared): apply makes no link in its own directory,
+	// so the copy found there would be a second one it loads. It goes to
+	// the trash when it is what the library holds; a copy that differs is
+	// left in place with a warning.
+	if after, err := s.Resolve(); err == nil {
+		for _, p := range props {
+			if p.Kind == "skip" || p.Kind == "drop" || keep[p.Item.Target+"/"+p.Item.Name] || !fsutil.Lexists(p.Item.Path) {
+				continue
+			}
+			var e *engine.Entry
+			for i := range after {
+				if x := &after[i]; slices.Contains(x.ViaShared, p.Item.Target) && x.LinkName == adoptedAs(p.Item) {
+					e = x
+				}
+			}
+			if e == nil {
+				continue
+			}
+			t, err := s.Reg.Get(p.Item.Target)
+			if err != nil || filepath.Dir(p.Item.Path) != t.Path || t.Intact() != nil {
+				continue
+			}
+			if !sameContent(p.Item, e.Dir) {
+				s.logf(Warn, "%s differs from the library's %s, which %s reads from ~/.agents/skills; left in place — compare them and remove one by hand", p.Item.Path, e.LinkName, t.Name)
+				continue
+			}
+			to, err := engine.Trash(lib, p.Item.Path)
+			if err != nil {
+				return nil, err
+			}
+			ap.Backups = append(ap.Backups, p.Item.Path+" → "+lib.Rel(to))
+		}
+	}
 	if out.Failed > 0 {
 		return out, i18n.Errorf("%d repositories could not be fetched", out.Failed)
 	}
 	return out, nil
+}
+
+// sameContent reports whether the agent entry it holds exactly what dir
+// holds: a copy (followed when it is a link) with the same files and
+// nothing a hash cannot see.
+func sameContent(it scan.Item, dir string) bool {
+	src := it.Path
+	if it.LinkTo != "" {
+		src = it.LinkTo
+	}
+	h, err := fsutil.HashTree(dir)
+	return err == nil && fsutil.Pristine(src, h)
 }
 
 func short(s string) string {

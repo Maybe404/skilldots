@@ -88,12 +88,12 @@ func TestChineseDashboardIsChinese(t *testing.T) {
 	useLanguage(t, i18n.ZH)
 	m, _ := newModel(t, sampleSnapshot(), 120, 36)
 	v := strings.Join(plain(m), "\n")
-	for _, want := range []string{"添加", "更新", "切换", "退出", "帮助", "已同步", "来源", "本地", "私有", "应用", "agent", "未安装", "SKILL", "分类"} {
+	for _, want := range []string{"添加", "更新", "切换", "退出", "帮助", "已同步", "来源", "本地", "私有", "应用", "agent", "未引入", "SKILL", "分类"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("no %q in the Chinese dashboard:\n%s", want, v)
 		}
 	}
-	for _, english := range []string{" add ", " quit", "synced", "not installed", "MINE", "CATEGORY"} {
+	for _, english := range []string{" add ", " quit", "synced", "not installed", "LOCAL", "CATEGORY"} {
 		if strings.Contains(v, english) {
 			t.Errorf("English %q left in the Chinese dashboard:\n%s", english, v)
 		}
