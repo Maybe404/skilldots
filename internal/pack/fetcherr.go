@@ -126,6 +126,13 @@ func fetchKind(msg string, ref, ssh bool) string {
 	switch {
 	case has("Host key verification failed", "REMOTE HOST IDENTIFICATION HAS CHANGED"):
 		return FetchHostKey
+	// Before anything about the repository: over SSH a connection that
+	// failed also ends in "Could not read from remote repository".
+	case has("Could not resolve host", "Could not resolve hostname", "Failed to connect", "Connection timed out",
+		"Connection refused", "Network is unreachable", "No route to host", "SSL_connect", "SSL_ERROR",
+		"Operation timed out", "Connection closed by", "Connection reset", "kex_exchange_identification",
+		"Broken pipe", "nodename nor servname", "Name or service not known", "Temporary failure in name resolution"):
+		return FetchOffline
 	case ref && has("Remote branch", "couldn't find remote ref", "not found in upstream"):
 		return FetchNoRef
 	case has("Permission denied (publickey"):
@@ -139,9 +146,6 @@ func fetchKind(msg string, ref, ssh bool) string {
 	case has("could not read Username", "could not read Password", "terminal prompts disabled",
 		"Repository not found", "returned error: 404", "does not appear to be a git repository", "does not exist"):
 		return FetchNotFound
-	case has("Could not resolve host", "Failed to connect", "Connection timed out", "Connection refused",
-		"Network is unreachable", "SSL_connect", "SSL_ERROR", "Operation timed out", "Could not resolve hostname"):
-		return FetchOffline
 	}
 	return ""
 }
