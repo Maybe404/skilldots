@@ -1,12 +1,12 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { CloudUpload } from "lucide-react"
+import { ArrowDownUp } from "lucide-react"
 
 import { errorText, useApp } from "@/lib/app-state"
 import { tildify } from "@/lib/agents"
-import { backend, type CliStatus, type Config, type Theme } from "@/lib/backend"
+import { backend, SYNC_REF, type CliStatus, type Config, type Theme } from "@/lib/backend"
 import { ago } from "@/lib/i18n"
-import { Page } from "@/components/app/bits"
+import { ConflictMark, Page } from "@/components/app/bits"
 import { StyleSwitch } from "@/components/app/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,7 +40,7 @@ function Row({ label, hint, htmlFor, children }: { label: string; hint?: string;
 
 /** Settings shared with the CLI, plus the desktop's own style switch. */
 export function SettingsPage() {
-  const { t, config, setConfig, status, openDialog, run, runTask, reload } = useApp()
+  const { t, config, setConfig, status, openDialog, syncLibrary, syncShelved, openResolve, run } = useApp()
   const editors: [Config["editor"], string][] = [
     ["auto", t("editorAuto")],
     ["code", "VS Code"],
@@ -56,11 +56,8 @@ export function SettingsPage() {
       return
     }
     setSyncing(true)
-    const r = await runTask(t("syncing"), () => backend.sync({}))
+    await syncLibrary()
     setSyncing(false)
-    if (!r.ok) return
-    await reload()
-    toast(r.value.committed ? t("syncedToast", { remote: r.value.remote }) : t("nothingToSync"))
   }
 
   return (
@@ -183,11 +180,21 @@ export function SettingsPage() {
                   {status?.lastSync && ` · ${t("lastSync", { ago: ago(status.lastSync, t) })}`}
                 </div>
               </div>
-              <Button onClick={() => void backup()} disabled={syncing} variant={status?.changes || !status?.remote ? "default" : "secondary"} className="px-3">
-                {syncing ? <Spinner /> : <CloudUpload aria-hidden strokeWidth={1.8} />}
-                {syncing ? t("syncing") : status?.changes || !status?.remote ? t("syncNow") : t("backedUp")}
+              {/* Syncing also pulls, so it stays offered when nothing here changed. */}
+              <Button onClick={() => void backup()} disabled={syncing || !!status?.syncing} variant={status?.changes || !status?.remote ? "default" : "secondary"} className="px-3">
+                {syncing ? <Spinner /> : <ArrowDownUp aria-hidden strokeWidth={1.8} />}
+                {syncing ? t("syncing") : t("syncNow")}
               </Button>
             </div>
+            {(status?.syncing || !!syncShelved?.length) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b-row py-2.5 fs-meta text-ink" role="status">
+                <ConflictMark />
+                {status?.syncing ? t("syncResolvingBar") : t("syncShelvedToast", { n: syncShelved?.length ?? 0 })}
+                <Button variant="link" size="inline" className="fs-meta" onClick={() => openResolve(SYNC_REF)}>
+                  {t("resolveConflicts")}
+                </Button>
+              </div>
+            )}
             <p className="py-3 fs-meta text-mut">
               {t("backupNote2")}{" "}
               <Button variant="link" size="inline" onClick={() => openDialog({ kind: "sync" })}>

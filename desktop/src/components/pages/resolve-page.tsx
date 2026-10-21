@@ -5,7 +5,7 @@ import { ArrowLeft, Check, FileWarning, FolderOpen, GitMerge, PencilLine } from 
 
 import { cn } from "@/lib/utils"
 import { hasConflicts, kindLabel, toastAbsent, useApp } from "@/lib/app-state"
-import { backend, type ConflictBlock, type ConflictFile, type Ref, type ResolveChoice, type ResolveState, type Skill } from "@/lib/backend"
+import { backend, SYNC_REF, type ApplyNote, type ConflictBlock, type ConflictFile, type Ref, type ResolveChoice, type ResolveState } from "@/lib/backend"
 import { useSkillActions } from "@/lib/use-actions"
 import { EmptyNote, Hint, RefreshIcon, Tag } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
@@ -13,36 +13,116 @@ import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } 
 import { Skeleton } from "@/components/ui/skeleton"
 
 /*
- * Resolving a shelved update (skd resolve), as a full page like the editor:
- * the conflicted files on the left; on the right each conflict of the open
- * file with the local and upstream sides and one button per way out. Picking
- * rewrites that block in the file (resolvePick); 手动编辑 opens the editor on
- * the file, markers and all. 完成合并 is offered once no markers remain;
- * 先搁置 puts the folder back as it was and keeps the update shelved.
+ * Resolving conflicts, as a full page like the editor: a shelved update of a
+ * skill (skd resolve), or the library's shelved sync (skd sync --resolve,
+ * ref @sync, paths relative to the library root). The conflicted files on the
+ * left; on the right each conflict of the open file with both sides and one
+ * button per way out. Picking rewrites that block (resolvePick); 手动编辑
+ * opens the editor on a skill's file, markers and all (a sync's files are
+ * shown in Finder instead). 完成合并 is offered once no markers remain; 先搁置
+ * puts things back as they were and keeps the update or sync shelved.
  */
+
+/** What is being resolved and how the page words it. */
+interface Subject {
+  ref: Ref
+  title: string
+  meta: string
+  /** The merge with markers is already in the files: read it, do not start it again. */
+  started: boolean
+  files: string[]
+  banner: string
+  theirs: string
+  useTheirs: string
+  /** Said once no conflicts are left. */
+  ready: string
+  /** Opens a conflicted file in the in-app editor; none for a sync. */
+  edit?: (path: string) => void
+  reveal: () => void
+  finished: (note: ApplyNote | void) => void
+  shelve: { title: string; body: string; hint: string; done: () => void }
+}
 
 /** Conflicts left in a file: its blocks, or one for a binary file (resolved by hand in Finder). */
 const left = (f: ConflictFile) => f.blocks.length + (f.binary ? 1 : 0)
 
-/** "e52f8c0" from the file's ">>>>>>> upstream e52f8c0" marker, when it is there. */
-const upstreamLabel = (f?: ConflictFile) => f?.text.match(/^>>>>>>> upstream (\S+)/m)?.[1]
+/** What the other side's marker names: "e52f8c0" from ">>>>>>> upstream e52f8c0", "origin/main" from a sync's. */
+const theirsLabel = (f?: ConflictFile) => f?.text.match(/^>>>>>>> (.+)$/m)?.[1].replace(/^upstream /, "").trim()
 
 export function ResolvePage({ skillRef }: { skillRef: Ref }) {
-  const { skills } = useApp()
+  const { t, skills, status, syncShelved, setSyncShelved, agents, navigate, openEditor, run } = useApp()
+  const { reveal } = useSkillActions()
+  const revealLibrary = async () => {
+    if ((await run(() => backend.revealLibrary())).ok) toast(t("revealed"))
+  }
+  if (skillRef.key === SYNC_REF.key) {
+    const subject: Subject = {
+      ref: SYNC_REF,
+      title: t("resolveSyncTitle"),
+      meta: status?.remote ?? "",
+      started: !!status?.syncing,
+      files: syncShelved ?? [],
+      banner: t("resolveSyncBanner"),
+      theirs: t("sideRemote"),
+      useTheirs: t("useRemote"),
+      ready: t("allResolvedSync"),
+      reveal: revealLibrary,
+      finished: () => {
+        setSyncShelved(null)
+        toast(t("syncMergedToast"))
+        navigate("skills")
+      },
+      shelve: {
+        title: t("syncShelveConfirmTitle"),
+        body: t("syncShelveConfirmBody"),
+        hint: t("syncShelveAgainHint"),
+        done: () => toast(t("syncShelvedAgainToast")),
+      },
+    }
+    if (!status?.syncing && !syncShelved?.length) return <NothingToResolve title={subject.title} meta={subject.meta} empty={t("noSyncConflicts")} />
+    return <Resolver subject={subject} />
+  }
   const skill = skills.find((s) => s.ref.key === skillRef.key)
   if (!skill) return null
-  if (!hasConflicts(skill)) return <NothingToResolve skill={skill} />
-  return <Resolver skill={skill} />
+  if (!hasConflicts(skill)) return <NothingToResolve title={t("resolveTitle", { name: skill.linkName })} meta={kindLabel(t, skill)} empty={t("noConflicts", { name: skill.linkName })} />
+  return (
+    <Resolver
+      subject={{
+        ref: skill.ref,
+        title: t("resolveTitle", { name: skill.linkName }),
+        meta: kindLabel(t, skill),
+        started: !!skill.resolving,
+        files: skill.conflictFiles ?? [],
+        banner: t("resolveBanner"),
+        theirs: t("sideUpstream"),
+        useTheirs: t("useUpstream"),
+        ready: t("allResolved"),
+        edit: (path) => openEditor(skill.ref, { file: path, back: "resolve" }),
+        reveal: () => reveal(skill.ref),
+        finished: (note) => {
+          toast(t("mergedToast", { name: skill.linkName }))
+          if (note) toastAbsent(t, agents, note.absent)
+          navigate("skills")
+        },
+        shelve: {
+          title: t("shelveConfirmTitle", { name: skill.linkName }),
+          body: t("shelveConfirmBody"),
+          hint: t("shelveAgainHint"),
+          done: () => toast(t("shelvedAgainToast", { name: skill.linkName })),
+        },
+      }}
+    />
+  )
 }
 
-function NothingToResolve({ skill }: { skill: Skill }) {
+function NothingToResolve({ title, meta, empty }: { title: string; meta: string; empty: string }) {
   const { t, navigate } = useApp()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar skill={skill} onBack={() => navigate("skills")} />
+      <TopBar title={title} meta={meta} onBack={() => navigate("skills")} />
       <div className="px-10 pt-10">
         <EmptyNote
-          title={t("noConflicts", { name: skill.linkName })}
+          title={empty}
           action={
             <Button variant="outline" onClick={() => navigate("skills")}>
               {t("backToSkills")}
@@ -54,7 +134,7 @@ function NothingToResolve({ skill }: { skill: Skill }) {
   )
 }
 
-function TopBar({ skill, onBack, children }: { skill: Skill; onBack: () => void; children?: React.ReactNode }) {
+function TopBar({ title, meta, onBack, children }: { title: string; meta: string; onBack: () => void; children?: React.ReactNode }) {
   const { t } = useApp()
   return (
     <div className="flex h-[46px] shrink-0 items-center gap-2 px-10 font-body fs-body max-[760px]:px-5">
@@ -62,26 +142,25 @@ function TopBar({ skill, onBack, children }: { skill: Skill; onBack: () => void;
         <ArrowLeft /> {t("back")}
       </Button>
       <div className="ml-1 flex min-w-0 items-baseline gap-2">
-        <h1 className="truncate font-heading fs-name font-semibold text-ink">{t("resolveTitle", { name: skill.linkName })}</h1>
-        <span className="truncate fs-meta text-mut max-[900px]:hidden">{kindLabel(t, skill)}</span>
+        <h1 className="truncate font-heading fs-name font-semibold text-ink">{title}</h1>
+        {meta && <span className="truncate fs-meta text-mut max-[900px]:hidden">{meta}</span>}
       </div>
       {children}
     </div>
   )
 }
 
-function Resolver({ skill }: { skill: Skill }) {
-  const { t, agents, run, runTask, read, reload, navigate, openEditor, confirm, operation } = useApp()
-  const { reveal } = useSkillActions()
+function Resolver({ subject }: { subject: Subject }) {
+  const { t, run, runTask, read, reload, navigate, confirm, operation } = useApp()
   const reduce = useReducedMotion()
   const [state, setState] = React.useState<ResolveState | null>(null)
   const [failed, setFailed] = React.useState(false)
   const [active, setActive] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState<string | null>(null)
   // Files in the order first seen: one the bridge stops listing once resolved stays in the list, marked resolved.
-  const [order, setOrder] = React.useState<string[]>(() => skill.conflictFiles ?? [])
+  const [order, setOrder] = React.useState<string[]>(() => subject.files)
   const started = React.useRef(false)
-  const ref = skill.ref
+  const { ref } = subject
 
   const take = React.useCallback((s: ResolveState) => {
     setState(s)
@@ -89,12 +168,12 @@ function Resolver({ skill }: { skill: Skill }) {
     setActive((a) => a ?? s.files.find((f) => left(f) > 0)?.path ?? s.files[0]?.path ?? null)
   }, [])
 
-  // Starting writes the merge with markers into the folder; coming back (from the editor, or later) only reads it.
+  // Starting writes the merge with markers into the files; coming back (from the editor, or later) only reads it.
   React.useEffect(() => {
     if (started.current) return
     started.current = true
     ;(async () => {
-      if (skill.resolving) {
+      if (subject.started) {
         const r = await read(() => backend.resolveState(ref))
         if (r.ok) take(r.value)
         else setFailed(true)
@@ -108,7 +187,7 @@ function Resolver({ skill }: { skill: Skill }) {
       take(r.value)
       await reload().catch(() => undefined)
     })()
-  }, [skill.resolving, ref, read, runTask, reload, take, t])
+  }, [subject.started, ref, read, runTask, reload, take, t])
 
   const refresh = React.useCallback(async () => {
     const r = await read(() => backend.resolveState(ref))
@@ -129,21 +208,19 @@ function Resolver({ skill }: { skill: Skill }) {
       await refresh()
       return
     }
-    toast(t("mergedToast", { name: skill.linkName }))
-    if (r.value) toastAbsent(t, agents, r.value.absent)
-    navigate("skills")
+    subject.finished(r.value)
   }
 
   const shelve = () =>
     confirm({
-      title: t("shelveConfirmTitle", { name: skill.linkName }),
-      body: t("shelveConfirmBody"),
+      title: subject.shelve.title,
+      body: subject.shelve.body,
       action: t("shelveAgain"),
       run: async () => {
         const r = await runTask(t("operating"), () => backend.resolveAbort(ref))
         if (!r.ok) return false
         await reload().catch(() => undefined)
-        toast(t("shelvedAgainToast", { name: skill.linkName }))
+        subject.shelve.done()
         navigate("skills")
       },
     })
@@ -153,10 +230,14 @@ function Resolver({ skill }: { skill: Skill }) {
   const remaining = files.reduce((n, f) => n + left(f), 0)
   const current = active ? byPath.get(active) : undefined
   const ready = !!state && remaining === 0
+  // A skill's file opens in the editor; a sync's files are shown in Finder (the library root).
+  const handEdit = subject.edit
+    ? { icon: PencilLine, label: t("editManually"), go: (path: string) => subject.edit!(path) }
+    : { icon: FolderOpen, label: t("revealInFinder"), go: () => subject.reveal() }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar skill={skill} onBack={() => navigate("skills")}>
+      <TopBar title={subject.title} meta={subject.meta} onBack={() => navigate("skills")}>
         {state && (
           <span className="flex shrink-0 items-center gap-1.5 fs-meta text-ink" role="status">
             {remaining > 0 ? (
@@ -173,7 +254,7 @@ function Resolver({ skill }: { skill: Skill }) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-1.5">
-          <Hint label={t("shelveAgainHint")} wide>
+          <Hint label={subject.shelve.hint} wide>
             <Button variant="ghost" onClick={shelve} disabled={!state || !!operation}>
               {t("shelveAgain")}
             </Button>
@@ -185,7 +266,7 @@ function Resolver({ skill }: { skill: Skill }) {
       </TopBar>
 
       <div className="flex items-center gap-2 border-b-row bg-row-hv px-10 py-1.5 fs-meta text-ink [border-left:3px_solid_var(--ac)] max-[760px]:px-5" role="note">
-        {t("resolveBanner")}
+        {subject.banner}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -236,7 +317,7 @@ function Resolver({ skill }: { skill: Skill }) {
               {ready && (
                 <div className="mb-4 flex flex-wrap items-center gap-3 rounded-ctl bg-hue-soft px-3.5 py-2.5 fs-body text-ink" role="status">
                   <Check className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1">{t("allResolved")}</span>
+                  <span className="min-w-0 flex-1">{subject.ready}</span>
                   <Button size="sm" onClick={() => void finish()} disabled={!!operation}>
                     <GitMerge /> {t("finishMerge")}
                   </Button>
@@ -247,8 +328,8 @@ function Resolver({ skill }: { skill: Skill }) {
                   <h2 className="min-w-0 truncate font-mono fs-body font-medium text-ink">{current.path}</h2>
                   {left(current) > 0 && <Tag>{t("conflictsLeft", { n: left(current) })}</Tag>}
                   <span className="flex-1" />
-                  <Button variant="ghost" size="sm" onClick={() => openEditor(skill.ref, { file: current.path, back: "resolve" })}>
-                    <PencilLine /> {t("editManually")}
+                  <Button variant="ghost" size="sm" onClick={() => handEdit.go(current.path)}>
+                    <handEdit.icon /> {handEdit.label}
                   </Button>
                 </div>
               )}
@@ -257,7 +338,7 @@ function Resolver({ skill }: { skill: Skill }) {
                   <FileWarning className="mt-0.5 size-4 shrink-0 text-mut" aria-hidden />
                   <div className="min-w-0 flex-1">
                     <p className="leading-relaxed">{t("binaryConflict", { file: current.path })}</p>
-                    <Button variant="outline" size="sm" className="mt-2.5" onClick={() => reveal(skill.ref)}>
+                    <Button variant="outline" size="sm" className="mt-2.5" onClick={subject.reveal}>
                       <FolderOpen /> {t("revealInFinder")}
                     </Button>
                   </div>
@@ -282,11 +363,13 @@ function Resolver({ skill }: { skill: Skill }) {
                       <Block
                         block={b}
                         total={current.blocks.length}
-                        upstream={upstreamLabel(current)}
+                        theirs={subject.theirs}
+                        theirsAt={theirsLabel(current)}
+                        useTheirs={subject.useTheirs}
+                        handEdit={{ icon: handEdit.icon, label: handEdit.label, go: () => handEdit.go(current.path) }}
                         busy={busy === `${current.path}#${b.index}`}
                         disabled={!!busy || !!operation}
                         onPick={(c) => void pick(current, b, c)}
-                        onEdit={() => openEditor(skill.ref, { file: current.path, back: "resolve" })}
                       />
                     </motion.div>
                   ))}
@@ -303,19 +386,24 @@ function Resolver({ skill }: { skill: Skill }) {
 function Block({
   block,
   total,
-  upstream,
+  theirs,
+  theirsAt,
+  useTheirs,
+  handEdit,
   busy,
   disabled,
   onPick,
-  onEdit,
 }: {
   block: ConflictBlock
   total: number
-  upstream?: string
+  /** The other side's name (上游 / 远端) and what its marker calls it (a commit, origin/main). */
+  theirs: string
+  theirsAt?: string
+  useTheirs: string
+  handEdit: { icon: React.ComponentType; label: string; go: () => void }
   busy: boolean
   disabled: boolean
   onPick: (c: ResolveChoice) => void
-  onEdit: () => void
 }) {
   const { t } = useApp()
   const [baseOpen, setBaseOpen] = React.useState(false)
@@ -331,7 +419,7 @@ function Block({
       </header>
       <div className="grid lg:grid-cols-2">
         <Side label={t("sideLocal")} text={block.local} />
-        <Side label={t("sideUpstream")} sha={upstream} text={block.upstream} className="[border-top:1.5px_solid_var(--ln)] lg:[border-top:0] lg:[border-left:1.5px_solid_var(--ln)]" />
+        <Side label={theirs} sha={theirsAt} text={block.upstream} className="[border-top:1.5px_solid_var(--ln)] lg:[border-top:0] lg:[border-left:1.5px_solid_var(--ln)]" />
       </div>
       {block.base !== undefined && (
         <Collapsible open={baseOpen} onOpenChange={setBaseOpen} className="[border-top:1px_solid_var(--ln)]">
@@ -349,14 +437,14 @@ function Block({
           {t("useMine")}
         </Button>
         <Button variant="outline" size="sm" disabled={disabled} onClick={() => onPick("upstream")}>
-          {t("useUpstream")}
+          {useTheirs}
         </Button>
         <Button variant="outline" size="sm" disabled={disabled} onClick={() => onPick("both")}>
           {t("useBoth")}
         </Button>
         <span className="flex-1" />
-        <Button variant="ghost" size="sm" disabled={disabled} onClick={onEdit}>
-          <PencilLine /> {t("editManually")}
+        <Button variant="ghost" size="sm" disabled={disabled} onClick={handEdit.go}>
+          <handEdit.icon /> {handEdit.label}
         </Button>
       </footer>
     </section>
