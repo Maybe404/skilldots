@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Check, CornerDownRight, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp } from "@/lib/app-state"
@@ -7,8 +6,8 @@ import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn, keepsViaShared } from "@/lib/pending"
 import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
-import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
+import { Switch } from "@/components/ui/switch"
 import { GroupBatchMenu } from "./group-batch"
 import { traceCubic, wireSeed } from "./wobble"
 import { AGENT_H, AGENTS_TOP, GROUP_H, LIST_TOP, ROW_H, type ListItem, type useSkillList } from "./model"
@@ -460,28 +459,26 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
       </Hint>
       {skill &&
         (() => {
-          // shadcn button without a fill: the design draws 已装 / 装上 / 待装上 / 待卸下 with its own borders.
-          // In a narrow column it keeps only its glyph, so the agent's name and folder keep the room.
-          const Glyph = st === "removing" ? Minus : via ? CornerDownRight : on ? Check : Plus
-          const button = (
-            <Button
-              variant={null}
-              size="default"
-              aria-pressed={on}
-              aria-disabled={locked || undefined}
-              aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
-              onClick={() => togglePending(skill, a.name)}
-              className={cn(
-                "relative z-[1] h-[26px]",
-                compact && "w-[26px] px-0",
-                via ? "border-[1.5px] border-dashed border-ln bg-hue-soft text-hue-ink" : st === "absent" || locked ? cn("border-[1.5px] border-dashed border-ln text-mut", locked && "cursor-not-allowed") : on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
-                pend ? "border-ac text-ac" : !on && !locked && "border-mut text-ink",
-              )}
-            >
-              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : via ? t("viaShort") : st === "absent" || locked ? t("wireAbsent") : st === "removing" ? t("wireRemoving") : st === "on" && !a.enabled ? t("pausedTag") : btnText}
-            </Button>
+          // The same switch as the detail sheet: on is "this agent gets it", whatever the way (its own link, or
+          // the Agents folder it reads). Read through Agents it stays on and cannot be switched off here, unless
+          // the agent was also chosen itself (then off takes back that choice). Pending changes say so in orange.
+          const checked = skill ? isOn(skill, a.name, pending) : false
+          const fixed = locked || (via && !skill.targets.includes(a.name))
+          const note = st === "adding" ? t("wireAdding") : st === "removing" ? (keepsViaShared(skill, a.name, pending) ? t("viaCancelShort") : t("wireRemoving")) : via ? t("viaState") : null
+          const explain = via || locked || st === "absent" || st === "removing" || (st === "on" && !a.enabled)
+          const control = (
+            <span className="relative z-[1] flex items-center gap-2">
+              {note && !compact && <span className={cn("fs-meta whitespace-nowrap", pend ? "text-ac" : "text-mut")}>{note}</span>}
+              <Switch
+                checked={checked}
+                disabled={fixed}
+                aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
+                onCheckedChange={() => togglePending(skill, a.name)}
+                className={cn(pend && "ring-2 ring-ac/45 ring-offset-1 ring-offset-bg")}
+              />
+            </span>
           )
-          return compact || via || st === "absent" || locked || st === "removing" || !a.enabled ? <Hint label={btnText}>{button}</Hint> : button
+          return explain || compact ? <Hint label={btnText}>{control}</Hint> : control
         })()}
       <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>
