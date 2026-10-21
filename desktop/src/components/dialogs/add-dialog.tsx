@@ -62,13 +62,18 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
   const [adding, setAdding] = React.useState(false)
   const pack = adjust ? packs.find((p) => p.repo === initial) : undefined
 
-  // Recognise as the user types; nothing is fetched yet.
+  // A read in flight belongs to the input it was started for: a newer input (or read) makes it stale.
+  const readSeq = React.useRef(0)
+
+  // Recognise as the user types; nothing is fetched yet. Whatever was read for the previous input goes at once.
   React.useEffect(() => {
     const v = input.trim()
+    readSeq.current++
     setPreview(null)
     setFetchError(null)
+    setLoading(false)
+    setParsed(null)
     if (!v) {
-      setParsed(null)
       setParseError(false)
       return
     }
@@ -83,10 +88,13 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
   }, [input])
 
   const read = React.useCallback(async (src: ParsedSource) => {
+    const seq = ++readSeq.current
     setLoading(true)
     setFetchError(null)
+    setPreview(null)
     try {
       const p = await backend.show(src)
+      if (seq !== readSeq.current) return
       setPreview(p)
       // The backend matched what the input named (by name, category/name or folder); older ones did not say.
       const named = p.preselected ?? src.skills.filter((n) => p.skills.some((s) => s.name === n))
@@ -95,9 +103,9 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
       setFollowAll(false)
       setQuery("")
     } catch (e) {
-      setFetchError(e instanceof Error ? e.message : String(e))
+      if (seq === readSeq.current) setFetchError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLoading(false)
+      if (seq === readSeq.current) setLoading(false)
     }
   }, [])
 
@@ -129,6 +137,8 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
   const removes = followAll ? 0 : dropped.size
   // Ticked = installed and kept, or newly picked.
   const isTicked = (name: string) => followAll || (have.has(name) ? !dropped.has(name) : picked.has(name))
+  // Adjusting counts what will be in use after saving, installed ones included.
+  const ticked = preview?.skills.filter((s) => isTicked(s.name)).length ?? 0
   const toggle = (name: string, on: boolean) => {
     const set = have.has(name) ? setDropped : setPicked
     const add = have.has(name) ? !on : on
@@ -263,6 +273,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
             <div className="px-6 py-4">
               <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 fs-meta text-mut">
                 <span className="font-medium text-ink">{t("pickSkills")}</span>
+                {!adjust && <span className="font-medium text-ink">{preview.source.repo}</span>}
                 {versions ? <span>{versions}</span> : <Sha id={preview.commit} />}
                 <span>{preview.license ? t("licenseLabel", { license: preview.license }) : t("noLicense")}</span>
                 {preview.subscribed && !adjust && <span>{t("alreadySubscribed")}</span>}
@@ -366,7 +377,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
 
         <DialogFooter className="m-0 items-center px-6 py-3.5 [border-top:var(--tblRow)]">
           {preview ? (
-            <span className="mr-auto self-center fs-meta text-mut">{removes > 0 ? t("adjustRemoveNote", { n: removes }) : t("selectedCount", { n: adds })}</span>
+            <span className="mr-auto self-center fs-meta text-mut">{removes > 0 ? t("adjustRemoveNote", { n: removes }) : t("selectedCount", { n: adjust ? ticked : adds })}</span>
           ) : (
             !adjust && (
               <Button variant="link" size="inline" className="mr-auto fs-meta" onClick={() => openDialog({ kind: "new" })}>
