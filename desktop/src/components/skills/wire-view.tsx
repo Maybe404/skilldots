@@ -412,7 +412,7 @@ export function WireView({
 }
 
 function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Agent; skill: Skill | null; dragging: boolean; claudeOff: boolean; compact: boolean }) {
-  const { t, skills, pending, togglePending, agentFocus, setAgentFocus } = useApp()
+  const { t, skills, pending, togglePending, agentFocus, setAgentFocus, applying } = useApp()
   const count = skills.filter((s) => isOn(s, a.name, pending)).length
   const selA = agentFocus === a.name
   const st = skill ? cellState(skill, a.name, pending) : "off"
@@ -472,7 +472,8 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
               {note && !compact && <span className={cn("fs-meta whitespace-nowrap", pend ? "text-ac" : "text-mut")}>{note}</span>}
               <Switch
                 checked={checked}
-                disabled={fixed}
+                // Toggles are ignored while pending changes are being applied: say so by greying the switch.
+                disabled={fixed || applying}
                 aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
                 onCheckedChange={() => togglePending(skill, a.name)}
                 className={cn(pend && "ring-2 ring-ac/45 ring-offset-1 ring-offset-bg")}

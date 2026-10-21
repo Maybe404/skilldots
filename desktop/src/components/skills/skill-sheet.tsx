@@ -38,7 +38,7 @@ export function SkillSheet({ returnFocus }: { returnFocus: () => HTMLElement | n
 }
 
 function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivElement | null> }) {
-  const { t, overrides, outdated, updatable, packs, openEditor, openResolve, openDialog, pending, togglePending, pendingCount, applyPending, showSource, operation } = useApp()
+  const { t, overrides, outdated, updatable, packs, openEditor, openResolve, openDialog, pending, togglePending, pendingCount, applyPending, showSource, operation, applying } = useApp()
   const columns = useColumnAgents()
   const { reveal, openInEditor } = useSkillActions()
   const status = outdated?.packs.find((p) => p.repo === skill.origin)
@@ -122,7 +122,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
                   {a.name === "claude" && claudeOff && <OffRing />}
                   {(st === "adding" || st === "removing") && <span className="fs-meta text-ac">{st === "adding" ? t("wireAdding") : t("wireRemoving")}</span>}
                 </label>
-                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent" || st === "via"} disabled={(st === "off" && isAbsentAgent(a)) || (st === "via" && !skill.targets.includes(a.name))} title={st === "via" ? t(skill.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: agentLabel(a) }) : st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
+                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent" || st === "via"} disabled={applying || (st === "off" && isAbsentAgent(a)) || (st === "via" && !skill.targets.includes(a.name))} title={st === "via" ? t(skill.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: agentLabel(a) }) : st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
               </li>
             )
           })}
