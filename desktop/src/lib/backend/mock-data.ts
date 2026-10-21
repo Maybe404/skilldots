@@ -3,6 +3,7 @@
 // it is kept self-consistent: commits, counts, descriptions, history, trash and
 // the scan all describe the same library. Update history and trash entries are
 // fictional and marked `example`. Nothing here is anyone's real machine.
+import { SHARED_READERS } from "@/lib/agents"
 import type {
   Agent,
   HistoryEntry,
@@ -341,8 +342,13 @@ export function initialScan(library: Skill[]): ScanItem[] {
     const path = `${HOME}/${AGENT_DEFS.find(([n]) => n === f.agent)![2]}/${f.name}`
     const have = library.find((s) => s.linkName.toLowerCase() === f.name.toLowerCase())
     if (have?.targets.includes(f.agent)) continue
-    if (have) out.push({ ...f, path, proposal: "enable", label: `enable for ${f.agent} (already in library)` })
-    else if (f.state === "broken") out.push({ ...f, path, proposal: "drop", label: "broken link; move to the trash" })
+    if (have) {
+      // An agent that reads ~/.agents/skills already gets a library skill on Agents from there: its own copy is a
+      // second one, which adopting moves to the trash (app.Proposals); otherwise the library's skill is enabled for it.
+      const second = have.targets.includes("agents") && SHARED_READERS.includes(f.agent)
+      const label = second ? `${f.agent} already reads the library's copy from ~/.agents/skills; this second copy goes to the trash` : `enable for ${f.agent} (already in library)`
+      out.push({ ...f, path, proposal: "enable", sharedCopy: second, label })
+    } else if (f.state === "broken") out.push({ ...f, path, proposal: "drop", label: "broken link; move to the trash" })
     else if (f.source) out.push({ ...f, path, proposal: "pack", repo: f.source, label: `subscribe to ${f.source}` })
     else out.push({ ...f, path, proposal: "own", label: "copy into skills/ as your own (no known upstream)" })
   }

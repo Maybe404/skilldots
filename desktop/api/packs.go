@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/pack"
 )
 
@@ -254,16 +255,37 @@ func (s *Service) scanOperation(ses *app.Session, method string, args []json.Raw
 		}
 		return object{"adopted": len(selected)}, nil
 	}
+	// The rows are the unmanaged entries, the same count the status (and the
+	// first-run screen) reports; links skd manages are not listed.
+	entries, _ := ses.Resolve()
 	out := []object{}
-	for _, it := range rep.Items {
-		kind, label, repo, upstream, differs := "skip", "", "", "", false
+	for _, it := range rep.Unmanaged() {
+		kind, label, repo, upstream, differs, sharedCopy := "skip", "", "", "", false, false
 		for _, p := range props {
 			if p.Item.Path == it.Path {
 				kind, label, repo, upstream, differs = p.Kind, p.Label, p.Repo, p.Upstream, p.Differs
+				sharedCopy = p.Kind == "enable" && secondCopy(ses, entries, p)
 				break
 			}
 		}
-		out = append(out, object{"id": it.Target + "/" + it.Name, "agent": it.Target, "name": it.Name, "path": it.Path, "state": it.State, "linkTo": it.LinkTo, "source": it.Source, "proposal": kind, "label": label, "repo": repo, "upstream": upstream, "differs": differs})
+		out = append(out, object{"id": it.Target + "/" + it.Name, "agent": it.Target, "name": it.Name, "path": it.Path, "state": it.State, "linkTo": it.LinkTo, "source": it.Source, "proposal": kind, "label": label, "repo": repo, "upstream": upstream, "differs": differs, "sharedCopy": sharedCopy})
 	}
 	return out, nil
+}
+
+// secondCopy reports whether an "enable" proposal is for a copy the agent
+// does not need: it already reads the library's entry from ~/.agents/skills
+// (engine.ReachesViaShared), so adopting moves this copy to the trash
+// rather than linking anything (app.Proposals).
+func secondCopy(ses *app.Session, entries []engine.Entry, p app.Proposal) bool {
+	t, err := ses.Reg.Get(p.Item.Target)
+	if err != nil || p.Entry == "" {
+		return false
+	}
+	for i := range entries {
+		if engine.Qualified(entries[i]) == p.Entry {
+			return engine.ReachesViaShared(ses.Lib, &entries[i], t)
+		}
+	}
+	return false
 }

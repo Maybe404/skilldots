@@ -129,7 +129,8 @@ function emptyState(root: string | null): State {
     history: [],
     trash: [],
     plan: [],
-    scan: initialScan([]),
+    // The same machine: what the agents have that differs from upstream is there before any library too.
+    scan: [...initialScan([]), ...s.scan.filter((x) => x.differs)],
   }
 }
 
@@ -649,6 +650,9 @@ export function createMockBackend(): Backend {
           const name = taken ? `${it.name}-${it.agent}` : it.name
           addSkill({ name, kind: "skills", origin: "", category: "", description: "", targets: [it.agent] })
           toTrash(it.name, it.path, "adopt")
+        } else if (it.proposal === "enable" && it.sharedCopy) {
+          // The agent already reads the library's copy through Agents: this second copy only goes to the trash.
+          toTrash(it.name, it.path, "in-the-way")
         } else if (it.proposal === "enable") {
           const s = st.skills.find((x) => x.linkName === it.name)
           if (s) s.targets = [...new Set([...s.targets, it.agent])]

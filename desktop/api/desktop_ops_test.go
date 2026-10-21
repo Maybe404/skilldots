@@ -242,6 +242,42 @@ func TestViaSharedAndSharedReach(t *testing.T) {
 	}
 }
 
+// The Adopt page lists what the status counts (unmanaged entries only),
+// and a copy an agent no longer needs (it reads the library's from
+// ~/.agents/skills) is marked as such.
+func TestScanListsUnmanagedAndSecondCopies(t *testing.T) {
+	s := setup(t)
+	home, _ := os.UserHomeDir()
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	invoke(t, s, "newSkill", object{"name": "dup", "agents": []string{"agents"}})
+	body := invoke(t, s, "readFile", ref{Key: "skills:dup"}, "SKILL.md").(string)
+	writeFile(t, filepath.Join(home, ".codex", "skills", "dup", "SKILL.md"), body)
+	writeFile(t, filepath.Join(home, ".claude", "skills", "loose", "SKILL.md"), "---\nname: loose\ndescription: d\n---\n")
+	rows := roundTrip[[]struct {
+		ID, Proposal string
+		SharedCopy   bool
+	}](t, invoke(t, s, "scan"))
+	st := roundTrip[struct{ Unmanaged int }](t, invoke(t, s, "status"))
+	if len(rows) != st.Unmanaged {
+		t.Fatalf("scan lists %d rows, status counts %d: %+v", len(rows), st.Unmanaged, rows)
+	}
+	got := map[string]bool{}
+	for _, r := range rows {
+		if r.ID == "agents/dup" {
+			t.Fatal("a managed link is listed")
+		}
+		got[r.ID] = r.SharedCopy
+		if r.ID == "codex/dup" && r.Proposal != "enable" {
+			t.Fatalf("codex/dup: %+v", r)
+		}
+	}
+	if !got["codex/dup"] || got["claude/loose"] {
+		t.Fatalf("sharedCopy: %v", got)
+	}
+}
+
 // Restoring a removed skill links it again in the same call (the app
 // layer applies); the result says so.
 func TestRestoreLinksAgain(t *testing.T) {
