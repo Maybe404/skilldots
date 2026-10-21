@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { Download, FileDiff, ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react"
 
 import { cn, shortSha } from "@/lib/utils"
-import { hasUpdates, isMine, useApp } from "@/lib/app-state"
+import { hasUpdates, isMine, toastMergeOutcome, useApp } from "@/lib/app-state"
 import { backend, type Pack, type PackStatus, type Skill } from "@/lib/backend"
 import { EmptyNote, Hint, Mono, Page, RefreshIcon, Sha, TableHead, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
@@ -205,7 +205,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
 
 /** The expanded update review of one source (design: commits on the left, impact and actions on the right). */
 function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus; used: Skill[]; onClose: () => void }) {
-  const { t, runTask, reload, navigate, operation, openDialog } = useApp()
+  const { t, runTask, reload, navigate, operation, openDialog, skills, openResolve } = useApp()
   const [addNew, setAddNew] = React.useState<string[]>([])
   const usedNames = new Set(used.map((s) => s.name))
   const affected = [...st.changed, ...st.pending].filter((n) => usedNames.has(n))
@@ -224,6 +224,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
     toast(t("updatedOne", { repo: pack.repo, to: shortSha(st.latest) }), { action: { label: t("navHistory"), onClick: () => navigate("history") } })
     const backups = r.value.flatMap((h) => h.backups)
     if (backups.length) toast(t("backupsToast", { n: backups.length }), { action: { label: t("openTrash"), onClick: () => navigate("trash") } })
+    toastMergeOutcome(t, r.value, skills, openResolve)
   }
 
   return (

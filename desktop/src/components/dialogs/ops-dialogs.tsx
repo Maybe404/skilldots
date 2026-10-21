@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { ArrowRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { errorText, hasUpdates, toastAbsent, useApp } from "@/lib/app-state"
+import { errorText, hasUpdates, toastAbsent, toastMergeOutcome, useApp } from "@/lib/app-state"
 import { backend, type CliStatus, type PackStatus, type PlanItem, type SkillDiff, type UpdateDiff } from "@/lib/backend"
 import type { MessageKey } from "@/lib/i18n"
 import { Mono, RefreshIcon, Sha, Tag, UpdateDot } from "@/components/app/bits"
@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 
 // Update ---------------------------------------------------------------------
 
-type DiffState = { state: "loading" } | { state: "ok"; diff: UpdateDiff } | { state: "error"; error: string }
+export type DiffState = { state: "loading" } | { state: "ok"; diff: Pick<UpdateDiff, "skills"> } | { state: "error"; error: string }
 
 /**
  * Reads, for each source, what updating it would change file by file
@@ -48,7 +48,7 @@ export function useUpdateDiffs(packs: PackStatus[]) {
 }
 
 export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: () => void }) {
-  const { t, outdated, runTask, reload } = useApp()
+  const { t, outdated, runTask, reload, skills, openResolve } = useApp()
   const all = outdated?.packs ?? []
   const candidates = all.filter((p) => hasUpdates(p) || p.moved.length > 0)
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(repos?.length ? repos.filter((r) => candidates.some((c) => c.repo === r)) : candidates.map((c) => c.repo)))
@@ -71,6 +71,7 @@ export function UpdateDialog({ repos, onClose }: { repos?: string[]; onClose: ()
     toast(t("updatedToast", { n: r.value.length }))
     const backups = r.value.flatMap((h) => h.backups)
     if (backups.length) toast(t("backupsToast", { n: backups.length }))
+    toastMergeOutcome(t, r.value, skills, openResolve)
     onClose()
   }
 
@@ -205,8 +206,8 @@ function PackUpdate({
   )
 }
 
-/** One skill of a source's update: what happens to it, whether you edited it, and its file changes on demand. */
-function SkillUpdateRow({ name, label, diff, skill, defaultOpen }: { name: string; label: string; diff?: DiffState; skill?: SkillDiff; defaultOpen: boolean }) {
+/** One skill of a source's update: what happens to it, whether you edited it, and its file changes on demand (also a recorded update's, on the history page). */
+export function SkillUpdateRow({ name, label, diff, skill, defaultOpen, tags }: { name: string; label: string; diff?: DiffState; skill?: SkillDiff; defaultOpen: boolean; tags?: React.ReactNode }) {
   const { t } = useApp()
   const [open, setOpen] = React.useState(defaultOpen)
   const loading = diff?.state === "loading"
@@ -215,6 +216,7 @@ function SkillUpdateRow({ name, label, diff, skill, defaultOpen }: { name: strin
     <>
       <span className="truncate font-medium text-ink">{name}</span>
       {skill?.local && <Tag tone="accent">{t("localEdited")}</Tag>}
+      {tags}
       <span className="flex-1" />
       <span className="shrink-0 text-mut">{label}</span>
     </>

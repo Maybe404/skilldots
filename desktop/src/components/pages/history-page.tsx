@@ -1,11 +1,14 @@
 import * as React from "react"
+import { ArrowRight, FileDiff } from "lucide-react"
 
-import { useApp } from "@/lib/app-state"
-import { backend, type HistoryEntry } from "@/lib/backend"
+import { errorText, useApp } from "@/lib/app-state"
+import { backend, shelvedNames, type HistoryEntry, type SkillDiff } from "@/lib/backend"
 import { formatDate, type MessageKey } from "@/lib/i18n"
 import { shortSha } from "@/lib/utils"
-import { EmptyNote, ExampleTag, Page, PageError, Sha, TableHead, UpdateDot } from "@/components/app/bits"
+import { EmptyNote, ExampleTag, Page, PageError, RefreshIcon, Sha, TableHead, Tag, UpdateDot } from "@/components/app/bits"
+import { SkillUpdateRow, type DiffState } from "@/components/dialogs/ops-dialogs"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const COLS = "var(--cols)"
@@ -59,10 +62,13 @@ export function HistoryPage() {
 
 function Row({ h }: { h: HistoryEntry }) {
   const { t, config, navigate } = useApp()
+  const [diffOpen, setDiffOpen] = React.useState(false)
   const fresh = Date.now() - new Date(h.when).getTime() < 15 * 60 * 1000
   const kinds = (
     [
       ["skillChanged", h.changed],
+      ["skillMerged", h.merged ?? []],
+      ["skillShelved", shelvedNames(h)],
       ["added", h.added],
       ["skillNew", h.new ?? []],
       ["skillGone", h.gone],
@@ -83,8 +89,14 @@ function Row({ h }: { h: HistoryEntry }) {
         </span>
         {h.example && <ExampleTag />}
       </div>
-      <div role="cell" className="min-w-0 pt-0.5 font-mono fs-meta text-mut" title={`${h.from} → ${h.to}`}>
-        {shortSha(h.from)} → {shortSha(h.to)}
+      <div role="cell" className="min-w-0 pt-0.5 pr-3">
+        <span className="block font-mono fs-meta text-mut" title={`${h.from} → ${h.to}`}>
+          {shortSha(h.from)} → {shortSha(h.to)}
+        </span>
+        <Button variant="link" size="inline" className="mt-1 fs-meta" onClick={() => setDiffOpen(true)}>
+          <FileDiff /> {t("viewDiff")}
+        </Button>
+        {diffOpen && <HistoryDiffDialog h={h} onClose={() => setDiffOpen(false)} />}
       </div>
       <div role="cell" className="min-w-0">
         {kinds.map(([k, list]) => (
@@ -123,5 +135,66 @@ function Row({ h }: { h: HistoryEntry }) {
         ))}
       </div>
     </div>
+  )
+}
+
+const STATUS: Record<SkillDiff["status"], MessageKey> = { changed: "skillChanged", added: "added", moved: "skillMoved" }
+
+/** What one recorded update changed, skill by skill, with the update dialog's diff rows; merged and shelved skills marked. */
+function HistoryDiffDialog({ h, onClose }: { h: HistoryEntry; onClose: () => void }) {
+  const { t, config } = useApp()
+  const [diff, setDiff] = React.useState<DiffState>({ state: "loading" })
+  React.useEffect(() => {
+    let live = true
+    backend.historyDiff(h.repo, h.when).then(
+      (d) => live && setDiff({ state: "ok", diff: d }),
+      (e: unknown) => live && setDiff({ state: "error", error: errorText(t, e) }),
+    )
+    return () => {
+      live = false
+    }
+    // One record per dialog; t only words an error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [h.repo, h.when])
+  const merged = new Set(h.merged ?? [])
+  const shelved = new Set(shelvedNames(h))
+  const skills = diff.state === "ok" ? diff.diff.skills : []
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent closeLabel={t("close")} className="flex max-h-[min(46rem,calc(100svh-4rem))] w-[720px] flex-col gap-0 p-0">
+        <DialogHeader className="px-6 pt-[22px] pb-4">
+          <DialogTitle>{t("historyDiffTitle", { repo: h.repo })}</DialogTitle>
+          <DialogDescription>{t("historyDiffHint")}</DialogDescription>
+          <p className="mt-1 flex items-center gap-1.5 fs-meta text-mut">
+            <Sha id={h.from} />
+            <ArrowRight className="size-3" aria-hidden />
+            <Sha id={h.to} />
+            <span>· {formatDate(h.when, config.lang)}</span>
+          </p>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto [border-top:var(--tblRow)] px-6 py-4">
+          {diff.state === "loading" && (
+            <p className="flex items-center gap-2 fs-meta text-mut" role="status">
+              <RefreshIcon spinning /> {t("diffLoading")}
+            </p>
+          )}
+          {diff.state === "error" && <p className="fs-meta text-mut">{t("diffFailed", { error: diff.error })}</p>}
+          {diff.state === "ok" && skills.length === 0 && <p className="fs-body text-mut">{t("historyDiffEmpty")}</p>}
+          <ul className="space-y-1 fs-body">
+            {skills.map((s, i) => (
+              <SkillUpdateRow
+                key={s.name}
+                name={s.name}
+                label={t(STATUS[s.status])}
+                diff={diff}
+                skill={s}
+                defaultOpen={i === 0}
+                tags={merged.has(s.name) ? <Tag>{t("mergedTag")}</Tag> : shelved.has(s.name) ? <Tag tone="accent">{t("shelvedTag")}</Tag> : undefined}
+              />
+            ))}
+          </ul>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
