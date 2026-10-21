@@ -16,7 +16,7 @@ import {
 } from "@/lib/backend"
 import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import { translator, type T } from "@/lib/i18n"
-import { changes, pendingKey, prune, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
+import { changes, pendingKey, prune, readsViaShared, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
 
 export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
 /** The two interface styles of the design ("简洁" and "涂鸦"). */
@@ -435,24 +435,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [agents, t],
   )
 
+  const label = React.useCallback((name: string) => {
+    const a = agents.find((x) => x.name === name)
+    return a ? agentLabel(a) : name
+  }, [agents])
+
+  // Taking a skill off Agents also takes it away from the agents that read it there: said when it is marked.
+  const warnSharedLost = React.useCallback(
+    (list: Skill[]) => {
+      const lost = [...new Set(list.flatMap((s) => s.sharedReach ?? []))]
+      if (!lost.length) return
+      const skill = list.length === 1 ? list[0].linkName : t("groupCount", { n: list.length })
+      toast(t("viaSharedLost", { agents: lost.map(label).join(t("listSep")), skill }))
+    },
+    [label, t],
+  )
+
   const togglePending = React.useCallback(
     (skill: Skill, agent: string) => {
       if (applyingRef.current) return
       const k = pendingKey(skill.ref.key, agent)
+      // Read from the shared folder: nothing to link or unlink here; say so instead of recording a change.
+      if (!(k in pending) && readsViaShared(skill, agent, pending)) {
+        toast(t("viaSharedAlready", { agent: label(agent), skill: skill.linkName }))
+        return
+      }
       const turningOn = !(k in pending) && !skill.targets.includes(agent)
       if (turningOn && refuseAbsent(agent)) return
+      if (agent === "agents" && !(k in pending) && skill.targets.includes(agent)) warnSharedLost([skill])
       setPending((p) => togglePendingCell(p, skill, agent))
     },
-    [pending, refuseAbsent],
+    [pending, refuseAbsent, label, t, warnSharedLost],
   )
 
   const setPendingMany = React.useCallback(
     (list: Skill[], agent: string, want: boolean) => {
       if (applyingRef.current) return
       if (want && refuseAbsent(agent)) return
-      setPending((p) => setMany(p, list, agent, want))
+      // Skills the agent reads from the shared folder are left as they are, either way.
+      const own = list.filter((s) => !readsViaShared(s, agent, pending))
+      if (!own.length) {
+        toast(t("viaSharedAlready", { agent: label(agent), skill: t("groupCount", { n: list.length }) }))
+        return
+      }
+      if (agent === "agents" && !want) warnSharedLost(own.filter((s) => s.targets.includes("agents")))
+      setPending((p) => setMany(p, own, agent, want))
     },
-    [refuseAbsent],
+    [pending, refuseAbsent, label, t, warnSharedLost],
   )
 
   const pendingCount = Object.keys(pending).length

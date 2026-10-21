@@ -55,6 +55,10 @@ export interface Skill {
   missing?: boolean
   /** Agents it names that are not installed on this machine: nothing is linked there. */
   absent?: string[]
+  /** Agents among its targets that read it from ~/.agents/skills, so get no link of their own (engine.Entry.ViaShared). */
+  viaShared?: string[]
+  /** Installed agents that read it from ~/.agents/skills at all, chosen or not: turning it on for them changes nothing. */
+  sharedReach?: string[]
 }
 
 /** A subscribed repository ([[pack]] in skills.toml plus its lock). */

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, Minus, Plus } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, CornerDownRight, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
@@ -211,12 +211,12 @@ function Row({
       </div>
       {columns.map((a) => {
         const st = cellState(skill, a.name, pending)
-        const on = st === "on" || st === "adding" || st === "absent"
+        const on = st === "on" || st === "adding" || st === "absent" || st === "via"
         const label = agentLabel(a)
         // Off for an agent this Mac does not have: it cannot be turned on (app-state refuses and says why).
         const locked = st === "off" && isAbsentAgent(a)
         const title =
-          st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
+          st === "via" ? t("cellVia", { agent: label }) : st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
         return (
           <div role="cell" key={a.name} className="relative grid place-items-center">
             <Hint label={title}>
@@ -234,7 +234,7 @@ function Row({
                 aria-disabled={locked || undefined}
                 className={cn("skd-cell", !a.enabled && "opacity-45", locked && "cursor-not-allowed opacity-40 hover:text-transparent")}
               >
-                {st === "removing" ? <Minus aria-hidden className="size-3.5" strokeWidth={2.4} /> : on ? <Check aria-hidden className="size-3.5" strokeWidth={2.6} /> : locked ? null : <Plus aria-hidden className="size-3.5" strokeWidth={2.2} />}
+                {st === "removing" ? <Minus aria-hidden className="size-3.5" strokeWidth={2.4} /> : st === "via" ? <CornerDownRight aria-hidden className="size-3.5" strokeWidth={2.2} /> : on ? <Check aria-hidden className="size-3.5" strokeWidth={2.6} /> : locked ? null : <Plus aria-hidden className="size-3.5" strokeWidth={2.2} />}
               </button>
             </Hint>
             {claudeOff && a.name === "claude" && <OffRing className="pointer-events-none absolute top-1 right-2" />}

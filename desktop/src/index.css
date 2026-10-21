@@ -326,6 +326,13 @@
     color: var(--ac);
     transform: var(--onRot);
   }
+  /* read from ~/.agents/skills: the agent has it (filled like "on"), through Agents (dashed edge, a turn arrow) */
+  .skd-cell[data-state="via"] {
+    background: var(--onBg);
+    border: 1.5px dashed var(--ln);
+    color: var(--hueInk);
+    opacity: 0.75;
+  }
   /* chosen, but the agent is not installed here: nothing is linked */
   .skd-cell[data-state="absent"] {
     border: 1.5px dashed var(--ln);
