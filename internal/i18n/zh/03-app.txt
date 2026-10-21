@@ -347,3 +347,12 @@
 
 @ git cat-file answered %q, not a file's contents
 = git cat-file 返回了 %q，而不是文件内容
+
+@ %s already reads the library's copy from ~/.agents/skills; this second copy goes to the trash
+= %s 已经从 ~/.agents/skills 读到资料库里的这份；这份多出来的副本会移到回收站
+
+@ differs from the library's %s, which %s already reads from ~/.agents/skills; compare them and remove one by hand
+= 和资料库里的 %s 内容不同，而 %s 已经从 ~/.agents/skills 读到资料库里的那份；请比较后手动去掉其中一份
+
+@ %s differs from the library's %s, which %s reads from ~/.agents/skills; left in place — compare them and remove one by hand
+= %s 和资料库里的 %s 内容不同，而 %s 会从 ~/.agents/skills 读到资料库里的那份；已原样保留——请比较后手动去掉其中一份

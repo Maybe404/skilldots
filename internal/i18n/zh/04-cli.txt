@@ -1182,3 +1182,15 @@
 
 @ reads agents: the agent also reads ~/.agents/skills, so a skill for every installed agent ("*") reaches it there, not twice
 = 也读 agents：这个 agent 也会读 ~/.agents/skills，所以装给“本机所有 agent”（"*"）的 skill 只从那里加载，不会加载两份
+
+@ (+ %s through agents)
+= （另有 %s 经 agents 读到）
+
+@ (through agents)
+= （经 agents 读到）
+
+@ %s reads %s from the shared directory ~/.agents/skills (agents): no second link in its own directory
+= %s 会从共享目录 ~/.agents/skills（agents）读到 %s：不在它自己的目录里再链接一份
+
+@ %s still reads %s from the shared directory ~/.agents/skills: take it off agents too (skd disable %s --agent agents) to keep it from %s
+= %s 仍会从共享目录 ~/.agents/skills 读到 %s：要让 %[4]s 用不到它，还要把它从 agents 卸下（skd disable %[3]s --agent agents）

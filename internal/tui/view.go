@@ -612,6 +612,9 @@ func (m Model) skillDetail(sk Skill, w int) []string {
 	agents := []seg{sg(i18n.T("agents "), t.Faint)}
 	if sk.Enabled() {
 		agents = append(agents, sg(strings.Join(sk.Agents, " "), t.Cyan))
+		if len(sk.ViaShared) > 0 {
+			agents = append(agents, sg("  "+i18n.Sprintf("%s through agents", strings.Join(sk.ViaShared, " ")), t.Faint))
+		}
 	} else {
 		agents = append(agents, sg(i18n.T("off · kept in library"), t.Muted))
 	}

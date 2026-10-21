@@ -74,6 +74,9 @@ type Skill struct {
 	Missing        bool
 	Conflict       string   // set when another entry wants the same link name
 	Agents         []string // targets it is linked into (resolved)
+	// ViaShared are agents that read it from ~/.agents/skills instead of
+	// a link of their own (engine.Entry.ViaShared).
+	ViaShared []string
 	// Selected is every agent it is given, paused or unknown ones too:
 	// what the agents picker starts from, so saving keeps them.
 	Selected []string
@@ -181,6 +184,7 @@ func toSkill(e engine.Entry) Skill {
 		s.Agents = append(s.Agents, t.Name)
 	}
 	s.Selected = append([]string{}, e.TargetNames...)
+	s.ViaShared = append([]string(nil), e.ViaShared...)
 	return s
 }
 

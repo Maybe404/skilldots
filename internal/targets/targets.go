@@ -273,22 +273,11 @@ const AllInstalled = "*"
 // agents among present (Registry.Present, in its order), without
 // duplicates. Lists without it are returned as they are.
 //
-// When the list then has the shared directory (Shared), an installed agent
-// that reads it too (ReadsShared) is left out: it gets the skill from
-// there, and linked into its own directory as well it would load it
-// twice. An agent named in names or defaults is kept: that is a choice.
+// It is the selection, the same for every caller (resolving, editing,
+// showing): which of those agents read the skill through the shared
+// directory instead of a link of their own is decided per skill when the
+// library is resolved (engine.Entry.ViaShared).
 func ExpandNames(names, defaults []string, present []Target) []string {
-	return expandNames(names, defaults, present, true)
-}
-
-// ExpandNamesUnshared is ExpandNames for a machine where nothing is linked
-// into the shared directory (it is paused): every installed agent is
-// kept.
-func ExpandNamesUnshared(names, defaults []string, present []Target) []string {
-	return expandNames(names, defaults, present, false)
-}
-
-func expandNames(names, defaults []string, present []Target, shared bool) []string {
 	if !slices.Contains(names, AllInstalled) {
 		return names
 	}
@@ -298,7 +287,6 @@ func expandNames(names, defaults []string, present []Target, shared bool) []stri
 			out = append(out, n)
 		}
 	}
-	viaShared := shared && (slices.Contains(names, Shared) || slices.Contains(defaults, Shared))
 	for _, n := range names {
 		if n != AllInstalled {
 			add(n)
@@ -308,7 +296,7 @@ func expandNames(names, defaults []string, present []Target, shared bool) []stri
 			add(d)
 		}
 		for _, t := range present {
-			if t.Builtin && !(viaShared && t.ReadsShared) {
+			if t.Builtin {
 				add(t.Name)
 			}
 		}

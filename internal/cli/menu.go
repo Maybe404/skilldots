@@ -195,7 +195,7 @@ func menuAction(c *ctx, choice string, entries []engine.Entry) error {
 			Options(opts...).Value(&chosen)); err != nil {
 			return nil
 		}
-		return targetsDone(c)(c.SetTargets(app.KeyRef(name), chosen))
+		return targetsDone(c, chosen, true)(c.SetTargets(app.KeyRef(name), chosen))
 	case "sync":
 		return run("sync")
 	case "scan":

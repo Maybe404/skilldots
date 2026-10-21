@@ -5,11 +5,10 @@ import (
 	"testing"
 )
 
-// An agent that reads ~/.agents/skills too is not linked into its own
-// directory by "*" when the list has the shared directory: it would load
-// the skill twice. Named, or with nothing linked into the shared
-// directory, it is.
-func TestExpandNamesSkipsSharedReaders(t *testing.T) {
+// "*" is the selection, the same for every caller: every installed agent,
+// those that read ~/.agents/skills too included (which of them get a link
+// of their own is decided per skill, engine.Entry.ViaShared).
+func TestExpandNamesIsTheSelection(t *testing.T) {
 	present := []Target{
 		{Name: "agents", Builtin: true},
 		{Name: "claude", Builtin: true},
@@ -17,19 +16,14 @@ func TestExpandNamesSkipsSharedReaders(t *testing.T) {
 		{Name: "kiro", Builtin: true},
 	}
 	cases := []struct{ names, defaults, want []string }{
-		{[]string{"*"}, []string{"agents"}, []string{"agents", "claude", "kiro"}},
-		{[]string{"agents", "claude", "*"}, []string{"agents", "claude"}, []string{"agents", "claude", "kiro"}},
-		{[]string{"codex", "*"}, []string{"agents"}, []string{"codex", "agents", "claude", "kiro"}},
-		{[]string{"*"}, []string{"agents", "codex"}, []string{"agents", "codex", "claude", "kiro"}},
+		{[]string{"*"}, []string{"agents"}, []string{"agents", "claude", "codex", "kiro"}},
+		{[]string{"agents", "claude", "*"}, []string{"agents", "claude"}, []string{"agents", "claude", "codex", "kiro"}},
 		{[]string{"*"}, []string{"claude"}, []string{"claude", "agents", "codex", "kiro"}},
 	}
 	for _, c := range cases {
 		if got := ExpandNames(c.names, c.defaults, present); !slices.Equal(got, c.want) {
 			t.Errorf("ExpandNames(%v, %v) = %v, want %v", c.names, c.defaults, got, c.want)
 		}
-	}
-	if got := ExpandNamesUnshared([]string{"*"}, []string{"agents"}, present); !slices.Equal(got, []string{"agents", "claude", "codex", "kiro"}) {
-		t.Errorf("unshared: %v", got)
 	}
 	// The registry marks the agents documented to read it.
 	reg, err := NewRegistry("", nil)

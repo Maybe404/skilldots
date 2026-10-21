@@ -304,7 +304,12 @@ func targetList(e engine.Entry) string {
 	for i, t := range e.Targets {
 		names[i] = t.Name
 	}
-	return strings.Join(names, ", ")
+	out := strings.Join(names, ", ")
+	if len(e.ViaShared) > 0 {
+		// Agents that read ~/.agents/skills get it there.
+		out += dim(" " + i18n.Sprintf("(+ %s through agents)", strings.Join(e.ViaShared, ", ")))
+	}
+	return out
 }
 
 func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
@@ -319,6 +324,9 @@ func listByAgent(c *ctx, entries []engine.Entry, agent string) error {
 			if et.Name == t.Name {
 				tb.Row(e.LinkName, dim(engine.Describe(e)))
 			}
+		}
+		if slices.Contains(e.ViaShared, t.Name) {
+			tb.Row(e.LinkName, dim(engine.Describe(e)+" "+i18n.T("(through agents)")))
 		}
 	}
 	c.printf("%s\n", tb.Render())

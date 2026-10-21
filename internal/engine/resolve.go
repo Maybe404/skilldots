@@ -52,6 +52,11 @@ type Entry struct {
 	// this machine (targets.Installed): nothing is linked or made for
 	// them here, and what the lock records for them is kept.
 	Absent []string `json:",omitempty"`
+	// ViaShared are agents among its targets that read the shared directory
+	// ~/.agents/skills (targets.Target.ReadsShared) while the skill is in
+	// it: they get it there, and no link of their own, so none loads it
+	// twice (markViaShared).
+	ViaShared []string `json:",omitempty"`
 	// Missing is set when the source dir is absent (e.g. not vendored yet).
 	Missing bool
 	// LinkedVia is the symbolic link inside the library on the way to Dir,
@@ -101,13 +106,7 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 				e.Description = meta.Description
 			}
 		}
-		if slices.Contains(lib.Manifest.Targets.Disabled, SharedTarget) {
-			// Nothing goes into the shared directory while it is paused:
-			// every agent that reads it gets its own link.
-			e.TargetNames = targets.ExpandNamesUnshared(e.TargetNames, lib.Manifest.Targets.Default, reg.Present())
-		} else {
-			e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
-		}
+		e.TargetNames = ExpandTargets(e.TargetNames, lib.Manifest.Targets.Default, reg)
 		for _, n := range e.TargetNames {
 			if slices.Contains(lib.Manifest.Targets.Disabled, n) {
 				continue
@@ -150,6 +149,9 @@ func Resolve(lib *library.Library, reg *targets.Registry) ([]Entry, []string, er
 	}
 
 	warnings = append(warnings, markConflicts(out)...)
+	for i := range out {
+		markViaShared(lib, &out[i])
+	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].LinkName < out[j].LinkName })
 	return out, warnings, nil
 }
@@ -248,6 +250,72 @@ func collect(lib *library.Library) ([]Entry, []string) {
 		}
 	}
 	return out, warnings
+}
+
+// markViaShared takes out of e's targets the agents that read the shared
+// directory too (targets.Target.ReadsShared), when e is linked there: each
+// such agent would otherwise load the skill twice, once from its own
+// directory and once from ~/.agents/skills (Codex lists both). They are
+// recorded in ViaShared. However they were chosen ("*", named, the
+// defaults, adopt) the rule is the same.
+//
+// The shared directory must really serve the skill: Agents a target of
+// e here (not paused, which leaves it out of Targets), no name conflict,
+// and its entry there either free (apply links it), skd's link to e, or
+// skd's record of it still in place. Anything else there (a directory
+// of the user's that apply skips) does not count, and those agents keep
+// their own links.
+func markViaShared(lib *library.Library, e *Entry) {
+	if e.Conflict != "" || e.Missing || e.LinkedVia != "" || e.Refused != "" {
+		return
+	}
+	var shared *targets.Target
+	for i := range e.Targets {
+		if e.Targets[i].Builtin && e.Targets[i].Name == SharedTarget {
+			shared = &e.Targets[i]
+		}
+	}
+	if shared == nil || !sharedServes(lib, *shared, e) {
+		return
+	}
+	var keep []targets.Target
+	for _, t := range e.Targets {
+		if t.Builtin && t.ReadsShared {
+			e.ViaShared = append(e.ViaShared, t.Name)
+			continue
+		}
+		keep = append(keep, t)
+	}
+	e.Targets = keep
+}
+
+// ReachesViaShared reports whether agent t, given e as a target, gets it
+// through the shared directory rather than a link of its own: the rule of
+// markViaShared, for an agent e may not have yet.
+func ReachesViaShared(lib *library.Library, e *Entry, t targets.Target) bool {
+	if slices.Contains(e.ViaShared, t.Name) {
+		return true
+	}
+	if !t.Builtin || !t.ReadsShared || e.Conflict != "" || e.Missing || e.LinkedVia != "" || e.Refused != "" {
+		return false
+	}
+	for _, x := range e.Targets {
+		if x.Builtin && x.Name == SharedTarget {
+			return sharedServes(lib, x, e)
+		}
+	}
+	return false
+}
+
+// sharedServes reports whether e's entry in the shared directory t is, or
+// after apply will be, skd's own for e.
+func sharedServes(lib *library.Library, t targets.Target, e *Entry) bool {
+	dest := filepath.Join(t.Path, e.LinkName)
+	if !fsutil.Lexists(dest) || isLinkTo(dest, e.Dir) {
+		return true
+	}
+	prev := lib.Lock.Links[t.Name+"/"+e.LinkName]
+	return prev != nil && current(dest, prev, lib)
 }
 
 // SharedTarget is the cross-agent directory ~/.agents/skills: skd makes it
