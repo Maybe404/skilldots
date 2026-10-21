@@ -91,6 +91,8 @@ Prints where a skill's files live, for editing.
 
 Inventories every agent skill directory: managed entries, copies, links and broken links. It also lists links into the library recorded for a custom target no longer in use (`left`), and leaves them in place, since they may be your own.
 
+Each unmanaged entry says what `skd adopt` would do with it, or why it is left to you (say, a name the library already uses twice over); the last line counts those. It never fetches, so a copy is compared with upstream only by `adopt`.
+
 ## Linking
 
 ### `skd apply [-n] [--force]`
@@ -181,6 +183,8 @@ Unlinks a skill everywhere and moves its directory to the library trash; `skd tr
 
 Deletes a pack from the manifest, the lock, `vendor/` and every agent directory. What it takes out goes to the trash.
 
+Here and in every command that takes a pack (`update`, `list`, `enable` and the rest), a pack is named by `owner/repo`, by the URL or local path it was added from (`file://` URLs included), or by the last part of its repository name when only one pack has it.
+
 ## Taking over and cleaning up
 
 ### `skd adopt [-n] [--yes]`
@@ -189,6 +193,9 @@ Takes over unmanaged entries found by `skd scan`: subscribes to their repository
 
 - A copy in the own directory of an agent that reads `~/.agents/skills`, of a skill the library already links into `agents`, is redundant: when it is the same as the library's, it goes to the trash (that agent keeps reading the library's copy through `agents`); when it differs, it is left in place with a note.
 - A copy whose repository skd knows is compared with upstream first (one fetch per repository). If you changed it, it is copied in as your own skill rather than replaced by upstream's; the proposal names the repository and the `skd add` that would follow upstream instead (`Upstream` and `Differs` in `--json`).
+- A copy whose content is exactly a library skill's, under whatever name, is taken for that skill: it is installed for the agent and the copy goes to the trash.
+- A copy taken in as your own is named by its `SKILL.md`; when the library already uses that name, by its directory (and its `SKILL.md` is renamed to match), as the dry run says (`As` in `--json`). With both names taken it is not adopted: rename it first.
+- What it leaves to you is listed, with the reason, before anything is done, with `--yes` too.
 
 ### `skd trash [restore <id|skill|owner/repo> | empty]`
 

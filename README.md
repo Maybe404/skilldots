@@ -116,7 +116,7 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd remove <skill>` | unlink a skill everywhere and move its directory to the trash |
 | `skd purge <pack>` | delete a pack from the manifest, the lock, `vendor/` and every agent directory |
 | **Cleaning up** | |
-| `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own (always, when your copy differs from upstream), enable per agent |
+| `skd adopt [-n] [--yes]` | take over unmanaged entries: subscribe, register apps, copy as your own (always, when your copy differs from upstream), enable per agent; a copy identical to a library skill becomes that skill |
 | `skd trash [restore <id\|skill> \| empty]` | what skd set aside and why; restore it (undoing `remove` or `purge`, links included); or (a person, interactively) delete for good |
 | `skd config list \| get <key> \| set <key> [value]` | settings: `editor`, `editor-kind`, `theme`, `lang`, `library` |
 | `skd [--simple]` | the dashboard; `--simple`, a narrow terminal or `TERM=dumb` give a question-and-answer menu |
