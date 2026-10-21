@@ -359,3 +359,21 @@
 
 @ no trash entry holds the pack %q (give an id as `skd trash` lists it, the repository of a purged pack, or the name of a skill in the trash)
 = 回收站里没有来源 %q 的条目（请给出 `skd trash` 列出的 ID、被清除的来源的仓库名，或回收站里某个 skill 的名字）
+
+@ already in the library as %s (%s), which %s reads from ~/.agents/skills; this copy goes to the trash
+= 资料库里已有，名为 %s（来自 %s），%s 会从 ~/.agents/skills 读到它；这份副本会移到回收站
+
+@ already in the library as %s (%s): install it for %s; this copy goes to the trash
+= 资料库里已有，名为 %s（来自 %s）：装到 %s 上即可；这份副本会移到回收站
+
+@ named %s, which %s already uses in the library; rename it (its directory or the name in its SKILL.md) first
+= 名字是 %s，而资料库里的 %s 已经用了这个名字；请先改名（目录名或 SKILL.md 里的 name）
+
+@ as %s: its SKILL.md name %s is taken by %s
+= 名为 %s：它 SKILL.md 里的名字 %s 已被 %s 占用
+
+@ as %s, the name in its SKILL.md
+= 名为 %s（它 SKILL.md 里的名字）
+
+@ app %s
+= 应用 %s

@@ -44,6 +44,11 @@ type Proposal struct {
 	// (skd add <Upstream> --skill <name>).
 	Upstream string `json:",omitempty"`
 	Differs  bool   `json:",omitempty"`
+	// As is the name an "own" proposal is copied into skills/ under: its
+	// SKILL.md name, or its directory name when that one is taken in the
+	// library (the copy's SKILL.md then says so). The dry run and the
+	// adoption use the same.
+	As string `json:",omitempty"`
 }
 
 // Actionable reports whether accepting p does anything.
@@ -55,6 +60,7 @@ func (p Proposal) Actionable() bool { return p.Kind != "skip" }
 // anything else becomes a skill of the user's own under skills/.
 func (s *Session) Proposals(rep scan.Report) []Proposal {
 	entries, _ := s.Resolve()
+	hashes := map[int]string{}
 	seen := map[string]bool{}
 	var out []Proposal
 	for _, it := range rep.Unmanaged() {
@@ -91,6 +97,15 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 			out = append(out, Proposal{Item: it, Kind: "enable", Label: i18n.Sprintf("enable for %s (already in library)", it.Target), Entry: engine.Qualified(*e)})
 			continue
 		}
+		// The same content as a skill the library has, under another name
+		// (a copy someone renamed): that skill, not a new one.
+		if it.State != scan.Broken {
+			if m := s.sameAsLibrary(it, entries, hashes); m != nil {
+				seen[it.Name] = true
+				out = append(out, s.alreadyIn(it, m))
+				continue
+			}
+		}
 		p := Proposal{Item: it}
 		switch {
 		case it.State == scan.Broken:
@@ -118,6 +133,7 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 		out = append(out, p)
 	}
 	s.checkUpstream(out)
+	s.nameOwn(out, entries)
 	// "own"/"pack" copies found in several agents: enable the extra agents too.
 	for _, it := range rep.Unmanaged() {
 		for _, p := range out {
@@ -129,6 +145,115 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Item.Name < out[j].Item.Name })
 	return out
+}
+
+// sameAsLibrary is the library entry whose files are exactly what it
+// holds, or nil. hashes caches the entries' hashes by index.
+func (s *Session) sameAsLibrary(it scan.Item, entries []engine.Entry, hashes map[int]string) *engine.Entry {
+	src := it.Path
+	if it.LinkTo != "" {
+		src = it.LinkTo
+	}
+	h := it.Hash
+	if h == "" || it.LinkTo != "" {
+		var err error
+		if h, err = fsutil.HashTree(src); err != nil {
+			return nil
+		}
+	}
+	for i := range entries {
+		e := &entries[i]
+		if e.Missing || e.Refused != "" || e.LinkedVia != "" {
+			continue
+		}
+		eh, ok := hashes[i]
+		if !ok {
+			eh, _ = fsutil.HashTree(e.Dir)
+			hashes[i] = eh
+		}
+		if eh == h && sameContent(it, e.Dir) {
+			return e
+		}
+	}
+	return nil
+}
+
+// alreadyIn proposes, for an agent entry holding exactly what library
+// entry e holds, to install e for the agent instead: the copy found goes
+// to the trash once e reaches the agent.
+func (s *Session) alreadyIn(it scan.Item, e *engine.Entry) Proposal {
+	p := Proposal{Item: it, Kind: "enable", Entry: engine.Qualified(*e)}
+	from := Origin(*e)
+	if t, err := s.Reg.Get(it.Target); err == nil && engine.ReachesViaShared(s.Lib, e, t) {
+		p.Label = i18n.Sprintf("already in the library as %s (%s), which %s reads from ~/.agents/skills; this copy goes to the trash", e.LinkName, from, it.Target)
+		return p
+	}
+	p.Label = i18n.Sprintf("already in the library as %s (%s): install it for %s; this copy goes to the trash", e.LinkName, from, it.Target)
+	return p
+}
+
+// nameOwn gives every "own" proposal the name it is copied into skills/
+// under (As): its SKILL.md name, else its directory name when the first is
+// taken in the library (or by another proposal); with both taken it is
+// not proposed, rather than adopted into a name clash.
+func (s *Session) nameOwn(props []Proposal, entries []engine.Entry) {
+	taken := map[string]string{}
+	for _, e := range entries {
+		taken[strings.ToLower(e.LinkName)] = e.LinkName + " (" + Origin(e) + ")"
+	}
+	for i := range props {
+		p := &props[i]
+		if p.Kind != "own" {
+			continue
+		}
+		src := p.Item.Path
+		if p.Item.LinkTo != "" {
+			src = p.Item.LinkTo
+		}
+		names := []string{}
+		if meta, err := skillmd.Read(src); err == nil && manifest.CheckName(meta.Name) == nil {
+			names = append(names, meta.Name)
+		}
+		if !slices.Contains(names, p.Item.Name) {
+			names = append(names, p.Item.Name)
+		}
+		free := func(n string) bool {
+			return taken[strings.ToLower(n)] == "" && !fsutil.Lexists(filepath.Join(s.Lib.SkillsDir(), n))
+		}
+		for _, n := range names {
+			if free(n) {
+				p.As = n
+				break
+			}
+		}
+		if p.As == "" {
+			p.Kind, p.Label = "skip", i18n.Sprintf("named %s, which %s already uses in the library; rename it (its directory or the name in its SKILL.md) first", names[0], taken[strings.ToLower(names[0])])
+			continue
+		}
+		switch {
+		case p.As != names[0]:
+			p.Label += " · " + i18n.Sprintf("as %s: its SKILL.md name %s is taken by %s", p.As, names[0], taken[strings.ToLower(names[0])])
+		case p.As != p.Item.Name:
+			p.Label += " · " + i18n.Sprintf("as %s, the name in its SKILL.md", p.As)
+		}
+		taken[strings.ToLower(p.As)] = p.As
+	}
+}
+
+// Origin says where a library entry comes from, for a person: its pack's
+// repository, skills/, private/ or the application.
+func Origin(e engine.Entry) string {
+	switch e.Kind {
+	case engine.KindVendor:
+		return e.Origin
+	case engine.KindSkill:
+		return "skills/"
+	case engine.KindPrivate:
+		return "private/"
+	case engine.KindApp:
+		return i18n.Sprintf("app %s", e.Origin)
+	}
+	return string(e.Kind)
 }
 
 // checkUpstream compares every "pack" proposal with what its upstream has
@@ -242,11 +367,25 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 	var order []string
 	// renamed maps an agent entry name to the skill name it was adopted as.
 	renamed := map[string]string{}
+	// copied is the hash of what each "own" skill was copied from, by its
+	// name in the library: its SKILL.md may be renamed after the copy.
+	copied := map[string]string{}
 	adoptedAs := func(it scan.Item) string {
 		if n := renamed[it.Name]; n != "" {
 			return n
 		}
 		return it.Name
+	}
+	// A copy of a library skill found under another name: the entry it
+	// is installed as is the skill's own name.
+	if before, err := s.Resolve(); err == nil {
+		for _, p := range props {
+			if p.Kind == "enable" && p.Entry != "" {
+				if e, _ := engine.Lookup(before, p.Entry); e != nil && e.LinkName != p.Item.Name {
+					renamed[p.Item.Name] = e.LinkName
+				}
+			}
+		}
 	}
 	for _, p := range props {
 		switch p.Kind {
@@ -282,10 +421,17 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 				src = p.Item.LinkTo
 			}
 			// The library knows a skill by its frontmatter name, which may
-			// differ from the directory name it had in the agent dir.
-			name := p.Item.Name
-			if meta, err := skillmd.Read(src); err == nil && meta.Name != name && manifest.CheckName(meta.Name) == nil {
-				name = meta.Name
+			// differ from the directory name it had in the agent dir. The
+			// proposal says which name (As); without one, as before.
+			name := p.As
+			meta, merr := skillmd.Read(src)
+			if name == "" {
+				name = p.Item.Name
+				if merr == nil && meta.Name != name && manifest.CheckName(meta.Name) == nil {
+					name = meta.Name
+				}
+			}
+			if name != p.Item.Name {
 				renamed[p.Item.Name] = name
 			}
 			dest := filepath.Join(lib.SkillsDir(), name)
@@ -295,6 +441,16 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			if !fsutil.Lexists(dest) {
 				if err := fsutil.CopyTree(src, dest); err != nil {
 					return nil, err
+				}
+				if h, err := fsutil.HashTree(dest); err == nil {
+					copied[name] = h
+				}
+				// Adopted under another name than its SKILL.md says (that
+				// one was taken): the copy says so too, or it would clash.
+				if merr == nil && meta.Name != name {
+					if err := skillmd.SetName(dest, name); err != nil {
+						return nil, err
+					}
 				}
 				s.logf(Done, "copied %s → %s", p.Item.Name, lib.Rel(dest))
 			}
@@ -428,6 +584,10 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			continue
 		}
 		h, err := fsutil.HashTree(e.Dir)
+		if c := copied[adoptedAs(p.Item)]; c != "" && (p.Kind == "own" || p.Via == "own") {
+			// Compared with what was copied, before its name was changed.
+			h, err = c, nil
+		}
 		if err == nil && fsutil.Pristine(src, h) {
 			continue
 		}
