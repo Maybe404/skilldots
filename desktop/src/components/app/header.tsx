@@ -60,7 +60,7 @@ export function StyleSwitch({ className, itemClassName }: { className?: string; 
 export function Header() {
   const { t, view, navigate, query, setQuery, status, openDialog, updatablePacks, setPaletteOpen } = useApp()
   const libName = status?.root?.split("/").filter(Boolean).pop() ?? ""
-  const current = view === "editor" ? "skills" : view
+  const current = view === "editor" || view === "resolve" ? "skills" : view
   return (
     <header className="skd-titlebar relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd max-[900px]:gap-2 pr-6 max-[760px]:pr-3 max-[760px]:[--bar-pad:12px]">
       <span className="shrink-0 font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>

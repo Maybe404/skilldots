@@ -30,7 +30,7 @@ export function Doodles() {
       <svg
         aria-hidden
         // The editor has its own toolbar in that corner; the moon stays out of it.
-        className={cn("pointer-events-none fixed top-[50px] right-[250px] z-[1] max-[960px]:hidden", view === "editor" && "hidden")}
+        className={cn("pointer-events-none fixed top-[50px] right-[250px] z-[1] max-[960px]:hidden", (view === "editor" || view === "resolve") && "hidden")}
         width="56"
         height="56"
         viewBox="0 0 90 90"

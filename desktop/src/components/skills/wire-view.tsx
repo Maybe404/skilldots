@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
-import { isMine, sourceText, useApp } from "@/lib/app-state"
+import { hasConflicts, isMine, sourceText, useApp } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn, keepsViaShared } from "@/lib/pending"
@@ -566,6 +566,7 @@ function SkillRow({
             <span className="truncate">{skill.linkName}</span>
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
+            {hasConflicts(skill) && <Tag tone="accent">{t("conflictTag")}</Tag>}
           </span>
           <span className="mt-0.5 block truncate fs-meta text-mut">{sourceText}</span>
         </span>
@@ -586,7 +587,7 @@ function SkillRow({
         </Hint>
       </button>
       {/* Over the row's right end, left of the count; the row's own background keeps a long name from showing through. */}
-      <RowActions skill={skill} shown={selected || focused} className={cn("absolute top-1/2 right-[62px] -translate-y-1/2 rounded-ctl pl-2", focused ? "bg-row-on" : "bg-bg", dim && "opacity-40")} />
+      <RowActions skill={skill} shown={selected || focused} tinted={focused} className={cn("absolute top-1/2 right-[62px] -translate-y-1/2 rounded-ctl", dim && "opacity-40")} />
     </div>
   )
 }
