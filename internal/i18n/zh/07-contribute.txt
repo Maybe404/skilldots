@@ -1,0 +1,220 @@
+# Your edits, contributing upstream, and syncing the library with its remote.
+
+@   %s %s · %s %s · gh %s\n
+=   %s %s · %s %s · gh %s\n
+
+@ %q is not a file of the library
+= %q 不是资料库里的文件
+
+@ %q is not a vendored skill: its files are all yours
+= %q 不是引入的 skill：它的文件全是你自己的
+
+@ %q is not a vendored skill; only changes to a skill from an upstream repository are contributed
+= %q 不是引入的 skill；只有来自上游仓库的 skill 的改动才能提交给上游
+
+@ %s has changes of yours, but the upstream version they are based on is not known (no upstream snapshot, never committed in the library), so skd cannot show them
+= %s 有你的改动，但不知道它基于的上游版本（没有上游快照，也没在资料库里提交过），所以 skd 无法显示这些改动
+
+@ %s has no changes of yours to contribute (skd diff %s shows them)
+= %s 没有你的改动可以提交（skd diff %s 可查看）
+
+@ %s has no changes of yours: it is what skd vendored
+= %s 没有你的改动：和 skd 引入时一样
+
+@ %s is no longer in %s
+= %s 已经不在 %s 里了
+
+@ %s is not based on upstream's current version: skd update %s first (and skd resolve, if it is shelved)
+= %s 不是基于上游当前的版本：请先 skd update %s（如果被搁置了，再 skd resolve）
+
+@ %s is the same as upstream's: nothing to contribute
+= %s 和上游的一样：没有可提交的
+
+@ %s refused the push to %s (%v); open a pull request instead: skd contribute %s --pr
+= %s 拒绝了推送到 %s（%v）；请改为提 PR：skd contribute %s --pr
+
+@ %s you changed it, against upstream's version (skd diff <skill>; skd update merges upstream's changes in)
+= %s 你改过它，相对上游的版本（skd diff <skill>；skd update 会把上游的改动合并进来）
+
+@ --pr and --push: pick one
+= --pr 和 --push 只能选一个
+
+@ --resolve, --continue and --abort: pick one
+= --resolve、--continue 和 --abort 只能选一个
+
+@ Compares a vendored skill's files with the upstream version they are based on (the one skills.lock records, found in the library's upstream snapshots or its git history), as a unified diff: what you changed, which skd update keeps by merging upstream's changes in, and what skd contribute would send. When that version is not found it says so and shows nothing.
+= 以统一 diff 格式比较引入的 skill 的文件和它所基于的上游版本（skills.lock 记录的那个，从资料库的上游快照或 git 历史里找）：这就是你的改动，skd update 合并上游改动时会保留它们，skd contribute 也会发送它们。找不到那个版本时会直接说明，不显示任何内容。
+
+@ Send %s's changes: %s?
+= 发送 %s 的改动：%s？
+
+@ Send your changes to a vendored skill upstream, as a pull request or a push
+= 把你对引入 skill 的改动提交给上游：提 PR 或直接推送
+
+@ Show your changes to a vendored skill, against the upstream version it is based on
+= 显示你对引入 skill 的改动（相对它所基于的上游版本）
+
+@ Your changes to a vendored skill stay yours (skd update merges upstream's changes into them); nothing is ever sent upstream unless you run this. contribute <skill> --pr opens a pull request on the pack's GitHub repository from a branch skilldots/<skill>-<time> (pushed to the repository when you may push there, else to your fork, which gh makes); --push pushes the change straight to the pack's branch, when you may. The change is committed, with your git identity and -m as the message, in a clone of its own in the cache, never in the library. The skill must be based on upstream's current version (skd update first), and --pr needs gh, logged in. --dry-run shows the repository, the branch, what is possible and the diff, and sends nothing; without a terminal --yes is needed to send. Without a skill, contribute lists the contributions on record; --refresh asks GitHub for the state of the pull requests.
+= 你对引入 skill 的改动始终是你的（skd update 会把上游的改动合并进来）；除非你运行这个命令，否则不会向上游发送任何东西。contribute <skill> --pr 从分支 skilldots/<skill>-<时间> 在来源的 GitHub 仓库上提 PR（你有推送权限时推到该仓库，否则推到 gh 为你建的 fork）；--push 在你有权限时直接推到来源的分支。改动用你的 git 身份、以 -m 为提交信息，在缓存里一个单独的克隆中提交，从不在资料库里提交。skill 必须基于上游当前的版本（先 skd update），--pr 需要已登录的 gh。--dry-run 显示仓库、分支、可用的方式和 diff，不发送任何东西；没有终端时要加 --yes 才会发送。不带 skill 时列出记录在案的提交；--refresh 向 GitHub 查询 PR 的状态。
+
+@ a pull request needs gh to be logged in: run gh auth login
+= 提 PR 需要 gh 已登录：请运行 gh auth login
+
+@ a pull request needs gh, GitHub's command line, which is not installed: https://cli.github.com
+= 提 PR 需要 GitHub 的命令行工具 gh，但它没有安装：https://cli.github.com
+
+@ a sync is being resolved: finish it with skd sync --continue, or skd sync --abort
+= 有一次同步正在解决冲突：用 skd sync --continue 完成，或用 skd sync --abort 放弃
+
+@ ask GitHub for the state of the pull requests on record
+= 向 GitHub 查询记录在案的 PR 的状态
+
+@ branch %s
+= 分支 %s
+
+@ cannot open a pull request: %s
+= 无法提 PR：%s
+
+@ cannot tell the default branch of %s
+= 无法确定 %s 的默认分支
+
+@ choose %s or %s, not %q
+= 请在 %s 和 %s 中选择，而不是 %q
+
+@ closed
+= 已关闭
+
+@ commit message (its first line titles the pull request)
+= 提交信息（第一行作为 PR 标题）
+
+@ contribute sends your changes upstream (%s); run it with --dry-run to see what it sends, then with --yes
+= contribute 会把你的改动发给上游（%s）；先用 --dry-run 看会发送什么，再加 --yes 运行
+
+@ could not link what was pulled: %v; run skd apply
+= 没能链接拉取下来的内容：%v；请运行 skd apply
+
+@ could not record the files of the sync being resolved: %v
+= 没能记录正在解决冲突的同步涉及的文件：%v
+
+@ could not record the state of the pull requests: %v
+= 没能记录 PR 的状态：%v
+
+@ edit them (git checkout --ours/--theirs <file> takes one side; agents linked to these skills read the markers meanwhile), then skd sync --continue · skd sync --abort gives up
+= 编辑它们（git checkout --ours/--theirs <文件> 可直接取一边；在此期间链接了这些 skill 的 agent 会读到冲突标记），然后 skd sync --continue · skd sync --abort 放弃
+
+@ finish a sync being resolved: commit the merge and push
+= 完成正在解决冲突的同步：提交合并并推送
+
+@ gh %s: %s
+= gh %s：%s
+
+@ give up a sync being resolved (git merge --abort)
+= 放弃正在解决冲突的同步（git merge --abort）
+
+@ merged and pushed
+= 已合并并推送
+
+@ merged what the remote had
+= 已合并远程仓库上的改动
+
+@ merged without conflicts and pushed
+= 已无冲突地合并并推送
+
+@ no contributions on record · skd contribute <skill> --pr sends one
+= 没有记录在案的提交 · skd contribute <skill> --pr 可提交
+
+@ no sync is being resolved
+= 没有正在解决冲突的同步
+
+@ no
+= 否
+
+@ nothing sent
+= 什么也没发送
+
+@ open a pull request (GitHub, through gh)
+= 提 PR（GitHub，通过 gh）
+
+@ open a pull request on %s
+= 在 %s 提 PR
+
+@ open
+= 等待审批
+
+@ pull request #%d opened: %s
+= 已提 PR #%d：%s
+
+@ pull request
+= PR
+
+@ pull requests are opened on GitHub only; for another host push (--push) when you may, or send a patch: git format-patch
+= 只能在 GitHub 上提 PR；其他主机请在有权限时直接推送（--push），或发送补丁：git format-patch
+
+@ push to %s's %s
+= 推送到 %s 的 %s
+
+@ push to the pack's branch (when you may)
+= 推送到来源的分支（在你有权限时）
+
+@ push
+= 推送
+
+@ pushed to %s's %s
+= 已推送到 %s 的 %s
+
+@ pushed
+= 已推送
+
+@ redo a shelved sync's merge, leaving its conflicts in the library to resolve
+= 重做被搁置的同步的合并，把冲突留在资料库里等你解决
+
+@ show where it would go and the diff; send nothing
+= 显示会发到哪里以及 diff；不发送任何东西
+
+@ skd contribute %s --pr opens a pull request · --push pushes to %s
+= skd contribute %s --pr 提 PR · --push 推送到 %s
+
+@ sync commits the library, fetches its git remote and merges what the remote has that the library has not (git merge, never rebase; what the merge brings in is linked), then pushes, with the upstream snapshots. When both sides changed the same lines the sync is shelved: the merge is aborted, the library stays as it was, nothing is pushed, and the conflicting files are listed. sync --resolve redoes the merge and leaves git's conflict state in the library (conflict markers, files unmerged in the index: git status, git diff and git checkout --ours/--theirs work); agents linked to skills among them read the markers until it is finished. Edit the files, then sync --continue commits the merge and pushes (it refuses while a marker is left); sync --abort gives up (git merge --abort). private/ is a separate repository and is never pushed.
+= sync 提交资料库，拉取它的 git 远程仓库，把远程有而资料库没有的改动合并进来（git merge，从不 rebase；合并进来的内容会被链接），然后连同上游快照一起推送。两边改了同样的行时，同步被搁置：合并被放弃，资料库保持原样，什么也不推送，并列出冲突的文件。sync --resolve 重做合并，把 git 的冲突状态留在资料库里（冲突标记、暂存区里未合并的文件：git status、git diff 和 git checkout --ours/--theirs 都能用）；在完成之前，链接了其中 skill 的 agent 会读到冲突标记。编辑完文件后，sync --continue 提交合并并推送（还有冲突标记时会拒绝）；sync --abort 放弃（git merge --abort）。private/ 是单独的仓库，从不推送。
+
+@ sync shelved with conflicts; skd sync --resolve to resolve them
+= 同步因冲突搁置；用 skd sync --resolve 解决
+
+@ sync shelved: the remote and this library both changed %s; nothing was merged or pushed
+= 同步已搁置：远程仓库和本资料库都改了 %s；什么也没有合并或推送
+
+@ the branch %s was pushed, but opening the pull request failed: %w
+= 分支 %s 已推送，但提 PR 失败：%w
+
+@ the library has no remote branch to sync with (skd sync --remote <git-url> sets one)
+= 资料库没有可同步的远程分支（skd sync --remote <git-url> 可设置）
+
+@ the merge is aborted: the library is as it was, the sync still shelved
+= 已放弃合并：资料库恢复原样，同步仍然搁置
+
+@ the pack is pinned to %s, which is not a branch upstream: there is nothing to push to
+= 来源固定在 %s，它在上游不是分支：没有可推送的目标
+
+@ the sync has no conflict in %q
+= 同步在 %q 里没有冲突
+
+@ the sync is being resolved: %s with conflicts
+= 同步正在解决冲突：%s 有冲突
+
+@ the sync still has conflicts in %s: edit them (or git checkout --ours/--theirs <file>, git add <file>), then run skd sync --continue again
+= 同步的 %s 里还有冲突：请编辑它们（或 git checkout --ours/--theirs <文件>、git add <文件>），然后再运行 skd sync --continue
+
+@ to
+= 到
+
+@ yes
+= 是
+
+@ you cannot push to %s: open a pull request (--pr)
+= 你不能推送到 %s：请提 PR（--pr）
+
+@ you cannot push to %s; open a pull request instead: skd contribute %s --pr
+= 你不能推送到 %s；请改为提 PR：skd contribute %s --pr
+
+@  · skd sync --resolve at a terminal
+=  · 在终端里运行 skd sync --resolve

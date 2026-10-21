@@ -540,8 +540,8 @@
 @ %s %v; nothing was set up there, and skills under it are skipped\n
 = %s %v；没有在那里设置任何东西，它下面的 skill 会被跳过\n
 
-@ Commit the library and push it to its git remote (your backup)
-= 提交资料库并推送到它的 git 远程仓库（你的备份）
+@ Commit the library, merge what its git remote has, and push (your backup)
+= 提交资料库，合并它的 git 远程仓库上的改动，再推送（你的备份）
 
 @ %s committed in %s\n
 = %s 已在 %s 提交\n

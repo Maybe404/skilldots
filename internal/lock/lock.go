@@ -56,6 +56,26 @@ type Skill struct {
 	// Backup is the trash ID of the directory as it was before.
 	Resolving bool   `toml:"resolving,omitempty"`
 	Backup    string `toml:"backup,omitempty"`
+	// Contribution is the user's change to this skill as last sent
+	// upstream (skd contribute): kept until an update brings upstream's
+	// version to what the user has (the change landed).
+	Contribution *Contribution `toml:"contribution,omitempty"`
+}
+
+// Contribution is a change to a vendored skill sent upstream.
+type Contribution struct {
+	// Kind is "pr" (a pull request) or "push" (pushed to the branch).
+	Kind string `toml:"kind"`
+	// URL is the pull request's; Number its number.
+	URL    string `toml:"url,omitempty"`
+	Number int    `toml:"number,omitempty"`
+	// Branch is the branch pushed to (the pull request's head branch).
+	Branch string `toml:"branch,omitempty"`
+	// State is "open", "merged" or "closed" for a pull request, "pushed"
+	// for a push.
+	State string `toml:"state"`
+	// At is when it was sent (RFC 3339).
+	At string `toml:"at,omitempty"`
 }
 
 type Link struct {
@@ -126,7 +146,8 @@ var known = []string{
 	"packs.*", "packs.*.commit", "packs.*.ref", "packs.*.upstream",
 	"packs.*.skills.*", "packs.*.skills.*.category", "packs.*.skills.*.hash",
 	"packs.*.skills.*.shelved", "packs.*.skills.*.upstream", "packs.*.skills.*.conflicts",
-	"packs.*.skills.*.resolving", "packs.*.skills.*.backup",
+	"packs.*.skills.*.resolving", "packs.*.skills.*.backup", "packs.*.skills.*.contribution", "packs.*.skills.*.contribution.kind",
+	"packs.*.skills.*.contribution.url", "packs.*.skills.*.contribution.branch", "packs.*.skills.*.contribution.state", "packs.*.skills.*.contribution.at",
 	"links.*", "links.*.mode", "links.*.source", "links.*.hash", "links.*.path",
 }
 
