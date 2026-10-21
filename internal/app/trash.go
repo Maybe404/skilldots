@@ -75,7 +75,7 @@ func (s *Session) RestoreEntry(key string) (*RestoreOutcome, error) {
 	if err != nil {
 		return nil, err
 	}
-	engine.DropTrashNote(p)
+	s.noteWarn(engine.DropTrashNote(p))
 	out := &RestoreOutcome{ID: id, Path: dest}
 	if note != nil {
 		out.Skills, out.Repo = note.Skills, note.Repo

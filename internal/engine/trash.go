@@ -191,7 +191,7 @@ func trashAs(lib *library.Library, src, base string) (string, error) {
 	// Whatever skd remembered about an entry that was at dest before (one
 	// deleted for good, then the same name set aside again in the same
 	// batch) is not about this one.
-	ForgetTrashEntry(dest)
+	warnf(ForgetTrashEntry(dest))
 	if err := move(src, dest); err != nil {
 		return "", err
 	}
@@ -536,7 +536,7 @@ func EmptyTrash(lib *library.Library) (int, error) {
 	if err := os.RemoveAll(filepath.Join(lib.Root, TrashDir)); err != nil {
 		return 0, err
 	}
-	dropTrashNotesUnder(filepath.Join(lib.Root, TrashDir))
+	warnf(dropTrashNotesUnder(filepath.Join(lib.Root, TrashDir)))
 	forgetLocalTrashUnder(filepath.Join(lib.Root, TrashDir))
 	return len(entries), nil
 }

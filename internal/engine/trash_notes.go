@@ -136,6 +136,21 @@ func editTrashNotes(edit func(m map[string]*TrashNote) bool) error {
 	return nil
 }
 
+// notify, when set (SetNotify), is told what a person should know about
+// a step that went on regardless: a broken notes file set aside while
+// something was moved to the trash.
+var notify func(msg string)
+
+// SetNotify sets where engine sends such warnings (app.Open: the
+// session's log).
+func SetNotify(f func(msg string)) { notify = f }
+
+func warnf(err error) {
+	if err != nil && notify != nil {
+		notify(err.Error())
+	}
+}
+
 // noteKey is the key of the entry at p in the notes: its resolved path.
 func noteKey(p string) string { return fsutil.Resolve(p) }
 
@@ -161,9 +176,10 @@ func TrashNoteFor(path string) *TrashNote {
 }
 
 // DropTrashNote forgets the note of the entry at path (restored, or
-// deleted for good).
-func DropTrashNote(path string) {
-	_ = editTrashNotes(func(m map[string]*TrashNote) bool {
+// deleted for good). Its error is a warning: a notes file that was not
+// valid JSON was set aside (BrokenNotesError).
+func DropTrashNote(path string) error {
+	return editTrashNotes(func(m map[string]*TrashNote) bool {
 		if m[noteKey(path)] == nil {
 			return false
 		}
@@ -174,9 +190,9 @@ func DropTrashNote(path string) {
 
 // dropTrashNotesUnder forgets the notes of every entry in dir (the trash
 // of a library that was emptied).
-func dropTrashNotesUnder(dir string) {
+func dropTrashNotesUnder(dir string) error {
 	root := noteKey(dir)
-	_ = editTrashNotes(func(m map[string]*TrashNote) bool {
+	return editTrashNotes(func(m map[string]*TrashNote) bool {
 		n := len(m)
 		for k := range m {
 			if strings.HasPrefix(k, root+string(filepath.Separator)) {

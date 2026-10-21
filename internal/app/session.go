@@ -75,6 +75,9 @@ func Open(root string) (*Session, error) {
 	engine.SetRegistry(reg)
 	engine.SetPlacedFile(PlacedFile())
 	ses := &Session{Lib: lib, Reg: reg}
+	// What engine warns about while it works goes where the session's
+	// progress goes.
+	engine.SetNotify(func(msg string) { ses.logf(Warn, "%s", msg) })
 	if engine.OlderSkd() && settingsLibrary(lib.Root) {
 		// The first time this skd opens the library the user's settings
 		// name, before any command changes skills.toml: record the app
