@@ -76,7 +76,8 @@ func txts(s []string) []string {
 
 // logLine prints the progress messages of the shared app flows.
 func logLine(l app.Level, msg string) {
-	msg = safetext.Lines(msg)
+	// Paths in the home directory are written ~/…, as everywhere else.
+	msg = tildeIn(safetext.Lines(msg))
 	switch l {
 	case app.Problem:
 		fmt.Fprintln(stderr, tag(warn, i18n.T("warning:"), msg))

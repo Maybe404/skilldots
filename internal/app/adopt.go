@@ -490,6 +490,7 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			if err != nil {
 				return nil, err
 			}
+			s.noteWarn(engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonBroken, Skills: []string{p.Item.Name}}))
 			s.logf(Done, "moved broken link %s to %s", p.Item.Path, lib.Rel(to))
 		}
 	}

@@ -877,8 +877,8 @@
 @  · upstream list unknown until u
 =  · 按 u 之前不知道上游有哪些
 
-@ agents 
-= agent 
+@ installed for 
+= 装到 
 
 @ %d new
 = %d 个新增
@@ -1113,3 +1113,9 @@
 
 @ %s through agents
 = %s 经 agents 读到
+
+@ through agents (~/.agents/skills), no link of its own · %s
+= 经 agents 读到（~/.agents/skills），不单独链接 · %s
+
+@ space toggle · e agents · d remove · o open in your editor
+= 空格切换 · e 选 agent · d 移除 · o 用编辑器打开

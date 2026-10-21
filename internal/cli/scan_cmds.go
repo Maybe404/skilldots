@@ -69,7 +69,7 @@ func printScan(c *ctx, rep scan.Report, all bool) {
 			cur = it.Target
 			where := i18n.T("(not in use)")
 			if tgt, err := c.reg.Get(cur); err == nil {
-				where = tgt.Path
+				where = tildePath(tgt.Path)
 			}
 			c.printf("%s %s\n", accent(txt(cur)), dim(where))
 			t = newTable("", "SKILL", "STATE", "DETAIL")

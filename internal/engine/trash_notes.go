@@ -32,6 +32,9 @@ const (
 	// ReasonInTheWay: something in an agent's skill directory was in the
 	// way (apply --force, adopt). Not recorded: told by where it came from.
 	ReasonInTheWay = "in-the-way"
+	// ReasonBroken: a broken link in an agent's skill directory that adopt
+	// cleared away.
+	ReasonBroken = "broken"
 )
 
 // TrashNote is what skd remembers about an entry it moved to the trash:

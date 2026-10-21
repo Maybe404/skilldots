@@ -314,6 +314,8 @@ func TrashReason(e engine.TrashEntry) string {
 		return i18n.T("had changes; an update replaced it")
 	case engine.ReasonInTheWay:
 		return i18n.T("in the way in an agent directory")
+	case engine.ReasonBroken:
+		return i18n.T("broken link in an agent directory")
 	}
 	return ""
 }

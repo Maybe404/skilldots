@@ -34,7 +34,7 @@
 = 装到 %s（资料库里已有）
 
 @ broken link; move to the trash
-= 失效的链接；移入回收站
+= 断链；移到回收站
 
 @ not a valid skill name (letters, digits, '.', '_' and '-'); rename it first
 = 不是有效的 skill 名称（只能用字母、数字、'.'、'_' 和 '-'）；请先改名
@@ -73,13 +73,13 @@
 = %s：%v；不移除它
 
 @ %s is no longer a broken link (something was put there since the scan); left in place
-= %s 已不是失效的链接（扫描之后那里放了别的东西）；原样保留
+= %s 已不是断链（扫描之后那里放了别的东西）；原样保留
 
 @ %s is no longer a broken link (it points at something now); left in place
-= %s 已不是失效的链接（它现在有指向了）；原样保留
+= %s 已不是断链（它现在有指向了）；原样保留
 
 @ moved broken link %s to %s
-= 已把失效的链接 %s 移到 %s
+= 已把断链 %s 移到 %s
 
 @ %s is not in %s any more; keeping your copy under skills/
 = %s 已不在 %s 里；保留你在 skills/ 下的副本
@@ -377,3 +377,6 @@
 
 @ app %s
 = 应用 %s
+
+@ broken link in an agent directory
+= agent 目录里的断链

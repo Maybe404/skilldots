@@ -817,7 +817,7 @@
 = 扫描
 
 @ %d entries · %d managed · %d unmanaged · %d broken
-= %d 个条目 · %d 个已管理 · %d 个未管理 · %d 个失效
+= %d 个条目 · %d 个已管理 · %d 个未管理 · %d 个断链
 
 @ STATE
 = 状态
@@ -862,7 +862,7 @@
 = 副本
 
 @ broken
-= 失效
+= 断链
 
 @ left
 = 遗留
@@ -1177,9 +1177,6 @@
 @ reads agents
 = 也读 agents
 
-@ reads agents: the agent also reads ~/.agents/skills, so a skill for every installed agent ("*") reaches it there, not twice
-= 也读 agents：这个 agent 也会读 ~/.agents/skills，所以装给“本机所有 agent”（"*"）的 skill 只从那里加载，不会加载两份
-
 @ (+ %s through agents)
 = （另有 %s 经 agents 读到）
 
@@ -1206,3 +1203,9 @@
 
 @ %d entries need you: skd adopt leaves them as they are (why above)
 = 有 %d 个条目需要你处理：skd adopt 不会动它们（原因见上）
+
+@ unknown subcommand %q of skd targets (subcommands: %s)
+= skd targets 没有子命令 %q（可用的子命令：%s）
+
+@ reads agents: the agent also reads ~/.agents/skills, so a skill installed for agents reaches it there and gets no link of its own, whether installed for it by name or for every installed agent ("*"); while agents is paused, it gets its own link
+= 也读 agents：这个 agent 也会读 ~/.agents/skills，所以装到 agents 的 skill 会从那里读到，不再单独链接，不论是单独点名装给它的，还是装给“本机所有 agent”（"*"）的；agents 暂停分发期间，它会各自链接
