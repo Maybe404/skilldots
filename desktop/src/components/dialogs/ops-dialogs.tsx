@@ -9,7 +9,7 @@ import type { MessageKey } from "@/lib/i18n"
 import { Mono, RefreshIcon, Sha, Tag, UpdateDot } from "@/components/app/bits"
 import { SkillDiffView } from "@/components/app/diff-view"
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
-import { agentLabel } from "@/lib/agents"
+import { agentLabel, tildify } from "@/lib/agents"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -286,7 +286,7 @@ export function ApplyDialog({ onClose }: { onClose: () => void }) {
                   <span>
                     {p.skill} → {label(p.agent)}
                   </span>
-                  <Mono className="block truncate text-mut">{p.path}</Mono>
+                  <Mono className="block truncate text-mut" title={tildify(p.path)}>{tildify(p.path)}</Mono>
                   {p.reason && <span className="block fs-meta text-mut">{p.reason}</span>}
                 </span>
               </li>
