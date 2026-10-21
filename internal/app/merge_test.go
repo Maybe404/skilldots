@@ -123,6 +123,13 @@ func TestUpdateMergesLocalChanges(t *testing.T) {
 	if ls := lockSkill(t, root, "tdd"); ls.Hash != upstreamHash(t, repo, "skills/eng/tdd") || ls.Shelved != "" {
 		t.Errorf("lock %+v", ls)
 	}
+	// The record lists it once: merged, not changed as well.
+	if s, _ := app.Open(root); s != nil {
+		recs, _, _ := s.History("acme/skills", 1)
+		if len(recs) != 1 || !slices.Equal(recs[0].Merged, []string{"tdd"}) || len(recs[0].Changed) != 0 || len(recs[0].Commits) != 1 {
+			t.Errorf("record %+v", recs)
+		}
+	}
 	// The copy before the merge is in the trash, and restoring it swaps
 	// it back (the lock goes back too, so the next update merges again).
 	s, _ := app.Open(root)
@@ -275,7 +282,25 @@ func TestResolveFlow(t *testing.T) {
 	}
 	recs, _, _ := s.History("acme/skills", 1)
 	if len(recs) != 1 || !slices.Equal(recs[0].Merged, []string{"tdd"}) {
-		t.Errorf("history %+v", recs)
+		t.Fatalf("history %+v", recs)
+	}
+	// The record of the resolve goes from the version the local changes
+	// were made on to the one merged in, and its diff is that change.
+	r := recs[0]
+	head := gitOut(t, repo, "rev-parse", "HEAD")
+	if r.SnapFrom == "" || r.SnapTo == "" || r.SnapFrom == r.SnapTo || r.To != head || r.From == r.To || r.From != gitOut(t, repo, "rev-parse", "HEAD~1") {
+		t.Errorf("resolve record %+v (upstream head %s)", r, head)
+	}
+	d, err := s.HistoryDiff(context.Background(), &r, "")
+	if err != nil || len(d.Skills) != 1 || d.Skills[0].Name != "tdd" || len(d.Skills[0].Files) != 1 {
+		t.Fatalf("resolve diff %+v %v", d, err)
+	}
+	var lines []string
+	for _, l := range d.Skills[0].Files[0].Hunks[0].Lines {
+		lines = append(lines, l.Op+l.Text)
+	}
+	if got := strings.Join(lines, "\n"); !strings.Contains(got, "-top\n+top upstream") {
+		t.Errorf("resolve diff:\n%s", got)
 	}
 	// Nothing waits any more.
 	if sh, _ := s.Shelved(); len(sh) != 0 {
@@ -486,5 +511,32 @@ func TestMergeWithoutGit(t *testing.T) {
 	}
 	if _, err := s.ResolveContinue(app.KeyRef("tdd")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A record written when a merged skill was listed under changed too
+// reads with it once, under merged.
+func TestHistoryListsMergedOnce(t *testing.T) {
+	_, root, _ := mergeFixture(t)
+	line := `{"time":"2026-01-02T03:04:05Z","repo":"acme/skills","from":"aaaaaaa","to":"bbbbbbb","changed":["tdd","review"],"added":[],"moved":[],"gone":[],"dropped":[],"new":[],"commits":[],"merged":["tdd"]}` + "\n"
+	f, err := os.OpenFile(filepath.Join(root, app.HistoryFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(line)
+	f.Close()
+	s, _ := app.Open(root)
+	recs, _, _ := s.History("acme/skills", 0)
+	var got *app.UpdateRecord
+	for i := range recs {
+		if recs[i].From == "aaaaaaa" {
+			got = &recs[i]
+		}
+	}
+	if got == nil || !slices.Equal(got.Changed, []string{"review"}) || !slices.Equal(got.Merged, []string{"tdd"}) {
+		t.Fatalf("record %+v", got)
+	}
+	if rows := app.RecordSummary(*got); strings.Count(rows, "1") != 2 {
+		t.Errorf("summary %q", rows)
 	}
 }

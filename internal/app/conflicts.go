@@ -189,7 +189,7 @@ func (s *Session) ResolveStart(r Ref) (*ResolveOutcome, error) {
 		lp.Skills[e.Name] = &lock.Skill{Category: ls.Category, Hash: ls.Upstream}
 		out.Merged = true
 		out.Apply, err = s.saveAndApply()
-		s.recordMerged(e.Origin, e.Name)
+		s.recordMerged(e.Origin, e.Name, ls)
 		return out, err
 	}
 	if err := engine.WriteFileSet(e.Dir, m.Files, m.Sidecars); err != nil {
@@ -275,13 +275,19 @@ func (s *Session) ResolveContinue(r Ref) (*ContinueOutcome, error) {
 	lp.Skills[e.Name] = &lock.Skill{Category: ls.Category, Hash: ls.Upstream}
 	out := &ContinueOutcome{Repo: e.Origin, Name: e.Name}
 	out.Apply, err = s.saveAndApply()
-	s.recordMerged(e.Origin, e.Name)
+	s.recordMerged(e.Origin, e.Name, ls)
 	return out, err
 }
 
 // recordMerged adds a history record saying name of repo was merged
-// with upstream (a resolve finished).
-func (s *Session) recordMerged(repo, name string) {
+// with upstream (a resolve finished). ls is its lock entry as it was
+// while shelved: the record goes from the upstream snapshot the local
+// changes were made on (ls.Hash) to the one merged in (ls.Upstream), and
+// from their upstream commits, so its diff is what the merge brought in.
+// When the first is not among the snapshots (the base came from the
+// library's history, or there was none) the record names no snapshots
+// and From is To.
+func (s *Session) recordMerged(repo, name string, ls *lock.Skill) {
 	commit := ""
 	if lp := s.Lib.Lock.Packs[repo]; lp != nil {
 		commit = lp.Commit
@@ -289,6 +295,17 @@ func (s *Session) recordMerged(repo, name string) {
 	r := &UpdateRecord{Time: time.Now().UTC().Truncate(time.Second), Repo: repo, From: commit, To: commit,
 		Changed: []string{}, Added: []string{}, Moved: []string{}, Gone: []string{}, Dropped: []string{}, New: []string{},
 		Merged: []string{name}, Commits: []UpstreamCommit{}}
+	if to := engine.SnapshotWith(s.Lib, repo, name, []string{ls.Category}, ls.Upstream); to != "" {
+		if from := engine.SnapshotWith(s.Lib, repo, name, []string{ls.Category}, ls.Hash); from != "" {
+			r.SnapFrom, r.SnapTo = from, to
+			if c := engine.SnapshotCommit(s.Lib, from); c != "" {
+				r.From = c
+			}
+			if c := engine.SnapshotCommit(s.Lib, to); c != "" {
+				r.To = c
+			}
+		}
+	}
 	r.sanitize()
 	if err := s.appendHistory([]*UpdateRecord{r}); err != nil {
 		s.logf(Warn, "could not write the update history (%s): %v", HistoryFile, err)

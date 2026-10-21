@@ -3,6 +3,7 @@ package cli_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -80,7 +81,45 @@ func TestResolveCommands(t *testing.T) {
 	if js := e.js(lib, "history", up, "--diff", "2", "--skill", "tdd"); js["source"] != "snapshots" {
 		t.Errorf("history --diff --json: %v", js)
 	}
+	// Without a pack the number is the record's among every pack's, as
+	// --diff=n is.
+	for _, args := range [][]string{{"history", "--diff", "2"}, {"history", "--diff=2"}, {"history", up, "--diff=2"}} {
+		if got := e.ok(lib, args...); got != out {
+			t.Errorf("skd %v differs from skd history <pack> --diff 2:\n%s", args, got)
+		}
+	}
+	if _, _, code := e.skd(lib, "history", "--diff=0"); code == 0 {
+		t.Error("--diff=0")
+	}
+	// The record of the resolve shows what the merge brought in.
+	out = e.ok(lib, "history", "--diff")
+	if !strings.Contains(out, "-top") || !strings.Contains(out, "+top upstream") {
+		t.Errorf("history --diff of the resolve:\n%s", out)
+	}
 	if _, _, code := e.skd(lib, "history", up, "extra"); code == 0 {
 		t.Error("two arguments without --diff")
+	}
+}
+
+// A skill an update merged is listed once, as merged.
+func TestUpdateListsMergedOnce(t *testing.T) {
+	e := newEnv(t)
+	lib := e.p("lib")
+	e.ok("", "init", "--no-skill", lib)
+	e.write("up/skills/eng/tdd/SKILL.md", longMD("top", "bottom"))
+	up := e.repo("up")
+	e.ok(lib, "add", up, "--all")
+	vendored := filepath.Join(strings.TrimSpace(e.ok(lib, "path", "tdd")), "SKILL.md")
+	os.WriteFile(vendored, []byte(longMD("top mine", "bottom")), 0o644)
+	e.write("up/skills/eng/tdd/SKILL.md", longMD("top", "bottom upstream"))
+	e.git(up, "commit", "-qam", "upstream")
+	out := e.ok(lib, "update", "--yes")
+	if !regexp.MustCompile(`(?m)^  merged +tdd$`).MatchString(out) || regexp.MustCompile(`(?m)^  changed `).MatchString(out) {
+		t.Errorf("update:\n%s", out)
+	}
+	h := e.js(lib, "history")
+	rec := h["records"].([]any)[0].(map[string]any)
+	if len(rec["changed"].([]any)) != 0 || len(rec["merged"].([]any)) != 1 {
+		t.Errorf("history: %v", rec)
 	}
 }

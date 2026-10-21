@@ -390,7 +390,8 @@ func printReport(c *ctx, r *engine.SyncReport) {
 			c.printf("  %s %s\n", style(pad(label, 13)), strings.Join(txts(names), ", "))
 		}
 	}
-	row(i18n.T("changed"), accent, r.Changed)
+	// A merged skill is in Changed too: it is listed once, as merged.
+	row(i18n.T("changed"), accent, r.Replaced())
 	row(i18n.T("merged"), ok, r.Merged)
 	printShelved(c, r)
 	row(i18n.T("added"), ok, r.Added)

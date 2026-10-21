@@ -16,7 +16,7 @@ import (
 
 func historyCmd() *cobra.Command {
 	var n int
-	var diff bool
+	var diff int
 	var skill string
 	cmd := &cobra.Command{
 		Use:   "history [pack] [--diff [n]]",
@@ -26,7 +26,8 @@ func historyCmd() *cobra.Command {
 			"%d). The record is %s in the library: it is committed and pushed with it, "+
 			"so another machine sees it after a clone. Reading it needs no network.\n\n"+
 			"With --diff it shows what upstream changed in one recorded update, as a unified diff, skill by skill: the newest "+
-			"record of the pack, or the n-th newest (skd history <pack> --diff 2), only one skill with --skill. It reads the "+
+			"record (of the pack, when one is named), or the n-th newest (skd history <pack> --diff 2, skd history --diff 2, "+
+			"--diff=2), only one skill with --skill. It reads the "+
 			"upstream versions the library recorded (refs/skilldots/upstream/*, no network); for a record made before skd kept "+
 			"them it reads the pack's cache clone, fetching the commits it lacks.", app.MaxCommits, app.HistoryFile),
 		Args: maximumNArgs(2),
@@ -35,8 +36,8 @@ func historyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if diff {
-				return historyDiff(c, args, skill)
+			if cmd.Flags().Changed("diff") {
+				return historyDiff(c, args, diff, skill)
 			}
 			if len(args) > 1 {
 				return i18n.Errorf("accepts at most %d arg(s), received %d", 1, len(args))
@@ -73,23 +74,44 @@ func historyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVarP(&n, "number", "n", 20, i18n.T("show at most this many records (0: all)"))
-	cmd.Flags().BoolVar(&diff, "diff", false, i18n.T("show what upstream changed in a record (the newest, or the n-th newest), as a diff"))
+	cmd.Flags().IntVar(&diff, "diff", 1, i18n.T("show what upstream changed in a record (the newest, or the n-th newest), as a diff"))
+	// --diff alone is the newest record; --diff=2 the one before.
+	cmd.Flags().Lookup("diff").NoOptDefVal = "1"
 	cmd.Flags().StringVar(&skill, "skill", "", i18n.T("with --diff: only this skill"))
 	return cmd
 }
 
-// historyDiff is `skd history [pack] --diff [n]`.
-func historyDiff(c *ctx, args []string, skill string) error {
-	p, n := "", 1
-	if len(args) > 0 {
-		p = args[0]
-	}
-	if len(args) == 2 {
-		v, err := strconv.Atoi(args[1])
+// historyDiff is `skd history [pack] --diff [n]`: n is the record's
+// number, newest first, given as --diff=n or after the pack. A lone
+// number that names no pack is the record's number among every pack's
+// (skd history --diff 2).
+func historyDiff(c *ctx, args []string, n int, skill string) error {
+	p := ""
+	number := func(a string) error {
+		v, err := strconv.Atoi(a)
 		if err != nil || v < 1 {
-			return i18n.Errorf("%q is not a record number (1 is the newest)", args[1])
+			return i18n.Errorf("%q is not a record number (1 is the newest)", a)
 		}
 		n = v
+		return nil
+	}
+	switch len(args) {
+	case 2:
+		p = args[0]
+		if err := number(args[1]); err != nil {
+			return err
+		}
+	case 1:
+		if _, err := strconv.Atoi(args[0]); err == nil && c.lib.Manifest.FindPack(args[0]) == nil {
+			if err := number(args[0]); err != nil {
+				return err
+			}
+		} else {
+			p = args[0]
+		}
+	}
+	if n < 1 {
+		return i18n.Errorf("%q is not a record number (1 is the newest)", strconv.Itoa(n))
 	}
 	r, err := c.HistoryRecord(p, n)
 	if err != nil {

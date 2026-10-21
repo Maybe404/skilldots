@@ -90,7 +90,7 @@ type UpdateRecord struct {
 	// Backups are user files moved to the Trash before this update was linked.
 	Backups []string `json:"backups,omitempty"`
 	// Merged are skills the user had changed that got upstream's changes
-	// merged in (also in Changed), or whose resolve finished; Shelved are
+	// merged in (not in Changed), or whose resolve finished; Shelved are
 	// skills upstream changed whose update waits for conflicts to be
 	// resolved (skd resolve).
 	Merged  []string `json:"merged,omitempty"`
@@ -121,10 +121,22 @@ func newRecord(rep *engine.SyncReport, now time.Time) *UpdateRecord {
 	for _, sh := range rep.Shelved {
 		r.Shelved = append(r.Shelved, sh.Name)
 	}
-	if r.From == r.To && len(r.Changed)+len(r.Added)+len(r.Moved)+len(r.Dropped) == 0 {
+	r.Changed = without(r.Changed, r.Merged)
+	if r.From == r.To && len(r.Changed)+len(r.Merged)+len(r.Added)+len(r.Moved)+len(r.Dropped) == 0 {
 		return nil
 	}
 	return r
+}
+
+// without is names less the ones in drop.
+func without(names, drop []string) []string {
+	out := []string{}
+	for _, n := range names {
+		if !slices.Contains(drop, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // sanitize makes everything in r that comes from upstream or the manifest
@@ -147,6 +159,9 @@ func (r *UpdateRecord) sanitize() {
 		}
 	}
 	r.SnapFrom, r.SnapTo = CleanText(r.SnapFrom, MaxName), CleanText(r.SnapTo, MaxName)
+	// A merged skill is listed once, under merged (records written before
+	// that listed it under changed too).
+	r.Changed = without(r.Changed, r.Merged)
 	if r.Commits == nil {
 		r.Commits = []UpstreamCommit{}
 	}
@@ -214,6 +229,7 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 		}
 	}
 	add(r.Changed)
+	add(r.Merged)
 	add(r.Added)
 	add(r.Moved)
 	add(r.Gone)
