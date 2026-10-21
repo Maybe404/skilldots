@@ -5,7 +5,7 @@ import { hasConflicts, isMine, sourceText, useApp } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn, keepsViaShared } from "@/lib/pending"
-import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { AgentMono, ConflictMark, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { DisclosureChevron } from "@/components/ui/collapsible"
 import { Switch } from "@/components/ui/switch"
 import { GroupBatchMenu } from "./group-batch"
@@ -567,7 +567,7 @@ function SkillRow({
             <span className="truncate">{skill.linkName}</span>
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
-            {hasConflicts(skill) && <Tag tone="accent">{t("conflictTag")}</Tag>}
+            {hasConflicts(skill) && <ConflictMark />}
           </span>
           <span className="mt-0.5 block truncate fs-meta text-mut">{sourceText}</span>
         </span>

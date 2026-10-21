@@ -7,7 +7,7 @@ import type { Skill } from "@/lib/backend"
 import { cellState } from "@/lib/pending"
 import { useSkillActions } from "@/lib/use-actions"
 import { shortSha } from "@/lib/utils"
-import { AgentMono, Mono, OffRing, Sha, Tag, UpdateDot } from "@/components/app/bits"
+import { AgentMono, ConflictMark, Mono, OffRing, Sha, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
@@ -54,7 +54,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           <span className="truncate">{skill.linkName}</span>
           {updatable.has(skill.ref.key) && <UpdateDot />}
           {mine && <Tag>{t("kindMine")}</Tag>}
-          {hasConflicts(skill) && <Tag tone="accent">{t("conflictTag")}</Tag>}
+          {hasConflicts(skill) && <ConflictMark />}
         </SheetTitle>
         <SheetDescription className="truncate">{sourceText(t, skill)}</SheetDescription>
       </SheetHeader>

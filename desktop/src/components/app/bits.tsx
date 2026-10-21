@@ -3,7 +3,7 @@ import { cn, shortSha } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
 import { agentMono } from "@/lib/agents"
 import type { Agent } from "@/lib/backend"
-import { RotateCwIcon } from "lucide-react"
+import { GitMerge, RotateCwIcon } from "lucide-react"
 import { useReducedMotion } from "motion/react"
 import { SlidingNumber } from "@/components/animate-ui/primitives/texts/sliding-number"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,18 @@ export function UpdateDot({ className, label, decorative }: { className?: string
   const cls = cn("inline-block size-1.5 shrink-0 rounded-full bg-ac", className)
   if (decorative) return <span aria-hidden className={cls} />
   return <span role="img" aria-label={label ?? t("updateMarker")} title={label ?? t("updateMarker")} className={cls} />
+}
+
+/** Accent merge icon next to a skill's name: its update is shelved until its conflicts are resolved (tooltip says so). */
+export function ConflictMark({ className }: { className?: string }) {
+  const { t } = useApp()
+  return (
+    <Hint label={t("conflictTag")}>
+      <span role="img" aria-label={t("conflictTag")} className={cn("inline-flex shrink-0 text-ac", className)}>
+        <GitMerge aria-hidden className="size-3.5" strokeWidth={2.2} />
+      </span>
+    </Hint>
+  )
 }
 
 /** Hollow ring: turned off inside Claude Code (read-only). */
