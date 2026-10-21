@@ -144,7 +144,7 @@ func (e *OverwrittenError) Error() string {
 func OverwriteNote(e engine.Entry) string {
 	switch e.Kind {
 	case engine.KindVendor:
-		return i18n.Sprintf("is vendored from %s: skd update replaces its files, so edits there are lost", e.Origin)
+		return i18n.Sprintf("is vendored from %s: skd update merges upstream's changes into edits there, and waits for skd resolve when they conflict", e.Origin)
 	case engine.KindApp:
 		return i18n.Sprintf("ships with the %s application: its updates replace the files, so edits there are lost", e.Origin)
 	}

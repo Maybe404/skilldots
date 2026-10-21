@@ -45,8 +45,8 @@
 @ Fork it into private/ (this machine only) and open your copy
 = fork 到 private/（仅本机）并打开你的副本
 
-@ Open the files anyway (edits are lost on the next update)
-= 仍然打开这些文件（下次更新时改动会丢失）
+@ Open the files anyway and edit them in place
+= 仍然打开这些文件，直接在原处编辑
 
 @ Cancel
 = 取消

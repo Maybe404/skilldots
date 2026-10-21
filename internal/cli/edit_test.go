@@ -53,7 +53,7 @@ func TestEdit(t *testing.T) {
 	}
 	// Vendored, no terminal: refused, nothing opened, nothing forked.
 	_, errOut, code := e.skd("", "edit", "tdd")
-	if code == 0 || !strings.Contains(errOut, "--fork") || !strings.Contains(errOut, "skd update replaces") {
+	if code == 0 || !strings.Contains(errOut, "--fork") || !strings.Contains(errOut, "skd update merges") {
 		t.Fatalf("vendored without a choice: exit %d\n%s", code, errOut)
 	}
 	if _, err := os.Stat(filepath.Join(lib, "skills", "tdd")); err == nil {
