@@ -9,6 +9,7 @@ import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { DisclosureChevron } from "@/components/ui/collapsible"
 import { Switch } from "@/components/ui/switch"
 import { GroupBatchMenu } from "./group-batch"
+import { RowActions } from "./row-actions"
 import { traceCubic, wireSeed } from "./wobble"
 import { AGENT_H, AGENTS_TOP, GROUP_H, LIST_TOP, ROW_H, type ListItem, type useSkillList } from "./model"
 
@@ -544,7 +545,7 @@ function SkillRow({
 }) {
   const { t } = useApp()
   return (
-    <div role="listitem" className="absolute inset-x-0" style={{ top: y, height: ROW_H }} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+    <div role="listitem" className="group/row absolute inset-x-0" style={{ top: y, height: ROW_H }} onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <button
         id={id}
         type="button"
@@ -584,6 +585,8 @@ function SkillRow({
           />
         </Hint>
       </button>
+      {/* Over the row's right end, left of the count; the row's own background keeps a long name from showing through. */}
+      <RowActions skill={skill} shown={selected || focused} className={cn("absolute top-1/2 right-[62px] -translate-y-1/2 rounded-ctl pl-2", focused ? "bg-row-on" : "bg-bg", dim && "opacity-40")} />
     </div>
   )
 }

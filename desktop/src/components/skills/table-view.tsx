@@ -9,6 +9,7 @@ import { Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
 import { GroupCell } from "./group-batch"
+import { RowActions } from "./row-actions"
 import type { ListItem, useSkillList } from "./model"
 
 /*
@@ -183,10 +184,10 @@ function Row({
       onDoubleClick={onOpen}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className={cn("relative grid h-[59px] items-center border-b-row px-3.5 transition-opacity", focused && "bg-row-on", dim && "opacity-40")}
+      className={cn("group/row relative grid h-[59px] items-center border-b-row px-3.5 transition-opacity", focused && "bg-row-on", dim && "opacity-40")}
       style={{ gridTemplateColumns: cols }}
     >
-      <div role="cell" className="min-w-0 pr-4">
+      <div role="cell" className="relative min-w-0 pr-4">
         <button
           id={id}
           type="button"
@@ -205,6 +206,7 @@ function Row({
           </span>
           <span className="mt-0.5 block truncate font-body fs-meta text-mut">{skill.description}</span>
         </button>
+        <RowActions skill={skill} shown={selected || focused} className={cn("absolute top-1/2 right-4 -translate-y-1/2 rounded-ctl pl-2", focused ? "bg-row-on" : "bg-bg")} />
       </div>
       <div role="cell" className="truncate pr-2.5 fs-meta text-mut" title={source}>
         {source}
