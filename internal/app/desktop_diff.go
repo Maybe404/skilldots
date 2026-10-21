@@ -153,6 +153,15 @@ func (s *Session) UpdateDiff(ctx context.Context, repo, latest string) (*UpdateD
 			continue
 		}
 		ls := vendored[u.Name]
+		if ls != nil {
+			// Hashed as it streams: an unchanged skill is never read.
+			if h, err := fsutil.HashTree(u.Dir); err == nil && h == ls.Hash {
+				if ls.Category != u.Category {
+					out.Skills = append(out.Skills, SkillDiff{Name: u.Name, Status: "moved", LocalFiles: []string{}, Files: []FileDiff{}})
+				}
+				continue
+			}
+		}
 		newFiles, err := readFiles(u.Dir)
 		if err != nil {
 			return nil, err
@@ -161,13 +170,6 @@ func (s *Session) UpdateDiff(ctx context.Context, repo, latest string) (*UpdateD
 			sd := SkillDiff{Name: u.Name, Status: "added", LocalFiles: []string{}}
 			sd.Files, sd.MoreFiles = diffFiles(nil, newFiles, nil)
 			out.Skills = append(out.Skills, sd)
-			continue
-		}
-		newHash := hashFiles(newFiles)
-		if newHash == ls.Hash {
-			if ls.Category != u.Category {
-				out.Skills = append(out.Skills, SkillDiff{Name: u.Name, Status: "moved", LocalFiles: []string{}, Files: []FileDiff{}})
-			}
 			continue
 		}
 		dir := filepath.Join(packDir, filepath.FromSlash(ls.Category), u.Name)
@@ -199,9 +201,27 @@ func (s *Session) UpdateDiff(ctx context.Context, repo, latest string) (*UpdateD
 	return out, nil
 }
 
+// tooLargePrefix starts what a set of files read for a diff holds for a
+// file larger than maxDiffBytes: the prefix and the file's SHA-256, so
+// two such files still compare equal or not, without their content
+// being held. diffFiles shows it as too large; a set with one does not
+// hash like the files themselves (hashFiles), so which files the user
+// changed in such a skill is not known.
+var tooLargePrefix = []byte("\x00skd:too-large:")
+
+func tooLargeMark(sum []byte) []byte {
+	return append(append([]byte{}, tooLargePrefix...), hex.EncodeToString(sum)...)
+}
+
+func isTooLarge(b []byte) bool { return bytes.HasPrefix(b, tooLargePrefix) }
+
 // readFiles reads every regular file under dir as fsutil.HashTree sees
 // them (Skip entries left out), keyed by slash-separated relative path.
+// A file larger than maxDiffBytes is not held: its tooLargeMark is.
 func readFiles(dir string) (map[string][]byte, error) {
+	if filesRead != nil {
+		filesRead(dir)
+	}
 	files := map[string][]byte{}
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -220,6 +240,24 @@ func readFiles(dir string) (map[string][]byte, error) {
 		if err != nil {
 			return err
 		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.Size() > maxDiffBytes {
+			f, err := os.Open(p)
+			if err != nil {
+				return err
+			}
+			h := sha256.New()
+			_, err = io.Copy(h, f)
+			f.Close()
+			if err != nil {
+				return err
+			}
+			files[filepath.ToSlash(rel)] = tooLargeMark(h.Sum(nil))
+			return nil
+		}
 		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
@@ -229,6 +267,9 @@ func readFiles(dir string) (map[string][]byte, error) {
 	})
 	return files, err
 }
+
+// filesRead, when set (tests), is told each directory readFiles reads.
+var filesRead func(dir string)
 
 // hashFiles is fsutil.HashTree over files already read.
 func hashFiles(files map[string][]byte) string {
@@ -337,13 +378,21 @@ func gitTreeFiles(ctx context.Context, root, c, rel string) (map[string][]byte, 
 	for _, b := range blobs {
 		in.WriteString(b.sha + "\n")
 	}
+	// The answer is read as it comes, never held whole: a blob larger than
+	// maxDiffBytes is only hashed (tooLargeMark).
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "cat-file", "--batch")
 	cmd.Stdin = &in
-	raw, err := cmd.Output()
+	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
-	r := bufio.NewReader(bytes.NewReader(raw))
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	defer func() { cancel(); cmd.Wait() }()
+	r := bufio.NewReader(pipe)
 	for _, b := range blobs {
 		head, err := r.ReadString('\n')
 		if err != nil {
@@ -354,8 +403,19 @@ func gitTreeFiles(ctx context.Context, root, c, rel string) (map[string][]byte, 
 			return nil, i18n.Errorf("git cat-file answered %q, not a file's contents", strings.TrimSpace(head))
 		}
 		n, err := strconv.Atoi(f[2])
-		if err != nil {
-			return nil, err
+		if err != nil || n < 0 {
+			return nil, i18n.Errorf("git cat-file answered %q, not a file's contents", strings.TrimSpace(head))
+		}
+		if n > maxDiffBytes {
+			h := sha256.New()
+			if _, err := io.CopyN(h, r, int64(n)); err != nil {
+				return nil, err
+			}
+			if _, err := r.ReadByte(); err != nil { // git's newline after it
+				return nil, err
+			}
+			files[b.path] = tooLargeMark(h.Sum(nil))
+			continue
 		}
 		body := make([]byte, n+1) // the content and git's newline after it
 		if _, err := io.ReadFull(r, body); err != nil {
@@ -387,6 +447,8 @@ func diffFiles(old, new map[string][]byte, local map[string]bool) ([]FileDiff, i
 			fd.Status = "removed"
 		}
 		switch {
+		case isTooLarge(a) || isTooLarge(b):
+			fd.TooLarge = true
 		case isBinary(a) || isBinary(b):
 			fd.Binary = true
 		case len(a) > maxDiffBytes || len(b) > maxDiffBytes:
