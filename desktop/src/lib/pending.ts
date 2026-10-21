@@ -14,20 +14,39 @@ const SEP = "\u0000"
 export const pendingKey = (skill: string, agent: string) => skill + SEP + agent
 export const splitKey = (k: string) => k.split(SEP) as [skill: string, agent: string]
 
-/** "absent": chosen, but the agent is not installed on this machine, so nothing is linked. */
-export type CellState = "on" | "off" | "adding" | "removing" | "absent"
+/**
+ * "absent": chosen, but the agent is not installed on this machine, so nothing is linked.
+ * "via": the agent reads it from ~/.agents/skills (Agents has it), so it has no link of its own and needs none.
+ */
+export type CellState = "on" | "off" | "adding" | "removing" | "absent" | "via"
+
+/**
+ * The agent reads skill from the shared folder ~/.agents/skills (chosen for it or not), and will still once the
+ * pending changes apply: taking the skill off Agents ends that.
+ */
+export function readsViaShared(skill: Skill, agent: string, pending: Pending): boolean {
+  if (pending[pendingKey(skill.ref.key, "agents")] === false) return false
+  return !!(skill.sharedReach?.includes(agent) || skill.viaShared?.includes(agent))
+}
 
 export function cellState(skill: Skill, agent: string, pending: Pending): CellState {
   const base = skill.targets.includes(agent)
   const k = pendingKey(skill.ref.key, agent)
-  if (!(k in pending)) return base ? (skill.absent?.includes(agent) ? "absent" : "on") : "off"
-  return pending[k] ? "adding" : "removing"
+  if (k in pending) return pending[k] ? "adding" : "removing"
+  if (readsViaShared(skill, agent, pending)) return "via"
+  // Agents is about to lose it: an agent that only read it there loses it too; one chosen for it gets its own link.
+  const shared = skill.sharedReach?.includes(agent) || skill.viaShared?.includes(agent)
+  if (shared && !base) return "removing"
+  return base ? (skill.absent?.includes(agent) ? "absent" : "on") : "off"
 }
 
-/** Installed once the pending changes are applied. */
+/**
+ * The agent gets the skill once the pending changes are applied: linked, chosen for an agent not installed here,
+ * or read from the shared folder (counted as installed: the agent can use it).
+ */
 export function isOn(skill: Skill, agent: string, pending: Pending): boolean {
   const s = cellState(skill, agent, pending)
-  return s === "on" || s === "adding" || s === "absent"
+  return s === "on" || s === "adding" || s === "absent" || s === "via"
 }
 
 /** Flip one cell: a pending change is reverted, otherwise one is recorded. */

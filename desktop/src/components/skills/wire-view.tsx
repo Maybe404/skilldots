@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Check, Minus, Plus } from "lucide-react"
+import { Check, CornerDownRight, Minus, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp } from "@/lib/app-state"
@@ -197,7 +197,8 @@ export function WireView({
     } else if (it.collapsed) {
       const y1 = it.y + LIST_TOP + GROUP_H / 2
       columns.forEach((a, k) => {
-        const n = it.skills.filter((s) => isOn(s, a.name, pending)).length
+        // A collapsed group's curve stands for its own links: what an agent reads through Agents draws none.
+        const n = it.skills.filter((s) => ["on", "adding"].includes(cellState(s, a.name, pending))).length
         if (!n) return
         wires.push({ y1, k, seed: wireSeed(it.name + ">" + a.name), ink: "wire", width: 1 + n * 0.9, opacity: agentFocus && agentFocus !== a.name ? 0.08 : 0.4, z: 0 })
         labels.push({ y1, k, text: n })
@@ -413,13 +414,15 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
   const count = skills.filter((s) => isOn(s, a.name, pending)).length
   const selA = agentFocus === a.name
   const st = skill ? cellState(skill, a.name, pending) : "off"
-  const on = st === "on" || st === "adding" || st === "absent"
+  const on = st === "on" || st === "adding" || st === "absent" || st === "via"
+  // Read from ~/.agents/skills: no link of its own, no curve, and the button says where it comes from.
+  const via = st === "via"
   const away = isAbsentAgent(a)
   // Off for an agent this Mac does not have: shown as such and refused when pressed (app-state says why).
   const locked = st === "off" && away
   const pend = st === "adding" || st === "removing"
   const label = agentLabel(a)
-  const btnText = locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
+  const btnText = via ? t("cellVia", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
   return (
     <div
       data-agent={a.name}
@@ -433,7 +436,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
       <span
         aria-hidden
         className="absolute top-1/2 -left-[7px] -mt-1.5 size-3 rounded-full transition-shadow"
-        style={{ background: on || selA ? "var(--ac)" : "var(--hue)", boxShadow: dragging ? "0 0 0 4px var(--acSoft)" : "none" }}
+        style={{ background: (on && !via) || selA ? "var(--ac)" : "var(--hue)", boxShadow: dragging ? "0 0 0 4px var(--acSoft)" : "none" }}
       />
       <AgentMono agent={a} size={34} />
       {/* The shared folder says who reads it (several agents, not Claude Code). */}
@@ -457,7 +460,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
         (() => {
           // shadcn button without a fill: the design draws 已装 / 装上 / 待装上 / 待卸下 with its own borders.
           // In a narrow column it keeps only its glyph, so the agent's name and folder keep the room.
-          const Glyph = st === "removing" ? Minus : on ? Check : Plus
+          const Glyph = st === "removing" ? Minus : via ? CornerDownRight : on ? Check : Plus
           const button = (
             <Button
               variant={null}
@@ -469,14 +472,14 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
               className={cn(
                 "relative z-[1] h-[26px]",
                 compact && "w-[26px] px-0",
-                st === "absent" || locked ? cn("border-[1.5px] border-dashed border-ln text-mut", locked && "cursor-not-allowed") : on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
+                via ? "border-[1.5px] border-dashed border-ln bg-hue-soft text-hue-ink" : st === "absent" || locked ? cn("border-[1.5px] border-dashed border-ln text-mut", locked && "cursor-not-allowed") : on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
                 pend ? "border-ac text-ac" : !on && !locked && "border-mut text-ink",
               )}
             >
-              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : st === "absent" || locked ? t("wireAbsent") : btnText}
+              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : via ? t("viaShort") : st === "absent" || locked ? t("wireAbsent") : btnText}
             </Button>
           )
-          return compact || st === "absent" || locked ? <Hint label={btnText}>{button}</Hint> : button
+          return compact || via || st === "absent" || locked ? <Hint label={btnText}>{button}</Hint> : button
         })()}
       <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>

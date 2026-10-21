@@ -115,10 +115,11 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
                   <span className="truncate">{agentLabel(a)}</span>
                   {!a.enabled && <Tag>{t("pausedTag")}</Tag>}
                   {st === "absent" && <Tag>{t("notInstalled")}</Tag>}
+                  {st === "via" && <Tag>{t("viaState")}</Tag>}
                   {a.name === "claude" && claudeOff && <OffRing />}
                   {(st === "adding" || st === "removing") && <span className="fs-meta text-ac">{st === "adding" ? t("wireAdding") : t("wireRemoving")}</span>}
                 </label>
-                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent"} disabled={st === "off" && isAbsentAgent(a)} title={st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
+                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent" || st === "via"} disabled={(st === "off" && isAbsentAgent(a)) || st === "via"} title={st === "via" ? t("cellVia", { agent: agentLabel(a) }) : st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
               </li>
             )
           })}

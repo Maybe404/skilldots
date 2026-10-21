@@ -81,6 +81,12 @@ export function AgentTargets({ value, onChange, className, label }: { value: Set
         }}
       />
       {agentLabel(a)}
+      {/* With Agents ticked, an agent that reads ~/.agents/skills gets the skill from there (no link of its own). */}
+      {a.readsShared && value.has("agents") && !isAbsentAgent(a) && (
+        <Hint label={t("viaSharedHint", { agent: agentLabel(a) })}>
+          <span tabIndex={0} className="cursor-help fs-meta text-mut">{t("viaState")}</span>
+        </Hint>
+      )}
       {a.name === "agents" && (
         <Hint label={t("sharedDirFull")} wide>
           <Info aria-label={t("sharedDirFull")} className="size-3.5 text-mut" strokeWidth={1.8} />

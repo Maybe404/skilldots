@@ -275,7 +275,21 @@ export function createMockBackend(): Backend {
     async skills() {
       await wait(80)
       const away = absentAgents()
-      return clone(st.skills.map((s) => ({ ...s, absent: s.targets.filter((a) => away.includes(a)) })))
+      // Like engine.markViaShared: with Agents a target and not paused, the agents that read ~/.agents/skills get it
+      // from there (no link of their own); sharedReach is every installed such agent, chosen or not.
+      const shared = st.agents.find((a) => a.name === "agents")
+      const readers = st.agents.filter((a) => a.detected && SHARED_READERS.includes(a.name)).map((a) => a.name)
+      return clone(
+        st.skills.map((s) => {
+          const serves = !!shared?.enabled && s.targets.includes("agents")
+          return {
+            ...s,
+            absent: s.targets.filter((a) => away.includes(a)),
+            viaShared: serves ? s.targets.filter((a) => SHARED_READERS.includes(a)) : [],
+            sharedReach: serves ? readers : [],
+          }
+        }),
+      )
     },
     async packs() {
       await wait(60)

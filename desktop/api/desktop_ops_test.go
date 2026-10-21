@@ -198,6 +198,50 @@ func TestAbsentAgentAndSharedReaders(t *testing.T) {
 	}
 }
 
+// A skill on Agents reaches the agents that read ~/.agents/skills: those
+// among its targets get no link of their own (viaShared), and the bridge
+// says which installed agents read it there at all (sharedReach). With
+// Agents paused, each agent gets its own link again.
+func TestViaSharedAndSharedReach(t *testing.T) {
+	s := setup(t)
+	home, _ := os.UserHomeDir()
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil { // Codex is installed
+		t.Fatal(err)
+	}
+	invoke(t, s, "newSkill", object{"name": "both", "agents": []string{"agents", "codex"}})
+	invoke(t, s, "newSkill", object{"name": "shared", "agents": []string{"agents"}})
+	type row struct {
+		Name                                    string
+		Targets, ViaShared, SharedReach, Absent []string
+	}
+	find := func() map[string]row {
+		out := map[string]row{}
+		for _, r := range roundTrip[[]row](t, invoke(t, s, "skills")) {
+			out[r.Name] = r
+		}
+		return out
+	}
+	got := find()
+	if b := got["both"]; !slices.Contains(b.Targets, "codex") || !slices.Equal(b.ViaShared, []string{"codex"}) || !slices.Equal(b.SharedReach, []string{"codex"}) {
+		t.Fatalf("both: %+v", b)
+	}
+	if sh := got["shared"]; slices.Contains(sh.Targets, "codex") || len(sh.ViaShared) != 0 || !slices.Equal(sh.SharedReach, []string{"codex"}) {
+		t.Fatalf("shared: %+v", sh)
+	}
+	if _, err := os.Lstat(filepath.Join(home, ".codex", "skills", "both")); !os.IsNotExist(err) {
+		t.Fatal("a skill read through ~/.agents/skills was linked into Codex too")
+	}
+	// Gemini CLI reads the shared folder too but is not installed: not listed.
+	invoke(t, s, "setAgentEnabled", "agents", false)
+	got = find()
+	if b := got["both"]; len(b.ViaShared) != 0 || len(b.SharedReach) != 0 {
+		t.Fatalf("paused Agents still serves: %+v", b)
+	}
+	if _, err := os.Lstat(filepath.Join(home, ".codex", "skills", "both")); err != nil {
+		t.Fatalf("with Agents paused, Codex has no link of its own: %v", err)
+	}
+}
+
 // Restoring a removed skill links it again in the same call (the app
 // layer applies); the result says so.
 func TestRestoreLinksAgain(t *testing.T) {
