@@ -40,8 +40,9 @@ export function HistoryPage() {
       ) : items.length === 0 ? (
         <EmptyNote title={t("historyEmpty")}>{t("historyEmptyBody")}</EmptyNote>
       ) : (
-        <div role="table" aria-label={t("historyTitle")} className="skd-cols-history">
-          <TableHead style={{ gridTemplateColumns: COLS }}>
+        // One grid for the whole table (rows are subgrids), so the source column fits its longest name.
+        <div role="table" aria-label={t("historyTitle")} className="skd-cols-history grid" style={{ gridTemplateColumns: COLS }}>
+          <TableHead className="col-span-full grid-cols-subgrid">
             <div role="columnheader">{t("colTime")}</div>
             <div role="columnheader">{t("colSource")}</div>
             <div role="columnheader">{t("colVersion")}</div>
@@ -71,8 +72,8 @@ function Row({ h }: { h: HistoryEntry }) {
   ).filter(([, l]) => l.length)
 
   return (
-    <div role="row" className="grid items-start border-b-row px-2.5 py-3 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
-      <div role="cell" className="flex items-center gap-2 pt-0.5 fs-meta text-mut tabular-nums">
+    <div role="row" className="col-span-full grid grid-cols-subgrid items-start border-b-row px-2.5 py-3 hover:bg-row-hv">
+      <div role="cell" className="flex items-center gap-2 pt-0.5 pr-3 fs-meta text-mut tabular-nums">
         <time dateTime={h.when}>{formatDate(h.when, config.lang)}</time>
         {fresh && <UpdateDot label={t("fresh")} />}
       </div>

@@ -610,10 +610,12 @@ export function createMockBackend(): Backend {
       await wait(900)
       return clone(st.scan)
     },
-    async adopt(ids) {
+    async adopt(picks) {
       await wait(900)
       let adopted = 0
-      for (const id of ids) {
+      // Like the bridge: every row must still be what the confirmation showed, or nothing is adopted.
+      for (const { id, kind } of picks) if (st.scan.find((x) => x.id === id)?.proposal !== kind) throw new Error(`scan item "${id}" changed; scan again`)
+      for (const { id } of picks) {
         const it = st.scan.find((x) => x.id === id)
         if (!it || it.proposal === "skip") continue
         if (it.proposal === "pack" && it.repo) {
@@ -658,9 +660,9 @@ export function createMockBackend(): Backend {
       await wait(80)
       return { count: st.trash.length, bytes: st.trash.reduce((n, e) => n + (e.size ?? sampleSize(e.id)), 0) }
     },
-    async emptyTrash({ count }) {
+    async emptyTrash({ ids }) {
       await wait(400)
-      if (count !== st.trash.length) throw new Error("the trash changed since it was shown; look at it again")
+      if (ids.length !== st.trash.length || st.trash.some((e) => !ids.includes(e.id))) throw new Error("the trash changed since it was shown; look at it again")
       const deleted = st.trash.length
       st.trash = []
       return { deleted }

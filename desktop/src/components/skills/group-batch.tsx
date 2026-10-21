@@ -1,7 +1,7 @@
 import { ListChecks } from "lucide-react"
 
 import { useApp, useColumnAgents } from "@/lib/app-state"
-import { agentLabel } from "@/lib/agents"
+import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { isOn } from "@/lib/pending"
 import { Hint } from "@/components/app/bits"
@@ -25,10 +25,10 @@ export function groupState(skills: Skill[], agent: string, pending: Parameters<t
 export function GroupCell({ group, skills, agent }: { group: string; skills: Skill[]; agent: Agent }) {
   const { t, pending, setPendingMany } = useApp()
   const { n, all, some } = groupState(skills, agent.name, pending)
-  const label = all ? t("groupAllOff", { group, agent: agentLabel(agent) }) : t("groupAllOn", { group, agent: agentLabel(agent) })
+  const label = n === 0 && isAbsentAgent(agent) ? t("absentCannotInstall", { agent: agentLabel(agent) }) : all ? t("groupAllOff", { group, agent: agentLabel(agent) }) : t("groupAllOn", { group, agent: agentLabel(agent) })
   return (
     <Hint label={`${label} · ${t("groupBatchSome", { n, total: skills.length })}`}>
-      <Checkbox aria-label={label} checked={all} indeterminate={some} onCheckedChange={() => setPendingMany(skills, agent.name, !all)} />
+      <Checkbox aria-label={label} checked={all} indeterminate={some} disabled={n === 0 && isAbsentAgent(agent)} onCheckedChange={() => setPendingMany(skills, agent.name, !all)} />
     </Hint>
   )
 }
@@ -53,6 +53,7 @@ export function GroupBatchMenu({ group, skills }: { group: string; skills: Skill
               <DropdownMenuCheckboxItem
                 key={a.name}
                 checked={all}
+                disabled={n === 0 && isAbsentAgent(a)}
                 closeOnClick={false}
                 aria-label={all ? t("groupAllOff", { group, agent: agentLabel(a) }) : t("groupAllOn", { group, agent: agentLabel(a) })}
                 onCheckedChange={() => setPendingMany(skills, a.name, !all)}

@@ -30,20 +30,30 @@ func (s *Service) trashOperation(ses *app.Session, method string, args []json.Ra
 		}
 		return object{"count": len(u.Entries), "bytes": u.Total}, nil
 	case "emptyTrash":
+		// The IDs the confirmation listed: the trash must hold exactly
+		// those. A count alone would let one entry in and one out unseen.
 		opts, err := argument[struct {
-			Count *int `json:"count"`
+			IDs *[]string `json:"ids"`
 		}](args, 0)
 		if err != nil {
 			return nil, err
 		}
-		if opts.Count == nil {
-			return nil, errors.New("emptying the trash needs the number of entries the person confirmed")
+		if opts.IDs == nil {
+			return nil, errors.New("emptying the trash needs the entries the person confirmed")
 		}
 		u, err := ses.TrashUsage()
 		if err != nil {
 			return nil, err
 		}
-		if len(u.Entries) != *opts.Count {
+		shown := map[string]bool{}
+		for _, id := range *opts.IDs {
+			shown[id] = true
+		}
+		same := len(shown) == len(u.Entries)
+		for _, e := range u.Entries {
+			same = same && shown[e.ID]
+		}
+		if !same {
 			return nil, errors.New("the trash changed since it was shown; look at it again")
 		}
 		n, err := ses.EmptyTrash()

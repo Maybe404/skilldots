@@ -87,30 +87,33 @@ export function initialAgents(): Agent[] {
 type Seed = [name: string, kind: Skill["kind"], origin: string, category: string, on: string, description?: string]
 
 // on: one digit per column agent (agents, claude, codex, gemini, grok, cursor).
+// Codex, Gemini CLI, Grok and Cursor read ~/.agents/skills too: a skill on
+// Agents is never also linked into them (it would load twice), so a 1 there
+// only appears for skills not on Agents.
 // A vendored skill's description is upstream's, from CATALOG below.
 const SEEDS: Seed[] = [
-  ["skilldots", "vendor", "Maybe404/skilldots", "", "111111"],
-  ["ui-arsenal", "vendor", "Maybe404/ui-arsenal", "", "111000"],
-  ["subagent", "skills", "", "", "111001", "Brief a helper agent: the goal, the files it may touch and how the result is checked."],
+  ["skilldots", "vendor", "Maybe404/skilldots", "", "110000"],
+  ["ui-arsenal", "vendor", "Maybe404/ui-arsenal", "", "110000"],
+  ["subagent", "skills", "", "", "110000", "Brief a helper agent: the goal, the files it may touch and how the result is checked."],
   ["release-notes", "skills", "", "", "110000", "Draft release notes from git log, grouped by what users will notice."],
   ["design-review", "skills", "", "", "010001", "Review interface screenshots against the design spec, item by item."],
   ["defuddle", "vendor", "kepano/obsidian-skills", "", "110000"],
   ["json-canvas", "vendor", "kepano/obsidian-skills", "", "110000"],
   ["obsidian-bases", "vendor", "kepano/obsidian-skills", "", "110000"],
-  ["obsidian-cli", "vendor", "kepano/obsidian-skills", "", "111000"],
+  ["obsidian-cli", "vendor", "kepano/obsidian-skills", "", "110000"],
   ["obsidian-markdown", "vendor", "kepano/obsidian-skills", "", "110000"],
-  ["impeccable", "vendor", "pbakaus/impeccable", "", "111101"],
+  ["impeccable", "vendor", "pbakaus/impeccable", "", "110000"],
   ["orchestration", "vendor", "stablyai/orca", "", "110000"],
-  ["orca-review", "vendor", "stablyai/orca", "", "010000"],
-  ["pdf", "vendor", "anthropics/skills", "document-skills", "110100"],
+  ["orca-review", "vendor", "stablyai/orca", "", "010010"],
+  ["pdf", "vendor", "anthropics/skills", "document-skills", "110000"],
   ["docx", "vendor", "anthropics/skills", "document-skills", "010000"],
   ["xlsx", "vendor", "anthropics/skills", "document-skills", "010000"],
   ["pptx", "vendor", "anthropics/skills", "document-skills", "011000"],
   ["differential-review", "vendor", "trailofbits/skills", "differential-review", "011000"],
   ["modern-python", "vendor", "trailofbits/skills", "modern-python", "011000"],
-  ["find-skills", "vendor", "vercel-labs/agent-skills", "", "110001"],
-  ["web-design-guidelines", "vendor", "vercel-labs/agent-skills", "", "110001"],
-  ["grill-me", "vendor", "mattpocock/skills", "engineering", "010000"],
+  ["find-skills", "vendor", "vercel-labs/agent-skills", "", "110000"],
+  ["web-design-guidelines", "vendor", "vercel-labs/agent-skills", "", "110000"],
+  ["grill-me", "vendor", "mattpocock/skills", "engineering", "010100"],
 ]
 
 /** Upstream's description of a vendored skill (as CATALOG has it). */
@@ -311,9 +314,9 @@ export function initialPlan(): PlanItem[] {
   const drift = typeof location !== "undefined" && new URLSearchParams(location.search).has("drift")
   if (!drift) return []
   return [
-    { action: "link", skill: "find-skills", agent: "gemini", path: `${HOME}/.gemini/skills/find-skills`, reason: "skills.toml changed on another machine" },
+    { action: "link", skill: "docx", agent: "claude", path: `${HOME}/.claude/skills/docx`, reason: "skills.toml changed on another machine" },
     { action: "unlink", skill: "orca-review", agent: "codex", path: `${HOME}/.codex/skills/orca-review`, reason: "no longer a target" },
-    { action: "blocked", skill: "impeccable", agent: "grok", path: `${HOME}/.grok/skills/impeccable`, reason: "a directory skd did not create is in the way" },
+    { action: "blocked", skill: "impeccable", agent: "claude", path: `${HOME}/.claude/skills/impeccable`, reason: "a directory skd did not create is in the way" },
   ]
 }
 

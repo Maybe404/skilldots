@@ -2,7 +2,7 @@ import * as React from "react"
 import { Copy, FolderOpen, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
 
 import { PLACEHOLDER_DESC, isMine, kindLabel, sourceText, useApp, useColumnAgents } from "@/lib/app-state"
-import { agentLabel } from "@/lib/agents"
+import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Skill } from "@/lib/backend"
 import { cellState } from "@/lib/pending"
 import { useSkillActions } from "@/lib/use-actions"
@@ -118,7 +118,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
                   {a.name === "claude" && claudeOff && <OffRing />}
                   {(st === "adding" || st === "removing") && <span className="fs-meta text-ac">{st === "adding" ? t("wireAdding") : t("wireRemoving")}</span>}
                 </label>
-                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent"} title={st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
+                <Switch id={id} checked={st === "on" || st === "adding" || st === "absent"} disabled={st === "off" && isAbsentAgent(a)} title={st === "absent" ? t("cellAbsent", { agent: agentLabel(a) }) : st === "off" && isAbsentAgent(a) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined} onCheckedChange={() => togglePending(skill, a.name)} />
               </li>
             )
           })}
@@ -164,7 +164,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           </dd>
           <dt className="text-mut">{t("infoLocation")}</dt>
           <dd className="min-w-0 break-all">
-            <Mono className="text-mut">{skill.dir}</Mono>
+            <Mono className="text-mut">{tildify(skill.dir)}</Mono>
           </dd>
         </dl>
       </div>

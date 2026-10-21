@@ -14,9 +14,9 @@ import {
   type Ref,
   type Skill,
 } from "@/lib/backend"
-import { agentLabel } from "@/lib/agents"
+import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import { translator, type T } from "@/lib/i18n"
-import { changes, prune, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
+import { changes, pendingKey, prune, setMany, toggle as togglePendingCell, type Pending } from "@/lib/pending"
 
 export type View = "skills" | "sources" | "agents" | "history" | "scan" | "trash" | "settings" | "editor"
 /** The two interface styles of the design ("简洁" and "涂鸦"). */
@@ -423,15 +423,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // While applying, the snapshot being written is the truth: edits would only disagree with it.
-  const togglePending = React.useCallback((skill: Skill, agent: string) => {
-    if (applyingRef.current) return
-    setPending((p) => togglePendingCell(p, skill, agent))
-  }, [])
+  // An agent this Mac does not have gets nothing linked: turning a skill on for it is refused here, for every
+  // way of doing so (cell, button, number key, drag, group switch); taking a choice off it still works.
+  const refuseAbsent = React.useCallback(
+    (agent: string) => {
+      const a = agents.find((x) => x.name === agent)
+      if (!a || !isAbsentAgent(a)) return false
+      toast(t("absentCannotInstall", { agent: agentLabel(a) }))
+      return true
+    },
+    [agents, t],
+  )
 
-  const setPendingMany = React.useCallback((list: Skill[], agent: string, want: boolean) => {
-    if (applyingRef.current) return
-    setPending((p) => setMany(p, list, agent, want))
-  }, [])
+  const togglePending = React.useCallback(
+    (skill: Skill, agent: string) => {
+      if (applyingRef.current) return
+      const k = pendingKey(skill.ref.key, agent)
+      const turningOn = !(k in pending) && !skill.targets.includes(agent)
+      if (turningOn && refuseAbsent(agent)) return
+      setPending((p) => togglePendingCell(p, skill, agent))
+    },
+    [pending, refuseAbsent],
+  )
+
+  const setPendingMany = React.useCallback(
+    (list: Skill[], agent: string, want: boolean) => {
+      if (applyingRef.current) return
+      if (want && refuseAbsent(agent)) return
+      setPending((p) => setMany(p, list, agent, want))
+    },
+    [refuseAbsent],
+  )
 
   const pendingCount = Object.keys(pending).length
 

@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { Trash2, Undo2 } from "lucide-react"
 
 import { absentFor, toastAbsent, useApp } from "@/lib/app-state"
+import { tildify } from "@/lib/agents"
 import { backend, type TrashEntry } from "@/lib/backend"
 import { ago, formatBytes, type MessageKey } from "@/lib/i18n"
 import { EmptyNote, ExampleTag, Hint, Page, PageError, TableHead } from "@/components/app/bits"
@@ -59,16 +60,19 @@ export function TrashPage() {
   }
 
   const emptyAll = async () => {
-    // Counted now, not from the list on screen: the confirmation names exactly what goes.
-    const u = await read(() => backend.trashUsage())
-    if (!u.ok || !u.value.count) return
-    const { count, bytes } = u.value
+    // Read now, not from the list on screen: the confirmation names exactly what goes, and the
+    // backend deletes only if the trash still holds exactly these entries.
+    const u = await read(() => Promise.all([backend.trash(), backend.trashUsage()]))
+    if (!u.ok || !u.value[0].length) return
+    const ids = u.value[0].map((e) => e.id)
+    const { bytes } = u.value[1]
+    setItems(u.value[0])
     confirm({
-      title: t("emptyTrashTitle", { n: count }),
+      title: t("emptyTrashTitle", { n: ids.length }),
       body: t("emptyTrashBody", { size: formatBytes(bytes) }),
       action: t("deleteForever"),
       run: async () => {
-        const r = await run(() => backend.emptyTrash({ count }))
+        const r = await run(() => backend.emptyTrash({ ids }))
         if (!r.ok) return false
         toast(t("emptiedToast", { n: r.value.deleted }))
         await reload()
@@ -134,7 +138,7 @@ export function TrashPage() {
             <div role="columnheader" />
           </TableHead>
           {items.map((e) => (
-            <div role="row" key={e.id} className="grid h-[57px] items-center border-b-row px-2.5 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
+            <div role="row" key={e.id} className="grid min-h-[57px] items-center border-b-row px-2.5 py-2 hover:bg-row-hv" style={{ gridTemplateColumns: COLS }}>
               <div role="cell" className="min-w-0 pr-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="truncate font-heading fs-name font-semibold text-ink">{e.name}</span>
@@ -147,13 +151,13 @@ export function TrashPage() {
                   </p>
                 )}
               </div>
-              <div role="cell" className="truncate pr-3 text-left font-mono fs-meta text-mut [direction:rtl]" title={e.origin}>
-                <bdi>{e.origin}</bdi>
+              <div role="cell" className="truncate pr-3 font-mono fs-meta text-mut" title={tildify(e.origin)}>
+                {tildify(e.origin)}
               </div>
               <div role="cell" className="fs-meta text-mut">
                 <time dateTime={e.when}>{ago(e.when, t)}</time>
               </div>
-              <div role="cell" className="truncate fs-meta text-mut" title={e.problem ?? why(e)}>
+              <div role="cell" className="line-clamp-2 pr-2 fs-meta leading-snug text-mut" title={e.problem ?? why(e)}>
                 {e.restorable === false && e.problem ? e.problem : why(e)}
               </div>
               <div role="cell" className="flex justify-end gap-1">

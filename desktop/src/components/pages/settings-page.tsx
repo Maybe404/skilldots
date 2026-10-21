@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { CloudUpload } from "lucide-react"
 
 import { errorText, useApp } from "@/lib/app-state"
+import { tildify } from "@/lib/agents"
 import { backend, type CliStatus, type Config, type Theme } from "@/lib/backend"
 import { ago } from "@/lib/i18n"
 import { Page } from "@/components/app/bits"
@@ -148,7 +149,7 @@ export function SettingsPage() {
           <Section title={t("librarySection")} first>
             <div className="border-b-row py-3">
               <div className="fs-meta text-mut">{t("libraryPath")}</div>
-              <div className="mt-[3px] font-mono fs-meta break-all text-ink">{status?.root}</div>
+              <div className="mt-[3px] font-mono fs-meta break-all text-ink">{tildify(status?.root ?? "")}</div>
               <div className="mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1.5 fs-meta">
                 <Button variant="link" size="inline" onClick={async () => (await run(() => backend.revealLibrary())).ok && toast(t("revealed"))}>
                   {t("revealInFinder")}
@@ -169,10 +170,11 @@ export function SettingsPage() {
           <AgentAccess />
 
           <Section title={t("backupSection")}>
-            <div className="flex items-center gap-3.5 border-b-row py-3">
-              <div className="min-w-0 flex-1">
+            {/* The remote keeps a whole line when the column is narrow: the button wraps below it. */}
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b-row py-3">
+              <div className="min-w-[16rem] flex-1">
                 {status?.remote ? (
-                  <div className="truncate font-mono fs-meta text-ink">{status.remote}</div>
+                  <div className="font-mono fs-meta break-all text-ink">{status.remote}</div>
                 ) : (
                   <div className="fs-body text-ink">{t("noRemote")}</div>
                 )}

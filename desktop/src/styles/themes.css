@@ -109,7 +109,8 @@
   --priFg: #2a1c08;
   --ln: rgba(62, 57, 53, 0.3);
   --wire: #4c58a4;
-  --sage: #8fae8b;
+  /* the margin doodles: a light tint of the indigo hue (three hues in all: ink, indigo, orange) */
+  --sage: #8b93c4;
   --knob: #fbf8f0;
   --inBg: transparent;
   --inBd: 1.5px solid rgba(62, 57, 53, 0.3);
@@ -117,7 +118,8 @@
   --fh: "Gaegu", "Long Cang", "PingFang SC", cursive;
   /* Handwriting only in headings and names (--fh); body text, Chinese above all, stays PingFang to be read easily. */
   --fb: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-  --fm: "Gaegu", "Long Cang", cursive;
+  /* paths and commit ids stay monospaced, as in Clean: handwriting makes them hard to read */
+  --fm: "JetBrains Mono", "PingFang SC", monospace;
   --fmCode: "JetBrains Mono", ui-monospace, monospace;
   --fsSm: 12.5px;
   --fs: 14px;
@@ -141,8 +143,9 @@
   --onRad: 8px 10px 7px 11px;
   --onRot: rotate(-2deg);
   --offBd: 1.4px dashed rgba(138, 131, 122, 0.6);
-  --rowOn: repeating-linear-gradient(-45deg, rgba(143, 174, 139, 0.45) 0 2px, rgba(143, 174, 139, 0.04) 2px 7px);
-  --rowHv: rgba(143, 174, 139, 0.14);
+  /* selected row: the indigo hue's hatching, hover a faint ink wash */
+  --rowOn: repeating-linear-gradient(-45deg, rgba(76, 88, 164, 0.2) 0 2px, rgba(76, 88, 164, 0.03) 2px 7px);
+  --rowHv: rgba(62, 57, 53, 0.05);
   --rowSh: inset 0 0 0 1.6px #3e3935;
   --navBg: rgba(62, 57, 53, 0.07);
   --navOn: rgba(216, 138, 63, 0.25);

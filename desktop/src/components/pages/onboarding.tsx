@@ -2,7 +2,6 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
-import { StyleSwitch } from "@/components/app/header"
 import { LibraryForm } from "@/components/dialogs/ops-dialogs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
@@ -26,8 +25,6 @@ export function Onboarding() {
     <div className="flex min-h-svh flex-col">
       <header className="skd-titlebar flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd pr-6">
         <span className="font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
-        <span className="flex-1" />
-        <StyleSwitch className="h-[26px] p-0.5" />
       </header>
       <main className="mx-auto w-full max-w-[640px] flex-1 px-6 pt-12 pb-10">
         <h1 className="font-heading fs-h1 leading-tight font-semibold tracking-[-0.01em] text-ink">{t("welcome")}</h1>

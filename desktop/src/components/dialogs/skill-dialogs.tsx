@@ -3,7 +3,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { useApp, useEnabledAgents } from "@/lib/app-state"
-import { agentLabel } from "@/lib/agents"
+import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import { backend, type Ref } from "@/lib/backend"
 import { useSkillActions } from "@/lib/use-actions"
 import { Info } from "lucide-react"
@@ -68,9 +68,11 @@ export function AgentTargets({ value, onChange, className, label }: { value: Set
   const here = enabled.filter((a) => shown.has(a.name))
   const others = enabled.filter((a) => !shown.has(a.name))
   const box = (a: (typeof enabled)[number]) => (
-    <label key={a.name} className="flex items-center gap-2 fs-body text-ink">
+    // Not installed here: nothing would be linked, so it cannot be ticked (unticking a default that is ticked still works).
+    <label key={a.name} className="flex items-center gap-2 fs-body text-ink has-disabled:text-mut" title={isAbsentAgent(a) && !value.has(a.name) ? t("absentCannotInstall", { agent: agentLabel(a) }) : undefined}>
       <Checkbox
         checked={value.has(a.name)}
+        disabled={isAbsentAgent(a) && !value.has(a.name)}
         onCheckedChange={(v) => {
           const n = new Set(value)
           if (v) n.add(a.name)

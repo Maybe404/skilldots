@@ -2,6 +2,7 @@ import { isMyGo } from "mygo-runtime"
 import { Plus, Search } from "lucide-react"
 
 import { useApp, type Style, type View } from "@/lib/app-state"
+import { tildify } from "@/lib/agents"
 import type { MessageKey } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { Highlight, HighlightItem } from "@/components/animate-ui/primitives/effects/highlight"
@@ -63,7 +64,7 @@ export function Header() {
   return (
     <header className="skd-titlebar relative z-[5] -mb-px flex h-[55px] shrink-0 items-center gap-2.5 border-b-hd max-[900px]:gap-2 pr-6 max-[760px]:pr-3 max-[760px]:[--bar-pad:12px]">
       <span className="shrink-0 font-heading fs-brand leading-none font-semibold text-ink">skilldots</span>
-      <span className="ml-1 min-w-[3.5rem] max-w-[180px] shrink truncate fs-meta text-mut max-[760px]:hidden" title={status?.root ?? ""}>
+      <span className="ml-1 min-w-[3.5rem] max-w-[180px] shrink truncate fs-meta text-mut max-[760px]:hidden" title={tildify(status?.root ?? "")}>
         {libName}
       </span>
       {/* Browser preview only; the native window has no such tag. */}

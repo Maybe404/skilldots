@@ -452,7 +452,8 @@ export interface Backend {
   /** Session.Scan + Session.Proposals */
   scan(): Promise<ScanItem[]>
   /** Session.Adopt */
-  adopt(ids: string[]): Promise<{ adopted: number }>
+  /** Session.Adopt; each pick carries the proposal kind the person saw, and a row that changed since is refused. */
+  adopt(picks: { id: string; kind: ScanItem["proposal"] }[]): Promise<{ adopted: number }>
 
   // Trash -----------------------------------------------------------------
   trash(): Promise<TrashEntry[]>
@@ -461,7 +462,7 @@ export interface Backend {
   /** Entries and bytes the trash holds (what emptying it deletes). */
   trashUsage(): Promise<{ count: number; bytes: number }>
   /** Permanently deletes everything; count is what the person confirmed and must still match. */
-  emptyTrash(opts: { count: number }): Promise<{ deleted: number }>
+  emptyTrash(opts: { ids: string[] }): Promise<{ deleted: number }>
   /** Permanently deletes one entry. */
   deleteTrash(id: string): Promise<void>
 

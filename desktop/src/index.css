@@ -180,7 +180,7 @@
     --cols: 40px minmax(0, 1fr) 220px 70px 100px 110px 120px;
   }
   .skd-cols-history {
-    --cols: 130px 230px 150px minmax(0, 1fr);
+    --cols: 130px fit-content(320px) 150px minmax(0, 1fr);
   }
   .skd-cols-adopt {
     --cols: 28px minmax(0, 1fr) 110px minmax(0, 380px);
@@ -197,7 +197,7 @@
       --cols: 36px minmax(0, 1fr) 150px 44px 104px 104px 96px;
     }
     .skd-cols-history {
-      --cols: 104px 170px 130px minmax(0, 1fr);
+      --cols: 104px fit-content(260px) 130px minmax(0, 1fr);
     }
     .skd-cols-adopt {
       --cols: 28px minmax(0, 1fr) 88px minmax(0, 260px);
