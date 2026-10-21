@@ -68,7 +68,52 @@ export interface Skill {
   resolving?: boolean
   /** The files with conflicts, relative to the skill folder. */
   conflictFiles?: string[]
+  /** A vendored skill whose folder differs from the version it was vendored at: you edited it. False for the rest. */
+  edited?: boolean
+  /** What was last sent upstream from it (`skd contribute`), or null. */
+  contribution?: Contribution | null
 }
+
+/** A contribution recorded in the lock (lock.Skill.Contribution). */
+export interface Contribution {
+  kind: "pr" | "push"
+  url: string
+  /** PR number; 0 for a push. */
+  number: number
+  branch: string
+  state: "open" | "merged" | "closed" | "pushed"
+}
+
+/** What contributing a skill upstream can do right now (app.ContributeOptions). */
+export interface ContributeOptions {
+  /** The pack's repository, owner/repo. */
+  repo: string
+  host: "github" | "other"
+  canPush: boolean
+  canPR: boolean
+  /** The gh command: installed and logged in, missing, or logged out. */
+  gh: "ok" | "missing" | "logged-out"
+  /** The skill is not up to date with upstream: update (and resolve) first. */
+  behind: boolean
+  /** Why a mode is unavailable, in the person's words. */
+  reason: string
+  defaultMessage: string
+  /** The branch a push goes to (the ref, or the default branch). */
+  branch: string
+}
+
+export type ContributeMode = "pr" | "push"
+
+export interface ContributeOutcome {
+  mode: ContributeMode
+  url: string
+  number: number
+  branch: string
+  pushed: boolean
+}
+
+/** The ref that names the library's own sync merge in the resolve methods (paths relative to the library root). */
+export const SYNC_REF: Ref = { key: "@sync" }
 
 /** A subscribed repository ([[pack]] in skills.toml plus its lock). */
 export interface Pack {
@@ -366,6 +411,8 @@ export interface LibraryStatus {
   bundledSkill?: boolean
   /** initLibrary with the skill: why the skill could not be installed (the library was created). */
   skillError?: string
+  /** A sync merge is being resolved (`skd sync --resolve`): the library has conflict markers until it is finished. */
+  syncing?: boolean
 }
 
 /** The skd command: a link on the PATH to the app's own executable. */
@@ -404,6 +451,10 @@ export interface SyncOutcome {
   committed: boolean
   pushed: boolean
   remote: string
+  /** The remote had changes, merged before pushing. */
+  pulled?: boolean
+  /** Files both sides changed: the merge was abandoned and the sync is shelved (nothing pushed). Empty otherwise. */
+  conflicts?: string[]
 }
 
 /** Agent not installed on this machine → the skills an apply did not link there. */
@@ -520,7 +571,17 @@ export interface Backend {
   /** app.HistoryDiff: what one recorded update changed, skill by skill (time is the record's `when`). */
   historyDiff(repo: string, time: string): Promise<{ skills: SkillDiff[] }>
 
-  // Resolving a shelved update (skd resolve) -------------------------------
+  // Your edits and contributing upstream -----------------------------------
+  /** app.LocalChanges: your edits, the upstream version they started from against the working copy (base false: not found). */
+  localChanges(ref: Ref): Promise<SkillDiff>
+  /** What contributing the skill can do: target, modes, gh, whether to update first. */
+  contributeOptions(ref: Ref): Promise<ContributeOptions>
+  /** skd contribute --pr | --push -m message: the person confirmed the target and the diff first. */
+  contribute(ref: Ref, mode: ContributeMode, message: string): Promise<ContributeOutcome>
+  /** skd contribute --refresh: re-reads PR states (reload the skills after). */
+  refreshContributions(): Promise<void>
+
+  // Resolving a shelved update (skd resolve), or a shelved sync with SYNC_REF --
   /** Writes the merge with conflict markers into the skill's folder (the folder as it was goes to the trash first). */
   resolveStart(ref: Ref): Promise<ResolveState>
   /** The conflicts left, read from the files as they are now (manual edits included). */
