@@ -18,6 +18,7 @@ const REASON: Record<Exclude<NonNullable<TrashEntry["reason"]>, "">, MessageKey>
   remove: "reasonRemoved",
   update: "reasonUpdate",
   replaced: "reasonUpdate",
+  merged: "reasonMerged",
   adopt: "reasonAdopt",
   "in-the-way": "reasonInTheWay",
   purge: "reasonPurge",

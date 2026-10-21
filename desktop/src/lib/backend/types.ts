@@ -59,6 +59,15 @@ export interface Skill {
   viaShared?: string[]
   /** Installed agents that read it from ~/.agents/skills at all, chosen or not: turning it on for them changes nothing. */
   sharedReach?: string[]
+  /**
+   * An update is shelved: upstream changed what you edited as well and the merge has conflicts, so the folder was
+   * left as it was (lock Shelved). The bridge always sends it; optional for the sample data and older bridges.
+   */
+  shelved?: boolean
+  /** Being resolved (`skd resolve` started): its files hold conflict markers until the merge is finished or shelved again. */
+  resolving?: boolean
+  /** The files with conflicts, relative to the skill folder. */
+  conflictFiles?: string[]
 }
 
 /** A subscribed repository ([[pack]] in skills.toml plus its lock). */
@@ -120,9 +129,54 @@ export interface HistoryEntry {
   omitted?: number
   /** Files the user had changed, moved to the trash before replacing. */
   backups: string[]
+  /** Skills whose edits were merged with upstream's changes (app.UpdateRecord.Merged). */
+  merged?: string[]
+  /**
+   * Skills left as they were because the merge had conflicts. An update's own result names the files
+   * ({name, files}); a history record may name only the skill. shelvedNames() reads either.
+   */
+  shelved?: (ShelvedSkill | string)[]
   /** Fictional sample shown by the mock. */
   example?: boolean
 }
+
+/** A skill an update shelved, with its conflicted files (engine.ShelvedSkill). */
+export interface ShelvedSkill {
+  name: string
+  files: string[]
+}
+
+/** The skill names of a record's shelved list, whichever form it has. */
+export function shelvedNames(h: Pick<HistoryEntry, "shelved">): string[] {
+  return (h.shelved ?? []).map((s) => (typeof s === "string" ? s : s.name))
+}
+
+/** One conflict in a file: the two sides between the markers (and the common ancestor, when known). */
+export interface ConflictBlock {
+  /** 0-based position among the file's conflicts; what resolvePick names. */
+  index: number
+  local: string
+  upstream: string
+  base?: string
+}
+
+/** A file of a skill being resolved, parsed from the conflict markers in the work tree. */
+export interface ConflictFile {
+  /** Relative to the skill folder. */
+  path: string
+  /** Changed on both sides and not text: nothing to pick block by block. */
+  binary: boolean
+  /** The conflicts still in the file; empty once every one is resolved. */
+  blocks: ConflictBlock[]
+  /** The whole file as it is now, markers included. */
+  text: string
+}
+
+export interface ResolveState {
+  files: ConflictFile[]
+}
+
+export type ResolveChoice = "local" | "upstream" | "both"
 
 /** What the add box recognised (app.ParseAdd, extended for pasted commands and links). */
 export interface ParsedSource {
@@ -227,7 +281,7 @@ export interface TrashEntry {
    * (replaced by an update), "adopt" (replaced while adopting), "purge"
    * (a removed source). Optional; the UI falls back to where it came from.
    */
-  reason?: "removed" | "update" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | "broken" | ""
+  reason?: "removed" | "update" | "merged" | "adopt" | "purge" | "remove" | "deselected" | "replaced" | "in-the-way" | "broken" | ""
   /** The skills it holds and the source they came from, as recorded when it was set aside. */
   skills?: string[]
   repo?: string
@@ -457,6 +511,20 @@ export interface Backend {
   updateDiff(repo: string, latest?: string): Promise<UpdateDiff>
   /** Update history kept in the library. */
   history(): Promise<HistoryEntry[]>
+  /** app.HistoryDiff: what one recorded update changed, skill by skill (time is the record's `when`). */
+  historyDiff(repo: string, time: string): Promise<{ skills: SkillDiff[] }>
+
+  // Resolving a shelved update (skd resolve) -------------------------------
+  /** Writes the merge with conflict markers into the skill's folder (the folder as it was goes to the trash first). */
+  resolveStart(ref: Ref): Promise<ResolveState>
+  /** The conflicts left, read from the files as they are now (manual edits included). */
+  resolveState(ref: Ref): Promise<ResolveState>
+  /** Replaces one conflict of a file with one side, or both one after the other. */
+  resolvePick(ref: Ref, path: string, block: number, choice: ResolveChoice): Promise<void>
+  /** skd resolve --continue: refused while a file still has conflict markers; then the skill is up to date and linked again. */
+  resolveContinue(ref: Ref): Promise<ApplyNote | void>
+  /** skd resolve --abort: the folder comes back as it was, and the update is shelved again. */
+  resolveAbort(ref: Ref): Promise<void>
 
   // Scan / adopt ----------------------------------------------------------
   /** Session.Scan + Session.Proposals */
