@@ -90,7 +90,9 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd init [dir]` | create a library (its own git repository) and teach your agents to use skd |
 | `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
 | `skd use <dir>` | point skd at an existing library from any directory |
-| `skd sync [--remote url] [-m msg]` | commit the library and push it: your backup |
+| `skd sync [--remote url] [-m msg]` | commit the library, merge what its remote has, and push: your backup (`--resolve`, `--continue`, `--abort` for a sync whose merge conflicts) |
+| `skd diff <skill>` | your changes to a vendored skill, against the upstream version it is based on |
+| `skd contribute <skill> --pr \| --push` | send your changes to a vendored skill upstream: a pull request, or a push (`--dry-run` first) |
 | **Adding** | |
 | `skd show <owner/repo \| url>` | list what a repository offers, without installing |
 | `skd add <source>[@ref]` | fetch a repo and choose skills, interactively or with `--skill`, `--category`, `--all`; also takes a pasted install line, a skills.sh page or a GitHub link (only parsed, never run) |

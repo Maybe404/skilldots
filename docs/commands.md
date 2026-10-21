@@ -12,10 +12,12 @@ Every `skd` command in full. The [README](../README.md#commands) has a one-line 
 ## What `--json` prints
 
 - stdout carries exactly one JSON document. Progress and warnings go to stderr.
-- A failing command prints nothing on stdout and exits non-zero. Three commands print their document and still exit non-zero:
+- A failing command prints nothing on stdout and exits non-zero. These print their document and still exit non-zero:
   - `skd update` reports `{packs, failed, apply, committed, history}`. It exits non-zero when any pack failed, and also, with an `error` field, when the update was saved but linking or `--commit` then failed.
   - `skd outdated` does the same with `{checked, packs, failed, updates}`; each pack has `repo, commit, latest, changed, moved, new, gone, pending, checked`, and `shelved` when an update of one of its skills waits for `skd resolve` (those skills are in `changed` too).
   - `skd apply` exits non-zero when a planned change was not made because its agent directory no longer led where it did, or its source went through a symbolic link inside the library (`refused`). The last line of the plain output then reads `applied · … · N not changed` instead of a tick.
+  - `skd sync` when the remote and the library both changed the same lines: the document lists them in `conflicts` (the sync is shelved, nothing was merged or pushed).
+  - `skd sync --continue` and `skd resolve --continue` while a conflict is left: `{unresolved}` (and `skill` for resolve).
 - Problems confined to one skill (an unknown target, a name clash, a pack not fetched yet) are warnings, not errors: the rest of the library keeps working.
 - `--json` is English whatever the language, byte for byte what `--lang en` gives ([README → Language](../README.md#language)).
 - Field values are data as found. Every control character in them (DEL, C1 and bidi controls included) is written as a `\u` escape, so the document decodes to the same values and is harmless on a terminal; a program that shows them to a person cleans them itself ([safety.md](safety.md#what-skd-prints)).
@@ -41,9 +43,15 @@ Sets up a machine from a library you pushed elsewhere.
 
 Points skd at an existing library, from any directory. After moving a library: `skd use <new dir>`, then `skd apply` ([safety.md → Moved or copied libraries](safety.md#moved-or-copied-libraries)).
 
-### `skd sync [--remote url] [-m msg]`
+### `skd sync [--remote url] [-m msg] [--resolve | --continue | --abort]`
 
-Commits the library and pushes it: your backup.
+Commits the library and pushes it: your backup, and how other machines get your changes.
+
+- When the branch has an upstream, sync first fetches it and merges what it has that the library has not (`git merge --no-edit`, never a rebase), links what the merge brought in (as `skd clone` does), then pushes, with the upstream snapshots (`refs/skilldots/*`, forced).
+- When both sides changed the same lines the merge is aborted: the library stays exactly as it was, nothing is pushed, the conflicting files are listed (`conflicts` in `--json`), and sync exits non-zero. The sync is shelved.
+- `--resolve` redoes the merge and leaves git's conflict state in the library: conflict markers in the files and unmerged index entries, so `git status`, `git diff` and `git checkout --ours|--theirs` work. Agents linked to skills among those files read the markers until it is finished. Commits wait meanwhile.
+- `--continue` refuses (non-zero; `--json`: `{unresolved}`) while a conflicted file holds a marker or stays unmerged; otherwise it adds the files, commits the merge, links what it brought in and pushes. `--abort` runs `git merge --abort`.
+- `private/` is a separate repository and is never pushed. `--json` prints `{committed, pushed, remote, pulled, conflicts, apply, privateUncommitted}`.
 
 ## Adding skills
 
@@ -178,6 +186,25 @@ What each update changed: when, old → new commit, the skills changed / merged 
 
 - An update whose linking failed says so until an apply links every skill of that pack. One skill still skipped (say, because something is in the way) keeps the note.
 - It is read from `skills.history.jsonl` in the library, which is committed and pushed with it, so it works offline and on another machine after a clone.
+
+## Your edits and contributing them
+
+### `skd diff <skill>`
+
+Your changes to a vendored skill: its files against the upstream version they are based on (the one `skills.lock` records, found in the library's upstream snapshots or its git history, as an update's merge finds its base), as a unified diff. When that version is not found it says so and shows nothing. `--json` prints the file/hunk document (`base` false when the version was not found). `skd list` marks a vendored skill you changed with `✎` (`Edited` in `--json`).
+
+### `skd contribute [skill] [--pr | --push] [-m msg] [--dry-run] [--yes] [--refresh]`
+
+Sends your changes to a vendored skill upstream. Nothing is ever sent unless you run this; without a terminal it needs `--yes`.
+
+- Target: the pack's repository at its ref (the default branch when none; a ref that is not a branch is refused). The skill's place there comes from scanning upstream.
+- The skill must be edited and based on upstream's current version, not shelved: otherwise "skd update first".
+- The change is made in a clone of its own in the cache (`<cache>/<repo>.contrib`, never the shallow clone updates use, never the library): reset to upstream's tip, the skill's files mirrored over its directory there (deletions too), committed with your git identity and `-m` (default `Update <skill>` and a line `Edited with skilldots`).
+- `--push` pushes to the pack's branch when you may (GitHub: asked through gh; elsewhere `git push --dry-run`); a rejected push (a protected branch, upstream moved on) stops with a pointer to `--pr`.
+- `--pr` (GitHub only, needs gh logged in) pushes a branch `skilldots/<skill>-<yyyymmdd-hhmm>` to the repository when you may push there, else to your fork (gh forks it, or reuses your fork), and opens the pull request with `gh pr create`. Elsewhere than GitHub: push when you may, or send a patch (`git format-patch`).
+- `--dry-run` (or no mode) prints the repository, the branch, what is possible and why not, and the diff; it sends nothing (it fetches upstream).
+- The contribution is recorded in `skills.lock` (`contribution`: kind, url, number, branch, state, at) until an update brings upstream to your version. `skd contribute` lists the records; `--refresh` (and `skd outdated`, best effort) asks GitHub for the pull requests' state.
+- `--json` prints `{repo, mode, branch, url, number, pushed}` (the options document with `--dry-run`).
 
 ## Changing skills
 

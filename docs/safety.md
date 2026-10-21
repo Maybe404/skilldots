@@ -65,6 +65,14 @@ After `skd use <new dir>` and `skd apply`, links into the old location are recog
 - After the library is moved (`mv`), a link to its old location is removed when it leads nowhere because that location is gone from a folder that is still there (not when a volume is unmounted).
 - After it is copied (`cp -R lib lib2`, then `skd use lib2`), a link into the old copy is relinked without going to the trash when the old copy's own `skills.lock` records that very link.
 
+## What is pushed, where, and when
+
+skd never pushes, forks or opens a pull request on its own: not on update, not on a schedule, not in the background.
+
+- `skd sync` (and `skd update --commit`) pushes the library to its own git remote, with the upstream snapshots (`refs/skilldots/*`). It first merges what that remote has; a conflict stops it with the library unchanged. `private/` is never pushed.
+- `skd contribute` is the only thing that sends a change to a pack's upstream repository, and only the one skill named: to the pack's branch (`--push`) or as a pull request (`--pr`, a branch on the repository or on your fork). Without a terminal it needs `--yes`; the desktop app shows the repository, the branch, the mode and the diff, and sends on a confirmation. It commits in a clone of its own in skd's cache, with your git identity, never in the library.
+- What gh is asked (whether you are logged in, whether you may push, a fork, a pull request and its state) happens only during `skd contribute` (and, for the state of pull requests already opened, `skd contribute --refresh` and `skd outdated`).
+
 ## A person at a terminal
 
 `skd trash empty` and approving a custom target are only for a person at a terminal. That means stdin and stdout are terminals and, where skd asks, the answer was typed.
