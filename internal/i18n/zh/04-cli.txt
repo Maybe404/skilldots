@@ -145,10 +145,10 @@
 = 默认 target：%s  （用 skd enable <skill> --agent <name> 给 skill 加一个 agent）
 
 @   %s could not install the %s skill (%s); run `skd add %s --skill %s --agent '*'` later\n
-=   %s 没能安装 %s skill（%s）；稍后请运行 `skd add %s --skill %s --agent '*'`\n
+=   %s 没能装上 %s skill（%s）；稍后请运行 `skd add %s --skill %s --agent '*'`\n
 
 @ installed the %s skill so agents on this machine know how to use skd
-= 已安装 %s skill，让本机上的 agent 知道怎么使用 skd
+= 已装上 %s skill，让本机上的 agent 知道怎么使用 skd
 
 @ turn an existing directory into the library
 = 把已有的目录变成资料库
@@ -157,7 +157,7 @@
 = 默认 target（默认：agents）
 
 @ do not install the skilldots skill for agents
-= 不为 agent 安装 skilldots skill
+= 不给 agent 装上 skilldots skill
 
 @ Show packs and skills (one line per pack unless expanded)
 = 显示来源和 skill（除非展开，每个来源一行）
@@ -171,8 +171,8 @@
 @ show what one agent target receives
 = 显示某个 agent target 收到的 skill
 
-@ %d linked
-= 已链接 %d 个
+@ %d in agents
+= 已装上 %d 个
 
 @  · agents: %s
 =  · agent：%s
@@ -267,8 +267,8 @@
 @ %d planned change(s) not made (listed above); the agent directories do not match skills.toml yet
 = 有 %d 项计划中的改动没有完成（见上方）；agent 目录与 skills.toml 还不一致
 
-@ up to date, %d linked
-= 已是最新，已链接 %d 个
+@ up to date, %d links
+= 已是最新，共 %d 个链接
 
 @ , %d skipped
 = ，跳过 %d 个
@@ -699,9 +699,6 @@
 @ rejected
 = 已拒绝
 
-@ see changes: git -C %s diff -- vendor/%s
-= 查看改动：git -C %s diff -- vendor/%s
-
 @ Link a skill (or whole pack) into agents
 = 把 skill（或整个来源）装到 agent 上
 
@@ -742,13 +739,13 @@
 = fork 的名字（默认：同名）
 
 @ List the skills a repository offers, without installing anything
-= 列出一个仓库提供的 skill，不安装任何东西
+= 列出一个仓库提供的 skill，不引入也不装上任何东西
 
 @ %s: uses %s; %d other copies with different content are ignored (%s)
 = %s：使用 %s；另有 %d 份内容不同的副本被忽略（%s）
 
 @ install: skd add %s --skill <name>   or   --category <category>   or   --all
-= 安装：skd add %s --skill <name>   或   --category <category>   或   --all
+= 引入：skd add %s --skill <name>   或   --category <category>   或   --all
 
 @ Check upstream for changes to the selected skills, without changing anything
 = 检查所选 skill 在上游的变化，不做任何改动
@@ -1194,3 +1191,15 @@
 
 @ %s still reads %s from the shared directory ~/.agents/skills: take it off agents too (skd disable %s --agent agents) to keep it from %s
 = %s 仍会从共享目录 ~/.agents/skills 读到 %s：要让 %[4]s 用不到它，还要把它从 agents 卸下（skd disable %[3]s --agent agents）
+
+@ relink
+= 重新链接
+
+@ forget
+= 忘掉记录
+
+@ ! marks an entry skd does not restore; why:
+= ! 表示 skd 不会恢复这一条，原因如下：
+
+@ see changes
+= 查看改动

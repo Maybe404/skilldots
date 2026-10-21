@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Maybe404/skilldots/internal/engine"
@@ -116,21 +117,32 @@ func (s *Session) uses(dir string) bool {
 // trashKey is the ID of the trash entry key names: key itself when it is
 // an ID ("<batch>/<name>"), else the one entry holding the skill key.
 func (s *Session) trashKey(key string) (string, error) {
-	if strings.Contains(key, "/") {
+	if batchID.MatchString(key) {
 		return key, nil
 	}
 	items, err := s.Trash()
 	if err != nil {
 		return "", err
 	}
+	// A pack's repository names the entry of its whole directory (what
+	// skd purge, or removing its last skill, set aside); any other key a
+	// skill the entry holds.
+	pack := s.Lib.Manifest.FindPack(key) == nil && strings.Contains(key, "/")
 	var ids []string
 	for _, it := range items {
 		if it.Unsafe {
 			continue
 		}
-		hit := it.Name == key
-		for _, n := range it.Skills {
-			hit = hit || n == key
+		hit := false
+		if pack {
+			if pd, err := engine.PackDir(s.Lib, key); err == nil && it.Repo == key && it.Origin == pd {
+				hit = true
+			}
+		} else {
+			hit = it.Name == key
+			for _, n := range it.Skills {
+				hit = hit || n == key
+			}
 		}
 		if hit {
 			ids = append(ids, it.ID)
@@ -138,12 +150,18 @@ func (s *Session) trashKey(key string) (string, error) {
 	}
 	switch len(ids) {
 	case 0:
+		if pack {
+			return "", i18n.Errorf("no trash entry holds the pack %q (give an id as `skd trash` lists it, the repository of a purged pack, or the name of a skill in the trash)", key)
+		}
 		return "", i18n.Errorf("no trash entry %q (give an id as `skd trash` lists it, or the name of a skill in the trash)", key)
 	case 1:
 		return ids[0], nil
 	}
 	return "", i18n.Errorf("%d trash entries hold %q: %s; restore one by its id", len(ids), key, strings.Join(ids, ", "))
 }
+
+// batchID is how an ID `skd trash` lists starts: the batch, then "/".
+var batchID = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}/`)
 
 // reinstate puts back into skills.toml and skills.lock what n recorded
 // for the vendored skills it holds: the whole pack as it was when whole

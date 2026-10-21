@@ -53,7 +53,7 @@ func runMenu() error {
 			last = dim(i18n.Sprintf("  ·  last change %s", out))
 		}
 		lines := []string{brand(), dim(strings.Replace(root, home, "~", 1)), "",
-			cyan(plural(len(c.lib.Manifest.Packs), "pack")) + dim(" · ") + cyan(plural(len(entries), "skill")) + dim(" · ") + cyan(i18n.Sprintf("%d linked", linked)) + dim(i18n.Sprintf(" · agents: %s", strings.Join(c.lib.Manifest.Targets.Default, ", ")))+pausedNote(c.lib.Manifest.Targets.Disabled),
+			cyan(plural(len(c.lib.Manifest.Packs), "pack")) + dim(" · ") + cyan(plural(len(entries), "skill")) + dim(" · ") + cyan(i18n.Sprintf("%d in agents", linked)) + dim(i18n.Sprintf(" · agents: %s", strings.Join(c.lib.Manifest.Targets.Default, ", ")))+pausedNote(c.lib.Manifest.Targets.Disabled),
 			status + last}
 		rec := c.RecordedOutdated()
 		if line := updatesLine(rec, time.Now()); line != "" {

@@ -407,10 +407,10 @@ func printReport(c *ctx, r *engine.SyncReport) {
 		c.printf("  %s %s\n", warn(pad(i18n.T("rejected"), 13)), rj)
 	}
 	for _, b := range r.Backups {
-		c.printf("  %s %s\n", dim(pad(i18n.T("moved aside"), 13)), txt(b))
+		c.printf("  %s %s\n", dim(pad(i18n.T("moved aside"), 13)), txt(tildeIn(b)))
 	}
 	if len(r.Changed) > 0 {
-		c.printf("  %s\n", dim(i18n.Sprintf("see changes: git -C %s diff -- vendor/%s", c.lib.Root, r.Repo)))
+		c.printf("  %s %s\n", dim(pad(i18n.T("see changes"), 13)), dim(fmt.Sprintf("git -C %s diff -- vendor/%s", tildePath(c.lib.Root), r.Repo)))
 	}
 }
 
@@ -545,13 +545,27 @@ func purgeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printApply(c, out.Apply)
+			// The links were listed above; the rest of the plan (skips)
+			// and the totals follow.
+			printOps(c, skipsOnly(out.Apply.Plan))
+			printApplySummary(c, out.Apply)
 			printUndo(c, out.Trash)
 			c.jsonOut(out)
 			return nil
 		},
 	}
 	return cmd
+}
+
+// skipsOnly is plan with its skips only.
+func skipsOnly(plan engine.Plan) engine.Plan {
+	var out engine.Plan
+	for _, op := range plan.Ops {
+		if op.Action == "skip" {
+			out.Ops = append(out.Ops, op)
+		}
+	}
+	return out
 }
 
 // printUndo says where in the trash the files went and how to put them

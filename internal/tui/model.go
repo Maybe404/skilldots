@@ -362,7 +362,7 @@ func (m Model) leftRows() []leftRow {
 	for _, g := range []struct {
 		title  string
 		skills []Skill
-	}{{i18n.M("MINE"), s.Mine}, {i18n.M("PRIVATE"), s.Private}, {i18n.M("APPS"), s.Apps}} {
+	}{{i18n.M("LOCAL"), s.Mine}, {i18n.M("PRIVATE"), s.Private}, {i18n.M("APPS"), s.Apps}} {
 		var items []leftRow
 		for _, sk := range g.skills {
 			if match(f, sk.LinkName, sk.Description) {

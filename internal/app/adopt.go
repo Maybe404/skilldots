@@ -109,10 +109,10 @@ func (s *Session) Proposals(rep scan.Report) []Proposal {
 			if repo := gitRemote(it.LinkTo); repo != "" {
 				p.Kind, p.Repo, p.Skill, p.Label = "pack", repo, it.Name, i18n.Sprintf("subscribe to %s (link target is a clone of it)", repo)
 			} else {
-				p.Kind, p.Label = "own", i18n.T("copy into skills/ as your own")
+				p.Kind, p.Label = "own", i18n.T("copy into skills/ as a local skill")
 			}
 		default:
-			p.Kind, p.Label = "own", i18n.T("copy into skills/ as your own (no known upstream)")
+			p.Kind, p.Label = "own", i18n.T("copy into skills/ as a local skill (no known upstream)")
 		}
 		seen[it.Name] = true
 		out = append(out, p)
@@ -177,7 +177,7 @@ func (s *Session) checkUpstream(props []Proposal) {
 			continue
 		}
 		p.Kind, p.Repo, p.Skill, p.Differs = "own", "", "", true
-		p.Label = i18n.Sprintf("differs from %s upstream (changed here, or an older version): copy into skills/ as your own; `skd add %s --skill %s` takes upstream's instead", p.Upstream, p.Upstream, p.Item.Name)
+		p.Label = i18n.Sprintf("differs from %s upstream (changed here, or an older version): copy into skills/ as a local skill; `skd add %s --skill %s` takes upstream's instead", p.Upstream, p.Upstream, p.Item.Name)
 	}
 }
 

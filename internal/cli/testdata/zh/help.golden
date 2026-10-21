@@ -25,7 +25,7 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库
   purge       彻底清除一个来源：清单、锁、vendor/ 和所有链接
   remove      将资料库中的 skill 移入回收站，并从所有 agent 取消链接
   scan        盘点本机上每个 agent 的 skill 目录
-  show        列出一个仓库提供的 skill，不安装任何东西
+  show        列出一个仓库提供的 skill，不引入也不装上任何东西
   sync        提交资料库并推送到它的 git 远程仓库（你的备份）
   targets     列出已知的 agent target，以及它们在本机是否存在
   trash       skd 挪开的东西：列出、恢复或清空（清空只能由终端前的人来做）
