@@ -122,6 +122,8 @@ export function WireView({
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const scene = React.useRef<Scene | null>(null)
   const inks = React.useRef<ReturnType<typeof readInks> | null>(null)
+  /** True while the list scrolls: rows passing under the pointer take no hover. */
+  const scrolling = React.useRef(false)
   const [drag, setDrag] = React.useState<{ key: string; x: number; y: number } | null>(null)
 
   const focusKey = hover ?? selected
@@ -304,28 +306,27 @@ export function WireView({
 
   React.useEffect(() => {
     const el = scroller.current
-    const layer = layerRef.current
-    if (!el || !layer) return
+    if (!el) return
     let timer = 0
     const onScroll = () => {
       draw()
-      // Rows slide under a still pointer while scrolling: drop the hover (and its orange curves) and take no new one until the scroll stops.
+      // Rows slide under a still pointer while scrolling: drop the hover (and its orange curves) and take no new one
+      // until the scroll stops. Only the hover: a click right after a scroll still selects its row (switching pointer
+      // events off swallowed it, and space then opened the skill selected before).
       if (scene.current?.drag) return
-      if (!timer) {
-        layer.style.pointerEvents = "none"
-        setHover(null)
-      }
+      if (!timer) setHover(null)
+      scrolling.current = true
       clearTimeout(timer)
       timer = window.setTimeout(() => {
         timer = 0
-        layer.style.pointerEvents = ""
+        scrolling.current = false
       }, 120)
     }
     el.addEventListener("scroll", onScroll, { passive: true })
     return () => {
       el.removeEventListener("scroll", onScroll)
       clearTimeout(timer)
-      layer.style.pointerEvents = ""
+      scrolling.current = false
     }
   }, [scroller, draw, setHover])
 
@@ -385,7 +386,9 @@ export function WireView({
                       select(it.skill.ref.key)
                       openDetail(it.skill.ref.key)
                     }}
-                    onEnter={() => setHover(it.skill.ref.key)}
+                    onEnter={() => {
+                      if (!scrolling.current) setHover(it.skill.ref.key)
+                    }}
                     onLeave={() => setHover(null)}
                     onPortDown={(e) => {
                       e.preventDefault()
@@ -412,9 +415,11 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
   const st = skill ? cellState(skill, a.name, pending) : "off"
   const on = st === "on" || st === "adding" || st === "absent"
   const away = isAbsentAgent(a)
+  // Off for an agent this Mac does not have: shown as such and refused when pressed (app-state says why).
+  const locked = st === "off" && away
   const pend = st === "adding" || st === "removing"
   const label = agentLabel(a)
-  const btnText = st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
+  const btnText = locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
   return (
     <div
       data-agent={a.name}
@@ -458,19 +463,20 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
               variant={null}
               size="default"
               aria-pressed={on}
+              aria-disabled={locked || undefined}
               aria-label={`${skill.linkName} · ${label} (${a.name}) · ${btnText}`}
               onClick={() => togglePending(skill, a.name)}
               className={cn(
                 "relative z-[1] h-[26px]",
                 compact && "w-[26px] px-0",
-                st === "absent" ? "border-[1.5px] border-dashed border-ln text-mut" : on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
-                pend ? "border-ac text-ac" : !on && "border-mut text-ink",
+                st === "absent" || locked ? cn("border-[1.5px] border-dashed border-ln text-mut", locked && "cursor-not-allowed") : on && !pend ? "border-[1.5px] border-hue bg-hue-soft text-hue-ink" : "border-[1.5px] border-dashed bg-transparent",
+                pend ? "border-ac text-ac" : !on && !locked && "border-mut text-ink",
               )}
             >
-              {compact ? <Glyph aria-hidden strokeWidth={2.2} /> : st === "absent" ? t("wireAbsent") : btnText}
+              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : st === "absent" || locked ? t("wireAbsent") : btnText}
             </Button>
           )
-          return compact || st === "absent" ? <Hint label={btnText}>{button}</Hint> : button
+          return compact || st === "absent" || locked ? <Hint label={btnText}>{button}</Hint> : button
         })()}
       <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>
