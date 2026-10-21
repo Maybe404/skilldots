@@ -5,7 +5,7 @@ import { hasConflicts, isMine, sourceText, useApp, type TableSort } from "@/lib/
 import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn, keepsViaShared } from "@/lib/pending"
-import { ConflictMark, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { ConflictMark, ContributionMark, EditedMark, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
 import { GroupCell } from "./group-batch"
@@ -204,6 +204,8 @@ function Row({
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
             {hasConflicts(skill) && <ConflictMark />}
+            {skill.edited && <EditedMark />}
+            {skill.contribution && <ContributionMark contribution={skill.contribution} />}
           </span>
           <span className="mt-0.5 block truncate font-body fs-meta text-mut">{skill.description}</span>
         </button>

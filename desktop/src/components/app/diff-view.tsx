@@ -62,11 +62,12 @@ export function LocalEditNote({ diff, className }: { diff: SkillDiff; className?
   )
 }
 
-export function SkillDiffView({ diff }: { diff: SkillDiff }) {
+/** note: the update note about your edits (off where the diff is your edits themselves, as in 我的改动). */
+export function SkillDiffView({ diff, note = true }: { diff: SkillDiff; note?: boolean }) {
   const { t } = useApp()
   return (
     <div className="space-y-2">
-      <LocalEditNote diff={diff} />
+      {note && <LocalEditNote diff={diff} />}
       {diff.files.length === 0 && diff.status === "moved" && <p className="fs-meta text-mut">{t("movedOnlyFiles")}</p>}
       <div className="overflow-hidden rounded-ctl border-line">
         {diff.files.map((f, i) => (

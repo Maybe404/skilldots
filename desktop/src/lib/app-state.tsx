@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import {
   backend,
   shelvedNames,
+  SYNC_REF,
   type Absent,
   type Agent,
   type Config,
@@ -62,6 +63,7 @@ export type DialogState =
   | { kind: "update"; repos?: string[] }
   | { kind: "apply" }
   | { kind: "sync" }
+  | { kind: "contribute"; ref: Ref }
   | { kind: "library"; mode: "use" | "clone" | "init" }
   | { kind: "remove"; ref: Ref }
   | { kind: "unlink"; ref: Ref }
@@ -106,9 +108,14 @@ interface AppContextValue {
   navigate: (view: View) => void
   editing: EditorTarget | null
   openEditor: (ref: Ref, opts?: { file?: string; back?: View }) => void
-  /** The skill whose shelved update the resolve page is resolving. */
+  /** The skill whose shelved update the resolve page is resolving, or SYNC_REF for the library's sync merge. */
   resolving: Ref | null
   openResolve: (ref: Ref) => void
+  /** skd sync (commit, pull and merge, push), with its toasts; "shelved" when the remote changed the same files. */
+  syncLibrary: (opts?: { remote?: string; message?: string }) => Promise<"done" | "shelved" | "failed">
+  /** The files of the sync shelved in this window, until it is resolved or synced. */
+  syncShelved: string[] | null
+  setSyncShelved: (files: string[] | null) => void
   selected: string | null
   select: (key: string | null) => void
   detail: string | null
@@ -207,6 +214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [view, setView] = React.useState<View>("skills")
   const [editing, setEditing] = React.useState<EditorTarget | null>(null)
   const [resolving, setResolving] = React.useState<Ref | null>(null)
+  const [syncShelved, setSyncShelved] = React.useState<string[] | null>(null)
   const [selected, setSelected] = React.useState<string | null>(null)
   const [detail, setDetail] = React.useState<string | null>(null)
   const [dialog, setDialog] = React.useState<DialogState>(null)
@@ -339,6 +347,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const n = out.packs.filter(hasUpdates).length
         toast(n ? t("checkedToast", { n }) : t("checkedNone"))
         if (out.failed.length) toast.error(t("checkFailed"), { description: out.failed.map((f) => `${f.repo}: ${f.error}`).join("\n") })
+        // Open PRs are looked at again too (best effort: offline or without gh nothing is said).
+        if (skills.some((s) => s.contribution?.kind === "pr" && s.contribution.state === "open")) {
+          void backend.refreshContributions().then(reload, () => undefined)
+        }
       } catch (e) {
         toast.error(t("checkFailed"), { description: errorText(t, e) })
       } finally {
@@ -346,7 +358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         endOperation(id)
       }
     },
-    [beginOperation, endOperation, operation, t],
+    [beginOperation, endOperation, operation, skills, reload, t],
   )
 
   // Load config and library once.
@@ -448,6 +460,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (guard.current && !guard.current(go)) return
     go()
   }, [])
+
+  const syncLibrary = React.useCallback(
+    async (opts: { remote?: string; message?: string } = {}): Promise<"done" | "shelved" | "failed"> => {
+      const r = await runTask(t("syncing"), () => backend.sync(opts))
+      if (!r.ok) return "failed"
+      await reload().catch(() => undefined)
+      const o = r.value
+      if (o.conflicts?.length) {
+        // Both sides changed the same files: nothing was pushed and the library is as it was.
+        setSyncShelved(o.conflicts)
+        toast(t("syncShelvedToast", { n: o.conflicts.length }), {
+          description: t("syncShelvedNote"),
+          duration: 10000,
+          action: { label: t("resolveConflicts"), onClick: () => openResolve(SYNC_REF) },
+        })
+        return "shelved"
+      }
+      setSyncShelved(null)
+      toast(o.pulled ? t("pulledToast", { remote: o.remote }) : o.committed ? t("syncedToast", { remote: o.remote }) : t("nothingToSync"))
+      return "done"
+    },
+    [runTask, reload, openResolve, t],
+  )
 
   // While applying, the snapshot being written is the truth: edits would only disagree with it.
   // An agent this Mac does not have gets nothing linked: turning a skill on for it is refused here, for every
@@ -631,6 +666,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     openEditor,
     resolving,
     openResolve,
+    syncLibrary,
+    syncShelved,
+    setSyncShelved,
     selected,
     select: setSelected,
     detail,

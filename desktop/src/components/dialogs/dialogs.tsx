@@ -3,6 +3,7 @@ import * as React from "react"
 import { useApp, type DialogState } from "@/lib/app-state"
 import { DialogClosing } from "@/lib/dialog-presence"
 import { AddDialog } from "./add-dialog"
+import { ContributeDialog } from "./contribute-dialog"
 import { ApplyDialog, LibraryDialog, SyncDialog, UpdateDialog } from "./ops-dialogs"
 import { ConfirmBox, ConfirmDialog, ForkDialog, NewSkillDialog } from "./skill-dialogs"
 
@@ -35,6 +36,8 @@ function render(d: NonNullable<DialogState>, closeDialog: () => void) {
       return <UpdateDialog repos={d.repos} onClose={closeDialog} />
     case "apply":
       return <ApplyDialog onClose={closeDialog} />
+    case "contribute":
+      return <ContributeDialog skillRef={d.ref} onClose={closeDialog} />
     case "sync":
       return <SyncDialog onClose={closeDialog} />
     case "library":

@@ -5,7 +5,7 @@ import { hasConflicts, isMine, sourceText, useApp } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
 import { cellState, isOn, keepsViaShared } from "@/lib/pending"
-import { AgentMono, ConflictMark, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
+import { AgentMono, ConflictMark, ContributionMark, EditedMark, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { DisclosureChevron } from "@/components/ui/collapsible"
 import { Switch } from "@/components/ui/switch"
 import { GroupBatchMenu } from "./group-batch"
@@ -568,6 +568,8 @@ function SkillRow({
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
             {hasConflicts(skill) && <ConflictMark />}
+            {skill.edited && <EditedMark />}
+            {skill.contribution && <ContributionMark contribution={skill.contribution} />}
           </span>
           <span className="mt-0.5 block truncate fs-meta text-mut">{sourceText}</span>
         </span>

@@ -1,13 +1,16 @@
 import * as React from "react"
-import { Copy, FolderOpen, GitMerge, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
+import { Copy, ExternalLink, FolderOpen, GitMerge, GitPullRequestArrow, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
+import { toast } from "sonner"
 
 import { PLACEHOLDER_DESC, hasConflicts, isMine, kindLabel, sourceText, useApp, useColumnAgents } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
-import type { Skill } from "@/lib/backend"
+import { backend, type Skill, type SkillDiff } from "@/lib/backend"
 import { cellState } from "@/lib/pending"
 import { useSkillActions } from "@/lib/use-actions"
-import { shortSha } from "@/lib/utils"
-import { AgentMono, ConflictMark, Mono, OffRing, Sha, Tag, UpdateDot } from "@/components/app/bits"
+import { cn, openExternal, shortSha } from "@/lib/utils"
+import { AgentMono, ConflictMark, ContributionMark, EditedMark, Mono, OffRing, RefreshIcon, Sha, Tag, UpdateDot, contributionLabel } from "@/components/app/bits"
+import { SkillDiffView } from "@/components/app/diff-view"
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger, DisclosureChevron } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
@@ -55,6 +58,8 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           {updatable.has(skill.ref.key) && <UpdateDot />}
           {mine && <Tag>{t("kindMine")}</Tag>}
           {hasConflicts(skill) && <ConflictMark />}
+          {skill.edited && <EditedMark />}
+          {skill.contribution && <ContributionMark contribution={skill.contribution} />}
         </SheetTitle>
         <SheetDescription className="truncate">{sourceText(t, skill)}</SheetDescription>
       </SheetHeader>
@@ -105,6 +110,8 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
             )}
           </div>
         )}
+
+        {(skill.edited || skill.contribution) && <MyChanges key={skill.ref.key} skill={skill} />}
 
         <h3 className="mt-6 flex h-[30px] items-center border-b-head fs-meta font-normal text-mut">{t("installedIn")}</h3>
         <ul>
@@ -186,9 +193,17 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           </Button>
         </div>
         {(skill.kind === "vendor" || skill.kind === "app") && (
-          <Button variant="outline" size="lg" onClick={() => openDialog({ kind: "fork", ref: skill.ref })}>
-            <Copy /> {t("forkSkill")}
-          </Button>
+          // An edited vendored skill can also go back to its source: 提交给上游 (a PR or a push, confirmed in a dialog).
+          <div className={cn("grid gap-2", skill.edited && "grid-cols-2")}>
+            <Button variant="outline" size="lg" onClick={() => openDialog({ kind: "fork", ref: skill.ref })}>
+              <Copy /> {t("forkSkill")}
+            </Button>
+            {skill.edited && (
+              <Button variant="outline" size="lg" onClick={() => openDialog({ kind: "contribute", ref: skill.ref })}>
+                <GitPullRequestArrow /> {t("contributeUpstream")}
+              </Button>
+            )}
+          </div>
         )}
         {skill.kind !== "app" ? (
           <Button variant="ghost" size="lg" onClick={() => openDialog({ kind: "remove", ref: skill.ref })}>
@@ -228,5 +243,80 @@ function ConflictNote({ skill, onResolve }: { skill: Skill; onResolve: () => voi
         <GitMerge /> {t("resolveConflicts")}
       </Button>
     </div>
+  )
+}
+
+type Loaded = { state: "loading" } | { state: "ok"; diff: SkillDiff } | { state: "error"; error: string }
+
+/**
+ * 我的改动: what you changed in a vendored skill against the upstream version you started from (localChanges),
+ * folded until asked for, and what was sent upstream from it (a PR or a push) with its link.
+ */
+function MyChanges({ skill }: { skill: Skill }) {
+  const { t, read, run, reload } = useApp()
+  const [open, setOpen] = React.useState(false)
+  const [loaded, setLoaded] = React.useState<Loaded | null>(null)
+  const c = skill.contribution
+
+  // Read on every opening: the files may have been edited since.
+  const toggle = async (next: boolean) => {
+    setOpen(next)
+    if (!next) return
+    setLoaded({ state: "loading" })
+    const r = await read(() => backend.localChanges(skill.ref))
+    setLoaded(r.ok ? { state: "ok", diff: r.value } : { state: "error", error: "" })
+  }
+
+  const refresh = async () => {
+    if (!(await run(() => backend.refreshContributions())).ok) return
+    await reload().catch(() => undefined)
+    toast(t("refreshedToast"))
+  }
+
+  return (
+    <section className="mt-6">
+      {skill.edited && (
+        <Collapsible open={open} onOpenChange={(o) => void toggle(o)}>
+          <CollapsibleTrigger className="flex h-[30px] w-full items-center gap-1.5 border-b-head text-left fs-meta text-mut hover:text-ink">
+            <DisclosureChevron open={open} />
+            <EditedMark />
+            {t("myChanges")}
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <div className="space-y-2 pt-3">
+              {loaded?.state === "loading" && (
+                <p className="flex items-center gap-2 fs-meta text-mut" role="status">
+                  <RefreshIcon spinning /> {t("diffLoading")}
+                </p>
+              )}
+              {loaded?.state === "error" && <p className="fs-meta text-mut">{t("pageLoadFailed")}</p>}
+              {loaded?.state === "ok" && (
+                <>
+                  <p className="fs-meta leading-relaxed text-mut">
+                    {loaded.diff.files.length === 0 ? t("myChangesNone") : loaded.diff.base === false ? t("myChangesNoBase") : t("myChangesBase")}
+                  </p>
+                  {loaded.diff.files.length > 0 && <SkillDiffView diff={loaded.diff} note={false} />}
+                </>
+              )}
+            </div>
+          </CollapsiblePanel>
+        </Collapsible>
+      )}
+      {c && (
+        <div className={cn("flex flex-wrap items-center gap-x-2.5 gap-y-1 fs-meta text-ink", skill.edited ? "mt-2.5" : "border-b-row py-2.5")}>
+          <ContributionMark contribution={c} />
+          <span>{contributionLabel(t, c)}</span>
+          <span className="flex-1" />
+          <Button variant="link" size="inline" className="fs-meta" onClick={() => openExternal(c.url)}>
+            <ExternalLink /> {c.kind === "pr" ? t("openPR") : t("openCommit")}
+          </Button>
+          {c.kind === "pr" && (
+            <Button variant="quiet" size="inline" className="fs-meta" onClick={() => void refresh()}>
+              {t("refreshContributions")}
+            </Button>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
