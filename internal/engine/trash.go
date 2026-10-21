@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -123,12 +124,25 @@ func entryName(base string) string {
 }
 
 // trashBatch is the per-run folder so one command's moves stay together.
-var trashBatch string
+// A process that runs for long (the desktop app, the dashboard) starts a
+// new one when batchIdle has passed since its last move: one batch per
+// operation, not one for the life of the process.
+var (
+	trashBatch     string
+	trashBatchUsed time.Time
+	trashBatchMu   sync.Mutex
+)
+
+const batchIdle = 10 * time.Second
 
 func batch() string {
-	if trashBatch == "" {
-		trashBatch = time.Now().Format("20060102-150405")
+	trashBatchMu.Lock()
+	defer trashBatchMu.Unlock()
+	now := time.Now()
+	if trashBatch == "" || now.Sub(trashBatchUsed) > batchIdle {
+		trashBatch = now.Format("20060102-150405")
 	}
+	trashBatchUsed = now
 	return trashBatch
 }
 
@@ -174,6 +188,10 @@ func trashAs(lib *library.Library, src, base string) (string, error) {
 	for i := 2; fsutil.Lexists(dest) || fsutil.Lexists(dest+".origin"); i++ {
 		dest = filepath.Join(dir, fmt.Sprintf("%s-%d", name, i))
 	}
+	// Whatever skd remembered about an entry that was at dest before (one
+	// deleted for good, then the same name set aside again in the same
+	// batch) is not about this one.
+	ForgetTrashEntry(dest)
 	if err := move(src, dest); err != nil {
 		return "", err
 	}
@@ -519,6 +537,7 @@ func EmptyTrash(lib *library.Library) (int, error) {
 		return 0, err
 	}
 	dropTrashNotesUnder(filepath.Join(lib.Root, TrashDir))
+	forgetLocalTrashUnder(filepath.Join(lib.Root, TrashDir))
 	return len(entries), nil
 }
 
