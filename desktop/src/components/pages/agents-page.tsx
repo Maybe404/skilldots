@@ -3,7 +3,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
-import { agentLabel, tildify } from "@/lib/agents"
+import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import { backend, type Agent } from "@/lib/backend"
 import { isOn, pendingOnAgent } from "@/lib/pending"
 import { AgentMono, Hint, Page, TableHead, Tag } from "@/components/app/bits"
@@ -139,8 +139,8 @@ function AgentRow({ agent: a, count }: { agent: Agent; count: number }) {
         {count}
       </div>
       <div role="cell">
-        <label htmlFor={id} className="flex cursor-pointer items-center gap-2 fs-meta whitespace-nowrap text-ink" title={lastDefault ? t("lastDefault") : undefined}>
-          <Checkbox id={id} checked={a.isDefault} disabled={lastDefault} onCheckedChange={(v) => void setDefault(!!v)} />
+        <label htmlFor={id} className="flex cursor-pointer items-center gap-2 fs-meta whitespace-nowrap text-ink" title={lastDefault ? t("lastDefault") : !a.isDefault && isAbsentAgent(a) ? t("absentNoDefault", { agent: label }) : undefined}>
+          <Checkbox id={id} checked={a.isDefault} disabled={lastDefault || (!a.isDefault && isAbsentAgent(a))} onCheckedChange={(v) => void setDefault(!!v)} />
           {a.isDefault ? t("defaultOn") : t("defaultOff")}
         </label>
       </div>

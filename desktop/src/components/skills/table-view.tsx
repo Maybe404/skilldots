@@ -33,7 +33,8 @@ export function TableView({
 }) {
   const { t, skills, selected, select, openDetail, pending, togglePending, agentFocus, setAgentFocus, toggleCollapsed, updatable, overrides, tableSort, setTableSort } = useApp()
   const { items, columns } = list
-  const cols = `minmax(0,1fr) minmax(0,170px) repeat(${columns.length},64px)`
+  // The name keeps room for a long name (differential-review in the doodle face); the source gives way first.
+  const cols = `minmax(13rem,1fr) minmax(0,150px) repeat(${columns.length},60px)`
   const focusKey = hover ?? selected
   // Without a selection the first row takes Tab, so the table stays reachable.
   const tabKey = list.order.some((s) => s.ref.key === selected) ? selected : list.order[0]?.ref.key
@@ -212,8 +213,10 @@ function Row({
         const st = cellState(skill, a.name, pending)
         const on = st === "on" || st === "adding" || st === "absent"
         const label = agentLabel(a)
+        // Off for an agent this Mac does not have: it cannot be turned on (app-state refuses and says why).
+        const locked = st === "off" && isAbsentAgent(a)
         const title =
-          st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : t("cellOff", { agent: label })
+          st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
         return (
           <div role="cell" key={a.name} className="relative grid place-items-center">
             <Hint label={title}>
@@ -228,9 +231,10 @@ function Row({
                   onSelect()
                   onToggle(a.name)
                 }}
-                className={cn("skd-cell", !a.enabled && "opacity-45")}
+                aria-disabled={locked || undefined}
+                className={cn("skd-cell", !a.enabled && "opacity-45", locked && "cursor-not-allowed opacity-40 hover:text-transparent")}
               >
-                {st === "removing" ? <Minus aria-hidden className="size-3.5" strokeWidth={2.4} /> : on ? <Check aria-hidden className="size-3.5" strokeWidth={2.6} /> : <Plus aria-hidden className="size-3.5" strokeWidth={2.2} />}
+                {st === "removing" ? <Minus aria-hidden className="size-3.5" strokeWidth={2.4} /> : on ? <Check aria-hidden className="size-3.5" strokeWidth={2.6} /> : locked ? null : <Plus aria-hidden className="size-3.5" strokeWidth={2.2} />}
               </button>
             </Hint>
             {claudeOff && a.name === "claude" && <OffRing className="pointer-events-none absolute top-1 right-2" />}
