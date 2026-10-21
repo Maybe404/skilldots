@@ -270,3 +270,12 @@
 
 @ cannot reach %s: check the network connection
 = 连不上 %s：请检查网络连接
+
+@ ssh cannot verify the host key for %s: the host is not in ~/.ssh/known_hosts, or its key changed; check it, add it (connect once with ssh) and try again
+= ssh 无法验证 %s 的主机密钥：~/.ssh/known_hosts 里没有这台主机，或者它的密钥变了；请先核实，再把它加进去（用 ssh 连一次即可），然后重试
+
+@ %s refused the credentials git gave (an expired or revoked token, a changed password): update them in your git credential helper and try again
+= %s 拒绝了 git 提供的凭据（令牌过期或被撤销、密码改了）：请在 git 的凭据助手里更新后重试
+
+@ %s refused access (HTTP 403): the credentials git gave have no access to it, or the host is limiting requests for now; check them, or try again later
+= %s 拒绝访问（HTTP 403）：git 提供的凭据没有权限，或者对方暂时限制了请求频率；请检查凭据，或稍后再试

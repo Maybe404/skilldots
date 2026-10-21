@@ -28,6 +28,14 @@ const (
 	FetchNoRef = "no-ref"
 	// FetchOffline: the host could not be reached.
 	FetchOffline = "offline"
+	// FetchHostKey: ssh could not verify the host's key (known_hosts).
+	FetchHostKey = "host-key"
+	// FetchAuth: the host refused the credentials git gave (an expired
+	// token, a changed password).
+	FetchAuth = "auth"
+	// FetchForbidden: the host answered 403: no access with these
+	// credentials, or it is limiting requests.
+	FetchForbidden = "forbidden"
 )
 
 // FetchError is a clone or fetch git refused, said for a person: what
@@ -63,6 +71,12 @@ func (e *FetchError) human() string {
 		return i18n.Sprintf("the repository %s has no branch or tag %q", e.Repo, e.Ref)
 	case FetchOffline:
 		return i18n.Sprintf("cannot reach %s: check the network connection", e.URL)
+	case FetchHostKey:
+		return i18n.Sprintf("ssh cannot verify the host key for %s: the host is not in ~/.ssh/known_hosts, or its key changed; check it, add it (connect once with ssh) and try again", e.URL)
+	case FetchAuth:
+		return i18n.Sprintf("%s refused the credentials git gave (an expired or revoked token, a changed password): update them in your git credential helper and try again", e.URL)
+	case FetchForbidden:
+		return i18n.Sprintf("%s refused access (HTTP 403): the credentials git gave have no access to it, or the host is limiting requests for now; check them, or try again later", e.URL)
 	}
 	return ""
 }
@@ -84,15 +98,23 @@ func fetchError(src Source, err error) error {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	kind := fetchKind(err.Error(), src.Ref != "")
+	kind := fetchKind(err.Error(), src.Ref != "", sshURL(src.URL))
 	if kind == "" {
 		return err
 	}
 	return &FetchError{Repo: src.Repo, URL: src.URL, Ref: src.Ref, Kind: kind, Git: err}
 }
 
-// fetchKind classifies git's (English) message msg.
-func fetchKind(msg string, ref bool) string {
+// sshURL reports whether git reaches url over SSH (user@host:path or
+// ssh://): a missing repository then looks like one the key cannot read,
+// and the SSH address is no way out of it.
+func sshURL(url string) bool {
+	return strings.HasPrefix(url, "ssh://") || (strings.Contains(url, "@") && !strings.Contains(url, "://"))
+}
+
+// fetchKind classifies git's (English) message msg, for a fetch of a ref
+// (ref) over SSH (ssh) or not.
+func fetchKind(msg string, ref, ssh bool) string {
 	has := func(subs ...string) bool {
 		for _, s := range subs {
 			if strings.Contains(msg, s) {
@@ -102,13 +124,20 @@ func fetchKind(msg string, ref bool) string {
 		return false
 	}
 	switch {
+	case has("Host key verification failed", "REMOTE HOST IDENTIFICATION HAS CHANGED"):
+		return FetchHostKey
 	case ref && has("Remote branch", "couldn't find remote ref", "not found in upstream"):
 		return FetchNoRef
-	case has("Permission denied (publickey", "Host key verification failed"):
+	case has("Permission denied (publickey"):
+		return FetchNoAccess
+	case has("Authentication failed", "returned error: 401"):
+		return FetchAuth
+	case has("returned error: 403", "rate limit"):
+		return FetchForbidden
+	case ssh && has("Repository not found", "Could not read from remote repository", "does not appear to be a git repository"):
 		return FetchNoAccess
 	case has("could not read Username", "could not read Password", "terminal prompts disabled",
-		"Repository not found", "Authentication failed", "returned error: 401", "returned error: 403",
-		"returned error: 404", "does not appear to be a git repository", "does not exist"):
+		"Repository not found", "returned error: 404", "does not appear to be a git repository", "does not exist"):
 		return FetchNotFound
 	case has("Could not resolve host", "Failed to connect", "Connection timed out", "Connection refused",
 		"Network is unreachable", "SSL_connect", "SSL_ERROR", "Operation timed out", "Could not resolve hostname"):
