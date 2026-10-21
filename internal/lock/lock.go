@@ -39,6 +39,23 @@ type Pack struct {
 type Skill struct {
 	Category string `toml:"category,omitempty"`
 	Hash     string `toml:"hash"`
+	// Shelved is set while an update of this skill waits for its
+	// conflicts to be resolved: the upstream commit whose version could
+	// not be merged with the local changes. Hash stays the version the
+	// local changes were made on until `skd resolve` finishes. An older
+	// skd ignores these fields.
+	Shelved string `toml:"shelved,omitempty"`
+	// Upstream is the content hash of the upstream version being merged
+	// (Shelved's); `skd resolve --continue` makes it Hash.
+	Upstream string `toml:"upstream,omitempty"`
+	// Conflicts are the files, relative to the skill's directory, that
+	// both sides changed in ways that do not merge.
+	Conflicts []string `toml:"conflicts,omitempty"`
+	// Resolving is set from `skd resolve <skill>` until --continue or
+	// --abort: the directory holds the merge with conflict markers, and
+	// Backup is the trash ID of the directory as it was before.
+	Resolving bool   `toml:"resolving,omitempty"`
+	Backup    string `toml:"backup,omitempty"`
 }
 
 type Link struct {
@@ -78,6 +95,13 @@ func Load(path string) (*Lock, error) {
 		if p := l.Packs[repo]; p != nil && p.Commit != "" && !commitRE.MatchString(p.Commit) {
 			return nil, i18n.Errorf("%s: pack %q: commit %q is not a commit hash; restore the file (git checkout -- %s) or remove the line", path, repo, p.Commit, FileName)
 		}
+		if p := l.Packs[repo]; p != nil {
+			for _, n := range sortedKeys(p.Skills) {
+				if s := p.Skills[n]; s != nil && s.Shelved != "" && !commitRE.MatchString(s.Shelved) {
+					return nil, i18n.Errorf("%s: pack %q: skill %q: shelved %q is not a commit hash; restore the file (git checkout -- %s) or remove the line", path, repo, n, s.Shelved, FileName)
+				}
+			}
+		}
 	}
 	return l, nil
 }
@@ -101,6 +125,8 @@ func sortedKeys[V any](m map[string]V) []string {
 var known = []string{
 	"packs.*", "packs.*.commit", "packs.*.ref", "packs.*.upstream",
 	"packs.*.skills.*", "packs.*.skills.*.category", "packs.*.skills.*.hash",
+	"packs.*.skills.*.shelved", "packs.*.skills.*.upstream", "packs.*.skills.*.conflicts",
+	"packs.*.skills.*.resolving", "packs.*.skills.*.backup",
 	"links.*", "links.*.mode", "links.*.source", "links.*.hash", "links.*.path",
 }
 

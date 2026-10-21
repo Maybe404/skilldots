@@ -1,7 +1,12 @@
 package app
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/Maybe404/skilldots/internal/engine"
 
 	"github.com/Maybe404/skilldots/internal/fsutil"
 	"github.com/Maybe404/skilldots/internal/i18n"
@@ -15,9 +20,14 @@ import (
 var commitPaths = []string{".", ":(exclude,glob).skills.toml.tmp-*", ":(exclude,glob).skills.lock.tmp-*"}
 
 // Commit commits the library's own files and, with push, pushes when the
-// branch has an upstream. It reports whether a commit was made.
+// branch has an upstream (and the upstream snapshots with it). It
+// reports whether a commit was made. It refuses while a skill is being
+// resolved: its files hold conflict markers.
 func (s *Session) Commit(msg string, push bool) (bool, error) {
 	lib := s.Lib
+	if names := s.resolving(); len(names) > 0 {
+		return false, i18n.Errorf("not committing while %s is being resolved (its files hold conflict markers): finish with skd resolve --continue, or skd resolve --abort", strings.Join(names, ", "))
+	}
 	if _, err := lib.Git(append([]string{"add", "-A", "--"}, commitPaths...)...); err != nil {
 		return false, err
 	}
@@ -31,8 +41,81 @@ func (s *Session) Commit(msg string, push bool) (bool, error) {
 		if _, err := lib.Git("push", "-q"); err != nil {
 			return true, err
 		}
+		s.pushSnapshots()
 	}
 	return true, nil
+}
+
+// resolving names the skills being resolved (skd resolve).
+func (s *Session) resolving() []string {
+	var out []string
+	for _, repo := range sortedRepoKeys(s.Lib.Lock.Packs) {
+		lp := s.Lib.Lock.Packs[repo]
+		if lp == nil {
+			continue
+		}
+		for _, n := range slices.Sorted(maps.Keys(lp.Skills)) {
+			if ls := lp.Skills[n]; ls != nil && ls.Resolving {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
+func sortedRepoKeys[V any](m map[string]V) []string { return slices.Sorted(maps.Keys(m)) }
+
+// snapshotRefspec pushes and fetches the upstream snapshots
+// (engine.SnapshotRefs). They are forced: the machine that pushes the
+// library pushes the snapshots its skills.lock was written from; a merge
+// on another machine whose own snapshot is gone finds its base in the
+// library's history instead.
+const snapshotRefspec = "+" + engine.SnapshotRefs + "*:" + engine.SnapshotRefs + "*"
+
+// pushSnapshots pushes the upstream snapshots to origin, when there are
+// any. A failure is a warning: the library itself was pushed.
+func (s *Session) pushSnapshots() {
+	if out, err := s.Lib.Git("for-each-ref", "--count=1", "--format=%(refname)", engine.SnapshotRefs); err != nil || out == "" {
+		return
+	}
+	if _, err := s.Lib.Git("push", "-q", "origin", snapshotRefspec); err != nil {
+		s.logf(Warn, "could not push upstream's versions (%s): %v", engine.SnapshotRefs, err)
+	}
+}
+
+// FetchSnapshots fetches the upstream snapshots another machine pushed
+// with the library at root (skd clone). Best effort: an error is
+// returned for a warning only.
+func FetchSnapshots(root string) error {
+	if _, err := library.Git(root, "remote", "get-url", "origin"); err != nil {
+		return nil
+	}
+	_, err := library.Git(root, "fetch", "-q", "origin", snapshotRefspec)
+	return err
+}
+
+// StageFile stages a file of the library that was just saved (git add),
+// in the repository it belongs to: private/ for a skill of yours kept on
+// this machine, else the library's own. Saving is staging; skd sync (or
+// update --commit) commits. Nothing is done outside a git repository.
+func (s *Session) StageFile(path string) error {
+	lib := s.Lib
+	repo := lib.Root
+	if fsutil.Within(lib.PrivateDir(), path) {
+		if library.PrivateLink(lib.Root) != "" {
+			return nil
+		}
+		repo = lib.PrivateDir()
+	}
+	if !fsutil.Within(repo, path) || !library.IsGitRepo(repo) {
+		return nil
+	}
+	rel, err := filepath.Rel(repo, path)
+	if err != nil {
+		return err
+	}
+	_, err = library.Git(repo, "add", "--", ":(literal)"+filepath.ToSlash(rel))
+	return err
 }
 
 // BackupOutcome is the result of Backup; its JSON form is what
@@ -86,6 +169,7 @@ func (s *Session) Backup(remote, msg string) (*BackupOutcome, error) {
 			return out, err
 		}
 		out.Pushed = true
+		s.pushSnapshots()
 	}
 	// Not through a link inside the library: git status refreshes the
 	// index of whatever repository it names.

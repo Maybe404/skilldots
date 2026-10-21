@@ -131,7 +131,12 @@ func (s *Service) fileOperation(ses *app.Session, method string, args []json.Raw
 		return nil, err
 	}
 	cleanup = false
-	return nil, nil
+	// Saving is staging (git add); skd sync, or the sync button, commits.
+	// A file that could not be staged is saved all the same.
+	if err := ses.StageFile(filepath.Join(e.Dir, filepath.FromSlash(name))); err != nil {
+		return object{"staged": false, "warning": err.Error()}, nil
+	}
+	return object{"staged": true}, nil
 }
 
 func fileTree(root *os.Root, dir string, count *int) ([]fileNode, error) {

@@ -120,8 +120,8 @@
 @ %s %s; fork it to edit your own copy (skd edit %s --fork), or open the files anyway (--force)
 = %s %s；可以 fork 一份来编辑你自己的副本（skd edit %s --fork），或仍然打开这些文件（--force）
 
-@ is vendored from %s: skd update replaces its files, so edits there are lost
-= 是从 %s 引入的：skd update 会替换它的文件，所以在那里的改动会丢失
+@ is vendored from %s: skd update merges upstream's changes into edits there, and waits for skd resolve when they conflict
+= 是从 %s 引入的：skd update 会把上游的改动合并进你在那里的修改，有冲突时等你用 skd resolve 解决
 
 @ ships with the %s application: its updates replace the files, so edits there are lost
 = 随 %s 应用一起提供：应用更新会替换这些文件，所以在那里的改动会丢失

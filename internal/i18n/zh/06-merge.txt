@@ -1,0 +1,238 @@
+# Git-style updates: merging local changes, shelving, skd resolve, history diffs.
+
+# engine
+
+@ git ls-tree %s: %w
+= git ls-tree %s：%w
+
+@ merging %s: %w
+= 合并 %s：%w
+
+@ cannot mark the conflict in %s: the skill already has a file %s
+= 无法标出 %s 的冲突：这个 skill 里已经有文件 %s
+
+@ git merge-file: %s
+= git merge-file：%s
+
+@ %s: a file name with a line break cannot be recorded
+= %s：文件名里有换行，无法记录
+
+@ git hash-object answered %d objects for %d files
+= git hash-object 为 %[2]d 个文件返回了 %[1]d 个对象
+
+@ could not record upstream's version in the library's git repository (%v); the next update of a skill you changed may report more conflicts
+= 没能把上游的版本记进资料库的 git 仓库（%v）；下次更新你改过的 skill 时，报告的冲突可能会多一些
+
+@ the library is not a git repository, so upstream's versions are not recorded: merging a skill you changed finds no common version and reports every file both sides changed as a conflict (skd init or git init makes it one)
+= 资料库不是 git 仓库，所以没有记录上游的版本：合并你改过的 skill 时找不到共同的版本，两边都改过的文件都会算作冲突（skd init 或 git init 可以把它变成 git 仓库）
+
+@ %s: pack %q: skill %q: shelved %q is not a commit hash; restore the file (git checkout -- %s) or remove the line
+= %s：来源 %q：skill %q：shelved %q 不是 commit 哈希；请恢复这个文件（git checkout -- %s）或删掉这一行
+
+# app
+
+@ no skill is being resolved (skd resolve lists the shelved ones)
+= 没有正在解决冲突的 skill（skd resolve 会列出已搁置的）
+
+@ no skill is shelved
+= 没有已搁置的 skill
+
+@ %d skills are being resolved (%s); name one
+= 有 %d 个 skill 正在解决冲突（%s）；请指定一个
+
+@ %q is not a vendored skill; only updates of vendored skills are shelved
+= %q 不是引入的 skill；只有引入的 skill 的更新会被搁置
+
+@ %s is not in %s
+= %s 不在 %s 里
+
+@ %q: its directory goes through %s, a symbolic link inside the library; skd writes nothing through it
+= %q：它的目录要经过资料库里的符号链接 %s；skd 不会经由它写入任何东西
+
+@ upstream's version of %s is not at hand any more; run skd update %s, then skd resolve %s
+= 手头已经没有 %s 的上游版本了；请先运行 skd update %s，再运行 skd resolve %s
+
+@ %s has no update waiting: nothing to resolve
+= %s 没有等待中的更新：没有要解决的冲突
+
+@ could not mark the conflicts in the library's git index: %v
+= 没能在资料库的 git 暂存区里标出冲突：%v
+
+@ %s still has conflicts in %s: edit them (or git checkout --ours/--theirs <file>), remove the .upstream files, then run skd resolve --continue %s again
+= %s 的 %s 里还有冲突：请编辑它们（或用 git checkout --ours/--theirs <文件>），删掉 .upstream 文件，然后再运行 skd resolve --continue %s
+
+@ %s is not being resolved: skd resolve %s starts it
+= %s 没有在解决冲突：用 skd resolve %s 开始
+
+@ %s is not being resolved: nothing to abort
+= %s 没有在解决冲突：没有可放弃的
+
+@ the copy of %s from before the resolve is not in the trash any more (%v): finish the resolve instead (skd resolve --continue %s)
+= 回收站里已经没有 %s 在解决冲突之前的副本了（%v）：请改为完成合并（skd resolve --continue %s）
+
+@ could not take the conflicts out of the library's git index: %v
+= 没能把冲突从资料库的 git 暂存区里移除：%v
+
+@ choose %s, %s or %s, not %q
+= 请在 %s、%s、%s 中选择，而不是 %q
+
+@ %s has no conflict in %q
+= %s 在 %q 里没有冲突
+
+@ %q is not a file of %s
+= %q 不是 %s 的文件
+
+@ %s: a file removed on one side, or not text, is taken from one side whole
+= %s：一边删掉了的文件或非文本文件，只能整个取用其中一边
+
+@ %s has no conflict %d
+= %s 没有第 %d 处冲突
+
+@ not committing while %s is being resolved (its files hold conflict markers): finish with skd resolve --continue, or skd resolve --abort
+= %s 正在解决冲突（文件里有冲突标记），暂不提交：请用 skd resolve --continue 完成，或用 skd resolve --abort 放弃
+
+@ could not push upstream's versions (%s): %v
+= 没能推送上游版本（%s）：%v
+
+@ merged
+= 已合并
+
+@ shelved
+= 已搁置
+
+@ %d merged
+= %d 个已合并
+
+@ %d shelved
+= %d 个已搁置
+
+@ there are %d records; pick one from 1 (the newest) to %d
+= 共有 %d 条记录；请从 1（最新）到 %d 中选一条
+
+@ no update of %s recorded at %s
+= 没有 %s 在 %s 的更新记录
+
+@ the update of %s at %s did not change %s
+= %s 在 %s 的那次更新没有改动 %s
+
+@ the upstream commit %s of this update is not in the cache and could not be fetched (it needs the network, and upstream must still have it): %v
+= 这次更新的上游 commit %s 不在缓存里，也没能拉取（需要联网，且上游仍保留它）：%v
+
+@ %s is being resolved: finish it (skd resolve --continue %s) or abort it (skd resolve --abort %s) first
+= %s 正在解决冲突：请先完成（skd resolve --continue %s）或放弃（skd resolve --abort %s）
+
+@ set aside by a merge with upstream; restoring it swaps it back
+= 与上游合并时放进来的；还原会把它换回去
+
+@ a resolve that was aborted
+= 放弃的冲突解决
+
+# cli
+
+@ %d file
+= %d 个文件
+
+@ %d files
+= %d 个文件
+
+@ Resolve the conflicts of a shelved update, as you would finish a git merge
+= 解决已搁置更新的冲突，就像完成一次 git merge
+
+@ An update merges upstream's changes into a vendored skill you changed. When both sides changed the same lines (or one removed a file the other changed) the update of that skill is shelved: the skill stays as it is until its conflicts are resolved. Without arguments, resolve lists the shelved skills. resolve <skill> writes the merge into the skill's files with git's conflict markers (<<<<<<< local, =======, >>>>>>> upstream) after setting the skill aside in the trash, and marks the files unmerged in the library's git index, so git status, git diff and git checkout --ours/--theirs <file> work as in a git merge. A file removed on one side, or not text, gets the upstream version beside it as <file>.upstream (or an empty <file>.upstream-deleted where upstream removed it): keep one and delete the other. Edit the files, then --continue takes the result (it refuses while a marker or such a file is left); --abort puts the skill back as it was, still shelved. Until then agents linked to the skill read the files with their markers.
+= 更新会把上游的改动合并进你改过的引入 skill。如果两边改了同样的行（或者一边删掉了另一边改过的文件），这个 skill 的更新就会被搁置：在冲突解决之前，skill 保持原样。不带参数时，resolve 列出已搁置的 skill。resolve <skill> 先把这个 skill 放进回收站，再把合并结果连同 git 的冲突标记（<<<<<<< local、=======、>>>>>>> upstream）写进它的文件，并在资料库的 git 暂存区里把这些文件标为未合并，所以 git status、git diff 和 git checkout --ours/--theirs <文件> 的用法和 git merge 时一样。一边删掉的文件或非文本文件，会在旁边放一份上游版本 <文件>.upstream（上游删掉的则放一个空的 <文件>.upstream-deleted）：留下一个，删掉另一个。编辑完文件后，--continue 采用结果（还有冲突标记或这类文件时会拒绝）；--abort 把 skill 恢复原样，更新仍然搁置。在此之前，链接了这个 skill 的 agent 读到的是带冲突标记的文件。
+
+@ --continue and --abort: pick one
+= --continue 和 --abort 只能选一个
+
+@ %s merged with upstream; the files are staged (git add), skd sync commits them
+= %s 已与上游合并；文件已暂存（git add），skd sync 会提交它们
+
+@ %s is back as it was; its update stays shelved (skd resolve %s starts again)
+= %s 已恢复原样；它的更新仍然搁置（skd resolve %s 可重新开始）
+
+@ the files as they were are in the trash as %s
+= 放弃时的文件在回收站里，ID 是 %s
+
+@ no update is shelved
+= 没有已搁置的更新
+
+@ resolving
+= 解决冲突中
+
+@ skd resolve %s
+= skd resolve %s
+
+@ skd resolve --continue %s · --abort
+= skd resolve --continue %s · --abort
+
+@ %s merged with upstream without conflicts (the copy before is in the trash as %s)
+= %s 已与上游合并，没有冲突（之前的副本在回收站里，ID 是 %s）
+
+@ %s: %s with conflicts in %s
+= %s：%s 有冲突，位于 %s
+
+@ edit them (git checkout --ours/--theirs <file> takes one side), then skd resolve --continue %s · skd resolve --abort %s puts it back
+= 编辑它们（git checkout --ours/--theirs <文件> 可直接取一边），然后 skd resolve --continue %s · skd resolve --abort %s 恢复原样
+
+@ the copy before is in the trash as %s
+= 之前的副本在回收站里，ID 是 %s
+
+@ finish: take the files as they are once no conflict is left
+= 完成：没有冲突了就采用文件现在的内容
+
+@ give up: put the skill back as it was, its update still shelved
+= 放弃：把 skill 恢复原样，更新仍然搁置
+
+@ not text: keep yours, or replace it with %s; then delete %s
+= 不是文本：保留你的，或换成 %s；然后删掉 %s
+
+@ you removed it, upstream changed it: rename %s to %s to keep upstream's, or delete it
+= 你删掉了它，上游改了它：把 %s 改名为 %s 以采用上游的，或者删掉它
+
+@ upstream removed it, you changed it: delete %s to keep yours, or delete both
+= 上游删掉了它，你改了它：删掉 %s 以保留你的，或者两个都删掉
+
+@ conflict markers
+= 冲突标记
+
+@ conflicts with your changes · skd resolve %s
+= 与你的改动冲突 · skd resolve %s
+
+@ conflicts with your changes · skd resolve <skill>
+= 与你的改动冲突 · skd resolve <skill>
+
+@ ! %d shelved with conflicts: %s
+= ! %d 个因冲突搁置：%s
+
+@  · skd resolve <skill>
+=  · skd resolve <skill>
+
+@ %s could not fetch upstream's versions (%s): %v\n
+= %s 没能拉取上游版本（%s）：%v\n
+
+@ show what upstream changed in a record (the newest, or the n-th newest), as a diff
+= 以 diff 显示一条记录（最新的，或倒数第 n 条）里上游改了什么
+
+@ with --diff: only this skill
+= 配合 --diff：只看这个 skill
+
+@ %q is not a record number (1 is the newest)
+= %q 不是记录编号（1 是最新的）
+
+@ no skill's files changed upstream in this update
+= 这次更新里上游没有改动任何 skill 的文件
+
+@ … %d more files of %s not shown
+= … %[2]s 还有 %[1]d 个文件未显示
+
+@ new file
+= 新文件
+
+@ deleted file
+= 已删除的文件
+
+@ Binary files %s and %s differ
+= 二进制文件 %s 和 %s 不同
+
+@ too large to compare line by line
+= 太大，无法逐行比较

@@ -89,6 +89,17 @@ type UpdateRecord struct {
 	Omitted int `json:"omitted,omitempty"`
 	// Backups are user files moved to the Trash before this update was linked.
 	Backups []string `json:"backups,omitempty"`
+	// Merged are skills the user had changed that got upstream's changes
+	// merged in (also in Changed), or whose resolve finished; Shelved are
+	// skills upstream changed whose update waits for conflicts to be
+	// resolved (skd resolve).
+	Merged  []string `json:"merged,omitempty"`
+	Shelved []string `json:"shelved,omitempty"`
+	// SnapFrom and SnapTo are the upstream snapshots before and after the
+	// update (commits of the library's repository, see
+	// engine.SnapshotRefs): what `skd history --diff` compares.
+	SnapFrom string `json:"snapFrom,omitempty"`
+	SnapTo   string `json:"snapTo,omitempty"`
 }
 
 // UpstreamCommit is one upstream commit.
@@ -105,7 +116,11 @@ func (s *Session) HistoryPath() string { return filepath.Join(s.Lib.Root, Histor
 func newRecord(rep *engine.SyncReport, now time.Time) *UpdateRecord {
 	r := &UpdateRecord{Time: now.UTC().Truncate(time.Second), Repo: rep.Repo, From: rep.OldCommit, To: rep.NewCommit,
 		Changed: nonNilStrings(rep.Changed), Added: nonNilStrings(rep.Added), Gone: nonNilStrings(rep.UpstreamGone),
-		Dropped: nonNilStrings(rep.Dropped), New: nonNilStrings(rep.UpstreamNew), Moved: movedNames(rep.Moved), Commits: []UpstreamCommit{}}
+		Dropped: nonNilStrings(rep.Dropped), New: nonNilStrings(rep.UpstreamNew), Moved: movedNames(rep.Moved), Commits: []UpstreamCommit{},
+		Merged: rep.Merged, SnapFrom: rep.SnapFrom, SnapTo: rep.SnapTo}
+	for _, sh := range rep.Shelved {
+		r.Shelved = append(r.Shelved, sh.Name)
+	}
 	if r.From == r.To && len(r.Changed)+len(r.Added)+len(r.Moved)+len(r.Dropped) == 0 {
 		return nil
 	}
@@ -126,6 +141,12 @@ func (r *UpdateRecord) sanitize() {
 		}
 		*l = out
 	}
+	for _, l := range []*[]string{&r.Merged, &r.Shelved} {
+		for i, n := range *l {
+			(*l)[i] = CleanText(n, MaxName)
+		}
+	}
+	r.SnapFrom, r.SnapTo = CleanText(r.SnapFrom, MaxName), CleanText(r.SnapTo, MaxName)
 	if r.Commits == nil {
 		r.Commits = []UpstreamCommit{}
 	}
@@ -365,7 +386,7 @@ func (r *UpdateRecord) marshalFit() ([]byte, error) {
 			return line, err
 		}
 		var longest *[]string
-		for _, l := range []*[]string{&r.Changed, &r.Added, &r.Moved, &r.Gone, &r.Dropped, &r.New} {
+		for _, l := range []*[]string{&r.Changed, &r.Added, &r.Moved, &r.Gone, &r.Dropped, &r.New, &r.Merged, &r.Shelved} {
 			if longest == nil || len(*l) > len(*longest) {
 				longest = l
 			}
@@ -461,8 +482,8 @@ func RecordRows(r UpdateRecord) [][2]string {
 	for _, row := range []struct {
 		label string
 		names []string
-	}{{i18n.M("changed"), r.Changed}, {i18n.M("added"), r.Added}, {i18n.M("moved"), r.Moved}, {i18n.M("upstream gone"), r.Gone},
-		{i18n.M("dropped"), r.Dropped}, {i18n.M("upstream new"), r.New}} {
+	}{{i18n.M("changed"), r.Changed}, {i18n.M("merged"), r.Merged}, {i18n.M("shelved"), r.Shelved}, {i18n.M("added"), r.Added},
+		{i18n.M("moved"), r.Moved}, {i18n.M("upstream gone"), r.Gone}, {i18n.M("dropped"), r.Dropped}, {i18n.M("upstream new"), r.New}} {
 		if len(row.names) > 0 {
 			out = append(out, [2]string{i18n.T(row.label), strings.Join(row.names, ", ")})
 		}
@@ -479,7 +500,8 @@ func RecordSummary(r UpdateRecord) string {
 	for _, c := range []struct {
 		n      int
 		format string
-	}{{len(r.Changed), i18n.M("%d changed")}, {len(r.Added), i18n.M("%d added")}, {len(r.Moved), i18n.M("%d moved")}, {len(r.Gone), i18n.M("%d gone")},
+	}{{len(r.Changed), i18n.M("%d changed")}, {len(r.Merged), i18n.M("%d merged")}, {len(r.Shelved), i18n.M("%d shelved")},
+		{len(r.Added), i18n.M("%d added")}, {len(r.Moved), i18n.M("%d moved")}, {len(r.Gone), i18n.M("%d gone")},
 		{len(r.Dropped), i18n.M("%d dropped")}, {len(r.New), i18n.M("%d new upstream")}} {
 		if c.n > 0 {
 			parts = append(parts, i18n.Sprintf(c.format, c.n))

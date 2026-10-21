@@ -47,7 +47,7 @@ func editCmd() *cobra.Command {
 					Options(
 						huh.NewOption(i18n.T("Fork it into skills/ and open your copy (upstream no longer touches it)"), "fork"),
 						huh.NewOption(i18n.T("Fork it into private/ (this machine only) and open your copy"), "private"),
-						huh.NewOption(i18n.T("Open the files anyway (edits are lost on the next update)"), "force"),
+						huh.NewOption(i18n.T("Open the files anyway and edit them in place"), "force"),
 						huh.NewOption(i18n.T("Cancel"), ""),
 					).Value(&how)); err != nil || how == "" {
 					return nil

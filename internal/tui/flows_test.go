@@ -557,7 +557,7 @@ func TestEditFlow(t *testing.T) {
 	m, _ = newModel(t, sampleSnapshot(), 120, 40)
 	m.ops = f
 	m, _ = press(t, m, "right", "o")
-	if m.ov == nil || m.ov.kind != ovConfirm || !strings.Contains(strings.Join(m.ov.lines, " "), "skd update replaces its files") {
+	if m.ov == nil || m.ov.kind != ovConfirm || !strings.Contains(strings.Join(m.ov.lines, " "), "skd update merges upstream's changes into edits there") {
 		t.Fatalf("vendored: %+v", m.ov)
 	}
 	for key, want := range map[string]string{

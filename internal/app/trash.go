@@ -71,6 +71,9 @@ func (s *Session) RestoreEntry(key string) (*RestoreOutcome, error) {
 		return nil, err
 	}
 	p, _ := engine.TrashEntryPath(s.Lib, id)
+	if note != nil && note.Reason == engine.ReasonMerged {
+		return s.restoreMerged(id, p, note)
+	}
 	dest, err := engine.Restore(s.Lib, s.Reg, id)
 	if err != nil {
 		return nil, err
@@ -100,6 +103,73 @@ func (s *Session) RestoreEntry(key string) (*RestoreOutcome, error) {
 		}
 	}
 	return out, nil
+}
+
+// restoreMerged restores a vendored skill as it was before a merge with
+// upstream (what an update or skd resolve set aside, engine.ReasonMerged):
+// the skill's directory as it is now is set aside in its place (and can
+// be restored the same way), and the lock's entry goes back to what it
+// was, so the next update merges again. Restoring the copy a skill being
+// resolved started from is skd resolve --abort.
+func (s *Session) restoreMerged(id, p string, note *engine.TrashNote) (*RestoreOutcome, error) {
+	var name string
+	if len(note.Skills) == 1 {
+		name = note.Skills[0]
+	}
+	lp := s.Lib.Lock.Packs[note.Repo]
+	var was *lock.Skill
+	if note.Lock != nil {
+		was = note.Lock.Skills[name]
+	}
+	if lp == nil || lp.Skills[name] == nil || was == nil {
+		// The skill is no longer vendored: restore it as any entry.
+		dest, err := engine.Restore(s.Lib, s.Reg, id)
+		if err != nil {
+			return nil, err
+		}
+		s.noteWarn(engine.DropTrashNote(p))
+		return &RestoreOutcome{ID: id, Path: dest, Skills: note.Skills, Repo: note.Repo}, nil
+	}
+	now := lp.Skills[name]
+	if now.Resolving {
+		if now.Backup == id {
+			ab, err := s.ResolveAbort(EntryRef(engine.KindVendor, note.Repo, name))
+			if err != nil {
+				return nil, err
+			}
+			pd, _ := engine.PackDir(s.Lib, note.Repo)
+			return &RestoreOutcome{ID: id, Path: filepath.Join(pd, filepath.FromSlash(now.Category), name), Skills: note.Skills, Repo: note.Repo, Selected: true, Apply: ab.Apply}, nil
+		}
+		return nil, i18n.Errorf("%s is being resolved: finish it (skd resolve --continue %s) or abort it (skd resolve --abort %s) first", name, name, name)
+	}
+	pd, err := engine.PackDir(s.Lib, note.Repo)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(pd, filepath.FromSlash(now.Category), name)
+	if fsutil.Lexists(dir) {
+		to, err := engine.Trash(s.Lib, dir)
+		if err != nil {
+			return nil, err
+		}
+		cur := *now
+		s.noteWarn(engine.SetTrashNote(to, &engine.TrashNote{Reason: engine.ReasonMerged, Skills: []string{name}, Repo: note.Repo,
+			Lock: &lock.Pack{Commit: lp.Commit, Ref: lp.Ref, Skills: map[string]*lock.Skill{name: &cur}}}))
+	}
+	dest, err := engine.Restore(s.Lib, s.Reg, id)
+	if err != nil {
+		return nil, err
+	}
+	s.noteWarn(engine.DropTrashNote(p))
+	back := *was
+	back.Resolving, back.Backup = false, ""
+	if back.Category != now.Category {
+		back.Category = now.Category
+	}
+	lp.Skills[name] = &back
+	out := &RestoreOutcome{ID: id, Path: dest, Skills: note.Skills, Repo: note.Repo, Selected: true}
+	out.Apply, err = s.saveAndApply()
+	return out, err
 }
 
 // uses reports whether an entry of the library lives at dir, inside it
@@ -316,6 +386,10 @@ func TrashReason(e engine.TrashEntry) string {
 		return i18n.T("in the way in an agent directory")
 	case engine.ReasonBroken:
 		return i18n.T("broken link in an agent directory")
+	case engine.ReasonMerged:
+		return i18n.T("set aside by a merge with upstream; restoring it swaps it back")
+	case engine.ReasonResolveAborted:
+		return i18n.T("a resolve that was aborted")
 	}
 	return ""
 }

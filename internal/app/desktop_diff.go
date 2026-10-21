@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -9,8 +8,8 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,9 +24,12 @@ import (
 )
 
 // UpdateDiff is what `skd update` would do to one pack's vendored skills,
-// file by file, worked out before anything changes: the library's copy of
-// each skill as it is now against the upstream copy update would put in
-// its place. Nothing in the library is written.
+// file by file, worked out before anything changes: for a skill the user
+// has not changed, the library's copy against the upstream copy update
+// puts in its place; for one the user changed, what upstream changed
+// since the version those changes were made on (update merges that into
+// them), with the files expected to conflict marked. Nothing in the
+// library is written.
 type UpdateDiff struct {
 	Repo   string      `json:"repo"`
 	Commit string      `json:"commit"`
@@ -42,9 +44,19 @@ type SkillDiff struct {
 	// vendored yet) or "moved" (only its category changed upstream).
 	Status string `json:"status"`
 	// Local is set when the library's copy is not what skd vendored (the
-	// user edited it): update moves the whole folder to the trash before
-	// copying the upstream version in.
+	// user edited it): update merges upstream's changes into it (the copy
+	// as it was goes to the trash first), or shelves the update when they
+	// conflict.
 	Local bool `json:"local"`
+	// Base is set when Local is and the version the user's changes were
+	// made on was found: Files then compare it with the new upstream
+	// version (what the merge brings in), not the user's copy with it.
+	// Without it Files compare the user's copy with upstream, as before.
+	Base bool `json:"base,omitempty"`
+	// Conflicts are the files the merge is expected to conflict on (the
+	// update of the skill is then shelved until skd resolve); worked out
+	// only when Base is set.
+	Conflicts []string `json:"conflicts,omitempty"`
 	// LocalFiles are the files the user changed, added or removed, when
 	// the vendored version could be found in the library's git history.
 	LocalFiles []string `json:"localFiles"`
@@ -62,8 +74,11 @@ type FileDiff struct {
 	Path string `json:"path"`
 	// Status is "added", "removed" or "modified".
 	Status string `json:"status"`
-	// Local marks a file the user changed in the library's copy.
-	Local bool `json:"local,omitempty"`
+	// Local marks a file the user changed in the library's copy: with the
+	// skill's Base set, a file whose upstream change is merged into the
+	// user's (or conflicts with it, Conflict).
+	Local    bool `json:"local,omitempty"`
+	Conflict bool `json:"conflict,omitempty"`
 	// Binary or TooLarge files carry no hunks.
 	Binary   bool       `json:"binary,omitempty"`
 	TooLarge bool       `json:"tooLarge,omitempty"`
@@ -186,6 +201,10 @@ func (s *Session) UpdateDiff(ctx context.Context, repo, latest string) (*UpdateD
 		local := map[string]bool{}
 		if fsutil.Exists(dir) && !fsutil.Pristine(dir, ls.Hash) {
 			sd.Local = true
+			if m := s.mergePreview(p.Repo, u, dir, ls, commit); m != nil {
+				out.Skills = append(out.Skills, *m)
+				continue
+			}
 			if base := s.vendoredBaseline(ctx, dir, ls.Hash); base != nil {
 				for _, f := range changedPaths(base, oldFiles) {
 					local[f] = true
@@ -199,6 +218,57 @@ func (s *Session) UpdateDiff(ctx context.Context, repo, latest string) (*UpdateD
 		out.Skills = append(out.Skills, sd)
 	}
 	return out, nil
+}
+
+// mergePreview is the diff of a skill the user changed as update will
+// merge it: upstream's version the changes were made on (the lock's
+// hash, found in the snapshots or the library's history) against the
+// new one, the files the user changed marked, and those the merge would
+// conflict on. nil when that version is not found.
+func (s *Session) mergePreview(repo string, u pack.Skill, dir string, ls *lock.Skill, commit string) *SkillDiff {
+	base := engine.FindBase(s.Lib, repo, u.Name, []string{ls.Category, u.Category}, ls.Hash)
+	if base == nil {
+		return nil
+	}
+	ours, err := engine.ReadFileSet(dir)
+	if err != nil {
+		return nil
+	}
+	theirs, err := engine.ReadFileSet(u.Dir)
+	if err != nil {
+		return nil
+	}
+	m, err := engine.Merge(base, ours, theirs, commit)
+	if err != nil {
+		return nil
+	}
+	sd := &SkillDiff{Name: u.Name, Status: "changed", Local: true, Base: true, LocalFiles: []string{}, Conflicts: m.ConflictPaths()}
+	baseFiles, ourFiles, newFiles := diffable(base), diffable(ours), diffable(theirs)
+	local := map[string]bool{}
+	for _, f := range changedPaths(baseFiles, ourFiles) {
+		local[f] = true
+		sd.LocalFiles = append(sd.LocalFiles, f)
+	}
+	sd.Files, sd.MoreFiles = diffFiles(baseFiles, newFiles, local)
+	for i := range sd.Files {
+		sd.Files[i].Conflict = slices.Contains(sd.Conflicts, sd.Files[i].Path)
+	}
+	return sd
+}
+
+// diffable is a file set as readFiles reads one: a file larger than
+// maxDiffBytes is its tooLargeMark.
+func diffable(fs engine.FileSet) map[string][]byte {
+	out := map[string][]byte{}
+	for p, f := range fs {
+		if len(f.Data) > maxDiffBytes {
+			sum := sha256.Sum256(f.Data)
+			out[p] = tooLargeMark(sum[:])
+		} else {
+			out[p] = f.Data
+		}
+	}
+	return out
 }
 
 // tooLargePrefix starts what a set of files read for a diff holds for a
@@ -341,89 +411,23 @@ func (s *Session) vendoredBaseline(ctx context.Context, dir, hash string) map[st
 
 // gitTreeFiles reads the regular files under rel at commit c, keyed by
 // their path relative to rel, leaving out fsutil.Skip names as HashTree
-// does.
+// does. The answer is read as it comes, never held whole: a blob larger
+// than maxDiffBytes is only hashed (tooLargeMark).
 func gitTreeFiles(ctx context.Context, root, c, rel string) (map[string][]byte, error) {
-	ls, err := exec.CommandContext(ctx, "git", "-C", root, "ls-tree", "-r", "-z", "--full-tree", c, "--", rel).Output()
+	blobs, err := engine.GitTreeBlobs(ctx, root, c, rel)
 	if err != nil {
 		return nil, err
-	}
-	type blob struct{ sha, path string }
-	var blobs []blob
-	for _, rec := range bytes.Split(ls, []byte{0}) {
-		meta, path, ok := strings.Cut(string(rec), "\t")
-		if !ok {
-			continue
-		}
-		f := strings.Fields(meta)
-		if len(f) != 3 || f[1] != "blob" || (f[0] != "100644" && f[0] != "100755") {
-			continue
-		}
-		sub, ok := strings.CutPrefix(path, rel+"/")
-		if !ok {
-			continue
-		}
-		skip := false
-		for _, part := range strings.Split(sub, "/") {
-			skip = skip || fsutil.Skip[part]
-		}
-		if !skip {
-			blobs = append(blobs, blob{f[2], sub})
-		}
 	}
 	files := map[string][]byte{}
-	if len(blobs) == 0 {
-		return files, nil
-	}
-	var in bytes.Buffer
-	for _, b := range blobs {
-		in.WriteString(b.sha + "\n")
-	}
-	// The answer is read as it comes, never held whole: a blob larger than
-	// maxDiffBytes is only hashed (tooLargeMark).
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", root, "cat-file", "--batch")
-	cmd.Stdin = &in
-	pipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	defer func() { cancel(); cmd.Wait() }()
-	r := bufio.NewReader(pipe)
-	for _, b := range blobs {
-		head, err := r.ReadString('\n')
-		if err != nil {
-			return nil, err
+	err = engine.ReadGitBlobs(ctx, root, blobs, maxDiffBytes, func(b engine.GitBlob, data, sum []byte) error {
+		if sum != nil {
+			files[b.Path] = tooLargeMark(sum)
+		} else {
+			files[b.Path] = data
 		}
-		f := strings.Fields(head)
-		if len(f) != 3 || f[1] != "blob" {
-			return nil, i18n.Errorf("git cat-file answered %q, not a file's contents", strings.TrimSpace(head))
-		}
-		n, err := strconv.Atoi(f[2])
-		if err != nil || n < 0 {
-			return nil, i18n.Errorf("git cat-file answered %q, not a file's contents", strings.TrimSpace(head))
-		}
-		if n > maxDiffBytes {
-			h := sha256.New()
-			if _, err := io.CopyN(h, r, int64(n)); err != nil {
-				return nil, err
-			}
-			if _, err := r.ReadByte(); err != nil { // git's newline after it
-				return nil, err
-			}
-			files[b.path] = tooLargeMark(h.Sum(nil))
-			continue
-		}
-		body := make([]byte, n+1) // the content and git's newline after it
-		if _, err := io.ReadFull(r, body); err != nil {
-			return nil, err
-		}
-		files[b.path] = body[:n]
-	}
-	return files, nil
+		return nil
+	})
+	return files, err
 }
 
 // diffFiles compares two copies of a skill, file by file. local marks

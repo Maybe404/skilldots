@@ -73,6 +73,13 @@ type Entry struct {
 	// (skillOverrides in its settings); skd still links it. Filled in by
 	// app.Session.Resolve.
 	ClaudeDisabled bool
+	// Shelved is set for a vendored skill whose update waits for its
+	// conflicts to be resolved (skd resolve): the upstream commit it
+	// waits for. Resolving is set while skd resolve is under way (its
+	// files hold conflict markers); Conflicts are the conflicted files.
+	Shelved   string   `json:",omitempty"`
+	Resolving bool     `json:",omitempty"`
+	Conflicts []string `json:",omitempty"`
 }
 
 // Resolve computes every entry declared by the library. Problems confined
@@ -196,7 +203,7 @@ func collect(lib *library.Library) ([]Entry, []string) {
 				continue
 			}
 			e := Entry{Name: name, LinkName: name, Kind: KindVendor, Origin: p.Repo, Category: ls.Category,
-				Dir: sd, TargetNames: packTargets}
+				Dir: sd, TargetNames: packTargets, Shelved: ls.Shelved, Resolving: ls.Resolving, Conflicts: ls.Conflicts}
 			if o := p.Override(name, false); o != nil {
 				if o.As != "" {
 					if err := manifest.CheckName(o.As); err != nil {

@@ -206,7 +206,14 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 		if o.Apply != nil {
 			backups = o.Apply.Backups
 		}
-		return historyWithBackups(o.History, backups), nil
+		// The conflicted files of what this update shelved, from its reports.
+		files := map[string][]string{}
+		for _, rep := range o.Reports {
+			for _, sh := range rep.Shelved {
+				files[rep.Repo+"\x00"+sh.Name] = sh.Files
+			}
+		}
+		return historyRows(o.History, backups, shelvedFiles(ses, files)), nil
 	}
 	return nil, errors.New("unknown pack operation")
 }

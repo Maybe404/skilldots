@@ -35,6 +35,13 @@ const (
 	// ReasonBroken: a broken link in an agent's skill directory that adopt
 	// cleared away.
 	ReasonBroken = "broken"
+	// ReasonMerged: a vendored skill the user changed, as it was before an
+	// update (or skd resolve) merged upstream's changes into it.
+	ReasonMerged = "merged"
+	// ReasonResolveAborted: a skill's files as skd resolve --abort found
+	// them (the merge with its conflict markers, and whatever was edited
+	// in it), set aside to put back the copy from before the resolve.
+	ReasonResolveAborted = "resolve-aborted"
 )
 
 // TrashNote is what skd remembers about an entry it moved to the trash:

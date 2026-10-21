@@ -37,6 +37,7 @@ skd edit tdd                       # open a skill in your editor
 skd list                           # one line per repo, not one per skill
 skd update                         # show what changed upstream, update the packs you tick
 skd history                        # what each update changed, with upstream's commit messages
+skd resolve                        # updates shelved because they conflict with your edits
 skd disable grill-me --agent codex # per-skill, per-agent control
 skd purge mattpocock/skills        # gone from the library and every agent dir
 ```
@@ -109,6 +110,8 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd outdated [pack…]` | check upstream without changing anything |
 | `skd update [pack…] [--commit]` | show what changed upstream and update the packs you tick |
 | `skd history [pack] [-n N]` | what each update changed, with upstream's commit messages |
+| `skd history <pack> --diff [n] [--skill x]` | what upstream changed in one update, as a diff |
+| `skd resolve [skill] [--continue \| --abort]` | resolve the conflicts of a shelved update, as you would finish a git merge |
 | **Changing** | |
 | `skd new <name> [--private]` | scaffold a skill of your own and link it |
 | `skd fork <skill> [--private] [--as name]` | copy a vendored skill into `skills/` to edit it; upstream no longer touches it |
@@ -245,9 +248,9 @@ The approval covers that name, directory and mode, and is kept on your machine, 
 
 ## Editing, rolling back, removing
 
-- **Third-party skill you want to change:** `skd fork <skill>`. The copy in `skills/` is yours; the vendored original is deselected so the names do not clash.
+- **Third-party skill you want to change:** edit it in place, and `skd update` merges upstream's changes into your edits, like `git pull` (the copy before goes to the trash). When both changed the same lines, that skill's update is shelved, left as it is, until `skd resolve <skill>` writes the merge with git's conflict markers and `skd resolve --continue` takes your result (`--abort` puts it back). Or `skd fork <skill>`: the copy in `skills/` is yours and upstream no longer touches it; the vendored original is deselected so the names do not clash.
 - **Your own skill:** `skd edit <skill>` (or `o` in the dashboard) opens it; edit in place and commit.
-- **What did an update change?** `skd history [pack]`: per update, the skills that changed and upstream's commit messages for them.
+- **What did an update change?** `skd history [pack]`: per update, the skills that changed and upstream's commit messages for them; `skd history <pack> --diff` shows the change itself.
 - **Roll back an update:** the library is a git repository. With `skd update --commit` every update is one commit, so `git revert <commit> && skd apply` undoes it. Without `--commit`, `git checkout -- vendor skills.lock && skd apply`.
 - **Remove:** `skd disable` unlinks but keeps the files; `skd remove` also moves the skill's directory (vendored or your own) to the library trash; `skd purge` deletes a whole pack. `skd remove` of a pack's last skill drops the pack.
 - **Stop using an agent for a while:** `skd targets pause <agent>`; `skd targets resume <agent>` brings back every link.

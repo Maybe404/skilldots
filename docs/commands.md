@@ -14,7 +14,7 @@ Every `skd` command in full. The [README](../README.md#commands) has a one-line 
 - stdout carries exactly one JSON document. Progress and warnings go to stderr.
 - A failing command prints nothing on stdout and exits non-zero. Three commands print their document and still exit non-zero:
   - `skd update` reports `{packs, failed, apply, committed, history}`. It exits non-zero when any pack failed, and also, with an `error` field, when the update was saved but linking or `--commit` then failed.
-  - `skd outdated` does the same with `{checked, packs, failed, updates}`; each pack has `repo, commit, latest, changed, moved, new, gone, pending, checked`.
+  - `skd outdated` does the same with `{checked, packs, failed, updates}`; each pack has `repo, commit, latest, changed, moved, new, gone, pending, checked`, and `shelved` when an update of one of its skills waits for `skd resolve` (those skills are in `changed` too).
   - `skd apply` exits non-zero when a planned change was not made because its agent directory no longer led where it did, or its source went through a symbolic link inside the library (`refused`). The last line of the plain output then reads `applied · … · N not changed` instead of a tick.
 - Problems confined to one skill (an unknown target, a name clash, a pack not fetched yet) are warnings, not errors: the rest of the library keeps working.
 - `--json` is English whatever the language, byte for byte what `--lang en` gives ([README → Language](../README.md#language)).
@@ -143,11 +143,38 @@ At a terminal:
 
 With `--yes`, `--json` or no terminal, it updates straight away: every pack when none are named.
 
-Then it re-vendors the selected skills, reports, and records the update in the history. `--commit` commits and pushes the library when something changed.
+Then it re-vendors the selected skills, reports, and records the update in the history. `--commit` commits and pushes the library when something changed (it refuses while a skill is being resolved).
 
-### `skd history [pack] [-n N]`
+A skill you edited is merged, not replaced, the way `git pull` merges:
 
-What each update changed: when, old → new commit, the skills changed / added / moved / gone / new upstream, and the subjects of up to 20 upstream commits that touched them.
+- The base is the upstream version your edits were made on: the one whose content hash `skills.lock` records. skd finds it in the library's upstream snapshots (below), else in the library's own git history of the skill's directory; with neither, there is no base and every file both sides changed is a conflict.
+- File by file: a file only one side changed takes that side; text both changed goes through `git merge-file`; a file one side removed and the other changed, a file both added differently, and a non-text file both changed are conflicts.
+- Merged cleanly: the copy as it was goes to the trash (reason `merged`), the merge is written in its place, and the report lists the skill in `changed` and `merged`. The skill stays edited, so the next update merges again.
+- Conflicts: the update of that skill is **shelved**. Its directory and its lock hash stay as they were; `skills.lock` records `shelved` (the upstream commit), `upstream` (that version's hash) and `conflicts` (the files); older skd versions ignore these. The rest of the pack is updated and its commit moves on. The report lists the skill under `shelved`, with the files and the command that resolves it. `skd list` marks it `shelved`, and `skd outdated` counts it as an update (`shelved` in `--json`).
+- A later update merges a shelved skill again against the newest upstream version; it clears the shelf when upstream went back to the base or the merge is clean. A skill being resolved is left alone.
+
+Every update also records the upstream version vendored, as a commit on `refs/skilldots/upstream/<pack>` in the library's repository (see [design](design.md)): the next merge's base, and what `history --diff` reads. In a library that is not a git repository nothing is recorded, and an update that merged or shelved a skill says so.
+
+### `skd resolve [skill] [--continue | --abort]`
+
+Resolves a shelved update, as you would finish a git merge.
+
+- `skd resolve` lists the shelved skills, with their conflicted files and whether one is being resolved.
+- `skd resolve <skill>` works the merge out again against the newest upstream version (merging cleanly, if your edits changed meanwhile, finishes it). It moves the skill's directory to the trash (`merged`), writes the merge into it with git's conflict markers (`<<<<<<< local`, `=======`, `>>>>>>> upstream <commit>`), and puts the conflicted files into the library's git index as unmerged entries (stage 1 the base, 2 local, 3 upstream). So `git status` shows them as both modified (or deleted by one side), `git diff` shows the combined diff, and `git checkout --ours|--theirs -- <file>` takes a side.
+- Files that cannot hold markers: a non-text file changed on both sides keeps yours, with upstream's beside it as `<file>.upstream`; a file you removed and upstream changed stays removed, with upstream's as `<file>.upstream`; a file upstream removed and you changed stays, marked by an empty `<file>.upstream-deleted`. Keep one version and delete the other file.
+- `--continue [skill]` refuses (non-zero exit; `--json`: `{skill, unresolved}`) while a file of the skill holds a line opening or closing a conflict (`<<<<<<<`, `>>>>>>>`), a conflicted file still holds `=======` or `|||||||` alone on a line, or a `.upstream`/`.upstream-deleted` file is left. Otherwise it runs `git add` on the skill's directory, records upstream's version as merged in `skills.lock`, links the skill again, and adds a history record listing it under `merged`. `skd sync` commits.
+- `--abort [skill]` moves the files as they are to the trash, puts back the copy from before the resolve, restores the index entries the conflicts replaced, and leaves the update shelved.
+- Without a skill, `--continue` and `--abort` act on the one skill being resolved.
+
+While a skill is being resolved its files hold the markers, and the agents linked to it read them. `skd sync` and `update --commit` refuse to commit meanwhile.
+
+Saving a file in the desktop app's editor stages it (`git add`), like saving in an editor and adding in git; `skd sync` (or `update --commit`) commits. `skd edit` only opens an editor and stages nothing.
+
+### `skd history [pack] [-n N] [--diff [n] [--skill x]]`
+
+What each update changed: when, old → new commit, the skills changed / merged / shelved / added / moved / gone / new upstream, and the subjects of up to 20 upstream commits that touched them.
+
+- `--diff` prints what upstream changed in one record as a unified diff, coloured like git's, skill by skill: the newest record (of the pack, when one is named), or the n-th newest (`skd history owner/repo --diff 2`); `--skill` keeps one skill. It compares the upstream snapshots the record names, offline. A record from before skd kept snapshots is read from the pack's cache clone, fetching the record's commits by hash when the clone lacks them (that needs the network, and fails, saying so, without it). `--json` prints `{record, skills, source}`.
 
 - An update whose linking failed says so until an apply links every skill of that pack. One skill still skipped (say, because something is in the way) keeps the note.
 - It is read from `skills.history.jsonl` in the library, which is committed and pushed with it, so it works offline and on another machine after a clone.

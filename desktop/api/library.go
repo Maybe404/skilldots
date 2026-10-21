@@ -110,6 +110,9 @@ func (s *Service) cloneLibrary(url, dir string) (any, error) {
 	if _, err = library.Open(dir); err != nil {
 		return nil, err
 	}
+	// The upstream snapshots pushed with it (best effort): the merge base
+	// of the next update of a skill changed on the other machine.
+	_ = app.FetchSnapshots(dir)
 	if err = library.EnsurePrivateGit(dir); err != nil && !errors.Is(err, library.ErrPrivateLink) {
 		return nil, err
 	}

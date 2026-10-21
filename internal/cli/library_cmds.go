@@ -149,6 +149,9 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 	if line := updatesLine(rec, time.Now()); line != "" {
 		c.printf("%s\n", line)
 	}
+	if line := shelvedLine(entries); line != "" {
+		c.printf("%s\n", line)
+	}
 	c.printf("\n")
 
 	if len(m.Packs) > 0 {
@@ -189,6 +192,21 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 	printGroup(c, entries, engine.KindSkill, "skills/", "yours, published with the library")
 	printGroup(c, entries, engine.KindPrivate, "private/", "this machine only")
 	printGroup(c, entries, engine.KindApp, "apps", "shipped with installed applications")
+}
+
+// shelvedLine names the skills whose update is shelved, and what
+// resolves them; "" when none is.
+func shelvedLine(entries []engine.Entry) string {
+	var names []string
+	for _, e := range entries {
+		if e.Kind == engine.KindVendor && (e.Shelved != "" || e.Resolving) {
+			names = append(names, txt(e.LinkName))
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return warn(i18n.Sprintf("! %d shelved with conflicts: %s", len(names), strings.Join(names, ", "))) + dim(i18n.T(" · skd resolve <skill>"))
 }
 
 // updatesLine summarises the last recorded upstream check (skd outdated,
@@ -259,6 +277,12 @@ func printEntries(c *ctx, entries []engine.Entry) {
 		}
 		if e.Conflict != "" {
 			name += " " + warn(i18n.T("conflict"))
+		}
+		switch {
+		case e.Resolving:
+			name += " " + accent(i18n.T("resolving"))
+		case e.Shelved != "":
+			name += " " + warn(i18n.T("shelved"))
 		}
 		if e.ClaudeDisabled {
 			name += " " + warn(i18n.T("off in Claude Code"))
