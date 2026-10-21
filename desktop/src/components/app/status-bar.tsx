@@ -64,7 +64,7 @@ export function StatusBar() {
       <>
         <span className="flex items-center gap-2 text-ink" role="status">
           <span aria-hidden className="size-[7px] rounded-full bg-ac" />
-          <RollingText value={pendingCount} message={(n) => t("pendingN", { n })} />
+          <RollingText value={pendingCount} message={(n) => t(pendingCount === 1 ? "pendingOne" : "pendingN", { n })} />
         </span>
         <Button variant="accent" className="px-3.5" disabled={!!operation} onClick={() => void applyPending()}>
           {t("apply")}

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp, type TableSort } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
-import { cellState, isOn } from "@/lib/pending"
+import { cellState, isOn, keepsViaShared } from "@/lib/pending"
 import { Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
@@ -216,7 +216,7 @@ function Row({
         // Off for an agent this Mac does not have: it cannot be turned on (app-state refuses and says why).
         const locked = st === "off" && isAbsentAgent(a)
         const title =
-          st === "via" ? t("cellVia", { agent: label }) : st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t("cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
+          st === "via" ? t(skill.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: label }) : st === "on" ? t("cellOn", { agent: label }) : st === "absent" ? t("cellAbsent", { agent: label }) : st === "adding" ? t("cellAdding", { agent: label }) : st === "removing" ? t(keepsViaShared(skill, a.name, pending) ? "cellViaCancel" : "cellRemoving", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : t("cellOff", { agent: label })
         return (
           <div role="cell" key={a.name} className="relative grid place-items-center">
             <Hint label={title}>

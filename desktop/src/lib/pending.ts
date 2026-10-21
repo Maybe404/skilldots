@@ -46,7 +46,16 @@ export function cellState(skill: Skill, agent: string, pending: Pending): CellSt
  */
 export function isOn(skill: Skill, agent: string, pending: Pending): boolean {
   const s = cellState(skill, agent, pending)
+  if (s === "removing" && keepsViaShared(skill, agent, pending)) return true
   return s === "on" || s === "adding" || s === "absent" || s === "via"
+}
+
+/** Its own choice is being taken off, but it goes on reading skill through Agents. */
+export function keepsViaShared(skill: Skill, agent: string, pending: Pending): boolean {
+  if (pending[pendingKey(skill.ref.key, agent)] !== false) return false
+  const rest = { ...pending }
+  delete rest[pendingKey(skill.ref.key, agent)]
+  return readsViaShared(skill, agent, rest)
 }
 
 /** Flip one cell: a pending change is reverted, otherwise one is recorded. */

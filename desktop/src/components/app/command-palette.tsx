@@ -90,7 +90,7 @@ export function CommandPalette() {
           <CommandEmpty>{t("cmdEmpty")}</CommandEmpty>
 
           {pendingCount > 0 && (
-            <CommandGroup heading={t("pendingN", { n: pendingCount })}>
+            <CommandGroup heading={t(pendingCount === 1 ? "pendingOne" : "pendingN", { n: pendingCount })}>
               <CommandItem keywords={["apply pending"]} onSelect={() => run(() => void applyPending())}>
                 <Link2 /> {t("apply")}
                 <CommandShortcut>⏎</CommandShortcut>

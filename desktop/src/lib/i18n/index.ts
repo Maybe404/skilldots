@@ -1,5 +1,5 @@
 import type { Lang } from "@/lib/backend"
-import { en, zh, type MessageKey } from "./messages"
+import { en, enOne, zh, type MessageKey } from "./messages"
 
 export type { MessageKey }
 export type Vars = Record<string, string | number>
@@ -10,7 +10,9 @@ const tables: Record<Lang, Record<MessageKey, string>> = { zh, en }
 export function translator(lang: Lang): T {
   const table = tables[lang]
   return (key, vars) => {
-    let s = table[key] ?? zh[key] ?? key
+    // English has a singular for n = 1 where the plural would read wrong.
+    const one = lang === "en" && vars?.n === 1 ? enOne[key] : undefined
+    let s = one ?? table[key] ?? zh[key] ?? key
     if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v))
     return s
   }

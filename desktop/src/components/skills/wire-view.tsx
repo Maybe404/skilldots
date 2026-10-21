@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { isMine, sourceText, useApp } from "@/lib/app-state"
 import { agentLabel, isAbsentAgent, tildify } from "@/lib/agents"
 import type { Agent, Skill } from "@/lib/backend"
-import { cellState, isOn } from "@/lib/pending"
+import { cellState, isOn, keepsViaShared } from "@/lib/pending"
 import { AgentMono, Hint, OffRing, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
 import { DisclosureChevron } from "@/components/ui/collapsible"
@@ -422,7 +422,7 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
   const locked = st === "off" && away
   const pend = st === "adding" || st === "removing"
   const label = agentLabel(a)
-  const btnText = via ? t("cellVia", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? t("wireRemoving") : t("wireOff")
+  const btnText = via ? t(skill?.targets.includes(a.name) ? "cellViaOwn" : "cellVia", { agent: label }) : locked ? t("absentCannotInstall", { agent: label }) : st === "adding" ? t("wireAdding") : st === "absent" ? t("cellAbsent", { agent: label }) : st === "on" ? t("wireOn") : st === "removing" ? (skill && keepsViaShared(skill, a.name, pending) ? t("cellViaCancel", { agent: label }) : t("wireRemoving")) : t("wireOff")
   return (
     <div
       data-agent={a.name}
@@ -476,10 +476,10 @@ function AgentRow({ agent: a, skill, dragging, claudeOff, compact }: { agent: Ag
                 pend ? "border-ac text-ac" : !on && !locked && "border-mut text-ink",
               )}
             >
-              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : via ? t("viaShort") : st === "absent" || locked ? t("wireAbsent") : btnText}
+              {compact ? (locked ? null : <Glyph aria-hidden strokeWidth={2.2} />) : via ? t("viaShort") : st === "absent" || locked ? t("wireAbsent") : st === "removing" ? t("wireRemoving") : btnText}
             </Button>
           )
-          return compact || via || st === "absent" || locked ? <Hint label={btnText}>{button}</Hint> : button
+          return compact || via || st === "absent" || locked || st === "removing" ? <Hint label={btnText}>{button}</Hint> : button
         })()}
       <span className="min-w-[30px] flex-none text-right text-[18px] tabular-nums leading-none font-medium text-hue-ink">{count}</span>
     </div>
