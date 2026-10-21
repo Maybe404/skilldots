@@ -78,7 +78,10 @@ func skill(e engine.Entry) object {
 	if e.Kind == engine.KindVendor {
 		prefix = e.Origin
 	}
-	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "absent": append([]string{}, e.Absent...), "viaShared": append([]string{}, e.ViaShared...), "conflict": e.Conflict, "missing": e.Missing}
+	return object{"ref": ref{Key: prefix + ":" + e.Name}, "name": e.Name, "linkName": e.LinkName, "kind": e.Kind, "origin": e.Origin, "category": e.Category, "description": e.Description, "dir": e.Dir, "targets": append([]string{}, e.TargetNames...), "absent": append([]string{}, e.Absent...), "viaShared": append([]string{}, e.ViaShared...), "conflict": e.Conflict, "missing": e.Missing,
+		// An update waits for its conflicts (skd resolve): shelved also
+		// while it is being resolved.
+		"shelved": e.Shelved != "" || e.Resolving, "resolving": e.Resolving, "conflictFiles": append([]string{}, e.Conflicts...)}
 }
 
 // sharedReach are the agents installed here that load e from the shared
@@ -306,7 +309,11 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		return outdated(o), err
 	case "history":
 		rows, _, err := ses.History("", 0)
-		return history(rows), err
+		return historyRows(rows, nil, shelvedFiles(ses, nil)), err
+	case "historyDiff":
+		return historyDiff(ctx, ses, args)
+	case "resolveStart", "resolveState", "resolvePick", "resolveContinue", "resolveAbort":
+		return resolveOperation(ses, method, args)
 	case "trash", "trashUsage", "emptyTrash", "deleteTrash":
 		return s.trashOperation(ses, method, args)
 	case "restore":
@@ -555,7 +562,11 @@ func (s *Service) status() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill(), "bundledSkill": bundledSkill()}, nil
+	shelved := 0
+	if sh, err := ses.Shelved(); err == nil {
+		shelved = len(sh)
+	}
+	return object{"root": ses.Lib.Root, "branch": branch, "remote": remote, "changes": changes, "unmanaged": len(rep.Unmanaged()), "selfSkill": ses.HasSelfSkill(), "bundledSkill": bundledSkill(), "shelved": shelved}, nil
 }
 func outdated(o *app.Outdated) any {
 	if o == nil {
@@ -567,14 +578,15 @@ func outdated(o *app.Outdated) any {
 		for _, c := range p.Commits {
 			commits = append(commits, object{"id": c.Hash, "title": c.Subject})
 		}
-		ps = append(ps, object{"repo": p.Repo, "commit": p.Commit, "latest": p.Latest, "changed": p.Changed, "moved": p.Moved, "new": p.New, "gone": p.Gone, "pending": p.Pending, "checked": p.Checked, "commits": commits, "moreCommits": p.MoreCommits, "commitsUnknown": p.CommitsUnknown})
+		ps = append(ps, object{"repo": p.Repo, "commit": p.Commit, "latest": p.Latest, "changed": p.Changed, "moved": p.Moved, "new": p.New, "gone": p.Gone, "pending": p.Pending, "checked": p.Checked, "commits": commits, "moreCommits": p.MoreCommits, "commitsUnknown": p.CommitsUnknown, "shelved": nonNilList(p.Shelved)})
 	}
 	return object{"checked": o.Checked, "packs": ps, "failed": o.Failed}
 }
-func history(rows []app.UpdateRecord) []object {
-	return historyWithBackups(rows, nil)
-}
-func historyWithBackups(rows []app.UpdateRecord, backups []string) []object {
+
+// historyRows are history records as the desktop shows them. backups
+// (an update's own) go on the first record that lists none; files names
+// the conflicted files of each pack's shelved skills ("repo\x00name").
+func historyRows(rows []app.UpdateRecord, backups []string, files map[string][]string) []object {
 	out := []object{}
 	for _, r := range rows {
 		cs := []object{}
@@ -585,7 +597,12 @@ func historyWithBackups(rows []app.UpdateRecord, backups []string) []object {
 		if len(rowBackups) == 0 && len(out) == 0 {
 			rowBackups = append(rowBackups, backups...)
 		}
-		out = append(out, object{"id": r.Time.String() + r.Repo + r.To, "when": r.Time, "repo": r.Repo, "from": r.From, "to": r.To, "changed": r.Changed, "added": r.Added, "gone": r.Gone, "moved": r.Moved, "dropped": r.Dropped, "new": r.New, "commits": cs, "moreCommits": r.MoreCommits, "commitsUnknown": r.CommitsUnknown, "applyError": r.ApplyError, "omitted": r.Omitted, "backups": rowBackups})
+		shelved := []object{}
+		for _, n := range r.Shelved {
+			shelved = append(shelved, object{"name": n, "files": nonNilList(files[r.Repo+"\x00"+n])})
+		}
+		out = append(out, object{"id": r.Time.String() + r.Repo + r.To, "when": r.Time, "repo": r.Repo, "from": r.From, "to": r.To, "changed": r.Changed, "added": r.Added, "gone": r.Gone, "moved": r.Moved, "dropped": r.Dropped, "new": r.New, "commits": cs, "moreCommits": r.MoreCommits, "commitsUnknown": r.CommitsUnknown, "applyError": r.ApplyError, "omitted": r.Omitted, "backups": rowBackups,
+			"merged": nonNilList(r.Merged), "shelved": shelved})
 	}
 	return out
 }

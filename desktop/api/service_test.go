@@ -172,18 +172,23 @@ func TestDesktopHistoryAndOutdatedKeepDetails(t *testing.T) {
 		t.Fatalf("outdated details lost: %s", b)
 	}
 
-	rows := historyWithBackups([]app.UpdateRecord{{
+	rows := historyRows([]app.UpdateRecord{{
 		Time: now, Repo: "example/skills", From: "old", To: "new",
 		Dropped: []string{"dropped"}, New: []string{"upstream-new"},
 		MoreCommits: true, CommitsUnknown: true, ApplyError: "apply failed", Omitted: 2,
 		Commits: []app.UpstreamCommit{{Hash: "def", Subject: "another update"}},
-	}}, []string{"skill/SKILL.md"})
+		Merged:  []string{"m"}, Shelved: []string{"s"},
+	}}, []string{"skill/SKILL.md"}, map[string][]string{"example/skills\x00s": {"SKILL.md"}})
 	b, err = json.Marshal(rows)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var historyRows []struct {
-		Dropped, New, Backups       []string
+		Dropped, New, Backups, Merged []string
+		Shelved                       []struct {
+			Name  string
+			Files []string
+		}
 		MoreCommits, CommitsUnknown bool
 		ApplyError                  string
 		Omitted                     int
@@ -191,7 +196,8 @@ func TestDesktopHistoryAndOutdatedKeepDetails(t *testing.T) {
 	if err := json.Unmarshal(b, &historyRows); err != nil {
 		t.Fatal(err)
 	}
-	if len(historyRows) != 1 || len(historyRows[0].Dropped) != 1 || len(historyRows[0].New) != 1 || len(historyRows[0].Backups) != 1 || !historyRows[0].MoreCommits || !historyRows[0].CommitsUnknown || historyRows[0].ApplyError == "" || historyRows[0].Omitted != 2 {
+	if len(historyRows) != 1 || len(historyRows[0].Dropped) != 1 || len(historyRows[0].New) != 1 || len(historyRows[0].Backups) != 1 || !historyRows[0].MoreCommits || !historyRows[0].CommitsUnknown || historyRows[0].ApplyError == "" || historyRows[0].Omitted != 2 ||
+		len(historyRows[0].Merged) != 1 || len(historyRows[0].Shelved) != 1 || historyRows[0].Shelved[0].Name != "s" || len(historyRows[0].Shelved[0].Files) != 1 {
 		t.Fatalf("history details lost: %s", b)
 	}
 }
