@@ -282,26 +282,24 @@ func (m Model) trashView(entries []engine.TrashEntry) (tea.Model, tea.Cmd) {
 		if e.When.IsZero() {
 			when = "?"
 		}
-		from := ""
-		if e.Origin != "" {
-			from = i18n.Sprintf("from %s", tildify(e.Origin))
-		}
+		// Why first, then when; where it was goes on a line of its own,
+		// so a long path does not push the reason out of sight.
+		detail := when
 		if why := app.TrashReason(e); why != "" {
-			when += " · " + why
+			detail = why + " · " + when
 		}
-		detail := when + "  " + from
 		if !e.Restorable {
 			problems[e.ID] = e.Problem
-			detail = when + i18n.T("  cannot be restored")
-			if from != "" {
-				detail += " · " + from
-			}
+			detail += i18n.T("  cannot be restored")
 		}
 		label := e.Name
 		if len(e.Skills) > 0 && !e.Unsafe {
 			label = strings.Join(e.Skills, ", ")
 		}
 		items = append(items, pickItem{label: label, detail: detail, value: e.ID})
+		if e.Origin != "" {
+			items = append(items, pickItem{info: true, detail: i18n.Sprintf("from %s", tildify(e.Origin))})
+		}
 	}
 	n := len(entries)
 	restore := listAction{key: "r", label: i18n.T("restore"), run: func(it pickItem) step {
@@ -329,8 +327,8 @@ func (m Model) trashView(entries []engine.TrashEntry) (tea.Model, tea.Cmd) {
 			i18n.Sprintf("%s in %s will be deleted permanently.", plural(n, "item"), tildify(m.snap.Root)+"/.trash"),
 		}, choice{"y", i18n.T("continue"), func() step { return step{next: final} }})}
 	}}
-	m.ov = listOverlay(i18n.Sprintf("Trash · %s", plural(n, "item")), i18n.T("what skd set aside, newest first · restoring puts it back where it came from"),
-		i18n.T("trash is empty"), items, restore, empty)
+	m.ov = wideOverlay(listOverlay(i18n.Sprintf("Trash · %s", plural(n, "item")), i18n.T("what skd set aside, newest first · restoring puts it back where it came from"),
+		i18n.T("trash is empty"), items, restore, empty))
 	return m, nil
 }
 

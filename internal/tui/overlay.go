@@ -83,6 +83,16 @@ type overlay struct {
 	// set while it is being typed.
 	filter    string
 	filtering bool
+
+	// wide lets the dialog take more of a wide terminal (the trash: names,
+	// reasons and paths).
+	wide bool
+}
+
+// wideOverlay is o drawn wider on a wide terminal.
+func wideOverlay(o *overlay) *overlay {
+	o.wide = true
+	return o
 }
 
 func inputOverlay(title, desc, placeholder, value string, t Theme, s surfaces, onInput func(string) (step, error)) *overlay {

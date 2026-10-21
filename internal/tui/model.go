@@ -873,6 +873,9 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 	var cur []string
 	var title string
 	var run func(Ops, []string) (string, error)
+	// The agents that read the skill (any of the pack's) through the
+	// shared directory: ticked, but with no link of their own.
+	var via []string
 	switch {
 	case s != nil && !s.Installed:
 		return m.hint(i18n.Sprintf("%s is not installed · space installs it", s.Name))
@@ -883,7 +886,15 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 			cur = sk.Selected
 		}
 		run = func(o Ops, a []string) (string, error) { return o.SetTargets(&sk, "", a) }
+		via = sk.ViaShared
 	case p != nil:
+		for _, sk := range p.Skills {
+			for _, a := range sk.ViaShared {
+				if !slices.Contains(via, a) {
+					via = append(via, a)
+				}
+			}
+		}
 		repo := p.Repo
 		cur = p.Targets
 		if cur == nil {
@@ -906,6 +917,9 @@ func (m Model) agents() (tea.Model, tea.Cmd) {
 		detail := tildify(t.Path)
 		if slices.Contains(m.snap.Paused, t.Name) {
 			detail = i18n.Sprintf("paused · %s", detail)
+		}
+		if slices.Contains(via, t.Name) {
+			detail = i18n.Sprintf("through agents (~/.agents/skills), no link of its own · %s", detail)
 		}
 		items = append(items, pickItem{label: t.Name, detail: detail, value: t.Name, on: on[t.Name]})
 		seen[t.Name] = true
