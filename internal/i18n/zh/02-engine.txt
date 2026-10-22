@@ -231,6 +231,18 @@
 @ %s already exists
 = %s 已存在
 
+@ upstream moved %s from %s to %s, but moving its directory failed: %w; it was left where it was
+= 上游把 %s 从 %s 移到了 %s，但移动它的目录失败：%w；目录留在原处
+
+@ upstream moved %s from %s to %s; moving its directory failed: %w
+= 上游把 %s 从 %s 移到了 %s；移动它的目录失败：%w
+
+@ %s is in the way
+= %s 挡在那里
+
+@ %w, and putting %s back failed too (%v): it is at %s; move it back by hand
+= %w，把 %s 放回原处也失败了（%v）：它现在在 %s；请手动移回去
+
 @ upstream renamed %s to %s; renaming failed (%v) and restoring %s failed too (%v): move %s back by hand
 = 上游把 %s 改名为 %s；重命名失败（%v），恢复 %s 也失败了（%v）：请手动把 %s 移回去
 

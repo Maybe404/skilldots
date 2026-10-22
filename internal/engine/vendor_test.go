@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -540,6 +541,87 @@ func TestSyncCaseRenameFailureRollsBack(t *testing.T) {
 			}
 			if lib.Lock.Packs[up].Skills["Foo"] == nil || lib.Lock.Packs[up].Skills["foo"] != nil || p.Use[0] != "Foo" {
 				t.Fatalf("lock/manifest changed: %v %v", lib.Lock.Packs[up].Skills, p.Use)
+			}
+		})
+	}
+}
+
+// tree lists every path under root (relative) with its mode and size.
+func tree(t *testing.T, root string) []string {
+	t.Helper()
+	var out []string
+	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || p == root {
+			return nil
+		}
+		info, _ := os.Lstat(p)
+		rel, _ := filepath.Rel(root, p)
+		out = append(out, fmt.Sprintf("%s %s %d", rel, info.Mode(), info.Size()))
+		return nil
+	})
+	return out
+}
+
+// A move of a skill into or out of a directory of its own name that
+// cannot finish leaves the vendored directory and the lock as they were:
+// when the last rename fails, and when the place it goes holds something
+// else.
+func TestSyncNestedMoveFailsCleanly(t *testing.T) {
+	for _, tc := range []struct {
+		name, from, to, was, now, why string
+	}{
+		{"into, rename fails", "skills/x", "plugins/x/skills/x", "x", "x/x", "rename"},
+		{"out of, rename fails", "plugins/x/skills/x", "skills/x", "x/x", "x", "rename"},
+		{"out of, something in the way", "plugins/x/skills/x", "skills/x", "x/x", "x", "in the way"},
+		{"into, putting back fails", "skills/x", "plugins/x/skills/x", "x", "x/x", "back by hand"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			world := t.TempDir()
+			t.Setenv("SKILLDOTS_CACHE", filepath.Join(world, "cache"))
+			lib, _, _ := newTestLib(t)
+			up := filepath.Join(world, "up")
+			writeSkillMD(t, filepath.Join(up, filepath.FromSlash(tc.from)), "x")
+			gitRepo(t, up)
+			p := &manifest.Pack{Repo: up, Use: []string{"*"}}
+			if _, err := Sync(lib, p); err != nil {
+				t.Fatal(err)
+			}
+			pd, _ := PackDir(lib, up)
+			cat := lib.Lock.Packs[up].Skills["x"].Category
+			if tc.why == "in the way" {
+				os.WriteFile(filepath.Join(pd, "x", "mine.txt"), []byte("mine"), 0o644)
+			} else {
+				dest, was := filepath.Join(pd, filepath.FromSlash(tc.now)), filepath.Join(pd, filepath.FromSlash(tc.was))
+				rename = func(a, b string) error {
+					if b == dest || b == was && tc.why == "back by hand" {
+						return &os.LinkError{Op: "rename", Old: a, New: b, Err: syscall.EIO}
+					}
+					return os.Rename(a, b)
+				}
+				defer func() { rename = os.Rename }()
+			}
+			before := tree(t, pd)
+			os.MkdirAll(filepath.Join(up, filepath.Dir(filepath.FromSlash(tc.to))), 0o755)
+			gitIn(t, up, "mv", tc.from, tc.to)
+			gitIn(t, up, "commit", "-qm", "mv")
+
+			_, err := Sync(lib, p)
+			if tc.why == "back by hand" {
+				// Said, with where it is, and not that it stayed.
+				aside := filepath.Join(pd, "x.skd-move")
+				if err == nil || !strings.Contains(err.Error(), aside) || strings.Contains(err.Error(), "left where it was") || !fsutil.Exists(filepath.Join(aside, "SKILL.md")) {
+					t.Fatalf("err = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "it was left where it was") || !strings.Contains(err.Error(), tc.why) {
+				t.Fatalf("err = %v", err)
+			}
+			if after := tree(t, pd); !slices.Equal(before, after) {
+				t.Errorf("vendor changed:\n%v\n%v", before, after)
+			}
+			if got := lib.Lock.Packs[up].Skills["x"].Category; got != cat {
+				t.Errorf("lock category %q, want %q", got, cat)
 			}
 		})
 	}
