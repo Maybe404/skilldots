@@ -14,7 +14,8 @@ Dock icon. Installing the command is a symbolic link,
 (`api/cli.go`), made by `install.sh` or by Settings → Agents (with
 macOS's administrator prompt when the directory needs it). Only a link to a
 skilldots.app is ever replaced or removed; another `skd` there is left
-alone. Updating the app updates the command. As `skd`, the version comes
+alone, and so is one earlier on PATH (`install.sh` names it and gives the
+link's full path instead). Updating the app updates the command. As `skd`, the version comes
 from the bundle's Info.plist, so mygo's backend (AppKit) never starts.
 
 The `skilldots` skill ships inside the app too: `skills/` is copied into
