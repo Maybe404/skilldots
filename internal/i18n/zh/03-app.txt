@@ -51,6 +51,18 @@
 @ subscribe to %s (link target is a clone of it)
 = 订阅 %s（链接指向它的克隆）
 
+@ subscribe to %s, as the skilldots library at %s has it
+= 订阅 %s，和 %s 那个 skilldots 资料库里一样
+
+@ copy into private/ (never pushed), as the skilldots library at %s keeps it
+= 复制到 private/（不会推送），和 %s 那个 skilldots 资料库里一样
+
+@ copy into skills/, as the skilldots library at %s has it
+= 复制到 skills/，和 %s 那个 skilldots 资料库里一样
+
+@ the library's %s (%s) takes the place of this link into the skilldots library at %s, which keeps its copy
+= 换成资料库里的 %s（%s）；这个链接指向 %s 那个 skilldots 资料库，那边的副本保留不动
+
 @ copy into skills/ as a local skill
 = 复制到 skills/，作为本地 skill
 

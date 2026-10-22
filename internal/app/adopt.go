@@ -49,6 +49,20 @@ type Proposal struct {
 	// library (the copy's SKILL.md then says so). The dry run and the
 	// adoption use the same.
 	As string `json:",omitempty"`
+	// From is the root of another skilldots library the entry links into
+	// (a library made before, or by another tool's skd): the skill is then
+	// taken as that library has it, its upstream, its ref (Ref) and
+	// whether it is private (Private), rather than as a clone of the
+	// library's own repository.
+	From string `json:",omitempty"`
+	Ref  string `json:",omitempty"`
+	// Private is set on an "own" proposal copied into private/ (never
+	// pushed) instead of skills/.
+	Private bool `json:",omitempty"`
+	// Targets are the agents the other library (From) installs the skill
+	// for: the adopted entry gets exactly these, so no agent gains or
+	// loses it.
+	Targets []string `json:",omitempty"`
 }
 
 // Actionable reports whether accepting p does anything.
@@ -69,10 +83,16 @@ func (s *Session) proposals(rep scan.Report, fetch bool) []Proposal {
 	entries, _ := s.Resolve()
 	hashes := map[int]string{}
 	seen := map[string]bool{}
+	others := map[string]*otherLibrary{}
 	var out []Proposal
 	for _, it := range rep.Unmanaged() {
 		if seen[it.Name] {
 			continue
+		}
+		var other *otherLibrary
+		var oe *engine.Entry
+		if it.State == scan.ExtLink {
+			other, oe = s.otherLibraryEntry(it.LinkTo, others)
 		}
 		e, err := engine.Lookup(entries, it.Name)
 		if err != nil {
@@ -87,6 +107,14 @@ func (s *Session) proposals(rep scan.Report, fetch bool) []Proposal {
 				enabled = enabled || t.Name == it.Target
 			}
 			if enabled {
+				// The library's own link is kept out by a link into another
+				// skilldots library (the skilldots skill a library made
+				// before installed): the library's entry takes its place,
+				// and that library keeps its copy.
+				if oe != nil {
+					out = append(out, Proposal{Item: it, Kind: "enable", Entry: engine.Qualified(*e), From: other.lib.Root,
+						Label: i18n.Sprintf("the library's %s (%s) takes the place of this link into the skilldots library at %s, which keeps its copy", e.LinkName, Origin(*e), other.lib.Root)})
+				}
 				continue
 			}
 			if t, err := s.Reg.Get(it.Target); err == nil && engine.ReachesViaShared(s.Lib, e, t) {
@@ -124,6 +152,24 @@ func (s *Session) proposals(rep scan.Report, fetch bool) []Proposal {
 			p.Kind, p.Label = "skip", i18n.T("same name with different content in several agents; resolve by hand")
 		case it.State == scan.AppLink:
 			p.Kind, p.Label = "app", i18n.Sprintf("app → %s", it.LinkTo)
+		case oe != nil:
+			// A link into another skilldots library: what that library
+			// says the skill is, not a clone of the library's repository.
+			p.From, p.Targets = other.lib.Root, s.knownTargets(oe.TargetNames)
+			switch oe.Kind {
+			case engine.KindVendor:
+				p.Kind, p.Repo, p.Skill = "pack", oe.Origin, oe.Name
+				if pk := other.lib.Manifest.FindPack(oe.Origin); pk != nil {
+					p.Ref = pk.Ref
+				}
+				p.Label = i18n.Sprintf("subscribe to %s, as the skilldots library at %s has it", oe.Origin, other.lib.Root)
+			case engine.KindPrivate:
+				p.Kind, p.Private = "own", true
+				p.Label = i18n.Sprintf("copy into private/ (never pushed), as the skilldots library at %s keeps it", other.lib.Root)
+			default:
+				p.Kind = "own"
+				p.Label = i18n.Sprintf("copy into skills/, as the skilldots library at %s has it", other.lib.Root)
+			}
 		case it.Source != "":
 			p.Kind, p.Repo, p.Skill = "pack", it.Source, it.Name
 			p.Label = i18n.Sprintf("subscribe to %s", it.Source)
@@ -147,7 +193,7 @@ func (s *Session) proposals(rep scan.Report, fetch bool) []Proposal {
 	for _, it := range rep.Unmanaged() {
 		for _, p := range out {
 			if p.Item.Name == it.Name && p.Item.Target != it.Target && (p.Kind == "own" || p.Kind == "pack" || p.Kind == "app") {
-				out = append(out, Proposal{Item: it, Kind: "enable", Label: i18n.Sprintf("enable for %s", it.Target), Via: p.Kind, Repo: p.Repo, Skill: p.Skill})
+				out = append(out, Proposal{Item: it, Kind: "enable", Label: i18n.Sprintf("enable for %s", it.Target), Via: p.Kind, Repo: p.Repo, Skill: p.Skill, From: p.From, Private: p.Private, Targets: p.Targets})
 				break
 			}
 		}
@@ -227,7 +273,7 @@ func (s *Session) nameOwn(props []Proposal, entries []engine.Entry) {
 			names = append(names, p.Item.Name)
 		}
 		free := func(n string) bool {
-			return taken[strings.ToLower(n)] == "" && !fsutil.Lexists(filepath.Join(s.Lib.SkillsDir(), n))
+			return taken[strings.ToLower(n)] == "" && !fsutil.Lexists(filepath.Join(s.ownDir(p.Private), n))
 		}
 		for _, n := range names {
 			if free(n) {
@@ -284,11 +330,12 @@ func (s *Session) checkUpstream(props []Proposal) {
 			continue
 		}
 		p.Upstream = p.Repo
-		up := fetched[p.Repo]
+		key := p.Repo + "@" + p.Ref
+		up := fetched[key]
 		if up == nil {
 			up = &upstream{hashes: map[string]string{}}
-			up.err = s.upstreamHashes(p.Repo, up.hashes)
-			fetched[p.Repo] = up
+			up.err = s.upstreamHashes(p.Repo, p.Ref, up.hashes)
+			fetched[key] = up
 		}
 		if up.err != nil {
 			p.Kind, p.Label = "skip", i18n.Sprintf("cannot compare it with %s (%v); run skd adopt again when it can be fetched", p.Repo, firstLine(up.err.Error()))
@@ -315,15 +362,17 @@ func (s *Session) checkUpstream(props []Proposal) {
 	}
 }
 
-// upstreamHashes fetches repo and records the content hash of each of
-// its skills by name.
-func (s *Session) upstreamHashes(repo string, into map[string]string) error {
+// upstreamHashes fetches repo, at the ref the library's pack follows, else
+// at ref, and records the content hash of each of its skills by name.
+func (s *Session) upstreamHashes(repo, ref string, into map[string]string) error {
 	src, err := pack.ParseSource(repo)
 	if err != nil {
 		return err
 	}
 	if p := s.Lib.Manifest.FindPack(repo); p != nil {
 		src.Ref = p.Ref
+	} else if ref != "" {
+		src.Ref = ref
 	}
 	defer pack.Hold(src.Repo)()
 	clone, _, err := pack.Fetch(src)
@@ -356,6 +405,83 @@ func gitRemote(dir string) string {
 		return ""
 	}
 	return src.Repo
+}
+
+// otherLibrary is another skilldots library an agent entry links into,
+// with its entries and their directories as they really are.
+type otherLibrary struct {
+	lib     *library.Library
+	entries []engine.Entry
+	dirs    []string
+}
+
+// otherLibraryEntry finds the skilldots library other than this one that
+// dir lies in (the nearest directory above it with a skills.toml), and the
+// entry of that library dir is. It is nil, nil when dir is in no other
+// library, or that library cannot be read; the library and a nil entry
+// when dir is in it but none of its entries (a file of vendor/ it no
+// longer follows, say). seen caches libraries by root.
+func (s *Session) otherLibraryEntry(dir string, seen map[string]*otherLibrary) (*otherLibrary, *engine.Entry) {
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, nil
+	}
+	mine, err := filepath.EvalSymlinks(s.Lib.Root)
+	if err != nil {
+		mine = s.Lib.Root
+	}
+	for d := filepath.Dir(real); d != filepath.Dir(d); d = filepath.Dir(d) {
+		if d == mine {
+			return nil, nil
+		}
+		if !fsutil.Exists(filepath.Join(d, manifest.FileName)) {
+			continue
+		}
+		o, ok := seen[d]
+		if !ok {
+			o = nil
+			if lib, err := library.Open(d); err == nil {
+				if entries, _, err := engine.Resolve(lib, s.Reg); err == nil {
+					o = &otherLibrary{lib: lib, entries: entries, dirs: make([]string, len(entries))}
+					for i := range entries {
+						o.dirs[i], _ = filepath.EvalSymlinks(entries[i].Dir)
+					}
+				}
+			}
+			seen[d] = o
+		}
+		if o == nil {
+			return nil, nil
+		}
+		for i := range o.entries {
+			if o.dirs[i] == real && !o.entries[i].Missing {
+				return o, &o.entries[i]
+			}
+		}
+		return o, nil
+	}
+	return nil, nil
+}
+
+// knownTargets is names without the ones this machine's registry does not
+// know (a custom target of the other library).
+func (s *Session) knownTargets(names []string) []string {
+	out := []string{}
+	for _, n := range names {
+		if _, err := s.Reg.Get(n); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// ownDir is where an "own" proposal is copied: private/ for a private
+// one, else skills/.
+func (s *Session) ownDir(private bool) string {
+	if private {
+		return s.Lib.PrivateDir()
+	}
+	return s.Lib.SkillsDir()
 }
 
 // AdoptOutcome is the result of Adopt.
@@ -401,7 +527,8 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		case "pack":
 			pk := m.FindPack(p.Repo)
 			if pk == nil {
-				pk = &manifest.Pack{Repo: p.Repo}
+				// Ref: the one the other library's pack follows, if any.
+				pk = &manifest.Pack{Repo: p.Repo, Ref: p.Ref}
 				m.Packs = append(m.Packs, pk)
 			}
 			if !pk.UsesAll() {
@@ -443,7 +570,7 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			if name != p.Item.Name {
 				renamed[p.Item.Name] = name
 			}
-			dest := filepath.Join(lib.SkillsDir(), name)
+			dest := filepath.Join(s.ownDir(p.Private), name)
 			if err := s.writableInLibrary(dest); err != nil {
 				return nil, err
 			}
@@ -561,7 +688,8 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 		for i := range entries {
 			e := &entries[i]
 			switch {
-			case kind == "own" && e.Kind == engine.KindSkill && e.Dir == filepath.Join(lib.SkillsDir(), adoptedAs(p.Item)),
+			case kind == "own" && !p.Private && e.Kind == engine.KindSkill && e.Dir == filepath.Join(lib.SkillsDir(), adoptedAs(p.Item)),
+				kind == "own" && p.Private && e.Kind == engine.KindPrivate && e.Dir == filepath.Join(lib.PrivateDir(), adoptedAs(p.Item)),
 				kind == "pack" && e.Kind == engine.KindVendor && e.Origin == p.Repo && e.Name == p.Skill,
 				kind == "app" && e.Kind == engine.KindApp && e.Name == p.Item.Name:
 				return e
@@ -606,6 +734,8 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			p.Item.Path, adoptedAs(p.Item), e.Dir)
 	}
 	want := map[*engine.Entry][]string{}
+	// exact: the targets an entry adopted from another library had there.
+	exact := map[*engine.Entry][]string{}
 	var eorder []*engine.Entry
 	for _, p := range props {
 		if p.Kind == "skip" || p.Kind == "drop" || keep[p.Item.Target+"/"+p.Item.Name] {
@@ -619,8 +749,17 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			eorder = append(eorder, e)
 		}
 		want[e] = append(want[e], p.Item.Target)
+		if p.From != "" && p.Targets != nil {
+			exact[e] = p.Targets
+		}
 	}
 	for _, e := range eorder {
+		if t, ok := exact[e]; ok {
+			if !slices.Equal(t, e.TargetNames) {
+				setEntryTargets(m, e, t)
+			}
+			continue
+		}
 		next := dedupe(append(append([]string{}, e.TargetNames...), want[e]...))
 		if len(next) != len(e.TargetNames) {
 			setEntryTargets(m, e, next)
@@ -700,10 +839,48 @@ func (s *Session) Adopt(props []Proposal) (*AdoptOutcome, error) {
 			ap.Backups = append(ap.Backups, p.Item.Path+" → "+lib.Rel(to))
 		}
 	}
+	// Linking what was forced can leave another link redundant: an agent
+	// that reads ~/.agents/skills was linked on its own while the shared
+	// link was kept out by the entry just taken over. A second apply
+	// settles it, reported as part of this one.
+	again, err := s.Apply(ApplyOptions{})
+	if err != nil {
+		return nil, err
+	}
+	foldApply(ap, again)
 	if out.Failed > 0 {
 		return out, i18n.Errorf("%d repositories could not be fetched", out.Failed)
 	}
 	return out, nil
+}
+
+// foldApply merges into ap what a second apply changed: each op of again
+// that does something replaces ap's op for the same link, and a link the
+// first made and the second removed is neither.
+func foldApply(ap, again *ApplyOutcome) {
+	for _, op := range again.Plan.Ops {
+		if op.Action == "keep" || op.Action == "absent" {
+			continue
+		}
+		ops := ap.Plan.Ops[:0]
+		made := false
+		for _, o := range ap.Plan.Ops {
+			if o.Target.Name == op.Target.Name && o.Name == op.Name {
+				made = made || o.Action == "create"
+				continue
+			}
+			ops = append(ops, o)
+		}
+		if made && op.Action == "remove" {
+			ap.Plan.Ops = ops
+			continue
+		}
+		ap.Plan.Ops = append(ops, op)
+	}
+	ap.Changes = ap.Plan.ChangeList()
+	ap.Kept = ap.Plan.Counts()["keep"]
+	ap.Backups = append(ap.Backups, again.Backups...)
+	ap.Refused = append(ap.Refused, again.Refused...)
 }
 
 // sameContent reports whether the agent entry it holds exactly what dir
