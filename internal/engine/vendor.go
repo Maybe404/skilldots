@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -264,12 +266,12 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			// The skill's category changed (upstream moved it, or the
 			// categorisation rule did): rename the vendored directory.
 			old, err := skillDir(packDir, prev.Category, s.Name)
-			if err == nil && fsutil.Lexists(old) && !fsutil.Lexists(dest) {
-				if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-					return nil, err
-				}
-				if err := os.Rename(old, dest); err != nil {
-					return nil, err
+			if err == nil && fsutil.Lexists(old) && (!fsutil.Lexists(dest) || enclosing(old, dest) != "") {
+				if err := moveSkillDir(old, dest); errors.As(err, new(strandedError)) {
+					return nil, i18n.Errorf("upstream moved %s from %s to %s; moving its directory failed: %w", s.Name, lib.Rel(old), lib.Rel(dest), err)
+				} else if err != nil {
+					return nil, i18n.Errorf("upstream moved %s from %s to %s, but moving its directory failed: %w; it was left where it was",
+						s.Name, lib.Rel(old), lib.Rel(dest), err)
 				}
 				pruneEmpty(lib, filepath.Dir(old))
 				rep.Moved = append(rep.Moved, fmt.Sprintf("%s: %q → %q", s.Name, prev.Category, s.Category))
@@ -442,6 +444,126 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		rep.Warnings = append(rep.Warnings, i18n.T("the library is not a git repository, so upstream's versions are not recorded: merging a skill you changed finds no common version and reports every file both sides changed as a conflict (skd init or git init makes it one)"))
 	}
 	return rep, nil
+}
+
+// enclosing returns the spelling, on old's path, of dest when dest is a
+// directory that holds old (upstream moved x/x/ to x/): "" otherwise.
+// The file system decides, so a category differing only in case counts
+// where it folds case.
+func enclosing(old, dest string) string {
+	if len(dest) >= len(old) || old[len(dest)] != filepath.Separator || !strings.EqualFold(old[:len(dest)], dest) {
+		return ""
+	}
+	a, err1 := os.Lstat(old[:len(dest)])
+	b, err2 := os.Lstat(dest)
+	if err1 != nil || err2 != nil || !os.SameFile(a, b) {
+		return ""
+	}
+	return old[:len(dest)]
+}
+
+// moveSkillDir renames the vendored directory old to dest, which does
+// not exist, or holds old and nothing else but the directories leading
+// to it. When one lies inside the other (upstream moved x/ to x/x/, or
+// x/x/ to x/), old first goes to a free name beside them, so it is never
+// renamed into itself. On failure everything is put back as it was.
+func moveSkillDir(old, dest string) error {
+	outer := enclosing(old, dest)
+	if outer == "" && !(len(dest) > len(old) && dest[len(old)] == filepath.Separator && strings.EqualFold(dest[:len(old)], old)) {
+		undo, err := mkdirs(filepath.Dir(dest))
+		if err != nil {
+			return err
+		}
+		if err := rename(old, dest); err != nil {
+			undo()
+			return err
+		}
+		return nil
+	}
+	aside := old
+	if outer != "" {
+		aside = outer
+		// Only the directories leading to old may be in the way.
+		var in []string
+		filepath.WalkDir(outer, func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case p == old:
+				return filepath.SkipDir
+			case err != nil || !d.IsDir() || !fsutil.Within(p, old):
+				in = append(in, p)
+				return filepath.SkipDir
+			}
+			return nil
+		})
+		if len(in) > 0 {
+			return i18n.Errorf("%s is in the way", in[0])
+		}
+	}
+	tmp := aside + ".skd-move"
+	for i := 2; fsutil.Lexists(tmp); i++ {
+		tmp = fmt.Sprintf("%s.skd-move-%d", aside, i)
+	}
+	if err := rename(old, tmp); err != nil {
+		return err
+	}
+	putBack := func(err error) error {
+		_, perr := mkdirs(filepath.Dir(old))
+		if perr == nil {
+			perr = rename(tmp, old)
+		}
+		if perr != nil {
+			return strandedError{i18n.Errorf("%w, and putting %s back failed too (%v): it is at %s; move it back by hand", err, old, perr, tmp)}
+		}
+		return err
+	}
+	if outer != "" {
+		// Now only empty directories: remove them, innermost first.
+		for d := filepath.Dir(old); ; d = filepath.Dir(d) {
+			if err := os.Remove(d); err != nil {
+				return putBack(err)
+			}
+			if d == outer {
+				break
+			}
+		}
+	}
+	undo, err := mkdirs(filepath.Dir(dest))
+	if err != nil {
+		return putBack(err)
+	}
+	if err := rename(tmp, dest); err != nil {
+		undo()
+		return putBack(err)
+	}
+	return nil
+}
+
+// strandedError is a failed moveSkillDir that could not put the
+// directory back either.
+type strandedError struct{ error }
+
+func (e strandedError) Unwrap() error { return e.error }
+
+// mkdirs is os.MkdirAll that also returns how to remove again the
+// directories it created (those still empty).
+func mkdirs(dir string) (undo func(), err error) {
+	var made []string
+	for d := dir; !fsutil.Lexists(d); d = filepath.Dir(d) {
+		made = append(made, d)
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	undo = func() {
+		for _, d := range made {
+			os.Remove(d)
+		}
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		undo()
+		return nil, err
+	}
+	return undo, nil
 }
 
 // renameCase moves a vendored skill from name old to name new (which
