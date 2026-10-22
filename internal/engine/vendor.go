@@ -31,6 +31,9 @@ type SyncReport struct {
 	Moved         []string // "name: old category → new category" (directory renamed)
 	NoLicense     bool
 	NoLicenseList []string
+	// Own is set for the user's own repository (manifest.Pack.Own):
+	// front ends give no license warning for it.
+	Own bool `json:",omitempty"`
 	// Rejected lists upstream SKILL.md files that were not used (e.g. a
 	// name that is not a safe directory name).
 	Rejected []pack.Rejected
@@ -51,6 +54,10 @@ type SyncReport struct {
 	// were merged into the local copy (the copy as it was went to the
 	// trash first).
 	Merged []string `json:",omitempty"`
+	// Landed are skills upstream changed to exactly what the user has
+	// (their change landed upstream): the lock moves to the new version
+	// and nothing is merged or set aside. They are not in Changed.
+	Landed []string `json:",omitempty"`
 	// Shelved are skills upstream changed whose local changes conflict
 	// with upstream's: they were left as they are, waiting for `skd
 	// resolve`. They are not in Changed.
@@ -141,14 +148,16 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(upstream) == 0 {
+	// The user's own repository may have no skill yet: skills are made
+	// in it with skd new --in.
+	if len(upstream) == 0 && !p.Own {
 		if len(rejected) > 0 {
 			return nil, i18n.Errorf("%s: no usable SKILL.md (%s)", p.Repo, rejected[0])
 		}
 		return nil, i18n.Errorf("%s: no SKILL.md found", p.Repo)
 	}
 
-	rep := &SyncReport{Repo: p.Repo, NewCommit: commit, Upstream: upstream, Rejected: rejected}
+	rep := &SyncReport{Repo: p.Repo, NewCommit: commit, Upstream: upstream, Rejected: rejected, Own: p.Own}
 	lp := lib.Lock.Packs[p.Repo]
 	if lp == nil {
 		lp = &lock.Pack{Skills: map[string]*lock.Skill{}}
@@ -314,6 +323,13 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			}
 			rep.Unchanged = append(rep.Unchanged, s.Name)
 			continue
+		case fsutil.Exists(dest) && fsutil.Pristine(dest, newHash):
+			// The local copy already is upstream's new version: the
+			// user's change landed there (skd contribute, or the same
+			// edit made in both places). Nothing to merge or set aside.
+			rep.Landed = append(rep.Landed, s.Name)
+			lp.Skills[s.Name] = &lock.Skill{Category: s.Category, Hash: newHash}
+			continue
 		case fsutil.Exists(dest) && !fsutil.Pristine(dest, prev.Hash) && filesChanged(dest, prev.Hash):
 			// The user changed its files: merge upstream's changes in.
 			// (A copy that only gained what is not a file of it, a .git
@@ -374,7 +390,10 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 			continue
 		}
 		if !upNames[n] && p.Selected(n, ls.Category) {
-			rep.UpstreamGone = append(rep.UpstreamGone, n)
+			// A draft (skd new --in) is not upstream yet: it is not gone.
+			if !ls.IsDraft() {
+				rep.UpstreamGone = append(rep.UpstreamGone, n)
+			}
 			continue
 		}
 		rep.Dropped = append(rep.Dropped, n)
@@ -427,7 +446,7 @@ func Sync(lib *library.Library, p *manifest.Pack) (*SyncReport, error) {
 		}
 	}
 	lp.Commit, lp.Ref = commit, p.Ref
-	for _, l := range [][]string{rep.Changed, rep.Added, rep.Unchanged, rep.UpstreamGone, rep.Dropped, rep.Merged} {
+	for _, l := range [][]string{rep.Changed, rep.Added, rep.Unchanged, rep.UpstreamGone, rep.Dropped, rep.Merged, rep.Landed} {
 		sort.Strings(l)
 	}
 	sort.Slice(rep.Shelved, func(i, j int) bool { return rep.Shelved[i].Name < rep.Shelved[j].Name })

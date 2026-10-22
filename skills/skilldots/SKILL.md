@@ -147,7 +147,10 @@ You edit files yourself; `skd edit <skill>` is for opening a skill in the user's
 ```bash
 skd new <name>              # skills/<name>/SKILL.md, linked immediately
 skd new <name> --private    # private/: this machine only, never pushed
+skd new <name> --in <pack>  # in the user's own repository (below), pushed with skd contribute <pack>
 ```
+
+When the user keeps their skills in a GitHub repository of their own that is a pack here (`skd own --json` lists them), a new skill for that set belongs there: `skd new <name> --in <pack>`. Otherwise `skd new`.
 
 ## Your edits, contributing upstream, syncing your library
 
@@ -160,6 +163,7 @@ Who owns what, and where it lives:
 | upstream versions | every version vendored | `refs/skilldots/upstream/<pack>` in the library repository | pushed with `skd sync`, fetched by `skd clone` |
 | shelved / resolving state, contribution records | per skill | `skills.lock` (`shelved`, `resolving`, `contribution`) | with the library |
 | the user's own skills | theirs | `skills/` (published with the library), `private/` (this machine only) | `skd sync` (never `private/`) |
+| the user's own repository | theirs, a pack marked `own = true` | `vendor/<pack>/…`, like any pack; new skills there are drafts until pushed | upstream with `skd contribute <pack> --push`; the library with `skd sync` |
 
 **See the user's edits.** `skd list` marks an edited vendored skill with `✎` (`"Edited": true` in `skd list --json`). `skd diff <skill>` (`--json`: the file/hunk document) shows what the user changed against the upstream version the skill is based on — the same base an update merges against. When that version is not known (`"base": false`) skd says so and shows nothing; do not guess with `git diff`. Plain git: `git -C <library> diff -- vendor/<pack>/<category>/<skill>` shows only the uncommitted part, against the library's last commit, not against upstream.
 
@@ -176,6 +180,15 @@ skd contribute --refresh --json            # ask GitHub for the pull requests' s
 ```
 
 Always run `--dry-run` first, show the user the repository, the branch, the mode and the diff, and get their go-ahead; then run with `--yes` (without a terminal skd refuses to send without it). The skill must be based on upstream's current version: if `--dry-run` says `behind` (or "skd update first"), update (and resolve) first. `--pr` needs `gh` installed and logged in (`gh auth login`, the user's step); without push rights skd forks with gh and pushes the branch `skilldots/<skill>-<time>` to the fork. `--push` is refused when the user may not push or the branch is protected or moved on — suggest `--pr`. Pull requests are GitHub only. The commit is made with the user's git identity in a work clone in skd's cache (`<cache>/<owner>__<repo>.contrib`), never in the library. The record (`contribution` in `skills.lock`: kind, url, number, branch, state open/merged/closed/pushed) stays until an update brings the change back from upstream; then the skill is no longer edited and the record goes. Plain git equivalent (what skd does): clone upstream, copy the skill's files over its directory there, commit, `git push origin HEAD:<branch>` or push a branch and `gh pr create --repo <owner>/<repo> --head <branch>`.
+
+**The user's own repository.** A pack with `own = true` (`skd add <repo> --own`, `skd own <pack>`; `"Own": true` on its skills in `skd list --json`) is a repository of the user's: they edit its skills in place and create new ones with `skd new <name> --in <pack>`. `skd list` marks it `yours`; new skills not pushed yet are marked `+` (`"Draft": true`). Never mark a pack as own, or turn it off, without asking the user: it changes where `--push` sends commits. To send everything changed and new in the pack in one commit:
+
+```bash
+skd contribute <pack> --dry-run            # the skills it would send (+ new, at their path; ✎ edited), the diff, and whether it pulls first
+skd contribute <pack> --push --yes -m "<message>"
+```
+
+Same rule as for one skill: `--dry-run`, the user's go-ahead, then `--yes`. For an own pack skd pulls first when upstream moved (like `skd update <pack>`; a conflict shelves the skill and nothing is sent: resolve, then contribute again), and pulls back after the push (`pulledBack` in `--json`; `pullBackError` means the push went through, `skd update <pack>` finishes it). A name that is both a pack's alias and a skill is refused: use `owner/repo` for the pack or `<pack>:<skill>` for the skill. In update and outdated reports, `Landed`/`landed` are skills whose upstream change is what the library already has (the user's own push coming back): nothing changed locally, and it is not an update to mention.
 
 **Sync the library with its remote** (the user's own backup, and other machines):
 

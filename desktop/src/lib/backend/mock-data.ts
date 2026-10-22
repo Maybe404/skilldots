@@ -163,10 +163,10 @@ export function initialSkills(): Skill[] {
 
 export const CLAUDE_OVERRIDES = ["modern-python"]
 
-/** The commit each subscribed repository is vendored at (skills.lock). */
-const VENDORED: [repo: string, short: string, license: string, followAll?: boolean][] = [
+/** The commit each subscribed repository is vendored at (skills.lock); own: the person's own repository (own = true). */
+const VENDORED: [repo: string, short: string, license: string, followAll?: boolean, own?: boolean][] = [
   ["Maybe404/skilldots", "4c1e9a2", "MIT"],
-  ["Maybe404/ui-arsenal", "9b07d31", "MIT"],
+  ["Maybe404/ui-arsenal", "9b07d31", "MIT", false, true],
   ["kepano/obsidian-skills", "e52f8c0", "MIT", true],
   ["pbakaus/impeccable", "a1d4e77", "Apache-2.0"],
   ["stablyai/orca", "0f3b9d4", "MIT"],
@@ -177,10 +177,11 @@ const VENDORED: [repo: string, short: string, license: string, followAll?: boole
 ]
 
 export function initialPacks(): Pack[] {
-  return VENDORED.map(([repo, short, license, followAll = false]) => ({
+  return VENDORED.map(([repo, short, license, followAll = false, own = false]) => ({
     repo,
     commit: sha(short),
     followAll,
+    own,
     // None of the sample's pending updates adds or drops a skill, so the
     // count at the last update is what upstream has now.
     upstreamCount: CATALOG[repo]?.skills.length ?? 1,
@@ -451,6 +452,13 @@ export const CATALOG: Record<string, Omit<RepoPreview, "source" | "subscribed" |
       sk("orca-cli", "", "Drive Orca worktrees and terminals from the command line."),
     ],
   },
+  // The person's own repository, still empty: added as theirs (own), then skills are made in it.
+  "Maybe404/my-skills": {
+    commit: sha("1a2b3c4"),
+    license: "MIT",
+    rejected: [],
+    skills: [],
+  },
   "Maybe404/skilldots": {
     commit: sha("8d3f6b1"),
     license: "MIT",
@@ -547,6 +555,14 @@ export const SYNC_REMOTE: { path: string; key: string; file: string; base: strin
     remote: "2. Group commits by feature, newest first.",
   },
 ]
+
+/** A skill made in the person's own repository (ui-arsenal) and not pushed yet: a draft. */
+export const DRAFT = {
+  name: "motion-picker",
+  repo: "Maybe404/ui-arsenal",
+  path: "motion-picker",
+  description: "Pick an animation from the curated motion libraries for a UI change, with its licence checked.",
+}
 
 /** The sample's version of a skill before your edits (what the vendored copy was). */
 export function vendoredFiles(s: Skill): Record<string, string> {

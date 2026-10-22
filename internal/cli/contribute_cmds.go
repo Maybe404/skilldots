@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Maybe404/skilldots/internal/app"
+	"github.com/Maybe404/skilldots/internal/engine"
 	"github.com/Maybe404/skilldots/internal/i18n"
 )
 
@@ -54,17 +55,19 @@ func contributeCmd() *cobra.Command {
 	var pr, push, dry, refresh bool
 	var msg string
 	cmd := &cobra.Command{
-		Use:   "contribute [skill] [--pr | --push]",
+		Use:   "contribute [skill | pack] [--pr | --push]",
 		Short: i18n.T("Send your changes to a vendored skill upstream, as a pull request or a push"),
 		Long: i18n.T("Your changes to a vendored skill stay yours (skd update merges upstream's changes into them); nothing is ever " +
 			"sent upstream unless you run this. contribute <skill> --pr opens a pull request on the pack's GitHub repository " +
 			"from a branch skilldots/<skill>-<time> (pushed to the repository when you may push there, else to your fork, " +
 			"which gh makes); --push pushes the change straight to the pack's branch, when you may. The change is committed, " +
 			"with your git identity and -m as the message, in a clone of its own in the cache, never in the library. The " +
-			"skill must be based on upstream's current version (skd update first), and --pr needs gh, logged in. --dry-run " +
-			"shows the repository, the branch, what is possible and the diff, and sends nothing; without a terminal --yes is " +
-			"needed to send. Without a skill, contribute lists the contributions on record; --refresh asks GitHub for the " +
-			"state of the pull requests."),
+			"skill must be based on upstream's current version (skd update first), and --pr needs gh, logged in. " +
+			"contribute <pack> sends every skill of the pack you changed, and every skill you made in it (skd new --in), in " +
+			"one commit. For your own repository (skd own) it pulls first when the repository moved on, merging as skd update " +
+			"does, and pulls back after a push, so nothing is left marked as changed. --dry-run shows the repository, the " +
+			"branch, what is possible and the diff, and sends nothing; without a terminal --yes is needed to send. Without a " +
+			"skill, contribute lists the contributions on record; --refresh asks GitHub for the state of the pull requests."),
 		Args: maximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
@@ -98,7 +101,16 @@ func contributeCmd() *cobra.Command {
 			if pr && push {
 				return i18n.Errorf("--pr and --push: pick one")
 			}
-			o, err := c.ContributeOptions(ctx, app.KeyRef(args[0]))
+			whole, err := contributesPack(c, args[0])
+			if err != nil {
+				return err
+			}
+			var o *app.ContributeOptions
+			if whole != "" {
+				o, err = c.ContributePackOptions(ctx, whole)
+			} else {
+				o, err = c.ContributeOptions(ctx, app.KeyRef(args[0]))
+			}
 			if err != nil {
 				return err
 			}
@@ -114,17 +126,35 @@ func contributeCmd() *cobra.Command {
 					return nil
 				}
 				c.printf("%s  %s %s  %s\n", bold(txt(args[0])), dim(i18n.T("to")), txt(o.Repo), dim(i18n.Sprintf("branch %s", txt(o.Branch))))
+				if whole != "" || len(o.Drafts) > 0 {
+					for _, n := range o.Skills {
+						if p, isNew := o.Paths[n]; isNew {
+							c.printf("  %s %s\n", ok("+"), i18n.Sprintf("%s  new, at %s", txt(n), txt(p)))
+						} else {
+							c.printf("  %s %s\n", accent("✎"), txt(n))
+						}
+					}
+				}
 				c.printf("  %s %s · %s %s · gh %s\n", dim(i18n.T("push")), yesNo(o.CanPush), dim(i18n.T("pull request")), yesNo(o.CanPR), o.GH)
+				if o.Pull {
+					c.printf("  %s\n", accent(i18n.Sprintf("%s moved on: it is pulled first, merging as skd update does", o.Repo)))
+				}
 				if o.Reason != "" {
 					c.printf("  %s\n", warn(o.Reason))
 				}
-				if d, err := c.LocalChanges(ctx, app.KeyRef(args[0])); err == nil && d.Base {
-					for _, f := range d.Files {
-						printFileDiff(c, d.Name, f)
+				for _, n := range o.Skills {
+					if d, err := c.LocalChanges(ctx, app.KeyRef(qualified(c, o.Repo, n))); err == nil && d.Base {
+						for _, f := range d.Files {
+							printFileDiff(c, d.Name, f)
+						}
 					}
 				}
 				if mode == "" {
-					c.printf("%s\n", dim(i18n.Sprintf("skd contribute %s --pr opens a pull request · --push pushes to %s", args[0], o.Branch)))
+					if o.Own {
+						c.printf("%s\n", dim(i18n.Sprintf("skd contribute %s --push pushes to %s · --pr opens a pull request", args[0], o.Branch)))
+					} else {
+						c.printf("%s\n", dim(i18n.Sprintf("skd contribute %s --pr opens a pull request · --push pushes to %s", args[0], o.Branch)))
+					}
 				}
 				return nil
 			}
@@ -136,13 +166,26 @@ func contributeCmd() *cobra.Command {
 				if !isTerminal() || flags.json {
 					return i18n.Errorf("contribute sends your changes upstream (%s); run it with --dry-run to see what it sends, then with --yes", target)
 				}
-				if !confirm(i18n.Sprintf("Send %s's changes: %s?", args[0], target)) {
+				q := i18n.Sprintf("Send %s's changes: %s?", args[0], target)
+				if whole != "" {
+					q = i18n.Sprintf("Send %s (%s): %s?", plural(len(o.Skills), "skill"), strings.Join(o.Skills, ", "), target)
+				}
+				if !confirm(q) {
 					c.printf("%s\n", dim(i18n.T("nothing sent")))
 					return nil
 				}
 			}
-			out, err := c.Contribute(ctx, app.KeyRef(args[0]), mode, msg)
+			var out *app.ContributeOutcome
+			if whole != "" {
+				out, err = c.ContributePack(ctx, whole, mode, msg)
+			} else {
+				out, err = c.Contribute(ctx, app.KeyRef(args[0]), mode, msg)
+			}
 			if out != nil {
+				if out.Pulled != nil {
+					c.printf("%s %s\n", ok("✓"), i18n.Sprintf("pulled %s first", out.Repo))
+					printReport(c, out.Pulled)
+				}
 				c.jsonOut(out)
 			}
 			if err != nil {
@@ -153,6 +196,12 @@ func contributeCmd() *cobra.Command {
 			} else {
 				c.printf("%s %s\n", ok("✓"), i18n.Sprintf("pushed to %s's %s", out.Repo, out.Branch))
 			}
+			if out.PulledBack != nil {
+				c.printf("%s %s\n", ok("✓"), i18n.Sprintf("pulled it back: %s now match %s", strings.Join(out.Skills, ", "), out.Repo))
+			}
+			if out.PullBackError != "" {
+				c.printf("%s %s\n", warn("!"), i18n.Sprintf("pulling it back failed (%s): skd update %s finishes it", txt(out.PullBackError), out.Repo))
+			}
 			return nil
 		},
 	}
@@ -162,6 +211,36 @@ func contributeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&dry, "dry-run", false, i18n.T("show where it would go and the diff; send nothing"))
 	cmd.Flags().BoolVar(&refresh, "refresh", false, i18n.T("ask GitHub for the state of the pull requests on record"))
 	return cmd
+}
+
+// contributesPack tells whether what contribute was given names a pack
+// (its repository, then) rather than a skill (""): a name both could be
+// is refused, with the two spellings that tell them apart.
+func contributesPack(c *ctx, arg string) (string, error) {
+	p := c.lib.Manifest.FindPack(arg)
+	if p == nil {
+		return "", nil
+	}
+	entries, err := c.Resolve()
+	if err != nil {
+		return "", err
+	}
+	if e, err := c.Lookup(entries, arg); err == nil && e != nil && arg != p.Repo {
+		return "", i18n.Errorf("%q is both the pack %s and the skill %s: say skd contribute %s for the pack, or skd contribute %s for the skill", arg, p.Repo, e.LinkName, p.Repo, engine.Qualified(*e))
+	}
+	return p.Repo, nil
+}
+
+// qualified is the key of a pack's skill by its link name.
+func qualified(c *ctx, repo, link string) string {
+	if entries, err := c.Resolve(); err == nil {
+		for _, e := range entries {
+			if e.Kind == engine.KindVendor && e.Origin == repo && e.LinkName == link {
+				return engine.Qualified(e)
+			}
+		}
+	}
+	return link
 }
 
 func yesNo(b bool) string {

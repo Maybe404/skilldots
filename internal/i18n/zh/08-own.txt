@@ -1,0 +1,151 @@
+# Your own repository: skd own, skd new --in, skd contribute <pack>, landed.
+
+@  (already what you have)
+= （已经和你手上的一样）
+
+@ %d landed
+= %d 个已落地
+
+@ landed
+= 已落地
+
+@ %q is both the pack %s and the skill %s: say skd contribute %s for the pack, or skd contribute %s for the skill
+= %q 既是来源 %s，也是 skill %s：要整个来源请用 skd contribute %s，要这个 skill 请用 skd contribute %s
+
+@ %q is not a place skd looks for skills (a hidden, test or dependency directory)
+= %q 不是 skd 查找 skill 的地方（隐藏目录、测试目录或依赖目录）
+
+@ %q is not a relative path in the repository
+= %q 不是仓库里的相对路径
+
+@ %s  new, at %s
+= %s  新建，位置 %s
+
+@ %s already has a skill named %s
+= %s 里已经有名为 %s 的 skill
+
+@ %s already has a skill named %s: skd update %s brings it
+= %s 里已经有名为 %s 的 skill：运行 skd update %s 把它拉下来
+
+@ %s are not based on upstream's current version: skd update %s first (and skd resolve, if one is shelved)
+= %s 不是基于上游当前的版本：请先运行 skd update %s（如果有被搁置的，再运行 skd resolve）
+
+@ %s contains no SKILL.md (if it is your own repository, add it with --own: skills can then be made in it with skd new <name> --in %s)
+= %s 里没有 SKILL.md（如果这是你自己的仓库，请加上 --own 添加：之后可以用 skd new <名称> --in %s 在里面新建 skill）
+
+@ %s has no changes of yours to contribute: no skill of it is changed, and no new one was made in it (skd list %s marks them)
+= %s 里没有你要提交的改动：没有改过的 skill，也没有在里面新建 skill（skd list %s 会标出来）
+
+@ %s has not been fetched: skd update %s first
+= %s 还没有拉取过：请先运行 skd update %s
+
+@ %s is excluded by skip = [%q] of %s in skills.toml, which excludes other skills too: edit skills.toml first
+= %s 被 skills.toml 中 %[3]s 的 skip = [%[2]q] 排除了，这条规则也排除了别的 skill：请先编辑 skills.toml
+
+@ %s is marked as your own: skd new <name> --in %s makes a skill in it, skd contribute %s --push pushes what you change
+= %s 已标记为你自己的仓库：skd new <名称> --in %s 在里面新建 skill，skd contribute %s --push 推送你的改动
+
+@ %s is no longer marked as your own
+= %s 不再标记为你自己的仓库
+
+@ %s is not marked as your own repository; skills are made only in your own (skd own %s marks it, if it is yours)
+= %s 没有标记为你自己的仓库；只能在你自己的仓库里新建 skill（如果它是你的，运行 skd own %s 标记）
+
+@ %s is the whole repository %s: contribute it on its own
+= %s 就是整个仓库 %s：请单独提交它
+
+@ %s is yours: skd new <name> --in %s makes a skill in it, skd contribute %s --push pushes what you change
+= %s 是你自己的仓库：skd new <名称> --in %s 在里面新建 skill，skd contribute %s --push 推送你的改动
+
+@ %s looks like your own repository (you administer it on GitHub). Mark it as yours (new skills can be made in it, and what you change is pushed back)?
+= %s 看起来是你自己的仓库（你在 GitHub 上是它的管理员）。标记为你的仓库吗（可以在里面新建 skill，你的改动会推送回去）？
+
+@ %s moved on: it is pulled first, merging as skd update does
+= %s 有新提交：会先拉取，像 skd update 一样合并
+
+@ %s new, made here and not pushed yet (skd contribute %s --push sends it)
+= %s 新建的，在这里建、还没推送（skd contribute %s --push 推送）
+
+@ %s you changed it and have not pushed it (skd diff <skill>; skd contribute %s --push sends it)
+= %s 你改过、还没推送（skd diff <skill>；skd contribute %s --push 推送）
+
+@ %s: %s already exists in %s, and is not a skill: choose another place for it (skd new %s --in %s --path <dir>, after skd remove %s)
+= %s：%s 已经存在于 %s 里，而且不是 skill：请换个位置（先 skd remove %[6]s，再 skd new %[4]s --in %[5]s --path <目录>）
+
+@ --path is the place in your own repository: give the repository with --in
+= --path 是你自己仓库里的位置：请用 --in 指定仓库
+
+@ --private and --in: a skill in your own repository is pushed there; pick one
+= --private 和 --in：你自己仓库里的 skill 会推送到那里；请二选一
+
+@ Mark a pack as your own repository, or list the ones that are
+= 把一个来源标记为你自己的仓库，或列出已标记的
+
+@ Marks a pack as your own repository (own = true in skills.toml): skills can be made in it (skd new <name> --in <pack>), skd contribute <pack> --push sends what you change and pulls it back, and no license warning is given. --off takes the mark away; nothing else changes. Without a pack, own lists the packs marked.
+= 把一个来源标记为你自己的仓库（skills.toml 里的 own = true）：可以在里面新建 skill（skd new <名称> --in <来源>），skd contribute <来源> --push 推送你的改动并拉回来，也不再提示许可证。--off 去掉标记，别的都不变。不带来源时列出已标记的来源。
+
+@ Scaffolds a skill of your own and links it: in skills/ (pushed with the library by skd sync), in private/ with --private (never pushed), or with --in in your own repository (a pack marked own = true, skd own). There it is a draft: in vendor/ like the pack's other skills, edited in place, and in the repository once skd contribute <pack> --push sends it. Its place there is --path <dir> (a directory of the repository, . for its top), else beside most of the repository's skills (skills/ when it has none).
+= 新建一个你自己的 skill 骨架并链接好：放在 skills/（随资料库由 skd sync 推送），加 --private 放在 private/（从不推送），或用 --in 放进你自己的仓库（标记了 own = true 的来源，见 skd own）。放进仓库的是草稿：和这个来源的其他 skill 一样在 vendor/ 里，原地编辑，skd contribute <来源> --push 推送之后才进入仓库。它在仓库里的位置是 --path <目录>（仓库里的目录，. 表示顶层），不指定时放在仓库里大多数 skill 所在的目录（没有 skill 时为 skills/）。
+
+@ Send %s (%s): %s?
+= 发送 %s（%s）：%s？
+
+@ create it in your own repository (a pack marked own), to push there
+= 建在你自己的仓库里（标记了 own 的来源），以便推送到那里
+
+@ created %s in %s, at %s there once pushed
+= 已新建 %[1]s，在 %[2]s 里，推送后位于 %[3]s
+
+@ edit it in place (%s) · skd contribute %s --push sends it
+= 原地编辑（%s）· skd contribute %s --push 推送
+
+@ no pack is marked as your own · skd own <pack> marks one
+= 没有标记为你自己仓库的来源 · skd own <来源> 可以标记
+
+@ not every skill is based on upstream's current version: skd update %s first (and skd resolve, if one is shelved)
+= 不是每个 skill 都基于上游当前的版本：请先运行 skd update %s（如果有被搁置的，再运行 skd resolve）
+
+@ pulled %s first
+= 已先拉取 %s
+
+@ pulled %s, but %s conflict with what is there: nothing was sent; skd resolve, then contribute again
+= 已拉取 %s，但 %s 和仓库里的内容冲突：什么都没发送；请先 skd resolve，再重新提交
+
+@ pulled %s: %w
+= 已拉取 %s：%w
+
+@ pulled it back: %s now match %s
+= 已拉回：%s 现在和 %s 一致
+
+@ pulling %s before pushing: %w
+= 推送前拉取 %s：%w
+
+@ pulling it back failed (%s): skd update %s finishes it
+= 拉回失败（%s）：运行 skd update %s 完成
+
+@ pushed to %s, but pulling it back failed (%v): skd update %s finishes it
+= 已推送到 %s，但拉回失败（%v）：运行 skd update %s 完成
+
+@ skd contribute %s --push pushes to %s · --pr opens a pull request
+= skd contribute %s --push 推送到 %s · --pr 提 PR
+
+@ take the mark away
+= 去掉标记
+
+@ the library already has a skill named %s (%s): pick another name
+= 资料库里已经有名为 %s 的 skill（%s）：请换个名字
+
+@ the repository is a single skill at its top, where another skill would be nested in it and never found: give its place with --path
+= 这个仓库顶层本身就是一个 skill，新的 skill 会嵌在它里面、永远找不到：请用 --path 指定位置
+
+@ the repository is your own: skills can be made in it (skd new --in) and changes pushed back; it may have no skill yet
+= 这是你自己的仓库：可以在里面新建 skill（skd new --in）并把改动推送回去；仓库里可以还没有 skill
+
+@ these skills are the same as upstream's: nothing to contribute
+= 这些 skill 和上游的一样：没有可提交的
+
+@ with --in: the directory of the repository it goes in (. for the top)
+= 配合 --in：放进仓库里的哪个目录（. 表示顶层）
+
+@ yours
+= 你的

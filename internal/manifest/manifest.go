@@ -56,6 +56,12 @@ type Pack struct {
 	Targets *[]string `toml:"targets,omitempty"`
 	// Skill holds per-skill overrides keyed by upstream skill name.
 	Skill map[string]*SkillOverride `toml:"skill,omitempty"`
+	// Own marks the repository as the user's own: skills can be created
+	// in it (skd new --in), what the user changes is pushed back to it
+	// (skd contribute <pack> --push pulls first and pulls back after),
+	// and no license warning is given. An older skd ignores it, and drops
+	// it when it saves the manifest.
+	Own bool `toml:"own,omitempty"`
 }
 
 // SkillOverride tunes one skill inside a pack.
@@ -102,7 +108,7 @@ func Load(path string) (*Manifest, error) {
 // settings that commands print or pass on.
 var known = []string{
 	"targets.default", "targets.disabled", "targets.custom.*", "targets.custom.*.path", "targets.custom.*.mode",
-	"pack.repo", "pack.ref", "pack.alias", "pack.use", "pack.skip", "pack.targets",
+	"pack.repo", "pack.ref", "pack.alias", "pack.use", "pack.skip", "pack.targets", "pack.own",
 	"pack.skill.*", "pack.skill.*.as", "pack.skill.*.targets",
 	"app.name", "app.path", "app.targets", "local.name", "local.targets",
 }

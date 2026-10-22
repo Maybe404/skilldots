@@ -68,6 +68,7 @@ Fetches a repository and lets you choose skills interactively, or with flags:
 - skd never asks for a username or password: a private repository over HTTPS needs a git credential helper, or use its SSH address. When a repository cannot be fetched, skd says why (not found or private, no SSH access, no such ref, network), with git's own words after it.
 
 - `--skill x`, `--category c`, `--all`. `--all` follows everything; names given with it are only checked.
+- `--own` marks the repository as your own (`own = true`, see [Your own repository](#your-own-repository)); it may then have no skill yet, and is followed whole. Without it, at a terminal, skd asks when GitHub says you administer the repository (gh installed and logged in). No license warning is given for your own repository.
 - On a pack that follows `"*"`, `--skill x` takes `x` out of `skip`. If a wildcard such as `eng/*` excludes it, the command fails and tells you to edit `skills.toml`.
 - With no source at a terminal, it asks for one.
 
@@ -140,6 +141,7 @@ Checks upstream without changing anything. Per pack it lists:
 - skills new upstream since the last update (or since `add`, for a pack never updated);
 - skills gone upstream;
 - skills that only moved to another directory, as `moved`. A move is not an update: a pack with nothing but moves is not counted, and `U` in the dashboard skips it, though `u` or `skd update` on it still renames the vendored directory to the new path.
+- skills upstream changed to exactly what you have, as `landed` (your change landed there, after `skd contribute`). Not an update either; `skd update` moves the lock to that version.
 
 It exits non-zero if a pack could not be fetched.
 
@@ -162,6 +164,7 @@ A skill you edited is merged, not replaced, the way `git pull` merges:
 - Merged cleanly: the copy as it was goes to the trash (reason `merged`), the merge is written in its place. The update's `--json` report lists the skill in `Changed` and `Merged`; the printed report and the history list it once, under merged (a history record's `changed` leaves it out). The skill stays edited, so the next update merges again.
 - Conflicts: the update of that skill is **shelved**. Its directory and its lock hash stay as they were; `skills.lock` records `shelved` (the upstream commit), `upstream` (that version's hash) and `conflicts` (the files); older skd versions ignore these. The rest of the pack is updated and its commit moves on. The report lists the skill under `shelved`, with the files and the command that resolves it. `skd list` marks it `shelved`, and `skd outdated` counts it as an update (`shelved` in `--json`).
 - A later update merges a shelved skill again against the newest upstream version; it clears the shelf when upstream went back to the base or the merge is clean. A skill being resolved is left alone.
+- Upstream's new version is exactly your copy (what you contributed came back, or the same edit was made in both places): the skill **landed**. The lock moves to that version, nothing is merged or set aside in the trash, and the report lists it under `Landed` (`landed` in the history), not under changed or merged. The skill is no longer edited.
 
 Every update also records the upstream version vendored, as a commit on `refs/skilldots/upstream/<pack>` in the library's repository (see [design](design.md)): the next merge's base, and what `history --diff` reads. In a library that is not a git repository nothing is recorded, and an update that merged or shelved a skill says so.
 
@@ -195,24 +198,41 @@ What each update changed: when, old → new commit, the skills changed / merged 
 
 Your changes to a vendored skill: its files against the upstream version they are based on (the one `skills.lock` records, found in the library's upstream snapshots or its git history, as an update's merge finds its base), as a unified diff. When that version is not found it says so and shows nothing. `--json` prints the file/hunk document (`base` false when the version was not found). `skd list` marks a vendored skill you changed with `✎` (`Edited` in `--json`).
 
-### `skd contribute [skill] [--pr | --push] [-m msg] [--dry-run] [--yes] [--refresh]`
+### `skd contribute [skill | pack] [--pr | --push] [-m msg] [--dry-run] [--yes] [--refresh]`
 
 Sends your changes to a vendored skill upstream. Nothing is ever sent unless you run this; without a terminal it needs `--yes`.
 
 - Target: the pack's repository at its ref (the default branch when none; a ref that is not a branch is refused). The skill's place there comes from scanning upstream.
-- The skill must be edited and based on upstream's current version, not shelved: otherwise "skd update first".
+- The skill must be edited and based on upstream's current version, not shelved: otherwise "skd update first" (your own repository pulls instead, below).
 - The change is made in a clone of its own in the cache (`<cache>/<repo>.contrib`, never the shallow clone updates use, never the library): reset to upstream's tip, the skill's files mirrored over its directory there (deletions too), committed with your git identity and `-m` (default `Update <skill>` and a line `Edited with skilldots`).
 - `--push` pushes to the pack's branch when you may (GitHub: asked through gh; elsewhere `git push --dry-run`); a rejected push (a protected branch, upstream moved on) stops with a pointer to `--pr`.
 - `--pr` (GitHub only, needs gh logged in) pushes a branch `skilldots/<skill>-<yyyymmdd-hhmm>` to the repository when you may push there, else to your fork (gh forks it, or reuses your fork), and opens the pull request with `gh pr create`. Elsewhere than GitHub: push when you may, or send a patch (`git format-patch`).
 - `--dry-run` (or no mode) prints the repository, the branch, what is possible and why not, and the diff; it sends nothing (it fetches upstream).
-- The contribution is recorded in `skills.lock` (`contribution`: kind, url, number, branch, state, at) until an update brings upstream to your version. `skd contribute` lists the records; `--refresh` (and `skd outdated`, best effort) asks GitHub for the pull requests' state.
-- `--json` prints `{repo, mode, branch, url, number, pushed}` (the options document with `--dry-run`).
+- The contribution is recorded in `skills.lock` (`contribution`: kind, url, number, branch, state, at) until an update brings upstream to your version (the skill [landed](#skd-update-pack---commit)). `skd contribute` lists the records; `--refresh` (and `skd outdated`, best effort) asks GitHub for the pull requests' state.
+- `--json` prints `{repo, mode, branch, url, number, pushed, skills, pulled, pulledBack, pullBackError}` (the options document with `--dry-run`, which also has `own`, `pull`, `skills`, `drafts` and `paths`).
+
+`skd contribute <pack>` sends every skill of the pack you changed and every skill you made in it (`skd new --in`), in one commit (default message `Add c; update a, b`) and, with `--pr`, one pull request from `skilldots/<repo>-<time>`. A name that is both a pack and a skill is refused, with the two spellings that tell them apart (`owner/repo` for the pack, `owner/repo:skill` for the skill).
+
+For [your own repository](#your-own-repository), contribute also pulls, as `git pull` and `git push` would:
+
+- **Before:** when the repository moved on (`pull` in the options), the pack is updated first, merging as `skd update` does. If that shelves one of the skills being sent, nothing is sent: `skd resolve`, then contribute again.
+- **After a push:** the pack is updated again, so what was pushed is the version the lock records: the skills land, are no longer marked as changed, and no later update reports them. If that update fails, the push stands and `pullBackError` says so; `skd update <pack>` finishes it.
 
 ## Changing skills
 
-### `skd new <name> [--private]`
+### `skd new <name> [--private | --in <pack> [--path <dir>]]`
 
 Scaffolds a skill of your own and links it. The name follows the [skill name rule](../README.md#how-skills-are-found-in-a-repository).
+
+- In `skills/` by default, published with the library by `skd sync`; in `private/` with `--private`, never pushed.
+- `--in <pack>` makes it in [your own repository](#your-own-repository) instead, as a draft: in `vendor/` like the pack's other skills (linked, edited in place), and in the repository once `skd contribute <pack> --push` sends it. `skd list` marks it `+`. The pack's `use` gets its name unless the pack follows everything.
+- Its place in the repository is `--path <dir>` (a directory of the repository, `.` for its top), else the directory most of the repository's skills are in (`skills/` when it has none). A hidden, test or dependency directory is refused (skd's scan would never find the skill there), and so is a repository that is one skill at its top unless `--path` says where.
+- A name the library already uses is refused.
+- `--json` prints `{created, path, pack, repoPath, draft, apply}` with `--in`.
+
+### `skd own [pack] [--off]`
+
+Marks a pack as your own repository (`own = true` in `skills.toml`), `--off` takes the mark away; without a pack it lists the packs marked. See [Your own repository](#your-own-repository).
 
 ### `skd fork <skill> [--private] [--as name]`
 
@@ -240,6 +260,38 @@ Unlinks a skill everywhere and moves its directory to the library trash; `skd tr
 Deletes a pack from the manifest, the lock, `vendor/` and every agent directory. What it takes out goes to the trash.
 
 Here and in every command that takes a pack (`update`, `list`, `enable` and the rest), a pack is named by `owner/repo`, by the URL or local path it was added from (`file://` URLs included), or by the last part of its repository name when only one pack has it.
+
+## Your own repository
+
+A GitHub repository of skills you keep yourself is a pack like any other, marked `own = true`:
+
+```toml
+[[pack]]
+repo = "me/my-skills"
+own  = true
+use  = ["*"]
+```
+
+```bash
+skd add me/my-skills --all --own        # or: skd own me/my-skills, for a pack you already follow
+skd new notes --in me/my-skills         # a draft in vendor/, linked; edit it in place
+skd contribute me/my-skills --dry-run   # what would be sent: changed skills, drafts and where they go, the diff
+skd contribute me/my-skills --push --yes
+skd update me/my-skills                 # what you pushed from elsewhere, merged into your copies
+```
+
+What the mark changes:
+
+- Skills can be made in it (`skd new --in`), and `skd contribute <pack>` sends every change and new skill at once, pulling before and after a push.
+- It may have no skill yet (`skd add --own`).
+- No license warning (`add`, `update`, the dashboard): the skills are yours to redistribute.
+- The wording: your edits are "not pushed" rather than "changed against upstream".
+
+What it does not change: where the skills are kept (`vendor/`), how updates merge and shelve, links and targets, the pinned ref. Take the mark away (`skd own <pack> --off`) and the pack is an ordinary one again.
+
+An older skd ignores `own`, and drops it when it saves `skills.toml`; it ignores a draft's `draft` and `path` in `skills.lock` too, and drops them when it saves it. Nothing is lost: a vendored skill with no hash is a draft all the same, its place worked out again when it is pushed, and `skd own <pack>` marks the pack again.
+
+**Or make your repository the library.** If the repository is private and only for your own machines, it can be the library itself: your skills in `skills/`, pushed with `skd sync`. Everything the library holds is pushed with it, though: `skills.toml`, `skills.lock`, the history, the vendored copies of other people's skills in `vendor/` and the upstream snapshots. That is no place for a public repository of skills (it would redistribute everyone else's, and `npx skills add` would find them too), its skills must sit in `skills/`, and there is one library: so a public or shared repository is better kept as an own pack.
 
 ## Taking over and cleaning up
 

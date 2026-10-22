@@ -68,6 +68,10 @@ func (s *Session) LocalChanges(ctx context.Context, r Ref) (*SkillDiff, error) {
 	}
 	sd.Local = true
 	base := engine.FindBase(s.Lib, e.Origin, e.Name, []string{ls.Category}, ls.Hash)
+	if ls.IsDraft() {
+		// Made here (skd new --in): every file of it is the user's.
+		base = engine.FileSet{}
+	}
 	if base == nil {
 		sd.LocalUnknown = true
 		return sd, nil

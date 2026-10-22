@@ -69,6 +69,8 @@ function Row({ h }: { h: HistoryEntry }) {
       ["skillChanged", h.changed],
       ["skillMerged", h.merged ?? []],
       ["skillShelved", shelvedNames(h)],
+      // Your own change, come back from upstream: already what you have.
+      ["skillLanded", h.landed ?? []],
       ["added", h.added],
       ["skillNew", h.new ?? []],
       ["skillGone", h.gone],
@@ -101,7 +103,9 @@ function Row({ h }: { h: HistoryEntry }) {
       <div role="cell" className="min-w-0">
         {kinds.map(([k, list]) => (
           <div key={k} className="flex gap-2 fs-body">
-            <span className="flex-none text-mut">{t(k)}</span>
+            <span className="flex-none text-mut" title={k === "skillLanded" ? t("skillLandedHint") : undefined}>
+              {t(k)}
+            </span>
             <span className="pt-px fs-meta text-hue-ink">{list.join(", ")}</span>
           </div>
         ))}
@@ -138,7 +142,7 @@ function Row({ h }: { h: HistoryEntry }) {
   )
 }
 
-const STATUS: Record<SkillDiff["status"], MessageKey> = { changed: "skillChanged", added: "added", moved: "skillMoved" }
+const STATUS: Record<SkillDiff["status"], MessageKey> = { changed: "skillChanged", added: "added", moved: "skillMoved", landed: "skillLanded" }
 
 /** What one recorded update changed, skill by skill, with the update dialog's diff rows; merged and shelved skills marked. */
 function HistoryDiffDialog({ h, onClose }: { h: HistoryEntry; onClose: () => void }) {

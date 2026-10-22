@@ -43,6 +43,8 @@ export default function App() {
 
 function Root() {
   const { ready, status, loadError, loadStage, retryLoad, t } = useApp()
+  // First run stays on screen after the library exists: a new library has one more (skippable) step.
+  const [firstRun, setFirstRun] = React.useState(false)
   if (loadError) {
     const stageLabel = loadError.stage === "config" ? t("loadingConfig") : loadError.stage === "checking" ? t("loadingCheck") : t("loadingLibrary")
     return (
@@ -87,7 +89,8 @@ function Root() {
       </main>
     )
   }
-  if (!status?.root) return <Onboarding />
+  if (!status?.root && !firstRun) setFirstRun(true)
+  if (!status?.root || firstRun) return <Onboarding onDone={() => setFirstRun(false)} />
   return <Shell />
 }
 

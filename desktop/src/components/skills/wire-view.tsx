@@ -568,8 +568,8 @@ function SkillRow({
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
             {hasConflicts(skill) && <ConflictMark />}
-            {skill.edited && <EditedMark />}
-            {skill.contribution && <ContributionMark contribution={skill.contribution} />}
+            {skill.edited && <EditedMark skill={skill} />}
+            {skill.contribution && <ContributionMark contribution={skill.contribution} own={skill.own} />}
           </span>
           <span className="mt-0.5 block truncate fs-meta text-mut">{sourceText}</span>
         </span>

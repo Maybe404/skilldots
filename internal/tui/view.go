@@ -376,6 +376,9 @@ func (m Model) packHeader(p Pack, w int) []string {
 	if p.When != "" {
 		meta = append(meta, sg(" · "+p.When, t.Muted))
 	}
+	if p.Own {
+		meta = append(meta, sg(" · ", t.Muted), sg(i18n.T("yours"), t.OK))
+	}
 	if p.NoLicense {
 		meta = append(meta, sg(" · ", t.Muted), sg(i18n.T("no license"), t.Warn))
 	} else if p.License != "" {

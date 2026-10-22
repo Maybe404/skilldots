@@ -43,8 +43,10 @@ function fill(text: string, parts: Record<string, React.ReactNode>): React.React
  * Add skills from a repository, or (adjust, opened from a source) change
  * which of its skills the library uses: ticking adds, unticking an installed
  * one removes it (unlinked everywhere, its files moved to the trash).
+ * "这是我的仓库" adds it as your own repository (own): ticked when GitHub
+ * says you administer it, and the only way to add one with no skill yet.
  */
-export function AddDialog({ initial, adjust, onClose }: { initial?: string; adjust?: boolean; onClose: () => void }) {
+export function AddDialog({ initial, adjust, own: ownAsked, onClose }: { initial?: string; adjust?: boolean; own?: boolean; onClose: () => void }) {
   const { t, runTask, reload, agents: allAgents, openDialog, packs, skills } = useApp()
   const [input, setInput] = React.useState(initial ?? "")
   const [parsed, setParsed] = React.useState<ParsedSource | null>(null)
@@ -58,6 +60,9 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
   const [followAll, setFollowAll] = React.useState(false)
   const [targets, setTargets] = React.useState<Set<string>>(() => new Set(allAgents.filter((a) => a.isDefault && a.enabled).map((a) => a.name)))
   const [alias, setAlias] = React.useState("")
+  const [own, setOwn] = React.useState(!!ownAsked)
+  /** The person ticked or unticked it for this read: GitHub's answer arriving later does not override them. */
+  const ownChosen = React.useRef(false)
   const [query, setQuery] = React.useState("")
   const [adding, setAdding] = React.useState(false)
   const pack = adjust ? packs.find((p) => p.repo === initial) : undefined
@@ -96,6 +101,10 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
       const p = await backend.show(src)
       if (seq !== readSeq.current) return
       setPreview(p)
+      // Your own repository: as asked, as marked already, or as GitHub says (you administer it); never an error.
+      setOwn(!!ownAsked || !!packs.find((x) => x.repo === p.source.repo)?.own)
+      ownChosen.current = false
+      if (!adjust) void backend.looksOwn(p.source.url).then((v) => v && seq === readSeq.current && !ownChosen.current && setOwn(true), () => undefined)
       // The backend matched what the input named (by name, category/name or folder); older ones did not say.
       const named = p.preselected ?? src.skills.filter((n) => p.skills.some((s) => s.name === n))
       setPicked(new Set(named.filter((n) => !p.have.includes(n))))
@@ -107,7 +116,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
     } finally {
       if (seq === readSeq.current) setLoading(false)
     }
-  }, [])
+  }, [ownAsked, adjust, packs])
 
   // Opened from a source: read it straight away.
   const auto = React.useRef(!!initial)
@@ -133,6 +142,9 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
   }, [shownSkills])
 
   const have = new Set(preview?.have ?? [])
+  // A repository with no skill yet: only your own can be added (followed whole, skills made in it later).
+  const empty = !!preview && preview.skills.length === 0
+  const addEmpty = empty && own && !preview.subscribed
   const adds = followAll ? (preview?.skills.filter((s) => !have.has(s.name)).length ?? 0) : picked.size
   const removes = followAll ? 0 : dropped.size
   // Ticked = installed and kept, or newly picked.
@@ -156,7 +168,10 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
     const gone = followAll ? [] : [...dropped]
     setAdding(true)
     const r = await runTask(t("operating"), async () => {
-      const added = adds > 0 ? await backend.add(preview, { skills: [...picked], categories: [], all: followAll, alias: alias.trim() || undefined, agents: [...targets] }) : null
+      const added =
+        adds > 0 || addEmpty
+          ? await backend.add(preview, { skills: [...picked], categories: [], all: followAll || addEmpty, alias: alias.trim() || undefined, agents: [...targets], own: !adjust && own })
+          : null
       // Removing goes through the library's own remove: links first, then the files to the trash.
       for (const name of gone) {
         const s = skills.find((x) => x.kind === "vendor" && x.origin === repo && x.name === name)
@@ -168,6 +183,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
     if (!r.ok) return
     await reload()
     if (adjust) toast(t("adjustedToast", { repo, add: r.value?.linked.length ?? 0, remove: gone.length }))
+    else if (addEmpty) toast(t("ownAddedToast", { repo }), { action: { label: t("newSkill"), onClick: () => openDialog({ kind: "new", pack: repo }) } })
     else toast(t("addedToast", { n: r.value?.linked.length ?? 0 }))
     for (const [from, to] of Object.entries(r.value?.renamed ?? {})) toast(t("renamedToast", { from, to }))
     toastAbsent(t, allAgents, absentFor(r.value?.absent, r.value?.linked ?? []))
@@ -175,7 +191,9 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
   }
 
   const action = !adjust
-    ? t("addN", { n: adds })
+    ? addEmpty
+      ? t("addRepo")
+      : t("addN", { n: adds })
     : adds && removes
       ? t("adjustAddRemove", { add: adds, remove: removes })
       : adds
@@ -308,14 +326,37 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
                 </InputGroup>
               )}
 
-              {!(pack?.followAll) && (
+              {!adjust && (
+                <label className="mb-3 flex items-start gap-2.5 fs-body text-ink">
+                  <Checkbox
+                    checked={own}
+                    onCheckedChange={(v) => {
+                      ownChosen.current = true
+                      setOwn(!!v)
+                    }}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="block">{t("ownLabel")}</span>
+                    <span className="mt-0.5 block fs-meta text-mut">{t("ownLabelHint")}</span>
+                  </span>
+                </label>
+              )}
+
+              {!(pack?.followAll) && !empty && (
                 <label className="mb-3 flex items-start gap-2.5 fs-body text-ink">
                   <Checkbox checked={followAll} onCheckedChange={(v) => setFollowAll(!!v)} className="mt-0.5" />
                   <span>{t("followAllLabel")}</span>
                 </label>
               )}
 
-              {groups.length === 0 && <p className="py-3 fs-body text-mut">{t("noRepoMatch", { query })}</p>}
+              {empty ? (
+                <p className="py-3 fs-body text-mut" role="status">
+                  {t("emptyRepo")} {!adjust && t(own ? "emptyRepoOwn" : "emptyRepoNeedOwn")}
+                </p>
+              ) : (
+                groups.length === 0 && <p className="py-3 fs-body text-mut">{t("noRepoMatch", { query })}</p>
+              )}
               <div className="space-y-4">
                 {groups.map(([cat, list]) => {
                   // In adjust mode installed skills can be unticked too; otherwise they stay as they are.
@@ -358,7 +399,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
               </div>
               {preview.rejected.length > 0 && <p className="mt-3 fs-meta text-mut">{t("rejected", { n: preview.rejected.length })}</p>}
 
-              {(!adjust || adds > 0) && (
+              {(adjust ? adds > 0 : !empty || addEmpty) && (
                 <div className="mt-5 grid gap-4 [border-top:var(--tblRow)] pt-4">
                   <AgentTargets value={targets} onChange={setTargets} label={adjust ? t("installToNew") : undefined} />
                   {!preview.subscribed && (
@@ -377,7 +418,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
 
         <DialogFooter className="m-0 items-center px-6 py-3.5 [border-top:var(--tblRow)]">
           {preview ? (
-            <span className="mr-auto self-center fs-meta text-mut">{removes > 0 ? t("adjustRemoveNote", { n: removes }) : t("selectedCount", { n: adjust ? ticked : adds })}</span>
+            <span className="mr-auto self-center fs-meta text-mut">{empty ? null : removes > 0 ? t("adjustRemoveNote", { n: removes }) : t("selectedCount", { n: adjust ? ticked : adds })}</span>
           ) : (
             !adjust && (
               <Button variant="link" size="inline" className="mr-auto fs-meta" onClick={() => openDialog({ kind: "new" })}>
@@ -388,7 +429,7 @@ export function AddDialog({ initial, adjust, onClose }: { initial?: string; adju
           <Button variant="outline" size="lg" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button size="lg" onClick={submit} disabled={!preview || adds + removes === 0 || (adds > 0 && targets.size === 0) || adding}>
+          <Button size="lg" onClick={submit} disabled={!preview || (adds + removes === 0 && !addEmpty) || ((adds > 0 || addEmpty) && targets.size === 0) || adding}>
             {adding && <RefreshIcon spinning />}
             {action}
           </Button>

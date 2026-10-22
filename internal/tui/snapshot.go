@@ -54,6 +54,7 @@ type Pack struct {
 	When        string // "3 days ago", relative to now
 	License     string
 	NoLicense   bool
+	Own         bool     // the user's own repository (no license warning)
 	Targets     []string // nil: manifest default
 	UsesAll     bool
 	Selected    int
@@ -131,7 +132,7 @@ func LoadSnapshot(root string) (*Snapshot, error) {
 	}
 	for _, p := range m.Packs {
 		lp := lib.Lock.Packs[p.Repo]
-		pk := Pack{Repo: p.Repo, Alias: p.Alias, UsesAll: p.UsesAll()}
+		pk := Pack{Repo: p.Repo, Alias: p.Alias, UsesAll: p.UsesAll(), Own: p.Own}
 		if p.Targets != nil {
 			pk.Targets = append([]string{}, *p.Targets...)
 		}
@@ -234,7 +235,8 @@ func packMeta(lib *library.Library, lp *lock.Pack, pk *Pack) {
 	} else if f := fsutil.FindLicense(cache); f != "" {
 		pk.License = licenseName(f)
 	} else {
-		pk.NoLicense = true
+		// The user's own repository is theirs to redistribute.
+		pk.NoLicense = !pk.Own
 	}
 }
 

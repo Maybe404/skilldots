@@ -87,6 +87,11 @@ type Entry struct {
 	Edited bool `json:",omitempty"`
 	// Contribution is the change to it last sent upstream (skd contribute).
 	Contribution *lock.Contribution `json:",omitempty"`
+	// Own is set for a vendored skill of the user's own repository
+	// (manifest.Pack.Own); Draft for one made there with skd new --in
+	// that is not in the repository yet (lock.Skill.IsDraft).
+	Own   bool `json:",omitempty"`
+	Draft bool `json:",omitempty"`
 }
 
 // Resolve computes every entry declared by the library. Problems confined
@@ -210,7 +215,8 @@ func collect(lib *library.Library) ([]Entry, []string) {
 				continue
 			}
 			e := Entry{Name: name, LinkName: name, Kind: KindVendor, Origin: p.Repo, Category: ls.Category,
-				Dir: sd, TargetNames: packTargets, Shelved: ls.Shelved, Resolving: ls.Resolving, Conflicts: ls.Conflicts, Contribution: ls.Contribution}
+				Dir: sd, TargetNames: packTargets, Shelved: ls.Shelved, Resolving: ls.Resolving, Conflicts: ls.Conflicts, Contribution: ls.Contribution,
+				Own: p.Own, Draft: ls.IsDraft()}
 			if o := p.Override(name, false); o != nil {
 				if o.As != "" {
 					if err := manifest.CheckName(o.As); err != nil {

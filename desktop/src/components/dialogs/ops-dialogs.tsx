@@ -150,6 +150,8 @@ function PackUpdate({
   pack.pending.forEach((n) => push(n, "skillPending"))
   pack.gone.forEach((n) => push(n, "skillGone"))
   pack.moved.forEach((n) => push(n.split(": ")[0], "skillMoved"))
+  // Upstream now has what you have (your change landed): nothing to bring in.
+  pack.landed?.forEach((n) => push(n, "skillLanded"))
   const skillDiff = (name: string) => (diff?.state === "ok" ? diff.diff.skills.find((s) => s.name === name) : undefined)
   return (
     <div className={cn("rounded-ctl border-line p-3", checked && "border-hue")}>

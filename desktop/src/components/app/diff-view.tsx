@@ -69,7 +69,8 @@ export function SkillDiffView({ diff, note = true }: { diff: SkillDiff; note?: b
     <div className="space-y-2">
       {note && <LocalEditNote diff={diff} />}
       {diff.files.length === 0 && diff.status === "moved" && <p className="fs-meta text-mut">{t("movedOnlyFiles")}</p>}
-      <div className="overflow-hidden rounded-ctl border-line">
+      {diff.files.length === 0 && diff.status === "landed" && <p className="fs-meta text-mut">{t("skillLandedHint")}</p>}
+      <div className={cn("overflow-hidden rounded-ctl border-line", diff.status === "landed" && diff.files.length === 0 && "hidden")}>
         {diff.files.map((f, i) => (
           <FileBlock key={f.path} file={f} defaultOpen={f.path === "SKILL.md" || (i === 0 && diff.files.length <= 2)} first={i === 0} />
         ))}

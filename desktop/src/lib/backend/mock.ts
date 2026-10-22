@@ -3,6 +3,7 @@
 import {
   CATALOG,
   CLAUDE_OVERRIDES,
+  DRAFT,
   HOME,
   LIBRARY,
   OWNER,
@@ -36,7 +37,9 @@ import type {
   Config,
   ConflictBlock,
   ConflictFile,
+  ContributeMode,
   ContributeOptions,
+  ContributeOutcome,
   Contribution,
   DiffHunk,
   DiffLine,
@@ -70,6 +73,7 @@ const DEFAULT_CONFIG: Config = {
 const wait = (ms = 260) => new Promise((r) => setTimeout(r, ms))
 const clone = <T>(x: T): T => structuredClone(x)
 const NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/
+const PLACEHOLDER = "What this skill does and when an agent should use it."
 
 interface State {
   root: string | null
@@ -87,6 +91,8 @@ interface State {
   scan: ScanItem[]
   /** Vendored skills whose files the user edited ("edit anyway"). */
   touched: Set<string>
+  /** Skills made in the person's own repository and not pushed yet (lock draft), by key. */
+  drafts: Set<string>
   /** Shelved updates by skill key (lock Shelved), and how far resolving them got. */
   shelved: Map<string, Shelf>
   /** What was sent upstream, by skill key (lock contribution). */
@@ -130,6 +136,21 @@ function sampleState(root: string | null): State {
   // Yesterday's obsidian-skills update (history h3) merged your obsidian-cli and shelved your obsidian-markdown.
   touched.add("kepano/obsidian-skills:obsidian-cli")
   touched.add(SHELVED.key)
+  // A skill made in your own repository (ui-arsenal) and not pushed yet: sent with the ui-arsenal edit by 推送.
+  const draft: Skill = {
+    ref: { key: refKey("vendor", DRAFT.repo, DRAFT.name) },
+    name: DRAFT.name,
+    linkName: DRAFT.name,
+    kind: "vendor",
+    origin: DRAFT.repo,
+    category: "",
+    description: DRAFT.description,
+    dir: skillDir("vendor", DRAFT.repo, "", DRAFT.name),
+    targets: ["agents", "claude"],
+  }
+  skills.push(draft)
+  Object.assign(files, initialFiles([draft]))
+  const drafts = new Set([draft.ref.key])
   const shelved = new Map<string, Shelf>([[SHELVED.key, { files: ["SKILL.md"], merge: { "SKILL.md": SHELVED.markers }, bases: SHELVED.bases }]])
   // A skill of yours also chosen for Kiro, which this Mac does not have: shown as chosen but not linked.
   skills.find((s) => s.name === "design-review")?.targets.push("kiro")
@@ -154,6 +175,7 @@ function sampleState(root: string | null): State {
     plan: initialPlan(),
     scan: [...initialScan(skills), ...differs],
     touched,
+    drafts,
     shelved,
     contributions: new Map([[SAMPLE_PR.key, { ...SAMPLE_PR.contribution }]]),
     remoteAhead: true,
@@ -177,6 +199,7 @@ function emptyState(root: string | null): State {
     trash: [],
     plan: [],
     touched: new Set(),
+    drafts: new Set(),
     shelved: new Map(),
     contributions: new Map(),
     remoteAhead: false,
@@ -241,33 +264,90 @@ export function createMockBackend(): Backend {
     })
     return clone({ files })
   }
-  // Like app.ContributeOptions: your own repositories take a push, any GitHub repository a PR (gh permitting).
-  const contributeOptions = (s: Skill): ContributeOptions => {
-    if (s.kind !== "vendor") throw new Error(`${s.name} is not from a source; there is no upstream to send it to`)
-    if (!st.touched.has(s.ref.key)) throw new Error(`${s.name} has no edits to send`)
+  // Like app.ContributeOptions: repositories of the sample person (OWNER) take a push, any GitHub repository a PR
+  // (gh permitting). Several skills of one pack go together (contributePack). In the person's own repository
+  // (own = true) being behind does not block: sending pulls the new commits first (pull).
+  const unpushed = (s: Skill) => s.kind === "vendor" && (st.touched.has(s.ref.key) || st.drafts.has(s.ref.key))
+  const contributeOptions = (repo: string, list: Skill[]): ContributeOptions => {
+    for (const s of list) if (s.kind !== "vendor") throw new Error(`${s.name} is not from a source; there is no upstream to send it to`)
+    if (!list.length || !list.every(unpushed)) throw new Error(list.length === 1 ? `${list[0].name} has no edits to send` : `nothing to send in ${repo}`)
     const zh = readConfig().lang === "zh"
     const asked = typeof location !== "undefined" ? new URLSearchParams(location.search).get("gh") : null
     const gh: ContributeOptions["gh"] = asked === "missing" || asked === "logged-out" ? asked : "ok"
-    const behind = st.shelved.has(s.ref.key) || !!st.outdated?.packs.find((p) => p.repo === s.origin)?.changed.includes(s.name)
-    const own = s.origin.startsWith(OWNER + "/")
+    const own = !!st.packs.find((p) => p.repo === repo)?.own
+    const changed = st.outdated?.packs.find((p) => p.repo === repo)?.changed ?? []
+    const behind = list.some((s) => st.shelved.has(s.ref.key) || changed.includes(s.name))
+    const pull = own && behind
+    const pushable = repo.startsWith(OWNER + "/")
     const reasons: string[] = []
-    if (behind) reasons.push(zh ? `上游有更新的版本：先更新 ${s.origin}（有冲突就先解决），再提交。` : `Upstream has a newer version: update ${s.origin} (and resolve any conflicts) first.`)
+    if (behind && !pull) reasons.push(zh ? `上游有更新的版本：先更新 ${repo}（有冲突就先解决），再提交。` : `Upstream has a newer version: update ${repo} (and resolve any conflicts) first.`)
     else {
-      if (!own) reasons.push(zh ? `你没有 ${s.origin} 的推送权限，只能提 PR。` : `You cannot push to ${s.origin}; open a PR instead.`)
+      if (!pushable) reasons.push(zh ? `你没有 ${repo} 的推送权限，只能提 PR。` : `You cannot push to ${repo}; open a PR instead.`)
       if (gh === "missing") reasons.push(zh ? "提 PR 需要 gh：brew install gh，再 gh auth login。" : "A PR needs gh: brew install gh, then gh auth login.")
       if (gh === "logged-out") reasons.push(zh ? "gh 还没登录：在终端运行 gh auth login。" : "gh is not logged in: run gh auth login in a terminal.")
     }
+    const drafts = list.filter((s) => st.drafts.has(s.ref.key))
+    const updated = list.filter((s) => !st.drafts.has(s.ref.key)).map((s) => s.name)
+    const title = [updated.length ? `Update ${updated.join(", ")}` : "", drafts.length ? `Add ${drafts.map((s) => s.name).join(", ")}` : ""].filter(Boolean).join("; ")
     return {
-      repo: s.origin,
+      repo,
       host: "github",
-      canPush: own && !behind,
-      canPR: gh === "ok" && !behind,
+      canPush: pushable && (!behind || pull),
+      canPR: gh === "ok" && (!behind || pull),
       gh,
       behind,
       reason: reasons.join(" "),
-      defaultMessage: `Update ${s.name}\n\nEdited with skilldots`,
+      defaultMessage: `${title}\n\nEdited with skilldots`,
       branch: "main",
+      own,
+      pull,
+      skills: list.map((s) => s.linkName),
+      drafts: drafts.map((s) => s.linkName),
+      paths: Object.fromEntries(drafts.map((s) => [s.linkName, s.name === DRAFT.name ? DRAFT.path : s.category ? `${s.category}/${s.name}` : s.name])),
     }
+  }
+  // Like Session.Contribute: one commit for every skill listed. In the person's own repository a push is pulled
+  // back afterwards (an update of the pack), so the skills match the repository again and the update records
+  // them as landed; ?pullback=fail in the preview URL plays that update failing.
+  const contribute = (repo: string, list: Skill[], mode: ContributeMode, message: string): ContributeOutcome => {
+    const o = contributeOptions(repo, list)
+    if ((o.behind && !o.pull) || (mode === "pr" && !o.canPR) || (mode === "push" && !o.canPush)) throw new Error(o.reason || `cannot ${mode} to ${o.repo}`)
+    if (!message.trim()) throw new Error("a commit message is needed")
+    const pack = st.packs.find((p) => p.repo === repo)!
+    const status = st.outdated?.packs.find((p) => p.repo === repo)
+    if (o.pull && status) {
+      // Pulled first: the repository's new commits merged into your edits.
+      pack.commit = status.latest
+      Object.assign(status, { commit: status.latest, changed: [], moved: [], new: [], gone: [], pending: [], commits: [] })
+    }
+    const d = new Date()
+    const p = (n: number) => String(n).padStart(2, "0")
+    const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+    const base = { skills: o.skills, pulled: o.pull, pulledBack: false, pullBackError: "" }
+    if (mode === "pr") {
+      const number = 13 + [...st.contributions.values()].filter((c) => c.kind === "pr").length
+      const c: Contribution = { kind: "pr", url: `https://github.com/${repo}/pull/${number}`, number, branch: `skilldots/${list.length === 1 ? list[0].name : "update"}-${stamp}`, state: "open" }
+      for (const s of list) st.contributions.set(s.ref.key, { ...c })
+      changed()
+      return { ...base, mode, url: c.url, number, branch: c.branch, pushed: false }
+    }
+    const commit = sha(Date.now().toString(16).slice(-7))
+    const c: Contribution = { kind: "push", url: `https://github.com/${repo}/commit/${commit}`, number: 0, branch: o.branch, state: "pushed" }
+    for (const s of list) st.contributions.set(s.ref.key, { ...c })
+    changed()
+    if (!o.own) return { ...base, mode, url: c.url, number: 0, branch: c.branch, pushed: true }
+    if (typeof location !== "undefined" && new URLSearchParams(location.search).get("pullback") === "fail")
+      return { ...base, mode, url: c.url, number: 0, branch: c.branch, pushed: true, pullBackError: `git fetch ${repo}: connection reset by peer` }
+    const names = list.map((s) => s.name)
+    st.history.unshift({ id: `h${Date.now()}-${repo}`, when: new Date().toISOString(), repo, from: pack.commit, to: commit, changed: [], added: [], gone: [], moved: [], landed: names, commits: [{ id: commit, title: message.split("\n")[0] }], backups: [] })
+    pack.commit = commit
+    if (status) status.commit = status.latest = commit
+    for (const s of list) {
+      st.touched.delete(s.ref.key)
+      st.drafts.delete(s.ref.key)
+    }
+    pack.upstreamCount = Math.max(pack.upstreamCount, st.skills.filter((s) => s.kind === "vendor" && s.origin === repo).length)
+    return { ...base, mode, url: c.url, number: 0, branch: c.branch, pushed: true, pulledBack: true }
   }
   const status = (): LibraryStatus => ({
     root: st.root,
@@ -387,7 +467,9 @@ export function createMockBackend(): Backend {
             shelved: !!shelf,
             resolving: !!shelf?.backup,
             conflictFiles: shelf?.files ?? [],
-            edited: s.kind === "vendor" && st.touched.has(s.ref.key),
+            edited: unpushed(s),
+            own: s.kind === "vendor" && !!st.packs.find((p) => p.repo === s.origin)?.own,
+            draft: st.drafts.has(s.ref.key),
             contribution: st.contributions.get(s.ref.key) ?? null,
             absent: s.targets.filter((a) => away.includes(a)),
             viaShared: serves ? s.targets.filter((a) => SHARED_READERS.includes(a)) : [],
@@ -462,7 +544,13 @@ export function createMockBackend(): Backend {
       for (const c of sel.categories) preview.skills.filter((s) => s.category === c).forEach((s) => names.add(s.name))
       if (sel.all) preview.skills.forEach((s) => names.add(s.name))
       for (const h of preview.have) names.delete(h)
-      if (!names.size) return { repo, linked: [], renamed: {}, nothing: true }
+      // The person's own repository may have no skill yet: then it is followed whole.
+      const emptyOwn = !!sel.own && preview.skills.length === 0
+      const known = st.packs.find((p) => p.repo === repo)
+      if (!names.size && !emptyOwn) {
+        if (known && sel.own) known.own = true
+        return { repo, linked: [], renamed: {}, nothing: true, own: !!known?.own }
+      }
       if (sel.alias && (sel.alias.includes("/") || sel.alias.includes(":"))) throw new Error(`alias ${sel.alias} may not contain / or :`)
       if (!st.packs.some((p) => p.repo === repo)) {
         st.packs.push({
@@ -470,12 +558,13 @@ export function createMockBackend(): Backend {
           alias: sel.alias || undefined,
           ref: preview.source.ref,
           commit: preview.commit,
-          followAll: sel.all,
+          followAll: sel.all || emptyOwn,
           upstreamCount: preview.skills.length,
           license: preview.license,
           url: preview.source.url,
+          own: !!sel.own,
         })
-      }
+      } else if (sel.own) known!.own = true
       const renamed: Record<string, string> = {}
       const linked: string[] = []
       for (const n of names) {
@@ -490,7 +579,7 @@ export function createMockBackend(): Backend {
       }
       st.scan = st.scan.filter((x) => !(x.proposal === "pack" && x.repo === repo && names.has(x.name)))
       changed()
-      return { repo, linked, renamed, nothing: false, absent: absentOf(st.skills) }
+      return { repo, linked, renamed, nothing: false, absent: absentOf(st.skills), own: !!st.packs.find((p) => p.repo === repo)?.own }
     },
 
     async enable(ref, agents) {
@@ -534,6 +623,18 @@ export function createMockBackend(): Backend {
       toTrash(repo.split("/")[1], `${st.root}/vendor/${repo}`, "purge", { skills: gone, pack })
       changed()
     },
+    async setOwn(repo, own) {
+      await wait(150)
+      const pack = st.packs.find((p) => p.repo === repo)
+      if (!pack) throw new Error(`not subscribed: ${repo}`)
+      pack.own = own
+      changed()
+    },
+    async looksOwn(url) {
+      await wait(300)
+      // Like app.LooksOwn: GitHub says the sample person administers their own repositories.
+      return url.includes(`github.com/${OWNER}/`)
+    },
     async fork(ref, opts) {
       await wait(500)
       const s = find(ref)
@@ -547,6 +648,7 @@ export function createMockBackend(): Backend {
       if (s.kind === "vendor") {
         st.skills = st.skills.filter((x) => x !== s)
         st.touched.delete(s.ref.key)
+        st.drafts.delete(s.ref.key)
       }
       const created = addSkill({ name, kind, origin: "", category: "", description: s.description, targets: [...s.targets] }, files)
       changed()
@@ -555,9 +657,25 @@ export function createMockBackend(): Backend {
     async newSkill(opts) {
       await wait(400)
       if (!NAME.test(opts.name)) throw new Error(`invalid name ${opts.name}`)
+      if (opts.pack) {
+        // Like Session.NewInPack: a draft in the person's own repository, pushed there later.
+        const pack = st.packs.find((p) => p.repo === opts.pack)
+        if (!pack) throw new Error(`not subscribed: ${opts.pack}`)
+        if (!pack.own) throw new Error(`${opts.pack} is not marked as your own repository`)
+        if (opts.private) throw new Error("a skill in your own repository is pushed there; it cannot be private")
+        if (st.skills.some((x) => x.linkName === opts.name)) throw new Error(`${opts.name} already exists`)
+        const dir = (opts.dir ?? "").trim().replace(/^\/+|\/+$/g, "")
+        if (dir.split("/").includes("..")) throw new Error(`${dir}: not a directory in the repository`)
+        const description = opts.description.trim() || PLACEHOLDER
+        const category = dir && dir !== "." ? dir : ""
+        const created = addSkill({ name: opts.name, kind: "vendor", origin: pack.repo, category, description, targets: [...opts.agents] })
+        st.drafts.add(created.ref.key)
+        changed()
+        return clone({ ...created, own: true, draft: true, edited: true })
+      }
       const kind = opts.private ? "private" : "skills"
       if (st.skills.some((x) => (x.kind === "skills" || x.kind === "private") && x.name === opts.name)) throw new Error(`${kind}/${opts.name} already exists`)
-      const description = opts.description.trim() || "What this skill does and when an agent should use it."
+      const description = opts.description.trim() || PLACEHOLDER
       const created = addSkill({ name: opts.name, kind, origin: "", category: "", description, targets: [...opts.agents] })
       changed()
       return clone(created)
@@ -750,6 +868,7 @@ export function createMockBackend(): Backend {
         skills.push({ name, status: "changed", local: localFiles.length > 0, localFiles, files: diffFiles(mine, upstream, local) })
       }
       for (const name of s.pending) skills.push({ name, status: "added", local: false, localFiles: [], files: diffFiles({}, { "SKILL.md": `---\nname: ${name}\n---\n` }, new Set()) })
+      for (const name of s.landed ?? []) skills.push({ name, status: "landed", local: false, localFiles: [], files: [] })
       for (const mv of s.moved) {
         const name = mv.split(": ")[0]
         if (!skills.some((x) => x.name === name)) skills.push({ name, status: "moved", local: false, localFiles: [], files: [] })
@@ -777,6 +896,7 @@ export function createMockBackend(): Backend {
         skills.push({ name, status: "changed", local: false, localFiles: [], files: diffFiles(old, next, new Set()) })
       }
       for (const name of h.added) skills.push({ name, status: "added", local: false, localFiles: [], files: diffFiles({}, before(name), new Set()) })
+      for (const name of h.landed ?? []) skills.push({ name, status: "landed", local: false, localFiles: [], files: [] })
       for (const mv of h.moved) {
         const name = mv.split(": ")[0]
         if (!skills.some((x) => x.name === name)) skills.push({ name, status: "moved", local: false, localFiles: [], files: [] })
@@ -880,34 +1000,29 @@ export function createMockBackend(): Backend {
       await wait(300)
       const s = find(ref)
       if (s.kind !== "vendor") throw new Error(`${s.name} is not from a source`)
-      // Like app.LocalChanges: the upstream version your edits started from against the folder as it is.
-      const base = vendoredFiles(s)
+      // Like app.LocalChanges: the upstream version your edits started from against the folder as it is (a draft has none).
+      const base = st.drafts.has(ref.key) ? {} : vendoredFiles(s)
       const mine = st.files[ref.key] ?? base
       const localFiles = changedPaths(base, mine)
       return clone({ name: s.name, status: "changed" as const, local: localFiles.length > 0, localFiles, base: true, files: diffFiles(base, mine, new Set()) })
     },
     async contributeOptions(ref) {
       await wait(450)
-      return clone(contributeOptions(find(ref)))
+      const s = find(ref)
+      return clone(contributeOptions(s.origin, [s]))
     },
     async contribute(ref, mode, message) {
       await wait(1400)
       const s = find(ref)
-      const o = contributeOptions(s)
-      if (o.behind || (mode === "pr" && !o.canPR) || (mode === "push" && !o.canPush)) throw new Error(o.reason || `cannot ${mode} to ${o.repo}`)
-      if (!message.trim()) throw new Error("a commit message is needed")
-      const d = new Date()
-      const p = (n: number) => String(n).padStart(2, "0")
-      const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
-      if (mode === "pr") {
-        const number = 13 + [...st.contributions.values()].filter((c) => c.kind === "pr").length
-        const c: Contribution = { kind: "pr", url: `https://github.com/${o.repo}/pull/${number}`, number, branch: `skilldots/${s.name}-${stamp}`, state: "open" }
-        st.contributions.set(ref.key, c)
-        return { mode, url: c.url, number, branch: c.branch, pushed: false }
-      }
-      const c: Contribution = { kind: "push", url: `https://github.com/${o.repo}/commit/${sha(stamp + s.name)}`, number: 0, branch: o.branch, state: "pushed" }
-      st.contributions.set(ref.key, c)
-      return { mode, url: c.url, number: 0, branch: c.branch, pushed: true }
+      return clone(contribute(s.origin, [s], mode, message))
+    },
+    async contributePackOptions(repo) {
+      await wait(450)
+      return clone(contributeOptions(repo, st.skills.filter((s) => s.origin === repo && unpushed(s))))
+    },
+    async contributePack(repo, mode, message) {
+      await wait(1600)
+      return clone(contribute(repo, st.skills.filter((s) => s.origin === repo && unpushed(s)), mode, message))
     },
     async refreshContributions() {
       await wait(700)

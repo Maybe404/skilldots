@@ -9,6 +9,7 @@
       --all                跟随所有 skill，包括上游以后新增的
       --category strings   选择某个分类下的所有 skill
   -h, --help               add 的帮助
+      --own                这是你自己的仓库：可以在里面新建 skill（skd new --in）并把改动推送回去；仓库里可以还没有 skill
   -s, --skill strings      要选择的 skill 名称（可重复）
 
 全局选项：

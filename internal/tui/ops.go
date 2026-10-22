@@ -324,7 +324,7 @@ func (o *libOps) Add(arg string, req AddRequest) (string, error) {
 		sort.Strings(renamed)
 		msg += i18n.Sprintf(" · name taken, linked %s", strings.Join(renamed, ", "))
 	}
-	if rep.NoLicense {
+	if rep.NoLicense && !rep.Own {
 		msg += i18n.T(" · no license found: check before redistributing")
 	}
 	return withSummary(msg, out.Apply), nil

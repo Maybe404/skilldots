@@ -171,6 +171,9 @@ func printOverview(c *ctx, entries []engine.Entry, expand bool) {
 			if p.Alias != "" {
 				label += dim(" (" + p.Alias + ")")
 			}
+			if p.Own {
+				label += " " + ok(i18n.T("yours"))
+			}
 			if rec != nil {
 				if st := rec.Find(p.Repo); st != nil && st.HasUpdates() {
 					label += " " + accent("↑")
@@ -285,7 +288,10 @@ func printEntries(c *ctx, entries []engine.Entry) {
 		case e.Shelved != "":
 			name += " " + warn(i18n.T("shelved"))
 		}
-		if e.Edited {
+		switch {
+		case e.Draft:
+			name += " " + ok(DraftMark)
+		case e.Edited:
 			name += " " + dim(EditedMark)
 		}
 		if c := e.Contribution; c != nil && c.Kind == "pr" && c.Number > 0 {
@@ -302,8 +308,18 @@ func printEntries(c *ctx, entries []engine.Entry) {
 	}
 	c.printf("%s\n", t.Render())
 	for _, e := range entries {
-		if e.Edited {
+		if e.Edited && !e.Draft && e.Own {
+			c.printf("%s\n", dim(i18n.Sprintf("%s you changed it and have not pushed it (skd diff <skill>; skd contribute %s --push sends it)", EditedMark, e.Origin)))
+			break
+		}
+		if e.Edited && !e.Draft {
 			c.printf("%s\n", dim(i18n.Sprintf("%s you changed it, against upstream's version (skd diff <skill>; skd update merges upstream's changes in)", EditedMark)))
+			break
+		}
+	}
+	for _, e := range entries {
+		if e.Draft {
+			c.printf("%s\n", dim(i18n.Sprintf("%s new, made here and not pushed yet (skd contribute %s --push sends it)", DraftMark, e.Origin)))
 			break
 		}
 	}
@@ -315,8 +331,12 @@ func printEntries(c *ctx, entries []engine.Entry) {
 	}
 }
 
-// EditedMark marks a vendored skill the user changed.
-const EditedMark = "✎"
+// EditedMark marks a vendored skill the user changed; DraftMark one made
+// in the user's own repository that is not there yet (skd new --in).
+const (
+	EditedMark = "✎"
+	DraftMark  = "+"
+)
 
 // ClaudeOffNote explains "off in Claude Code" under a list that shows it.
 var ClaudeOffNote = i18n.M("off in Claude Code: turned off in Claude Code's own skill settings; skd still links it. " +
@@ -488,25 +508,101 @@ func printApplySummary(c *ctx, out *app.ApplyOutcome) {
 
 func newCmd() *cobra.Command {
 	var private bool
+	var in, dir string
 	cmd := &cobra.Command{
-		Use:   "new <name>",
+		Use:   "new <name> [--private | --in <pack> [--path <dir>]]",
 		Short: i18n.T("Scaffold a skill of your own in skills/ (or private/)"),
-		Args:  exactArgs(1),
+		Long: i18n.T("Scaffolds a skill of your own and links it: in skills/ (pushed with the library by skd sync), in private/ " +
+			"with --private (never pushed), or with --in in your own repository (a pack marked own = true, skd own). There it " +
+			"is a draft: in vendor/ like the pack's other skills, edited in place, and in the repository once skd contribute " +
+			"<pack> --push sends it. Its place there is --path <dir> (a directory of the repository, . for its top), else " +
+			"beside most of the repository's skills (skills/ when it has none)."),
+		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := open()
 			if err != nil {
 				return err
 			}
-			out, err := c.New(args[0], private)
+			if in == "" {
+				if dir != "" {
+					return i18n.Errorf("--path is the place in your own repository: give the repository with --in")
+				}
+				out, err := c.New(args[0], private)
+				if err != nil {
+					return err
+				}
+				printApply(c, out.Apply)
+				c.jsonOut(map[string]any{"created": out.Name, "path": out.Path, "apply": out.Apply})
+				return nil
+			}
+			if private {
+				return i18n.Errorf("--private and --in: a skill in your own repository is pushed there; pick one")
+			}
+			out, err := c.NewInPack(args[0], in, app.NewInPackOptions{Dir: dir})
 			if err != nil {
 				return err
 			}
+			c.printf("%s %s\n", ok("✓"), i18n.Sprintf("created %s in %s, at %s there once pushed", out.Name, out.Pack, out.RepoPath))
+			c.printf("%s\n", dim(i18n.Sprintf("edit it in place (%s) · skd contribute %s --push sends it", tildePath(out.Path), out.Pack)))
 			printApply(c, out.Apply)
-			c.jsonOut(map[string]any{"created": out.Name, "path": out.Path, "apply": out.Apply})
+			c.jsonOut(map[string]any{"created": out.Name, "path": out.Path, "pack": out.Pack, "repoPath": out.RepoPath, "draft": true, "apply": out.Apply})
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&private, "private", false, i18n.T("create under private/ (never pushed)"))
+	cmd.Flags().StringVar(&in, "in", "", i18n.T("create it in your own repository (a pack marked own), to push there"))
+	cmd.Flags().StringVar(&dir, "path", "", i18n.T("with --in: the directory of the repository it goes in (. for the top)"))
+	return cmd
+}
+
+func ownCmd() *cobra.Command {
+	var off bool
+	cmd := &cobra.Command{
+		Use:   "own [pack] [--off]",
+		Short: i18n.T("Mark a pack as your own repository, or list the ones that are"),
+		Long: i18n.T("Marks a pack as your own repository (own = true in skills.toml): skills can be made in it (skd new <name> " +
+			"--in <pack>), skd contribute <pack> --push sends what you change and pulls it back, and no license warning is " +
+			"given. --off takes the mark away; nothing else changes. Without a pack, own lists the packs marked."),
+		Args: maximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := open()
+			if err != nil {
+				return err
+			}
+			if len(args) == 0 {
+				var mine []string
+				for _, p := range c.lib.Manifest.Packs {
+					if p.Own {
+						mine = append(mine, p.Repo)
+					}
+				}
+				if c.jsonOut(map[string]any{"own": nonNil(mine)}) {
+					return nil
+				}
+				if len(mine) == 0 {
+					c.printf("%s\n", dim(i18n.T("no pack is marked as your own · skd own <pack> marks one")))
+				}
+				for _, r := range mine {
+					c.printf("%s\n", txt(r))
+				}
+				return nil
+			}
+			p, err := c.SetOwn(args[0], !off)
+			if err != nil {
+				return err
+			}
+			if c.jsonOut(map[string]any{"repo": p.Repo, "own": p.Own}) {
+				return nil
+			}
+			if p.Own {
+				c.printf("%s %s\n", ok("✓"), i18n.Sprintf("%s is marked as your own: skd new <name> --in %s makes a skill in it, skd contribute %s --push pushes what you change", p.Repo, p.Repo, p.Repo))
+			} else {
+				c.printf("%s %s\n", ok("✓"), i18n.Sprintf("%s is no longer marked as your own", p.Repo))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&off, "off", false, i18n.T("take the mark away"))
 	return cmd
 }
 
