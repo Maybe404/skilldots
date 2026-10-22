@@ -53,7 +53,7 @@ skilldots treats skills like dotfiles:
 - **`skills.toml` is the source of truth.** It says which repositories you follow, which skills you picked, and which agents get them. `skd apply` makes the machine match it.
 - **The library is a git repository.** Third-party skills are vendored in, so an upstream change shows up as a diff you can read and revert. A new machine is `git clone` + `skd apply`.
 - **Repositories are the unit, skills are the selection.** A repo with 40 skills is one line in `skd list` and one `git fetch` in `skd update`, however many of its skills you use.
-- **Your own skills live alongside.** `skills/` is for ones you publish with the library; `private/` is a separate local git repo that is never pushed.
+- **Your own skills live alongside.** `skills/` is for ones you publish with the library; `private/` is a separate local git repo that is never pushed. A repository of skills you already keep on GitHub can be added with `skd add <repo> --own`: you edit and create skills in place and `skd contribute <repo> --push` sends them back ([your own repository](docs/commands.md#your-own-repository)).
 - **Every link is recorded.** `skd` only ever touches files it placed itself, and tells you when something else is in the way.
 
 ## Built for agents
@@ -92,10 +92,10 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd use <dir>` | point skd at an existing library from any directory |
 | `skd sync [--remote url] [-m msg]` | commit the library, merge what its remote has, and push: your backup (`--resolve`, `--continue`, `--abort` for a sync whose merge conflicts) |
 | `skd diff <skill>` | your changes to a vendored skill, against the upstream version it is based on |
-| `skd contribute <skill> --pr \| --push` | send your changes to a vendored skill upstream: a pull request, or a push (`--dry-run` first) |
+| `skd contribute <skill \| pack> --pr \| --push` | send your changes to a vendored skill, or every changed and new skill of a pack in one commit, upstream: a pull request, or a push (`--dry-run` first) |
 | **Adding** | |
 | `skd show <owner/repo \| url>` | list what a repository offers, without installing |
-| `skd add <source>[@ref]` | fetch a repo and choose skills, interactively or with `--skill`, `--category`, `--all`; also takes a pasted install line, a skills.sh page or a GitHub link (only parsed, never run) |
+| `skd add <source>[@ref]` | fetch a repo and choose skills, interactively or with `--skill`, `--category`, `--all`; also takes a pasted install line, a skills.sh page or a GitHub link (only parsed, never run); `--own` for a repository of yours |
 | **Looking** | |
 | `skd list [pack] [--all] [--flat] [--agent x]` | overview; expand a pack; flat list; what one agent receives |
 | `skd path <skill>` | print where a skill's files live |
@@ -115,7 +115,8 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd history <pack> --diff [n] [--skill x]` | what upstream changed in one update, as a diff |
 | `skd resolve [skill] [--continue \| --abort]` | resolve the conflicts of a shelved update, as you would finish a git merge |
 | **Changing** | |
-| `skd new <name> [--private]` | scaffold a skill of your own and link it |
+| `skd new <name> [--private \| --in <pack>]` | scaffold a skill of your own and link it; `--in` puts it in your own repository, to be pushed with `skd contribute <pack>` |
+| `skd own [pack] [--off]` | list or mark the packs that are your own repositories |
 | `skd fork <skill> [--private] [--as name]` | copy a vendored skill into `skills/` to edit it; upstream no longer touches it |
 | `skd edit <skill> [--fork \| --force]` | open a skill in your editor; a vendored one is offered a fork first |
 | `skd remove <skill>` | unlink a skill everywhere and move its directory to the trash |
@@ -252,6 +253,7 @@ The approval covers that name, directory and mode, and is kept on your machine, 
 
 - **Third-party skill you want to change:** edit it in place, and `skd update` merges upstream's changes into your edits, like `git pull` (the copy before goes to the trash). When both changed the same lines, that skill's update is shelved, left as it is, until `skd resolve <skill>` writes the merge with git's conflict markers and `skd resolve --continue` takes your result (`--abort` puts it back). Or `skd fork <skill>`: the copy in `skills/` is yours and upstream no longer touches it; the vendored original is deselected so the names do not clash.
 - **Your own skill:** `skd edit <skill>` (or `o` in the dashboard) opens it; edit in place and commit.
+- **A skill in your own repository:** edit it in place, `skd new <name> --in <pack>` for a new one, then `skd contribute <pack> --push` sends them all in one commit. skd pulls first when upstream moved, and pulls back afterwards, so the next `skd update` reports them as landed, not as changes.
 - **What did an update change?** `skd history [pack]`: per update, the skills that changed and upstream's commit messages for them; `skd history <pack> --diff` shows the change itself.
 - **Roll back an update:** the library is a git repository. With `skd update --commit` every update is one commit, so `git revert <commit> && skd apply` undoes it. Without `--commit`, `git checkout -- vendor skills.lock && skd apply`.
 - **Remove:** `skd disable` unlinks but keeps the files; `skd remove` also moves the skill's directory (vendored or your own) to the library trash; `skd purge` deletes a whole pack. `skd remove` of a pack's last skill drops the pack.
