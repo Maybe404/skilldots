@@ -209,7 +209,7 @@ skd scan                    # inventory of every agent directory: managed, copie
 skd adopt --dry-run         # proposals: subscribe, register app, copy as own, enable per agent
 skd adopt --yes             # apply them; displaced directories go to the trash
 ```
-Run this on first use and whenever `skd scan` reports unmanaged entries.
+Run this on first use and whenever `skd scan` reports unmanaged entries. Links into another skilldots library (one made before, at another path) are adopted as that library has each skill: its upstream and ref, `private/` kept private, the same agents. That library is only read; do not delete it, it holds the only copy of what was never pushed (its `private/`) until the user says otherwise.
 
 ## Rules
 

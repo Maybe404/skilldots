@@ -336,6 +336,8 @@ export interface ScanItem {
   sharedCopy?: boolean
   /** An "own" copy's name in skills/: its SKILL.md name, or its folder name when that one is taken. */
   as?: string
+  /** An "own" copy that goes to private/ (never pushed): it was private in the skilldots library it links into. */
+  private?: boolean
   /** The library skill an "enable" installs; another name than the copy's when it was found by its content. */
   inLibrary?: string
   /** The repository it came from (as recorded by its installer, or its link). */
