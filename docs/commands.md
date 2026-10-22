@@ -36,6 +36,8 @@ Creates a library in `dir` (default `~/.skilldots`, or `$SKILLDOTS_LIBRARY`).
 
 Sets up a machine from a library you pushed elsewhere.
 
+- The repository must be a library: `skills.toml` at its top. `dir` must not exist yet.
+- A repository without one, such as your own repository of skills, is not kept: the clone is removed, nothing is recorded, skd exits non-zero without a `✓`, and the error says it is a repository of skills and names the command that uses it as a source instead: `skd add <git-url> --all` ([`skd add`](#skd-add-sourceref)). The desktop app's "Import from GitHub" says the same.
 - It lists the library's custom targets first and, at a terminal, asks whether to approve each ([safety.md → Custom targets](safety.md#custom-targets)).
 - A `private` that is a symbolic link in the cloned library is left as it is: no git repository is set up through it, and the skills under it are skipped. `skd init --from` refuses one.
 

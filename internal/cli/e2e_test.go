@@ -239,6 +239,84 @@ func TestCloneURLIsNeverAnOption(t *testing.T) {
 	}
 }
 
+// A repository of skills without a skills.toml is not a library: skd
+// clone fails without a ✓, keeps nothing, records nothing, and names
+// skd add for it; with --json too.
+func TestCloneRepositoryOfSkillsIsNotALibrary(t *testing.T) {
+	e := newEnv(t)
+	e.skill("mine/skills/alpha", "alpha")
+	e.skill("mine/skills/beta", "beta")
+	e.repo("mine")
+	e.git(e.home, "clone", "-q", "--bare", e.p("mine"), e.p("mine.git"))
+	url := "file://" + e.p("mine.git")
+
+	for _, args := range [][]string{{"clone", url, e.p("lib"), "--yes"}, {"clone", url, e.p("lib"), "--json"}} {
+		out, errOut, code := e.skd("", args...)
+		if code == 0 {
+			t.Fatalf("skd %v succeeded:\n%s", args, out)
+		}
+		if strings.Contains(out+errOut, "✓") {
+			t.Fatalf("skd %v printed a ✓:\n%s\n%s", args, out, errOut)
+		}
+		if out != "" {
+			t.Fatalf("skd %v wrote to stdout:\n%s", args, out)
+		}
+		for _, want := range []string{url + " is not a skilldots library but a repository of skills", "nothing was kept", "skd add " + url + " --all"} {
+			if !strings.Contains(errOut, want) {
+				t.Fatalf("skd %v: stderr lacks %q:\n%s", args, want, errOut)
+			}
+		}
+		if _, err := os.Lstat(e.p("lib")); !os.IsNotExist(err) {
+			t.Fatalf("skd %v left %s behind (%v)", args, e.p("lib"), err)
+		}
+	}
+	// No library was recorded.
+	if _, errOut, code := e.skd("", "list"); code == 0 || !strings.Contains(errOut, "no skilldots library found") {
+		t.Fatalf("a library is recorded after the failed clone:\n%s", errOut)
+	}
+
+	e.setLang("zh")
+	_, errOut, _ := e.skd("", "clone", url, e.p("lib"))
+	if !strings.Contains(errOut, "不是 skilldots 资料库，而是一个存放 skill 的仓库") || !strings.Contains(errOut, "skd add "+url+" --all") {
+		t.Fatalf("zh: %s", errOut)
+	}
+	// The directory's own message names the directory, then the file.
+	_, errOut, _ = e.skd("", "--library", e.p("lib"), "list")
+	if !strings.Contains(errOut, e.p("lib")+" 中没有 skills.toml") {
+		t.Fatalf("zh: %s", errOut)
+	}
+}
+
+// A repository with no skills at all says only that it is no library.
+func TestCloneRepositoryWithoutSkills(t *testing.T) {
+	e := newEnv(t)
+	e.write("plain/README", "hi\n")
+	e.repo("plain")
+	_, errOut, code := e.skd("", "clone", e.p("plain"), e.p("lib"))
+	if code == 0 || !strings.Contains(errOut, "is not a skilldots library (no skills.toml at its top, and no SKILL.md in it)") || strings.Contains(errOut, "skd add") {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if _, err := os.Lstat(e.p("lib")); !os.IsNotExist(err) {
+		t.Fatalf("the clone was left behind (%v)", err)
+	}
+}
+
+// A destination that exists is refused before anything is cloned, and
+// left as it was.
+func TestCloneKeepsAnExistingDirectory(t *testing.T) {
+	e := newEnv(t)
+	e.skill("mine/skills/alpha", "alpha")
+	e.repo("mine")
+	e.write("lib/notes.txt", "mine\n")
+	_, errOut, code := e.skd("", "clone", e.p("mine"), e.p("lib"))
+	if code == 0 || !strings.Contains(errOut, "already exists") {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if b, err := os.ReadFile(e.p("lib/notes.txt")); err != nil || string(b) != "mine\n" {
+		t.Fatalf("existing directory changed: %q %v", b, err)
+	}
+}
+
 func TestInitInsideOuterRepoAndOtherLibrary(t *testing.T) {
 	e := newEnv(t)
 	// A larger repository the library lives in.

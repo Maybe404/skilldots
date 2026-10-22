@@ -104,7 +104,9 @@ func (s *Service) cloneLibrary(url, dir string) (any, error) {
 		s.previews = map[string]*app.Fetched{}
 	}()
 	app.SealOlderSkd()
-	if _, err = library.Git("", "clone", "--", url, dir); err != nil {
+	// A repository without a skills.toml (someone's repository of skills)
+	// is removed again, with an error saying how to add it as a source.
+	if err = app.CloneLibrary(url, dir); err != nil {
 		return nil, err
 	}
 	if _, err = library.Open(dir); err != nil {

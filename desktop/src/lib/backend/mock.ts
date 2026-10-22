@@ -352,6 +352,9 @@ export function createMockBackend(): Backend {
     async cloneLibrary(url, dir) {
       await wait(1200)
       if (!/github\.com|^git@|\//.test(url)) throw new Error(`cannot clone ${url}`)
+      // A repository named just "skills" stands for someone's repository of skills (app.CloneLibrary).
+      if (/\/skills(\.git)?$/.test(url))
+        throw new Error(`${url} is not a skilldots library but a repository of skills (no skills.toml at its top); nothing was kept. To use its skills, add it as a source: skd add ${url} --all`)
       st = sampleState(dir || `${HOME}/.skilldots`)
       st.remote = url
       st.changes = 0

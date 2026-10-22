@@ -380,3 +380,15 @@
 
 @ broken link in an agent directory
 = agent 目录里的断链
+
+@ not a skilldots library
+= 不是 skilldots 资料库
+
+@ %s is %w (no %s at its top); removing the clone failed too: %v
+= %s %w（顶层没有 %s）；删除克隆下来的内容也失败了：%v
+
+@ %s is %w (no %s at its top, and no SKILL.md in it); nothing was kept
+= %s %w（顶层没有 %s，里面也没有 SKILL.md）；克隆下来的内容没有保留
+
+@ %s is %w but a repository of skills (no %s at its top); nothing was kept. To use its skills, add it as a source: skd add %s --all
+= %s %w，而是一个存放 skill 的仓库（顶层没有 %s）；克隆下来的内容没有保留。要使用其中的 skill，请把它作为来源引入：skd add %s --all

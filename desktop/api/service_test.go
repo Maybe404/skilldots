@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -219,6 +220,29 @@ func TestCloneFailureCleansDestinationAndKeepsLibrary(t *testing.T) {
 	status := invoke(t, s, "status").(map[string]any)
 	if status["root"] != oldRoot {
 		t.Fatalf("remembered library changed after failed clone: %#v", status["root"])
+	}
+}
+
+// Importing a repository of skills (no skills.toml) fails with the error
+// the UI shows (errorText), and leaves nothing behind.
+func TestCloneRepositoryOfSkillsIsRefused(t *testing.T) {
+	s := setup(t)
+	oldRoot := s.root
+	repo := filepath.Join(t.TempDir(), "mine")
+	writeFile(t, filepath.Join(repo, "skills", "alpha", "SKILL.md"), "---\nname: alpha\ndescription: d\n---\nbody\n")
+	runGit(t, repo, "init", "-q")
+	runGit(t, repo, "add", "-A")
+	runGit(t, repo, "commit", "-qm", "x")
+	dir := filepath.Join(t.TempDir(), "cloned")
+	_, err := s.cloneLibrary(repo, dir)
+	if err == nil || !errors.Is(err, app.ErrNotLibrary) || !strings.Contains(err.Error(), repo+" is not a skilldots library but a repository of skills") {
+		t.Fatalf("clone of a repository of skills: %v", err)
+	}
+	if _, statErr := os.Lstat(dir); !os.IsNotExist(statErr) {
+		t.Fatalf("refused clone left destination: %v", statErr)
+	}
+	if s.root != oldRoot {
+		t.Fatalf("service root changed after refused clone: %q", s.root)
 	}
 }
 
