@@ -72,6 +72,10 @@ export interface Skill {
   edited?: boolean
   /** What was last sent upstream from it (`skd contribute`), or null. */
   contribution?: Contribution | null
+  /** Of the user's own repository (a pack with own = true): edits are pushed back there. */
+  own?: boolean
+  /** Made in the user's own repository (skd new --in) and not pushed yet; edited is set too. */
+  draft?: boolean
 }
 
 /** A contribution recorded in the lock (lock.Skill.Contribution). */
@@ -100,6 +104,16 @@ export interface ContributeOptions {
   defaultMessage: string
   /** The branch a push goes to (the ref, or the default branch). */
   branch: string
+  /** The user's own repository: a push is the default. */
+  own: boolean
+  /** Own and behind: sending pulls the repository's new commits first and merges them, so behind does not block. */
+  pull: boolean
+  /** Link names of the skills this sends. */
+  skills: string[]
+  /** Those of them made in the repository and not pushed yet (drafts). */
+  drafts: string[]
+  /** A draft's directory in the repository, by link name. */
+  paths?: Record<string, string>
 }
 
 export type ContributeMode = "pr" | "push"
@@ -110,6 +124,14 @@ export interface ContributeOutcome {
   number: number
   branch: string
   pushed: boolean
+  /** Link names of the skills sent. */
+  skills: string[]
+  /** The repository's new commits were pulled and merged first. */
+  pulled: boolean
+  /** Own repository: pulled back after the push, so the skills are no longer marked changed. */
+  pulledBack: boolean
+  /** Own repository: the push happened but pulling it back failed (updating the source finishes it). */
+  pullBackError: string
 }
 
 /** The ref that names the library's own sync merge in the resolve methods (paths relative to the library root). */
@@ -127,6 +149,8 @@ export interface Pack {
   upstreamCount: number
   license?: string
   url: string
+  /** The user's own repository (own = true in skills.toml). */
+  own?: boolean
 }
 
 /** Last upstream check of one pack (app.PackStatus). */
@@ -145,6 +169,8 @@ export interface PackStatus {
   commits: { id: string; title: string }[]
   moreCommits?: boolean
   commitsUnknown?: boolean
+  /** Skills upstream changed to exactly what you have (your change landed): not an update. */
+  landed?: string[]
 }
 
 /** app.Outdated */
@@ -181,6 +207,8 @@ export interface HistoryEntry {
    * ({name, files}); a history record may name only the skill. shelvedNames() reads either.
    */
   shelved?: (ShelvedSkill | string)[]
+  /** Skills upstream changed to what you already had (your change landed). */
+  landed?: string[]
   /** Fictional sample shown by the mock. */
   example?: boolean
 }
@@ -269,6 +297,8 @@ export interface Selection {
   all: boolean
   alias?: string
   agents: string[]
+  /** Marks the repository as the user's own; then an empty one can be added too (followed whole). */
+  own?: boolean
 }
 
 export interface AddOutcome {
@@ -278,6 +308,8 @@ export interface AddOutcome {
   renamed: Record<string, string>
   nothing: boolean
   absent?: Absent
+  /** Added as the user's own repository. */
+  own?: boolean
 }
 
 /** One link change apply would make (engine.Plan item). */
@@ -372,7 +404,8 @@ export interface FileDiff {
 /** One skill an update would replace or bring in (app.SkillDiff). */
 export interface SkillDiff {
   name: string
-  status: "changed" | "added" | "moved"
+  /** landed: upstream changed it to what you have; no file differs. */
+  status: "changed" | "added" | "moved" | "landed"
   /** The library's copy has your edits: the whole folder goes to the trash before the upstream version is copied in. */
   local: boolean
   /** Files you changed, when known. */
@@ -537,10 +570,14 @@ export interface Backend {
   remove(ref: Ref): Promise<void>
   /** Session.Purge: the whole pack to the trash. */
   purge(repo: string): Promise<void>
+  /** Session.SetOwn: marks a pack as the user's own repository, or not (skills.toml only). */
+  setOwn(repo: string, own: boolean): Promise<void>
+  /** app.LooksOwn: GitHub says the person administers the repository; false when it cannot tell. */
+  looksOwn(url: string): Promise<boolean>
   /** Session.Fork */
   fork(ref: Ref, opts: { private: boolean; name: string }): Promise<Skill>
-  /** Session.New */
-  newSkill(opts: { name: string; description: string; private: boolean; agents: string[] }): Promise<Skill>
+  /** Session.New; with pack, a draft in that own repository (Session.NewInPack) at dir ("" beside its other skills, "." at the top). */
+  newSkill(opts: { name: string; description: string; private: boolean; agents: string[]; pack?: string; dir?: string }): Promise<Skill>
   /** Finder: reveal the skill directory. */
   reveal(ref: Ref): Promise<void>
   /** Finder: reveal the library root. */
@@ -582,6 +619,9 @@ export interface Backend {
   contributeOptions(ref: Ref): Promise<ContributeOptions>
   /** skd contribute --pr | --push -m message: the person confirmed the target and the diff first. */
   contribute(ref: Ref, mode: ContributeMode, message: string): Promise<ContributeOutcome>
+  /** Sending every skill of a pack you changed or made at once; rejects when there is nothing to send. */
+  contributePackOptions(repo: string): Promise<ContributeOptions>
+  contributePack(repo: string, mode: ContributeMode, message: string): Promise<ContributeOutcome>
   /** skd contribute --refresh: re-reads PR states (reload the skills after). */
   refreshContributions(): Promise<void>
 

@@ -204,8 +204,8 @@ function Row({
             {update && <UpdateDot />}
             {isMine(skill) && <Tag>{t("kindMine")}</Tag>}
             {hasConflicts(skill) && <ConflictMark />}
-            {skill.edited && <EditedMark />}
-            {skill.contribution && <ContributionMark contribution={skill.contribution} />}
+            {skill.edited && <EditedMark skill={skill} />}
+            {skill.contribution && <ContributionMark contribution={skill.contribution} own={skill.own} />}
           </span>
           <span className="mt-0.5 block truncate font-body fs-meta text-mut">{skill.description}</span>
         </button>

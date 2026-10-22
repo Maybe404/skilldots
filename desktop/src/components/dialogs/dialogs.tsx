@@ -27,9 +27,9 @@ export function Dialogs() {
 function render(d: NonNullable<DialogState>, closeDialog: () => void) {
   switch (d.kind) {
     case "add":
-      return <AddDialog initial={d.initial} adjust={d.adjust} onClose={closeDialog} />
+      return <AddDialog initial={d.initial} adjust={d.adjust} own={d.own} onClose={closeDialog} />
     case "new":
-      return <NewSkillDialog onClose={closeDialog} />
+      return <NewSkillDialog pack={d.pack} onClose={closeDialog} />
     case "fork":
       return <ForkDialog skillRef={d.ref} thenEdit={d.thenEdit} onClose={closeDialog} />
     case "update":
@@ -37,7 +37,7 @@ function render(d: NonNullable<DialogState>, closeDialog: () => void) {
     case "apply":
       return <ApplyDialog onClose={closeDialog} />
     case "contribute":
-      return <ContributeDialog skillRef={d.ref} onClose={closeDialog} />
+      return "ref" in d ? <ContributeDialog skillRef={d.ref} onClose={closeDialog} /> : <ContributeDialog repo={d.repo} onClose={closeDialog} />
     case "sync":
       return <SyncDialog onClose={closeDialog} />
     case "library":

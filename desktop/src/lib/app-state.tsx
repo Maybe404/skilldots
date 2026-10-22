@@ -57,13 +57,17 @@ export interface ConfirmRequest {
 }
 
 export type DialogState =
-  | { kind: "add"; initial?: string; adjust?: boolean }
-  | { kind: "new" }
+  /** own: "这是我的仓库" ticked from the start (importing your own skills repository). */
+  | { kind: "add"; initial?: string; adjust?: boolean; own?: boolean }
+  /** pack: made in this own repository. */
+  | { kind: "new"; pack?: string }
   | { kind: "fork"; ref: Ref; thenEdit?: boolean }
   | { kind: "update"; repos?: string[] }
   | { kind: "apply" }
   | { kind: "sync" }
   | { kind: "contribute"; ref: Ref }
+  /** Every skill of the source you changed or made, at once (推送 N 项). */
+  | { kind: "contribute"; repo: string }
   | { kind: "library"; mode: "use" | "clone" | "init" }
   | { kind: "remove"; ref: Ref }
   | { kind: "unlink"; ref: Ref }
@@ -804,6 +808,11 @@ export function sourceGroup(t: T, s: Skill): string {
 
 export function isMine(s: Skill): boolean {
   return s.kind === "skills" || s.kind === "private"
+}
+
+/** A vendored skill with something to send to its repository: edited, or made there and not pushed (a draft). */
+export function isUnpushed(s: Skill): boolean {
+  return s.kind === "vendor" && !!(s.edited || s.draft)
 }
 
 /** An update of this skill waits for its conflicts to be resolved (shelved, or being resolved). */

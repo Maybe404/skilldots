@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Copy, ExternalLink, FolderOpen, GitMerge, GitPullRequestArrow, PencilLine, SquareArrowOutUpRight, Trash2, Unlink } from "lucide-react"
+import { Copy, ExternalLink, FolderOpen, GitMerge, GitPullRequestArrow, PencilLine, SquareArrowOutUpRight, Trash2, Unlink, Upload } from "lucide-react"
 import { toast } from "sonner"
 
 import { PLACEHOLDER_DESC, hasConflicts, isMine, kindLabel, sourceText, useApp, useColumnAgents } from "@/lib/app-state"
@@ -59,8 +59,8 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           {updatable.has(skill.ref.key) && <UpdateDot />}
           {mine && <Tag>{t("kindMine")}</Tag>}
           {hasConflicts(skill) && <ConflictMark />}
-          {skill.edited && <EditedMark />}
-          {skill.contribution && <ContributionMark contribution={skill.contribution} />}
+          {skill.edited && <EditedMark skill={skill} />}
+          {skill.contribution && <ContributionMark contribution={skill.contribution} own={skill.own} />}
         </SheetTitle>
         <SheetDescription className="truncate">{sourceText(t, skill)}</SheetDescription>
       </SheetHeader>
@@ -84,7 +84,7 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
             {updatable.has(skill.ref.key) && (
               <>
                 <p className="flex items-center gap-2 font-semibold text-ink">
-                  {t("upstreamChanged")}
+                  {t(skill.own ? "upstreamChangedOwn" : "upstreamChanged")}
                   {status && (
                     <Mono className="font-normal text-mut" title={`${status.commit} → ${status.latest}`}>
                       {shortSha(status.commit)} → {shortSha(status.latest)}
@@ -194,14 +194,16 @@ function Body({ skill, start }: { skill: Skill; start: React.RefObject<HTMLDivEl
           </Button>
         </div>
         {(skill.kind === "vendor" || skill.kind === "app") && (
-          // An edited vendored skill can also go back to its source: 提交给上游 (a PR or a push, confirmed in a dialog).
+          // An edited vendored skill can also go back to its source: 提交给上游 (a PR or a push, confirmed in a dialog);
+          // in your own repository, 推送到 it.
           <div className={cn("grid gap-2", skill.edited && "grid-cols-2")}>
             <Button variant="outline" size="lg" onClick={() => openDialog({ kind: "fork", ref: skill.ref })}>
               <Copy /> {t("forkSkill")}
             </Button>
             {skill.edited && (
-              <Button variant="outline" size="lg" onClick={() => openDialog({ kind: "contribute", ref: skill.ref })}>
-                <GitPullRequestArrow /> {t("contributeUpstream")}
+              <Button variant="outline" size="lg" className="min-w-0" title={skill.own ? t("pushToRepo", { repo: skill.origin }) : undefined} onClick={() => openDialog({ kind: "contribute", ref: skill.ref })}>
+                {skill.own ? <Upload /> : <GitPullRequestArrow />}
+                <span className="truncate">{skill.own ? t("pushToRepo", { repo: skill.origin }) : t("contributeUpstream")}</span>
               </Button>
             )}
           </div>
@@ -280,7 +282,7 @@ function MyChanges({ skill }: { skill: Skill }) {
         <Collapsible open={open} onOpenChange={(o) => void toggle(o)}>
           <CollapsibleTrigger className="flex h-[30px] w-full items-center gap-1.5 border-b-head text-left fs-meta text-mut hover:text-ink">
             <DisclosureChevron open={open} />
-            <EditedMark />
+            <EditedMark skill={skill} />
             {t("myChanges")}
           </CollapsibleTrigger>
           <CollapsiblePanel>
@@ -294,7 +296,13 @@ function MyChanges({ skill }: { skill: Skill }) {
               {loaded?.state === "ok" && (
                 <>
                   <p className="fs-meta leading-relaxed text-mut">
-                    {loaded.diff.files.length === 0 ? t("myChangesNone") : loaded.diff.base === false ? t("myChangesNoBase") : t("myChangesBase")}
+                    {loaded.diff.files.length === 0
+                      ? t("myChangesNone")
+                      : skill.draft
+                        ? t("myChangesDraft")
+                        : loaded.diff.base === false
+                          ? t("myChangesNoBase")
+                          : t(skill.own ? "myChangesBaseOwn" : "myChangesBase")}
                   </p>
                   {loaded.diff.files.length > 0 && <SkillDiffView diff={loaded.diff} note={false} />}
                 </>
@@ -305,8 +313,8 @@ function MyChanges({ skill }: { skill: Skill }) {
       )}
       {c && (
         <div className={cn("flex flex-wrap items-center gap-x-2.5 gap-y-1 fs-meta text-ink", skill.edited ? "mt-2.5" : "border-b-row py-2.5")}>
-          <ContributionMark contribution={c} />
-          <span>{contributionLabel(t, c)}</span>
+          <ContributionMark contribution={c} own={skill.own} />
+          <span>{contributionLabel(t, c, skill.own)}</span>
           <span className="flex-1" />
           <Button variant="link" size="inline" className="fs-meta" onClick={() => openExternal(c.url)}>
             <ExternalLink /> {c.kind === "pr" ? t("openPR") : t("openCommit")}

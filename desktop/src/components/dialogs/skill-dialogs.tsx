@@ -29,23 +29,27 @@ import { Textarea } from "@/components/ui/textarea"
 
 const NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/
 
-function LocationField({ value, onChange }: { value: "public" | "private"; onChange: (v: "public" | "private") => void }) {
+/** Where a new skill goes: skills/, private/, or (own) one of your own repositories, as "own:<repo>". */
+type Location = "public" | "private" | `own:${string}`
+
+function LocationField<L extends Location>({ value, onChange, own = [] }: { value: L; onChange: (v: L) => void; own?: string[] }) {
   const { t } = useApp()
+  const options: [Location, string, string][] = [
+    ["public", t("locPublic"), t("locPublicHint")],
+    ["private", t("locPrivate"), t("locPrivateHint")],
+    ...own.map((repo): [Location, string, string] => [`own:${repo}`, t("locOwn"), repo]),
+  ]
   return (
     <fieldset>
       <legend className="mb-1.5 fs-meta font-medium text-ink">{t("location")}</legend>
-      <RadioGroup value={value} onValueChange={(v) => onChange(v as "public" | "private")} className="grid grid-cols-2 gap-2">
-        {(
-          [
-            ["public", t("locPublic"), t("locPublicHint")],
-            ["private", t("locPrivate"), t("locPrivateHint")],
-          ] as const
-        ).map(([v, label, hint]) => (
-          <label key={v} className="flex cursor-pointer items-start gap-2.5 rounded-ctl border-line p-2.5 has-data-checked:border-hue has-data-checked:bg-row-hv">
+      <RadioGroup value={value} onValueChange={(v) => onChange(v as L)} className="grid grid-cols-2 gap-2">
+        {options.map(([v, label, hint]) => (
+          // Your own repositories each take a whole row under the library's two places.
+          <label key={v} className={cn("flex cursor-pointer items-start gap-2.5 rounded-ctl border-line p-2.5 has-data-checked:border-hue has-data-checked:bg-row-hv", v.startsWith("own:") && "col-span-2")}>
             <RadioGroupItem value={v} className="mt-0.5" />
             <span className="min-w-0">
               <span className="block fs-body font-medium text-ink">{label}</span>
-              <span className="block fs-meta text-mut">{hint}</span>
+              <span className="block fs-meta [overflow-wrap:anywhere] text-mut">{hint}</span>
             </span>
           </label>
         ))}
@@ -113,22 +117,28 @@ export function AgentTargets({ value, onChange, className, label }: { value: Set
   )
 }
 
-export function NewSkillDialog({ onClose }: { onClose: () => void }) {
-  const { t, run, reload, agents: all, openEditor, select, navigate } = useApp()
+/** New skill in skills/ or private/, or (pack) as a draft in one of your own repositories, pushed there later. */
+export function NewSkillDialog({ pack, onClose }: { pack?: string; onClose: () => void }) {
+  const { t, run, reload, agents: all, packs, openEditor, select, navigate } = useApp()
+  const own = packs.filter((p) => p.own).map((p) => p.repo)
   const [name, setName] = React.useState("")
   const [desc, setDesc] = React.useState("")
-  const [loc, setLoc] = React.useState<"public" | "private">("public")
+  const [loc, setLoc] = React.useState<Location>(() => (pack && own.includes(pack) ? `own:${pack}` : "public"))
+  const [dir, setDir] = React.useState("")
   const [targets, setTargets] = React.useState<Set<string>>(() => new Set(all.filter((a) => a.isDefault && a.enabled).map((a) => a.name)))
   const [busy, setBusy] = React.useState(false)
   const invalid = name !== "" && !NAME.test(name)
+  const repo = loc.startsWith("own:") ? loc.slice(4) : undefined
 
   const create = async (edit: boolean) => {
     setBusy(true)
-    const r = await run(() => backend.newSkill({ name, description: desc, private: loc === "private", agents: [...targets] }))
+    const r = await run(() =>
+      backend.newSkill(repo ? { name, description: desc, private: false, agents: [...targets], pack: repo, dir: dir.trim() } : { name, description: desc, private: loc === "private", agents: [...targets] }),
+    )
     setBusy(false)
     if (!r.ok) return
     await reload()
-    toast(t("created", { name: r.value.name }))
+    toast(repo ? t("createdInRepo", { name: r.value.name, repo }) : t("created", { name: r.value.name }))
     onClose()
     if (edit) openEditor(r.value.ref)
     else {
@@ -163,7 +173,14 @@ export function NewSkillDialog({ onClose }: { onClose: () => void }) {
               <Textarea id="new-desc" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t("descPlaceholder")} rows={3} />
               <FieldDescription>{t("descHint")}</FieldDescription>
             </Field>
-            <LocationField value={loc} onChange={setLoc} />
+            <LocationField value={loc} onChange={setLoc} own={own} />
+            {repo && (
+              <Field>
+                <FieldLabel htmlFor="new-dir">{t("repoDir")}</FieldLabel>
+                <Input id="new-dir" value={dir} onChange={(e) => setDir(e.target.value)} placeholder={t("repoDirPlaceholder")} className="font-mono fs-body placeholder:font-body" spellCheck={false} autoComplete="off" />
+                <FieldDescription>{t("repoDirHint")}</FieldDescription>
+              </Field>
+            )}
             <AgentTargets value={targets} onChange={setTargets} />
           </div>
           <DialogFooter>

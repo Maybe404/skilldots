@@ -2,8 +2,8 @@ import * as React from "react"
 import { cn, shortSha } from "@/lib/utils"
 import { useApp } from "@/lib/app-state"
 import { agentMono } from "@/lib/agents"
-import type { Agent, Contribution } from "@/lib/backend"
-import { ArrowUpFromLine, GitMerge, GitPullRequest, GitPullRequestClosed, PencilLine, RotateCwIcon } from "lucide-react"
+import type { Agent, Contribution, Skill } from "@/lib/backend"
+import { ArrowUpFromLine, FilePlus2, GitMerge, GitPullRequest, GitPullRequestClosed, PencilLine, RotateCwIcon } from "lucide-react"
 import { useReducedMotion } from "motion/react"
 import { SlidingNumber } from "@/components/animate-ui/primitives/texts/sliding-number"
 import { Button } from "@/components/ui/button"
@@ -31,28 +31,33 @@ export function ConflictMark({ className }: { className?: string }) {
   )
 }
 
-/** Muted pencil next to a vendored skill's name: you edited it, so it differs from upstream. */
-export function EditedMark({ className }: { className?: string }) {
+/**
+ * Muted pencil next to a vendored skill's name: you edited it, so it differs from upstream (in your own
+ * repository: not pushed yet). A skill made in your own repository and not pushed yet gets a new-file icon.
+ */
+export function EditedMark({ skill, className }: { skill?: Pick<Skill, "own" | "draft">; className?: string }) {
   const { t } = useApp()
+  const label = skill?.draft ? t("draftMark") : skill?.own ? t("editedMarkOwn") : t("editedMark")
+  const Icon = skill?.draft ? FilePlus2 : PencilLine
   return (
-    <Hint label={t("editedMark")}>
-      <span role="img" aria-label={t("editedMark")} className={cn("inline-flex shrink-0 text-mut", className)}>
-        <PencilLine aria-hidden className="size-3.5" strokeWidth={1.9} />
+    <Hint label={label}>
+      <span role="img" aria-label={label} className={cn("inline-flex shrink-0 text-mut", className)}>
+        <Icon aria-hidden className="size-3.5" strokeWidth={1.9} />
       </span>
     </Hint>
   )
 }
 
-/** What a contribution's icon and tooltip say: "PR #12 等待审批", "已合并", "已关闭", or the branch a push went to. */
-export function contributionLabel(t: ReturnType<typeof useApp>["t"], c: Contribution): string {
-  if (c.kind === "push") return t("pushedMark", { branch: c.branch })
+/** What a contribution's icon and tooltip say: "PR #12 等待审批", "已合并", "已关闭", or the branch a push went to (own: your repository's). */
+export function contributionLabel(t: ReturnType<typeof useApp>["t"], c: Contribution, own?: boolean): string {
+  if (c.kind === "push") return t(own ? "pushedMarkOwn" : "pushedMark", { branch: c.branch })
   return t(c.state === "merged" ? "prMerged" : c.state === "closed" ? "prClosed" : "prOpen", { n: c.number })
 }
 
 /** A PR icon next to a skill's name (or an upload arrow for a direct push); an open PR in the accent colour. */
-export function ContributionMark({ contribution: c, className }: { contribution: Contribution; className?: string }) {
+export function ContributionMark({ contribution: c, own, className }: { contribution: Contribution; own?: boolean; className?: string }) {
   const { t } = useApp()
-  const label = contributionLabel(t, c)
+  const label = contributionLabel(t, c, own)
   const Icon = c.kind === "push" ? ArrowUpFromLine : c.state === "closed" ? GitPullRequestClosed : GitPullRequest
   return (
     <Hint label={label}>

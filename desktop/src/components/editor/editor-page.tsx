@@ -49,7 +49,9 @@ export function EditorPage({ skillRef, file = "SKILL.md", back = "skills" }: { s
   const [cursor, setCursor] = React.useState({ line: 1, col: 1 })
   const [saving, setSaving] = React.useState(false)
   // Resolving a merge edits the files with conflict markers: the vendored copy is already yours to change.
-  const needsAck = (skill?.kind === "vendor" || skill?.kind === "app") && !hasConflicts(skill)
+  // So are your own repository's files (own): editing them and pushing back is the point, so only the banner says so.
+  const ownFile = skill?.kind === "vendor" && !!skill.own && !hasConflicts(skill)
+  const needsAck = (skill?.kind === "vendor" || skill?.kind === "app") && !hasConflicts(skill) && !ownFile
   const [acked, setAcked] = React.useState(false)
   const [leaving, setLeaving] = React.useState<(() => void) | null>(null)
 
@@ -197,9 +199,9 @@ export function EditorPage({ skillRef, file = "SKILL.md", back = "skills" }: { s
         </div>
       </div>
 
-      {needsAck && acked && (
+      {((needsAck && acked) || ownFile) && (
         <div className="flex items-center gap-2 border-b-row bg-row-hv px-10 py-1.5 fs-meta text-ink [border-left:3px_solid_var(--ac)]" role="note">
-          {t("vendorBanner")}
+          {ownFile ? t("ownBanner", { repo: skill.origin }) : t("vendorBanner")}
         </div>
       )}
 

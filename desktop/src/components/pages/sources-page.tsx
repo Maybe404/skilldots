@@ -1,9 +1,9 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { Download, FileDiff, ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Download, FileDiff, GitPullRequestArrow, ListChecks, MoreHorizontal, Plus, RefreshCw, Trash2, Upload, UserRoundCheck, UserRoundX } from "lucide-react"
 
 import { cn, shortSha } from "@/lib/utils"
-import { hasUpdates, isMine, toastMergeOutcome, useApp } from "@/lib/app-state"
+import { hasUpdates, isMine, isUnpushed, toastMergeOutcome, useApp } from "@/lib/app-state"
 import { backend, type Pack, type PackStatus, type Skill } from "@/lib/backend"
 import { EmptyNote, Hint, Mono, Page, RefreshIcon, Sha, TableHead, Tag, UpdateDot } from "@/components/app/bits"
 import { Button } from "@/components/ui/button"
@@ -64,7 +64,18 @@ export function SourcesPage() {
       }
     >
       {packs.length === 0 ? (
-        <EmptyNote title={t("noSources")} action={<Button onClick={() => openDialog({ kind: "add" })}>{t("addSkill")}</Button>}>
+        <EmptyNote
+          title={t("noSources")}
+          action={
+            <>
+              <Button onClick={() => openDialog({ kind: "add" })}>{t("addSkill")}</Button>
+              {/* Your own skills repository, added as yours ("这是我的仓库" ticked); it may still be empty. */}
+              <Button variant="outline" onClick={() => openDialog({ kind: "add", own: true })}>
+                {t("importOwnRepo")}
+              </Button>
+            </>
+          }
+        >
           {t("noSourcesBody")}
         </EmptyNote>
       ) : (
@@ -127,12 +138,21 @@ function SkillLinks({ list }: { list: Skill[] }) {
 }
 
 function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; used: Skill[]; st?: PackStatus; open: boolean; onToggle: () => void; failed?: string }) {
-  const { t, openDialog, check } = useApp()
+  const { t, openDialog, check, run, reload } = useApp()
   const upd = !!st && hasUpdates(st)
   const movedOnly = !!st && !upd && st.moved.length > 0
   const total = Math.max(p.upstreamCount, used.length, 1)
   const reviewable = upd || movedOnly
-  const statusText = reviewable ? (open ? t("collapse") : st!.moved.length ? t("hasUpdatesMoved") : t("hasUpdatesView")) : failed ? t("checkFailedShort") : st ? t("upToDate") : "—"
+  const statusText = reviewable ? (open ? t("collapse") : st!.moved.length ? t("hasUpdatesMoved") : t(p.own ? "hasUpdatesOwn" : "hasUpdatesView")) : failed ? t("checkFailedShort") : st ? t("upToDate") : "—"
+  // Skills changed or made here and not sent yet: your own repository pushes them from the row (推送 N 项).
+  const unpushed = used.filter(isUnpushed).length
+  const pushHere = !!p.own && unpushed > 0
+
+  const toggleOwn = async () => {
+    if (!(await run(() => backend.setOwn(p.repo, !p.own))).ok) return
+    await reload().catch(() => undefined)
+    toast(t(p.own ? "unmarkedOwnToast" : "markedOwnToast", { repo: p.repo }))
+  }
 
   return (
     <div id={`source-${p.repo}`} className={cn(open && "bg-row-hv")}>
@@ -140,6 +160,7 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
         <div role="cell" className="min-w-0 pr-4">
           <div className="flex items-center gap-2 font-heading fs-name leading-[1.2] font-semibold text-ink">
             <span className="truncate">{p.repo}</span>
+            {p.own && <Tag>{t("ownTag")}</Tag>}
             {p.followAll && <Tag>{t("followAll")}</Tag>}
             {p.alias && <span className="fs-meta font-normal text-mut">{p.alias}</span>}
           </div>
@@ -153,7 +174,8 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
             <span className="block h-full rounded-[2px] bg-hue" style={{ width: `${Math.max(4, Math.round((100 * used.length) / total))}%` }} />
           </span>
           <span className="fs-meta text-ink tabular-nums">
-            {used.length} / {p.upstreamCount || "?"}
+            {/* Drafts made in your own repository are not upstream yet: they count in both. */}
+            {used.length} / {p.upstreamCount ? Math.max(p.upstreamCount, used.length) : "?"}
           </span>
         </div>
         <div role="cell" className="min-w-0 truncate fs-meta text-mut" title={p.license}>
@@ -170,13 +192,22 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
           )}
         </div>
         <div role="cell" className="flex justify-end gap-1">
-          {/* Narrow windows keep the icon: the name column needs the room more. */}
-          <Hint label={t("chooseSkillsHint")}>
-            <Button variant="ghost" size="sm" aria-label={`${t("chooseSkills")} · ${p.repo}`} className="max-[1099px]:w-[26px] max-[1099px]:px-0" onClick={() => openDialog({ kind: "add", initial: p.repo, adjust: true })}>
-              <ListChecks />
-              <span className="max-[1099px]:hidden">{t("chooseSkills")}</span>
-            </Button>
-          </Hint>
+          {/* Narrow windows keep the icon: the name column needs the room more. With something to push, 调整选择 moves into the menu. */}
+          {pushHere ? (
+            <Hint label={t("pushNHint", { n: unpushed, repo: p.repo })}>
+              <Button size="sm" aria-label={t("pushNHint", { n: unpushed, repo: p.repo })} className="max-[1099px]:w-[26px] max-[1099px]:px-0" onClick={() => openDialog({ kind: "contribute", repo: p.repo })}>
+                <Upload />
+                <span className="max-[1099px]:hidden">{t("pushN", { n: unpushed })}</span>
+              </Button>
+            </Hint>
+          ) : (
+            <Hint label={t("chooseSkillsHint")}>
+              <Button variant="ghost" size="sm" aria-label={`${t("chooseSkills")} · ${p.repo}`} className="max-[1099px]:w-[26px] max-[1099px]:px-0" onClick={() => openDialog({ kind: "add", initial: p.repo, adjust: true })}>
+                <ListChecks />
+                <span className="max-[1099px]:hidden">{t("chooseSkills")}</span>
+              </Button>
+            </Hint>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("moreFor", { name: p.repo })} />}>
               <MoreHorizontal className="size-[15px]" />
@@ -190,7 +221,26 @@ function SourceRow({ pack: p, used, st, open, onToggle, failed }: { pack: Pack; 
                   <ListChecks /> {t("updateDialogOpen")}
                 </DropdownMenuItem>
               )}
+              {pushHere && (
+                <DropdownMenuItem onClick={() => openDialog({ kind: "add", initial: p.repo, adjust: true })}>
+                  <ListChecks /> {t("chooseSkills")}
+                </DropdownMenuItem>
+              )}
+              {/* Someone else's repository: every edit of its skills goes upstream at once from here. */}
+              {!p.own && unpushed > 0 && (
+                <DropdownMenuItem onClick={() => openDialog({ kind: "contribute", repo: p.repo })}>
+                  <GitPullRequestArrow /> {t("contributeN", { n: unpushed })}
+                </DropdownMenuItem>
+              )}
+              {p.own && (
+                <DropdownMenuItem onClick={() => openDialog({ kind: "new", pack: p.repo })}>
+                  <Plus /> {t("newInRepo")}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => void toggleOwn()}>
+                {p.own ? <UserRoundX /> : <UserRoundCheck />} {t(p.own ? "unmarkOwn" : "markOwn")}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => openDialog({ kind: "purge", repo: p.repo })}>
                 <Trash2 /> {t("removeSource")}
               </DropdownMenuItem>
@@ -214,6 +264,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
     [t("skillPending"), st.pending],
     [t("skillGone"), st.gone],
     [t("skillMoved"), st.moved.map((m) => m.split(": ")[0])],
+    [t("skillLanded"), st.landed ?? []],
   ]
 
   const go = async () => {
@@ -231,7 +282,7 @@ function UpdateReview({ pack, st, used, onClose }: { pack: Pack; st: PackStatus;
     <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6 border-b-row bg-row-hv py-3.5 pr-2.5 pb-4 pl-[26px] [border-left:3px_solid_var(--ac)] max-[900px]:grid-cols-1">
       <div className="min-w-0">
         <div className="flex items-baseline gap-2.5 fs-meta text-mut">
-          <span className="font-semibold text-ink">{t("upstreamCommits")}</span>
+          <span className="font-semibold text-ink">{t(pack.own ? "repoCommits" : "upstreamCommits")}</span>
           <Mono title={`${st.commit} → ${st.latest}`}>
             {shortSha(st.commit)} → {shortSha(st.latest)}
           </Mono>

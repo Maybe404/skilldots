@@ -17,6 +17,7 @@ export const nativeBackend: Backend = {
   parseSource: method("parseSource"), show: method("show"), add: method("add"),
   enable: method("enable"), disable: method("disable"), setTargets: method("setTargets"),
   remove: method("remove"), purge: method("purge"), fork: method("fork"),
+  setOwn: method("setOwn"), looksOwn: method("looksOwn"),
   newSkill: method("newSkill"), reveal: method("reveal"), revealLibrary: method("revealLibrary"),
   openInEditor: method("openInEditor"), files: method("files"),
   readFile: method("readFile"), writeFile: method("writeFile"), openUrl: method("openUrl"),
@@ -29,5 +30,6 @@ export const nativeBackend: Backend = {
   resolveContinue: method("resolveContinue"), resolveAbort: method("resolveAbort"),
   localChanges: method("localChanges"), contributeOptions: method("contributeOptions"),
   contribute: method("contribute"), refreshContributions: method("refreshContributions"),
+  contributePackOptions: method("contributePackOptions"), contributePack: method("contributePack"),
   sync: method("sync"), config: method("config"), setConfig: method("setConfig"),
 }
