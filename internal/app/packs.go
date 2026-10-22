@@ -101,6 +101,10 @@ type Selection struct {
 	// Agents are the pack's targets (empty keeps the current ones, or the
 	// manifest default for a new pack).
 	Agents []string
+	// Own marks the repository as the user's own (manifest.Pack.Own);
+	// false keeps what the pack has. Their own repository may have no
+	// skill yet: then it is followed whole.
+	Own bool
 }
 
 // AddOutcome is the result of Add.
@@ -122,6 +126,9 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 	src := f.Source
 	if err := s.checkAlias(sel.Alias, src.Repo); err != nil {
 		return nil, err
+	}
+	if sel.Own && len(f.Skills) == 0 {
+		sel.All = true
 	}
 	var names []string
 	for _, n := range sel.Skills {
@@ -185,6 +192,10 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 	if sel.Alias != "" {
 		p.Alias = sel.Alias
 	}
+	wasOwn := p.Own
+	if sel.Own {
+		p.Own = true
+	}
 	if len(sel.Agents) > 0 {
 		t := append([]string{}, sel.Agents...)
 		p.Targets = &t
@@ -197,6 +208,7 @@ func (s *Session) Add(f *Fetched, sel Selection) (*AddOutcome, error) {
 		if isNew {
 			m.Packs = m.Packs[:len(m.Packs)-1]
 		}
+		p.Own = wasOwn
 		return nil, err
 	}
 	s.recordBaseline(p.Repo, rep)

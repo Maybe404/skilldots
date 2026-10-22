@@ -576,6 +576,19 @@ func walk(root string, hidden bool) ([]string, error) {
 	return dirs, nil
 }
 
+// Scanned reports whether Scan looks for skills at rel, a
+// slash-separated directory of a repository: none of its segments is a
+// test, dependency or hidden directory (.agents aside), which Scan
+// skips while the repository has skills elsewhere.
+func Scanned(rel string) bool {
+	for _, seg := range strings.Split(rel, "/") {
+		if fsutil.Skip[seg] || testDirs[seg] || (strings.HasPrefix(seg, ".") && seg != ".agents") {
+			return false
+		}
+	}
+	return true
+}
+
 // Category derives a category from a skill dir's repo-relative path: the
 // parent segments minus structural and hidden ones.
 func Category(rel string) string {

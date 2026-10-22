@@ -36,6 +36,30 @@ type GitHub interface {
 	PRState(ctx context.Context, url string) (string, error)
 }
 
+// owner is what a GitHub may also say: whether the logged-in user
+// administers owner/repo (owns it, or is an admin of it). Asked only to
+// suggest marking a repository as the user's own (LooksOwn).
+type owner interface {
+	Owns(ctx context.Context, owner, repo string) (bool, error)
+}
+
+// LooksOwn reports whether GitHub says the logged-in user administers the
+// repository at url (a GitHub repository; gh installed and logged in):
+// it is likely theirs, and front ends suggest marking it as their own.
+// It never fails: whatever cannot be asked is false.
+func LooksOwn(ctx context.Context, url string) bool {
+	m := githubURL.FindStringSubmatch(url)
+	if m == nil {
+		return false
+	}
+	g, ok := gh().(owner)
+	if !ok || gh().Status(ctx) != GHOK {
+		return false
+	}
+	yes, err := g.Owns(ctx, m[1], m[2])
+	return err == nil && yes
+}
+
 var (
 	githubMu sync.Mutex
 	github   GitHub = ghCLI{}
@@ -90,6 +114,14 @@ func (g ghCLI) Status(ctx context.Context) string {
 
 func (g ghCLI) CanPush(ctx context.Context, owner, repo string) (bool, error) {
 	out, err := g.run(ctx, "api", "repos/"+owner+"/"+repo, "--jq", ".permissions.push")
+	if err != nil {
+		return false, err
+	}
+	return out == "true", nil
+}
+
+func (g ghCLI) Owns(ctx context.Context, owner, repo string) (bool, error) {
+	out, err := g.run(ctx, "api", "repos/"+owner+"/"+repo, "--jq", ".permissions.admin")
 	if err != nil {
 		return false, err
 	}

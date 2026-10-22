@@ -124,7 +124,7 @@ func (s *Service) packOperation(ctx context.Context, ses *app.Session, method st
 		if o.Report != nil && o.Report.Renamed != nil {
 			renamed = o.Report.Renamed
 		}
-		return object{"repo": o.Repo, "linked": o.Linked, "renamed": renamed, "nothing": o.Nothing, "absent": absentOf(o.Apply)}, nil
+		return object{"repo": o.Repo, "linked": o.Linked, "renamed": renamed, "nothing": o.Nothing, "absent": absentOf(o.Apply), "own": o.Report != nil && o.Report.Own}, nil
 	case "updateDiff":
 		repo, err := argument[string](args, 0)
 		if err != nil {

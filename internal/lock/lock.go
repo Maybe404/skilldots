@@ -60,7 +60,19 @@ type Skill struct {
 	// upstream (skd contribute): kept until an update brings upstream's
 	// version to what the user has (the change landed).
 	Contribution *Contribution `toml:"contribution,omitempty"`
+	// Draft is set for a skill created in the user's own repository
+	// (skd new --in) that is not there yet: it lives only in vendor/
+	// until skd contribute pushes it, at Path (slash-separated, relative
+	// to the repository's top). Hash is "" meanwhile. An older skd
+	// ignores both, and drops them when it saves the lock: a skill with
+	// no hash is a draft all the same (IsDraft).
+	Draft bool   `toml:"draft,omitempty"`
+	Path  string `toml:"path,omitempty"`
 }
+
+// IsDraft reports whether the skill is a draft: never vendored from
+// upstream, only made here (skd new --in).
+func (s *Skill) IsDraft() bool { return s != nil && (s.Draft || s.Hash == "") }
 
 // Contribution is a change to a vendored skill sent upstream.
 type Contribution struct {
@@ -146,7 +158,7 @@ var known = []string{
 	"packs.*", "packs.*.commit", "packs.*.ref", "packs.*.upstream",
 	"packs.*.skills.*", "packs.*.skills.*.category", "packs.*.skills.*.hash",
 	"packs.*.skills.*.shelved", "packs.*.skills.*.upstream", "packs.*.skills.*.conflicts",
-	"packs.*.skills.*.resolving", "packs.*.skills.*.backup", "packs.*.skills.*.contribution", "packs.*.skills.*.contribution.kind",
+	"packs.*.skills.*.resolving", "packs.*.skills.*.backup", "packs.*.skills.*.draft", "packs.*.skills.*.path", "packs.*.skills.*.contribution", "packs.*.skills.*.contribution.kind",
 	"packs.*.skills.*.contribution.url", "packs.*.skills.*.contribution.branch", "packs.*.skills.*.contribution.state", "packs.*.skills.*.contribution.at",
 	"links.*", "links.*.mode", "links.*.source", "links.*.hash", "links.*.path",
 }

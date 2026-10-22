@@ -85,7 +85,10 @@ func skill(e engine.Entry) object {
 		"shelved": e.Shelved != "" || e.Resolving, "resolving": e.Resolving, "conflictFiles": append([]string{}, e.Conflicts...),
 		// The user changed it (vendored only; set by Session.MarkEdited),
 		// and the change last sent upstream.
-		"edited": e.Edited, "contribution": contribution(e.Contribution)}
+		"edited": e.Edited, "contribution": contribution(e.Contribution),
+		// Of the user's own repository (own = true), and made there with
+		// skd new --in, not pushed yet.
+		"own": e.Own, "draft": e.Draft}
 }
 
 // contribution is a skill's contribution for the desktop, or nil.
@@ -303,7 +306,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			if e != nil {
 				return nil, e
 			}
-			out = append(out, object{"repo": p.Repo, "alias": p.Alias, "ref": p.Ref, "commit": commit, "followAll": p.UsesAll(), "upstreamCount": count, "url": src.URL})
+			out = append(out, object{"repo": p.Repo, "alias": p.Alias, "ref": p.Ref, "commit": commit, "followAll": p.UsesAll(), "upstreamCount": count, "url": src.URL, "own": p.Own})
 		}
 		return out, nil
 	case "claudeOverrides":
@@ -332,7 +335,7 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 		return historyRows(rows, nil, shelvedFiles(ses, nil)), err
 	case "historyDiff":
 		return historyDiff(ctx, ses, args)
-	case "localChanges", "contributeOptions", "contribute", "refreshContributions":
+	case "localChanges", "contributeOptions", "contribute", "refreshContributions", "contributePackOptions", "contributePack":
 		return contributeOperation(ctx, ses, method, args)
 	case "resolveStart", "resolveState", "resolvePick", "resolveContinue", "resolveAbort":
 		return resolveOperation(ses, method, args)
@@ -468,15 +471,51 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			return nil, err
 		}
 		return findSkill(ses, app.EntryRef(app.NewKind(opts.Private), "", filepath.Base(o.Path)))
+	case "setOwn":
+		repo, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		own, err := argument[bool](args, 1)
+		if err != nil {
+			return nil, err
+		}
+		_, err = ses.SetOwn(repo, own)
+		return nil, err
+	case "looksOwn":
+		// Whether GitHub says the person administers the repository: the
+		// add dialog then ticks "this is my repository".
+		url, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		return app.LooksOwn(ctx, url), nil
 	case "newSkill":
 		opts, err := argument[struct {
 			Name        string
 			Description string
 			Private     bool
 			Agents      []string
+			// Pack: made in the user's own repository (skd new --in),
+			// at Dir there ("" beside its other skills).
+			Pack string
+			Dir  string
 		}](args, 0)
 		if err != nil {
 			return nil, err
+		}
+		if opts.Pack != "" {
+			if opts.Private {
+				return nil, errors.New("a skill in your own repository is pushed there; it cannot be private")
+			}
+			o, err := ses.NewInPack(opts.Name, opts.Pack, app.NewInPackOptions{Dir: opts.Dir, Description: opts.Description, Agents: opts.Agents})
+			if err != nil {
+				return nil, err
+			}
+			if err = checkApply(o.Apply, nil); err != nil {
+				return nil, err
+			}
+			return findSkill(ses, app.EntryRef(engine.KindVendor, o.Pack, opts.Name))
 		}
 		for _, n := range opts.Agents {
 			if _, err = ses.Reg.Get(n); err != nil {
@@ -606,7 +645,9 @@ func outdated(o *app.Outdated) any {
 		for _, c := range p.Commits {
 			commits = append(commits, object{"id": c.Hash, "title": c.Subject})
 		}
-		ps = append(ps, object{"repo": p.Repo, "commit": p.Commit, "latest": p.Latest, "changed": p.Changed, "moved": p.Moved, "new": p.New, "gone": p.Gone, "pending": p.Pending, "checked": p.Checked, "commits": commits, "moreCommits": p.MoreCommits, "commitsUnknown": p.CommitsUnknown, "shelved": nonNilList(p.Shelved)})
+		ps = append(ps, object{"repo": p.Repo, "commit": p.Commit, "latest": p.Latest, "changed": p.Changed, "moved": p.Moved, "new": p.New, "gone": p.Gone, "pending": p.Pending, "checked": p.Checked, "commits": commits, "moreCommits": p.MoreCommits, "commitsUnknown": p.CommitsUnknown, "shelved": nonNilList(p.Shelved),
+			// Upstream is already what the library has (the user's change landed).
+			"landed": nonNilList(p.Landed)})
 	}
 	return object{"checked": o.Checked, "packs": ps, "failed": o.Failed}
 }
@@ -630,7 +671,7 @@ func historyRows(rows []app.UpdateRecord, backups []string, files map[string][]s
 			shelved = append(shelved, object{"name": n, "files": nonNilList(files[r.Repo+"\x00"+n])})
 		}
 		out = append(out, object{"id": r.Time.String() + r.Repo + r.To, "when": r.Time, "repo": r.Repo, "from": r.From, "to": r.To, "changed": r.Changed, "added": r.Added, "gone": r.Gone, "moved": r.Moved, "dropped": r.Dropped, "new": r.New, "commits": cs, "moreCommits": r.MoreCommits, "commitsUnknown": r.CommitsUnknown, "applyError": r.ApplyError, "omitted": r.Omitted, "backups": rowBackups,
-			"merged": nonNilList(r.Merged), "shelved": shelved})
+			"merged": nonNilList(r.Merged), "shelved": shelved, "landed": nonNilList(r.Landed)})
 	}
 	return out
 }

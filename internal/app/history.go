@@ -95,6 +95,9 @@ type UpdateRecord struct {
 	// resolved (skd resolve).
 	Merged  []string `json:"merged,omitempty"`
 	Shelved []string `json:"shelved,omitempty"`
+	// Landed are skills upstream changed to what the user already had
+	// (their change landed there): nothing was merged or replaced.
+	Landed []string `json:"landed,omitempty"`
 	// SnapFrom and SnapTo are the upstream snapshots before and after the
 	// update (commits of the library's repository, see
 	// engine.SnapshotRefs): what `skd history --diff` compares.
@@ -117,12 +120,12 @@ func newRecord(rep *engine.SyncReport, now time.Time) *UpdateRecord {
 	r := &UpdateRecord{Time: now.UTC().Truncate(time.Second), Repo: rep.Repo, From: rep.OldCommit, To: rep.NewCommit,
 		Changed: nonNilStrings(rep.Changed), Added: nonNilStrings(rep.Added), Gone: nonNilStrings(rep.UpstreamGone),
 		Dropped: nonNilStrings(rep.Dropped), New: nonNilStrings(rep.UpstreamNew), Moved: movedNames(rep.Moved), Commits: []UpstreamCommit{},
-		Merged: rep.Merged, SnapFrom: rep.SnapFrom, SnapTo: rep.SnapTo}
+		Merged: rep.Merged, Landed: rep.Landed, SnapFrom: rep.SnapFrom, SnapTo: rep.SnapTo}
 	for _, sh := range rep.Shelved {
 		r.Shelved = append(r.Shelved, sh.Name)
 	}
 	r.Changed = without(r.Changed, r.Merged)
-	if r.From == r.To && len(r.Changed)+len(r.Merged)+len(r.Added)+len(r.Moved)+len(r.Dropped) == 0 {
+	if r.From == r.To && len(r.Changed)+len(r.Merged)+len(r.Landed)+len(r.Added)+len(r.Moved)+len(r.Dropped) == 0 {
 		return nil
 	}
 	return r
@@ -153,7 +156,7 @@ func (r *UpdateRecord) sanitize() {
 		}
 		*l = out
 	}
-	for _, l := range []*[]string{&r.Merged, &r.Shelved} {
+	for _, l := range []*[]string{&r.Merged, &r.Shelved, &r.Landed} {
 		for i, n := range *l {
 			(*l)[i] = CleanText(n, MaxName)
 		}
@@ -230,6 +233,7 @@ func fillCommits(ctx context.Context, r *UpdateRecord, ref string, upstream []pa
 	}
 	add(r.Changed)
 	add(r.Merged)
+	add(r.Landed)
 	add(r.Added)
 	add(r.Moved)
 	add(r.Gone)
@@ -402,7 +406,7 @@ func (r *UpdateRecord) marshalFit() ([]byte, error) {
 			return line, err
 		}
 		var longest *[]string
-		for _, l := range []*[]string{&r.Changed, &r.Added, &r.Moved, &r.Gone, &r.Dropped, &r.New, &r.Merged, &r.Shelved} {
+		for _, l := range []*[]string{&r.Changed, &r.Added, &r.Moved, &r.Gone, &r.Dropped, &r.New, &r.Merged, &r.Shelved, &r.Landed} {
 			if longest == nil || len(*l) > len(*longest) {
 				longest = l
 			}
@@ -498,7 +502,7 @@ func RecordRows(r UpdateRecord) [][2]string {
 	for _, row := range []struct {
 		label string
 		names []string
-	}{{i18n.M("changed"), r.Changed}, {i18n.M("merged"), r.Merged}, {i18n.M("shelved"), r.Shelved}, {i18n.M("added"), r.Added},
+	}{{i18n.M("changed"), r.Changed}, {i18n.M("merged"), r.Merged}, {i18n.M("shelved"), r.Shelved}, {i18n.M("landed"), r.Landed}, {i18n.M("added"), r.Added},
 		{i18n.M("moved"), r.Moved}, {i18n.M("upstream gone"), r.Gone}, {i18n.M("dropped"), r.Dropped}, {i18n.M("upstream new"), r.New}} {
 		if len(row.names) > 0 {
 			out = append(out, [2]string{i18n.T(row.label), strings.Join(row.names, ", ")})
@@ -517,7 +521,7 @@ func RecordSummary(r UpdateRecord) string {
 		n      int
 		format string
 	}{{len(r.Changed), i18n.M("%d changed")}, {len(r.Merged), i18n.M("%d merged")}, {len(r.Shelved), i18n.M("%d shelved")},
-		{len(r.Added), i18n.M("%d added")}, {len(r.Moved), i18n.M("%d moved")}, {len(r.Gone), i18n.M("%d gone")},
+		{len(r.Landed), i18n.M("%d landed")}, {len(r.Added), i18n.M("%d added")}, {len(r.Moved), i18n.M("%d moved")}, {len(r.Gone), i18n.M("%d gone")},
 		{len(r.Dropped), i18n.M("%d dropped")}, {len(r.New), i18n.M("%d new upstream")}} {
 		if c.n > 0 {
 			parts = append(parts, i18n.Sprintf(c.format, c.n))

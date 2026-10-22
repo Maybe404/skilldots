@@ -41,7 +41,8 @@ type UpdateDiff struct {
 type SkillDiff struct {
 	Name string `json:"name"`
 	// Status is "changed" (upstream changed it), "added" (selected but not
-	// vendored yet) or "moved" (only its category changed upstream).
+	// vendored yet), "moved" (only its category changed upstream) or
+	// "landed" (upstream changed it to what the library already has).
 	Status string `json:"status"`
 	// Local is set when the library's copy is not what skd vendored (the
 	// user edited it): update merges upstream's changes into it (the copy
@@ -174,6 +175,10 @@ func (s *Session) UpdateDiff(ctx context.Context, repo, latest string) (*UpdateD
 				if ls.Category != u.Category {
 					out.Skills = append(out.Skills, SkillDiff{Name: u.Name, Status: "moved", LocalFiles: []string{}, Files: []FileDiff{}})
 				}
+				continue
+			} else if err == nil && s.landed(p.Repo, u.Name, ls, h) {
+				// The library already has it: the user's change landed.
+				out.Skills = append(out.Skills, SkillDiff{Name: u.Name, Status: "landed", LocalFiles: []string{}, Files: []FileDiff{}})
 				continue
 			}
 		}

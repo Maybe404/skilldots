@@ -56,7 +56,8 @@ func (p PackStatus) Summary() string {
 	for _, c := range []struct {
 		n      int
 		format string
-	}{{len(p.Changed), i18n.M("%d changed")}, {len(p.Pending), i18n.M("%d to add")}, {len(offered), i18n.M("%d new upstream")}, {len(p.Gone), i18n.M("%d gone upstream")}, {len(p.Moved), i18n.M("%d moved")}} {
+	}{{len(p.Changed), i18n.M("%d changed")}, {len(p.Pending), i18n.M("%d to add")}, {len(offered), i18n.M("%d new upstream")}, {len(p.Gone), i18n.M("%d gone upstream")}, {len(p.Moved), i18n.M("%d moved")},
+		{len(p.Landed), i18n.M("%d landed")}} {
 		if c.n > 0 {
 			parts = append(parts, i18n.Sprintf(c.format, c.n))
 		}
@@ -94,7 +95,8 @@ func (p PackStatus) Rows() [][2]string {
 		names []string
 		note  string
 	}{{i18n.M("changed"), p.Changed, ""}, {i18n.M("will add"), p.Pending, ""}, {i18n.M("upstream new"), p.Offered(), i18n.M(" (not selected)")},
-		{i18n.M("upstream gone"), p.Gone, i18n.M(" (kept)")}, {i18n.M("moved"), p.Moved, i18n.M(" (path only)")}} {
+		{i18n.M("upstream gone"), p.Gone, i18n.M(" (kept)")}, {i18n.M("moved"), p.Moved, i18n.M(" (path only)")},
+		{i18n.M("landed"), p.Landed, i18n.M(" (already what you have)")}} {
 		if len(row.names) > 0 {
 			out = append(out, [2]string{i18n.T(row.label), strings.Join(row.names, ", ") + i18n.T(row.note)})
 		}

@@ -20,7 +20,7 @@ import (
 
 func addCmd() *cobra.Command {
 	var skills, categories, targetNames []string
-	var all bool
+	var all, own bool
 	var alias string
 	cmd := &cobra.Command{
 		Use:   "add <owner/repo | url | pasted install command>[@ref]",
@@ -60,14 +60,22 @@ func addCmd() *cobra.Command {
 				return err
 			}
 			printRejected(c, src.Repo, f.Rejected)
+			if !own && isTerminal() && !flags.yes && !flags.json {
+				if p := c.lib.Manifest.FindPack(src.Repo); (p == nil || !p.Own) && app.LooksOwn(context.Background(), src.URL) {
+					own = confirm(i18n.Sprintf("%s looks like your own repository (you administer it on GitHub). Mark it as yours (new skills can be made in it, and what you change is pushed back)?", src.Repo))
+				}
+			}
 			if len(f.Skills) == 0 {
-				return i18n.Errorf("%s contains no SKILL.md", src.Repo)
+				if !own {
+					return i18n.Errorf("%s contains no SKILL.md (if it is your own repository, add it with --own: skills can then be made in it with skd new <name> --in %s)", src.Repo, src.Repo)
+				}
+				all = true
 			}
 			pre, missing := f.Preselect(hint)
 			for _, m := range missing {
 				i18n.Fprintf(stderr, "%s %s: nothing named %q upstream\n", warn("!"), src.Repo, m)
 			}
-			sel := app.Selection{Skills: skills, Categories: categories, All: all, Alias: alias, Agents: targetNames}
+			sel := app.Selection{Skills: skills, Categories: categories, All: all, Alias: alias, Agents: targetNames, Own: own}
 			switch {
 			case all || len(skills) > 0 || len(categories) > 0:
 				sel.Skills = dedupe(append(sel.Skills, pre...))
@@ -102,10 +110,13 @@ func addCmd() *cobra.Command {
 			printRenamed(c, rep)
 			warnLicense(c, rep)
 			c.printf("%s vendored %s from %s %s\n", ok("✓"), plural(len(rep.Added)+len(rep.Changed)+len(rep.Unchanged), "skill"), out.Repo, dim("@ "+short(rep.NewCommit)))
+			if rep.Own {
+				c.printf("%s\n", dim(i18n.Sprintf("%s is yours: skd new <name> --in %s makes a skill in it, skd contribute %s --push pushes what you change", out.Repo, out.Repo, out.Repo)))
+			}
 			printApply(c, out.Apply)
 			c.jsonOut(map[string]any{"repo": out.Repo, "commit": rep.NewCommit, "skills": out.Linked,
 				"added": nonNil(rep.Added), "changed": nonNil(rep.Changed), "unchanged": nonNil(rep.Unchanged),
-				"noLicense": nonNil(rep.NoLicenseList), "renamed": rep.Renamed, "rejected": nonNil(rep.Rejected),
+				"noLicense": nonNil(rep.NoLicenseList), "renamed": rep.Renamed, "rejected": nonNil(rep.Rejected), "own": rep.Own,
 				"changes": out.Apply.Changes, "kept": out.Apply.Kept, "backups": out.Apply.Backups, "refused": out.Apply.Refused})
 			return nil
 		},
@@ -113,6 +124,7 @@ func addCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&skills, "skill", "s", nil, i18n.T("skill names to select (repeatable)"))
 	cmd.Flags().StringSliceVar(&categories, "category", nil, i18n.T("select every skill in a category"))
 	cmd.Flags().BoolVar(&all, "all", false, i18n.T("follow every skill, including ones added upstream later"))
+	cmd.Flags().BoolVar(&own, "own", false, i18n.T("the repository is your own: skills can be made in it (skd new --in) and changes pushed back; it may have no skill yet"))
 	cmd.Flags().StringVar(&alias, "alias", "", i18n.T("short name for the pack"))
 	cmd.Flags().StringSliceVar(&targetNames, "agent", nil, i18n.T("targets for this pack (default: manifest default)"))
 	return cmd
@@ -227,7 +239,8 @@ func warnLicense(c *ctx, rep *engine.SyncReport) {
 	for _, w := range rep.Warnings {
 		fmt.Fprintf(stderr, "%s %s: %s\n", warn("!"), rep.Repo, txt(w))
 	}
-	if rep.NoLicense {
+	// The user's own repository: theirs to redistribute.
+	if rep.NoLicense && !rep.Own {
 		c.printf("%s %s: no license found for %s — check before redistributing\n", warn("!"), rep.Repo, strings.Join(rep.NoLicenseList, ", "))
 	}
 }
@@ -393,6 +406,7 @@ func printReport(c *ctx, r *engine.SyncReport) {
 	// A merged skill is in Changed too: it is listed once, as merged.
 	row(i18n.T("changed"), accent, r.Replaced())
 	row(i18n.T("merged"), ok, r.Merged)
+	row(i18n.T("landed"), ok, r.Landed)
 	printShelved(c, r)
 	row(i18n.T("added"), ok, r.Added)
 	row(i18n.T("dropped"), bad, r.Dropped)
@@ -795,6 +809,9 @@ func printStatus(c *ctx, st *app.PackStatus) {
 	moved := func() {
 		if len(st.Moved) > 0 {
 			c.printf("  %s %s\n", dim(pad(i18n.T("moved"), 13)), dim(strings.Join(st.Moved, ", ")+i18n.T(" (path only)")))
+		}
+		if len(st.Landed) > 0 {
+			c.printf("  %s %s\n", dim(pad(i18n.T("landed"), 13)), dim(strings.Join(st.Landed, ", ")+i18n.T(" (already what you have)")))
 		}
 	}
 	switch {

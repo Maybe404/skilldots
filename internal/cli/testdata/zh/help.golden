@@ -23,6 +23,7 @@ skd 把你的 agent 用到的所有 skill 放进一个由 git 管理的资料库
   list        显示来源和 skill（除非展开，每个来源一行）
   new         在 skills/（或 private/）里新建一个你自己的 skill 骨架
   outdated    检查所选 skill 在上游的变化，不做任何改动
+  own         把一个来源标记为你自己的仓库，或列出已标记的
   path        打印 skill 的文件在资料库里的位置
   purge       彻底清除一个来源：清单、锁、vendor/ 和所有链接
   remove      将资料库中的 skill 移入回收站，并从所有 agent 取消链接

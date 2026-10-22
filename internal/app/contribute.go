@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -15,6 +17,7 @@ import (
 	"github.com/Maybe404/skilldots/internal/i18n"
 	"github.com/Maybe404/skilldots/internal/library"
 	"github.com/Maybe404/skilldots/internal/lock"
+	"github.com/Maybe404/skilldots/internal/manifest"
 	"github.com/Maybe404/skilldots/internal/pack"
 )
 
@@ -58,23 +61,42 @@ type ContributeOptions struct {
 	CanPush bool   `json:"canPush"`
 	CanPR   bool   `json:"canPR"`
 	GH      string `json:"gh"`
-	// Behind is set when the skill is not based on upstream's current
-	// version (or its update is shelved): skd update first.
+	// Behind is set when a skill is not based on upstream's current
+	// version (or its update is shelved): skd update first. For the
+	// user's own repository (Own) Contribute pulls it first (Pull).
 	Behind         bool   `json:"behind"`
 	Reason         string `json:"reason"`
 	DefaultMessage string `json:"defaultMessage"`
+	// Own is set for the user's own repository (manifest.Pack.Own): a
+	// push is the default, and Contribute pulls before (Pull, when
+	// Behind) and after pushing.
+	Own  bool `json:"own"`
+	Pull bool `json:"pull"`
+	// Skills are the link names of the skills sent, Drafts those of them
+	// that are new (skd new --in), with Paths their directories in the
+	// repository.
+	Skills []string          `json:"skills"`
+	Drafts []string          `json:"drafts"`
+	Paths  map[string]string `json:"paths,omitempty"`
 
 	plan *contribPlan
 }
 
 // contribPlan is what Contribute needs beyond the options.
 type contribPlan struct {
-	entry       engine.Entry
-	ls          *lock.Skill
+	pack        *manifest.Pack
+	items       []contribItem
 	url         string // the repository's git URL
 	owner, name string // on GitHub
 	clone       string // the work clone
-	skillPath   string // the skill's directory in the repository
+}
+
+// contribItem is one skill of a contribution.
+type contribItem struct {
+	entry     engine.Entry
+	ls        *lock.Skill
+	skillPath string // the skill's directory in the repository
+	draft     bool
 }
 
 // github.com URLs: https://github.com/o/r(.git), git@github.com:o/r(.git),
@@ -87,6 +109,25 @@ func DefaultContributionMessage(skill string) string {
 	return "Update " + skill + "\n\nEdited with skilldots"
 }
 
+// defaultMessage is the commit message of a contribution of the skills
+// updated and added (drafts): "Add c; update a, b".
+func defaultMessage(updated, added []string) string {
+	if len(added) == 0 && len(updated) == 1 {
+		return DefaultContributionMessage(updated[0])
+	}
+	var parts []string
+	if len(added) > 0 {
+		parts = append(parts, "Add "+strings.Join(added, ", "))
+	}
+	if len(updated) > 0 {
+		parts = append(parts, "update "+strings.Join(updated, ", "))
+	}
+	if len(parts) > 0 {
+		parts[0] = strings.ToUpper(parts[0][:1]) + parts[0][1:]
+	}
+	return strings.Join(parts, "; ") + "\n\nEdited with skilldots"
+}
+
 // contribClone is where a pack's contributions are made.
 func contribClone(repo string) string { return pack.CachePath(repo) + ".contrib" }
 
@@ -95,31 +136,81 @@ func contribClone(repo string) string { return pack.CachePath(repo) + ".contrib"
 // (network), checks the skill is based on it, and asks gh what the user
 // may do. Nothing is sent.
 func (s *Session) ContributeOptions(ctx context.Context, r Ref) (*ContributeOptions, error) {
-	entries, err := s.Resolve()
+	p, items, err := s.contribSkill(r)
 	if err != nil {
 		return nil, err
+	}
+	return s.contribOptions(ctx, p, items)
+}
+
+// ContributePackOptions is ContributeOptions for every skill of a pack
+// the user changed, and every draft made in it (skd contribute <pack>).
+func (s *Session) ContributePackOptions(ctx context.Context, packName string) (*ContributeOptions, error) {
+	p, items, err := s.contribPack(packName)
+	if err != nil {
+		return nil, err
+	}
+	return s.contribOptions(ctx, p, items)
+}
+
+// contribSkill is the one skill r names, as a contribution.
+func (s *Session) contribSkill(r Ref) (*manifest.Pack, []contribItem, error) {
+	entries, err := s.Resolve()
+	if err != nil {
+		return nil, nil, err
 	}
 	e, err := s.mustEntry(entries, r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ls := s.vendoredLock(e)
 	if ls == nil {
-		return nil, i18n.Errorf("%q is not a vendored skill; only changes to a skill from an upstream repository are contributed", e.LinkName)
+		return nil, nil, i18n.Errorf("%q is not a vendored skill; only changes to a skill from an upstream repository are contributed", e.LinkName)
 	}
 	if !s.edited(e) {
-		return nil, i18n.Errorf("%s has no changes of yours to contribute (skd diff %s shows them)", e.LinkName, e.LinkName)
+		return nil, nil, i18n.Errorf("%s has no changes of yours to contribute (skd diff %s shows them)", e.LinkName, e.LinkName)
 	}
 	p := s.Lib.Manifest.FindPack(e.Origin)
 	if p == nil {
-		return nil, i18n.Errorf("no pack %q", e.Origin)
+		return nil, nil, i18n.Errorf("no pack %q", e.Origin)
 	}
+	return p, []contribItem{{entry: *e, ls: ls, draft: ls.IsDraft()}}, nil
+}
+
+// contribPack is every skill of a pack the user changed, drafts included.
+func (s *Session) contribPack(packName string) (*manifest.Pack, []contribItem, error) {
+	p := s.Lib.Manifest.FindPack(packName)
+	if p == nil {
+		return nil, nil, i18n.Errorf("no pack %q", packName)
+	}
+	entries, err := s.Resolve()
+	if err != nil {
+		return nil, nil, err
+	}
+	var items []contribItem
+	for i := range entries {
+		e := &entries[i]
+		if e.Kind != engine.KindVendor || e.Origin != p.Repo || !s.edited(e) {
+			continue
+		}
+		ls := s.vendoredLock(e)
+		items = append(items, contribItem{entry: *e, ls: ls, draft: ls.IsDraft()})
+	}
+	if len(items) == 0 {
+		return nil, nil, i18n.Errorf("%s has no changes of yours to contribute: no skill of it is changed, and no new one was made in it (skd list %s marks them)", p.Repo, p.Repo)
+	}
+	return p, items, nil
+}
+
+// contribOptions works out the options of contributing items, skills
+// of p: see ContributeOptions.
+func (s *Session) contribOptions(ctx context.Context, p *manifest.Pack, items []contribItem) (*ContributeOptions, error) {
 	src, err := pack.ParseSource(p.Repo)
 	if err != nil {
 		return nil, err
 	}
-	o := &ContributeOptions{Repo: p.Repo, Host: HostOther, GH: GHMissing, DefaultMessage: DefaultContributionMessage(e.Name),
-		plan: &contribPlan{entry: *e, ls: ls, url: src.URL, clone: contribClone(p.Repo)}}
+	o := &ContributeOptions{Repo: p.Repo, Host: HostOther, GH: GHMissing, Own: p.Own, Skills: []string{}, Drafts: []string{},
+		plan: &contribPlan{pack: p, url: src.URL, clone: contribClone(p.Repo)}}
 	if m := githubURL.FindStringSubmatch(src.URL); m != nil {
 		o.Host, o.plan.owner, o.plan.name = HostGitHub, m[1], m[2]
 		o.GH = gh().Status(ctx)
@@ -140,23 +231,69 @@ func (s *Session) ContributeOptions(ctx context.Context, r Ref) (*ContributeOpti
 	if err != nil {
 		return nil, err
 	}
-	sk := pack.Find(up, e.Name)
-	if sk == nil {
-		return nil, i18n.Errorf("%s is no longer in %s", e.Name, p.Repo)
-	}
-	rel, err := filepath.Rel(o.plan.clone, sk.Dir)
-	if err != nil {
-		return nil, err
-	}
-	o.plan.skillPath = filepath.ToSlash(rel)
-	h, err := fsutil.HashTree(sk.Dir)
-	if err != nil {
-		return nil, err
-	}
 	var reasons []string
-	if ls.Shelved != "" || ls.Resolving || h != ls.Hash {
+	var behind, updated, added []string
+	for _, it := range items {
+		e := it.entry
+		o.Skills = append(o.Skills, e.LinkName)
+		if it.draft {
+			o.Drafts = append(o.Drafts, e.LinkName)
+			added = append(added, e.Name)
+			if pack.Find(up, e.Name) != nil {
+				// Made in the repository meanwhile (pushed from elsewhere):
+				// an update brings it, and merges it with this one.
+				behind = append(behind, e.LinkName)
+				continue
+			}
+			rel, err := draftPath(up, o.plan.clone, e.Name, it.ls.Path)
+			if err != nil {
+				return nil, i18n.Errorf("%s: %w", e.LinkName, err)
+			}
+			if fsutil.Lexists(filepath.Join(o.plan.clone, filepath.FromSlash(rel))) {
+				return nil, i18n.Errorf("%s: %s already exists in %s, and is not a skill: choose another place for it (skd new %s --in %s --path <dir>, after skd remove %s)", e.LinkName, rel, p.Repo, e.Name, p.Repo, e.LinkName)
+			}
+			it.skillPath = rel
+		} else {
+			updated = append(updated, e.Name)
+			sk := pack.Find(up, e.Name)
+			if sk == nil {
+				return nil, i18n.Errorf("%s is no longer in %s", e.Name, p.Repo)
+			}
+			rel, err := filepath.Rel(o.plan.clone, sk.Dir)
+			if err != nil {
+				return nil, err
+			}
+			it.skillPath = filepath.ToSlash(rel)
+			h, err := fsutil.HashTree(sk.Dir)
+			if err != nil {
+				return nil, err
+			}
+			if it.ls.Shelved != "" || it.ls.Resolving || h != it.ls.Hash {
+				behind = append(behind, e.LinkName)
+			}
+		}
+		if it.skillPath == "." && len(items) > 1 {
+			return nil, i18n.Errorf("%s is the whole repository %s: contribute it on its own", e.LinkName, p.Repo)
+		}
+		o.plan.items = append(o.plan.items, it)
+	}
+	o.Paths = map[string]string{}
+	for _, it := range o.plan.items {
+		if it.draft {
+			o.Paths[it.entry.LinkName] = it.skillPath
+		}
+	}
+	o.DefaultMessage = defaultMessage(updated, added)
+	if len(behind) > 0 {
 		o.Behind = true
-		reasons = append(reasons, i18n.Sprintf("%s is not based on upstream's current version: skd update %s first (and skd resolve, if it is shelved)", e.LinkName, p.Repo))
+		if p.Own {
+			// Pulled first: Contribute updates the pack, merging.
+			o.Pull = true
+		} else if len(items) == 1 {
+			reasons = append(reasons, i18n.Sprintf("%s is not based on upstream's current version: skd update %s first (and skd resolve, if it is shelved)", behind[0], p.Repo))
+		} else {
+			reasons = append(reasons, i18n.Sprintf("%s are not based on upstream's current version: skd update %s first (and skd resolve, if one is shelved)", strings.Join(behind, ", "), p.Repo))
+		}
 	}
 	// Pushing: GitHub says whether the user may; elsewhere git tries.
 	if o.Host == HostGitHub && o.GH == GHOK {
@@ -183,6 +320,60 @@ func (s *Session) ContributeOptions(ctx context.Context, r Ref) (*ContributeOpti
 	}
 	o.Reason = strings.Join(reasons, "; ")
 	return o, nil
+}
+
+// draftPath is where in the repository (whose clone is at root, with
+// skills up) a draft named name goes: at want when it says (skd new --in
+// recorded it), else beside most of the repository's skills.
+func draftPath(up []pack.Skill, root, name, want string) (string, error) {
+	if want != "" {
+		if err := checkRepoPath(want); err != nil {
+			return "", err
+		}
+		return want, nil
+	}
+	parent, err := skillsParent(up, root)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(parent, name), nil
+}
+
+// skillsParent is the directory of a repository (whose clone is at root)
+// most of its skills are in, "skills" when it has none. A repository
+// that is one skill at its top has no place for another.
+func skillsParent(up []pack.Skill, root string) (string, error) {
+	count := map[string]int{}
+	for _, sk := range up {
+		rel, err := filepath.Rel(root, sk.Dir)
+		if err != nil {
+			return "", err
+		}
+		if rel == "." {
+			return "", i18n.New("the repository is a single skill at its top, where another skill would be nested in it and never found: give its place with --path")
+		}
+		count[path.Dir(filepath.ToSlash(rel))]++
+	}
+	best := "skills"
+	for d, n := range count {
+		if b := count[best]; n > b || n == b && (len(d) < len(best) || len(d) == len(best) && d < best) {
+			best = d
+		}
+	}
+	return best, nil
+}
+
+// checkRepoPath refuses a path in a repository (slash-separated, from
+// skills.lock or --path) that is not a plain relative path to a
+// directory skd's scan finds skills in.
+func checkRepoPath(rel string) error {
+	if rel == "" || path.IsAbs(rel) || strings.Contains(rel, `\`) || path.Clean(rel) != rel || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return i18n.Errorf("%q is not a relative path in the repository", rel)
+	}
+	if !pack.Scanned(rel) {
+		return i18n.Errorf("%q is not a place skd looks for skills (a hidden, test or dependency directory)", rel)
+	}
+	return nil
 }
 
 // prepareClone makes dir a clone of url at the tip of ref (the default
@@ -242,26 +433,73 @@ type ContributeOutcome struct {
 	Number int    `json:"number,omitempty"`
 	// Pushed is set once the change left this machine.
 	Pushed bool `json:"pushed"`
+	// Skills are the link names of the skills sent.
+	Skills []string `json:"skills"`
+	// Pulled is the update of the user's own repository made before
+	// sending (nil when there was none), PulledBack the one after, which
+	// brings what was pushed back as the version the lock records.
+	// PullBackError is set when that failed: the push happened, and skd
+	// update finishes it.
+	Pulled        *engine.SyncReport `json:"pulled,omitempty"`
+	PulledBack    *engine.SyncReport `json:"pulledBack,omitempty"`
+	PullBackError string             `json:"pullBackError,omitempty"`
 }
 
 // Contribute sends the user's edits to a vendored skill upstream, in
 // mode (ModePush or ModePR), with msg as the commit message (its first
-// line titles a pull request; DefaultContributionMessage when empty).
+// line titles a pull request; the options' DefaultMessage when empty).
 // Only a person's request may call it. It records the contribution in
 // skills.lock.
 func (s *Session) Contribute(ctx context.Context, r Ref, mode, msg string) (*ContributeOutcome, error) {
-	o, err := s.ContributeOptions(ctx, r)
+	return s.contribute(ctx, func() (*manifest.Pack, []contribItem, error) { return s.contribSkill(r) }, mode, msg)
+}
+
+// ContributePack is Contribute for every skill of a pack the user
+// changed and every draft made in it, in one commit (one pull request).
+func (s *Session) ContributePack(ctx context.Context, packName, mode, msg string) (*ContributeOutcome, error) {
+	return s.contribute(ctx, func() (*manifest.Pack, []contribItem, error) { return s.contribPack(packName) }, mode, msg)
+}
+
+func (s *Session) contribute(ctx context.Context, what func() (*manifest.Pack, []contribItem, error), mode, msg string) (*ContributeOutcome, error) {
+	if mode != ModePR && mode != ModePush {
+		return nil, i18n.Errorf("choose %s or %s, not %q", ModePR, ModePush, mode)
+	}
+	p, items, err := what()
 	if err != nil {
 		return nil, err
 	}
+	o, err := s.contribOptions(ctx, p, items)
+	if err != nil {
+		return nil, err
+	}
+	var pulled *engine.SyncReport
+	if o.Pull {
+		// The user's own repository moved on: pull it first, merging, as
+		// git pull before git push.
+		if pulled, err = s.pullPack(p.Repo); err != nil {
+			return nil, i18n.Errorf("pulling %s before pushing: %w", p.Repo, err)
+		}
+		if len(pulled.Shelved) > 0 {
+			return &ContributeOutcome{Repo: p.Repo, Mode: mode, Skills: []string{}, Pulled: pulled},
+				i18n.Errorf("pulled %s, but %s conflict with what is there: nothing was sent; skd resolve, then contribute again", p.Repo, strings.Join(pulled.ShelvedNames(), ", "))
+		}
+		if p, items, err = what(); err != nil {
+			return &ContributeOutcome{Repo: o.Repo, Mode: mode, Skills: []string{}, Pulled: pulled},
+				i18n.Errorf("pulled %s: %w", o.Repo, err)
+		}
+		if o, err = s.contribOptions(ctx, p, items); err != nil {
+			return nil, err
+		}
+	}
 	pl := o.plan
+	first := pl.items[0].entry.LinkName
 	switch {
-	case mode != ModePR && mode != ModePush:
-		return nil, i18n.Errorf("choose %s or %s, not %q", ModePR, ModePush, mode)
+	case o.Behind && len(pl.items) == 1:
+		return nil, i18n.Errorf("%s is not based on upstream's current version: skd update %s first (and skd resolve, if it is shelved)", first, o.Repo)
 	case o.Behind:
-		return nil, i18n.Errorf("%s is not based on upstream's current version: skd update %s first (and skd resolve, if it is shelved)", pl.entry.LinkName, o.Repo)
+		return nil, i18n.Errorf("not every skill is based on upstream's current version: skd update %s first (and skd resolve, if one is shelved)", o.Repo)
 	case mode == ModePush && !o.CanPush:
-		return nil, i18n.Errorf("you cannot push to %s; open a pull request instead: skd contribute %s --pr", o.Repo, pl.entry.LinkName)
+		return nil, i18n.Errorf("you cannot push to %s; open a pull request instead: skd contribute %s --pr", o.Repo, first)
 	case mode == ModePR && !o.CanPR:
 		return nil, i18n.Errorf("cannot open a pull request: %s", o.Reason)
 	}
@@ -276,39 +514,51 @@ func (s *Session) Contribute(ctx context.Context, r Ref, mode, msg string) (*Con
 	if err != nil {
 		return nil, err
 	}
-	// The skill's files over its upstream directory, deletions too.
-	ours, err := engine.ReadFileSet(pl.entry.Dir)
-	if err != nil {
-		return nil, err
-	}
-	target := filepath.Join(pl.clone, filepath.FromSlash(pl.skillPath))
-	if err := engine.WriteFileSet(target, ours, nil); err != nil {
-		return nil, err
-	}
-	spec := ":(literal)" + pl.skillPath
-	if pl.skillPath == "." {
-		spec = "."
-	}
-	if _, err := library.GitContext(ctx, pl.clone, "add", "-A", "--", spec); err != nil {
-		return nil, err
+	// Each skill's files over its directory there, deletions too.
+	for _, it := range pl.items {
+		ours, err := engine.ReadFileSet(it.entry.Dir)
+		if err != nil {
+			return nil, err
+		}
+		target := filepath.Join(pl.clone, filepath.FromSlash(it.skillPath))
+		if !fsutil.Within(pl.clone, target) {
+			return nil, i18n.Errorf("%s is outside %s", it.skillPath, o.Repo)
+		}
+		if err := engine.WriteFileSet(target, ours, nil); err != nil {
+			return nil, err
+		}
+		spec := ":(literal)" + it.skillPath
+		if it.skillPath == "." {
+			spec = "."
+		}
+		if _, err := library.GitContext(ctx, pl.clone, "add", "-A", "--", spec); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := library.GitContext(ctx, pl.clone, "diff", "--cached", "--quiet"); err == nil {
-		return nil, i18n.Errorf("%s is the same as upstream's: nothing to contribute", pl.entry.LinkName)
+		if len(pl.items) == 1 {
+			return nil, i18n.Errorf("%s is the same as upstream's: nothing to contribute", first)
+		}
+		return nil, i18n.Errorf("these skills are the same as upstream's: nothing to contribute")
 	}
 	if _, err := library.GitContext(ctx, pl.clone, "commit", "-q", "-m", msg); err != nil {
 		return nil, err
 	}
-	out := &ContributeOutcome{Repo: o.Repo, Mode: mode}
+	out := &ContributeOutcome{Repo: o.Repo, Mode: mode, Skills: o.Skills, Pulled: pulled}
 	c := &lock.Contribution{Kind: mode, At: time.Now().UTC().Format(time.RFC3339)}
 	if mode == ModePush {
 		out.Branch = o.Branch
 		if _, err := library.GitContext(ctx, pl.clone, "push", "-q", "origin", "HEAD:refs/heads/"+o.Branch); err != nil {
-			return nil, i18n.Errorf("%s refused the push to %s (%v); open a pull request instead: skd contribute %s --pr", o.Repo, o.Branch, err, pl.entry.LinkName)
+			return nil, i18n.Errorf("%s refused the push to %s (%v); open a pull request instead: skd contribute %s --pr", o.Repo, o.Branch, err, first)
 		}
 		out.Pushed = true
 		c.Branch, c.State = o.Branch, "pushed"
 	} else {
-		branch := "skilldots/" + pl.entry.Name + "-" + time.Now().Format("20060102-1504")
+		label := pl.items[0].entry.Name
+		if len(pl.items) > 1 {
+			label = path.Base(strings.TrimSuffix(o.Repo, ".git"))
+		}
+		branch := "skilldots/" + label + "-" + time.Now().Format("20060102-1504")
 		out.Branch = branch
 		head := branch
 		if o.CanPush {
@@ -339,10 +589,48 @@ func (s *Session) Contribute(ctx context.Context, r Ref, mode, msg string) (*Con
 		out.URL, out.Number = url, number
 		c.URL, c.Number, c.Branch, c.State = url, number, branch, "open"
 	}
-	if lp := s.Lib.Lock.Packs[pl.entry.Origin]; lp != nil && lp.Skills[pl.entry.Name] != nil {
-		lp.Skills[pl.entry.Name].Contribution = c
+	lp := s.Lib.Lock.Packs[pl.pack.Repo]
+	for _, it := range pl.items {
+		if lp == nil || lp.Skills[it.entry.Name] == nil {
+			continue
+		}
+		ls := lp.Skills[it.entry.Name]
+		cc := *c
+		ls.Contribution = &cc
+		if it.draft {
+			// Where it went, should it be sent again before it is pulled.
+			ls.Path = it.skillPath
+		}
 	}
-	return out, s.Lib.Save()
+	if err := s.Lib.Save(); err != nil {
+		return out, err
+	}
+	if p.Own && mode == ModePush {
+		// Pulled back: the lock records the version just pushed, so the
+		// skills are no longer changed, and nothing is reported later.
+		if rep, err := s.pullPack(p.Repo); err != nil {
+			out.PullBackError = err.Error()
+			s.logf(Warn, "pushed to %s, but pulling it back failed (%v): skd update %s finishes it", p.Repo, err, p.Repo)
+		} else {
+			out.PulledBack = rep
+		}
+	}
+	return out, nil
+}
+
+// pullPack updates one pack (skd update <pack>) and returns its report.
+func (s *Session) pullPack(repo string) (*engine.SyncReport, error) {
+	up, err := s.Update([]string{repo}, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(up.Failed) > 0 {
+		return nil, errors.New(up.Failed[0].Error)
+	}
+	if len(up.Reports) == 0 {
+		return nil, i18n.Errorf("no pack %q", repo)
+	}
+	return up.Reports[0], nil
 }
 
 // forkURL is a fork's URL in the form of the original's (https or ssh).

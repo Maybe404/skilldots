@@ -197,3 +197,73 @@ func TestOpenURL(t *testing.T) {
 		t.Errorf("opened %v", opened)
 	}
 }
+
+// The user's own repository through the desktop's calls: added with
+// own, marked in packs, a skill made in it (newSkill with a pack), sent
+// with an edit by contributePack, and nothing left marked after.
+func TestOwnRepositoryThroughTheBridge(t *testing.T) {
+	s := setup(t)
+	repo := fakeGitHub(t)
+	runGit(t, filepath.Dir(repo), "clone", "-q", "--bare", repo, repo+".bare")
+	os.RemoveAll(repo)
+	os.Rename(repo+".bare", repo)
+	t.Cleanup(app.SetGitHub(fakeGH{}))
+	parsed := invoke(t, s, "parseSource", "acme/skills")
+	p := roundTrip[previewOut](t, invoke(t, s, "show", parsed))
+	invoke(t, s, "add", object{"Source": p.Source, "Commit": p.Commit}, object{"all": true, "own": true, "agents": []string{"agents"}})
+	packs := roundTrip[[]struct {
+		Repo string
+		Own  bool
+	}](t, invoke(t, s, "packs"))
+	if len(packs) != 1 || !packs[0].Own {
+		t.Fatalf("packs: %+v", packs)
+	}
+
+	type row struct {
+		Ref                ref
+		Name               string
+		Edited, Own, Draft bool
+		Origin             string
+	}
+	find := func(name string) row {
+		for _, r := range roundTrip[[]row](t, invoke(t, s, "skills")) {
+			if r.Name == name {
+				return r
+			}
+		}
+		t.Fatalf("no %s", name)
+		return row{}
+	}
+	made := roundTrip[row](t, invoke(t, s, "newSkill", object{"Name": "notes", "Description": "Take notes.", "Pack": "acme/skills", "Agents": []string{"agents"}}))
+	if made.Origin != "acme/skills" || !made.Draft || !made.Own {
+		t.Fatalf("newSkill: %+v", made)
+	}
+	if _, err := s.Invoke(context.Background(), "newSkill", mustArgs(t, object{"Name": "x", "Pack": "acme/skills", "Private": true})); err == nil {
+		t.Error("a private skill in the own repository")
+	}
+	tdd := find("tdd")
+	invoke(t, s, "writeFile", tdd.Ref, "SKILL.md", "---\nname: tdd\ndescription: tdd skill\n---\nbody\nmine\n")
+	o := roundTrip[map[string]any](t, invoke(t, s, "contributePackOptions", "acme/skills"))
+	if o["own"] != true || o["pull"] != false || len(o["skills"].([]any)) != 2 || len(o["drafts"].([]any)) != 1 {
+		t.Fatalf("contributePackOptions: %v", o)
+	}
+	out := roundTrip[map[string]any](t, invoke(t, s, "contributePack", "acme/skills", "push", ""))
+	if out["pushed"] != true || out["pulledBack"] != true {
+		t.Fatalf("contributePack: %v", out)
+	}
+	if got := gitOutput(t, repo, "show", "HEAD:skills/eng/notes/SKILL.md"); !strings.Contains(got, "Take notes.") {
+		t.Errorf("upstream:\n%s", got)
+	}
+	for _, n := range []string{"notes", "tdd"} {
+		if r := find(n); r.Edited || r.Draft {
+			t.Errorf("%s still marked: %+v", n, r)
+		}
+	}
+	invoke(t, s, "setOwn", "acme/skills", false)
+	if packs := roundTrip[[]struct{ Own bool }](t, invoke(t, s, "packs")); packs[0].Own {
+		t.Error("setOwn false")
+	}
+	if res, err := s.Invoke(context.Background(), "looksOwn", mustArgs(t, "https://github.com/acme/skills")); err != nil || res != false {
+		t.Errorf("looksOwn without Owns: %v %v", res, err)
+	}
+}

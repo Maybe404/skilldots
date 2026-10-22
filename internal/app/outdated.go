@@ -52,6 +52,10 @@ type PackStatus struct {
 	// Shelved are Changed skills whose update waits for conflicts with
 	// the local changes to be resolved (skd resolve).
 	Shelved []string `json:"shelved,omitempty"`
+	// Landed are selected skills upstream changed to exactly what the
+	// library has (the user's change landed there, skd contribute): not
+	// an update, though `update` moves the lock to the new version.
+	Landed []string `json:"landed,omitempty"`
 	// Commits are the upstream commits affecting the selected skills since
 	// the vendored commit. They are bounded like update history.
 	Commits        []UpstreamCommit `json:"commits,omitempty"`
@@ -170,7 +174,7 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 	if err != nil {
 		return nil, err
 	}
-	if len(upstream) == 0 {
+	if len(upstream) == 0 && !p.Own {
 		if len(rejected) > 0 {
 			return nil, i18n.Errorf("%s: no usable SKILL.md (%s)", p.Repo, rejected[0])
 		}
@@ -205,6 +209,8 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 				return nil, err
 			}
 			switch {
+			case h != ls.Hash && s.landed(p.Repo, u.Name, ls, h):
+				st.Landed = append(st.Landed, u.Name)
 			case h != ls.Hash:
 				st.Changed = append(st.Changed, u.Name)
 				if ls.Shelved != "" || ls.Resolving {
@@ -221,11 +227,11 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 		}
 	}
 	for n, ls := range vendored {
-		if !up[n] && p.Selected(n, ls.Category) && (known == nil || known[n]) {
+		if !up[n] && p.Selected(n, ls.Category) && (known == nil || known[n]) && !ls.IsDraft() {
 			st.Gone = append(st.Gone, n)
 		}
 	}
-	for _, l := range [][]string{st.Changed, st.Moved, st.New, st.Gone, st.Pending} {
+	for _, l := range [][]string{st.Changed, st.Moved, st.New, st.Gone, st.Pending, st.Landed} {
 		sort.Strings(l)
 	}
 	if st.Commit != "" && st.Commit != st.Latest {
@@ -234,6 +240,14 @@ func (s *Session) checkPack(ctx context.Context, p *manifest.Pack) (*PackStatus,
 		st.Commits, st.MoreCommits, st.CommitsUnknown = r.Commits, r.MoreCommits, r.CommitsUnknown
 	}
 	return st, nil
+}
+
+// landed reports whether the vendored copy of a pack's skill is already
+// upstream's version hash: the user's change landed upstream.
+func (s *Session) landed(repo, name string, ls *lock.Skill, hash string) bool {
+	packDir := s.Lib.PackDir(repo)
+	dir := filepath.Join(packDir, filepath.FromSlash(ls.Category), name)
+	return fsutil.Within(packDir, dir) && fsutil.Exists(dir) && fsutil.Pristine(dir, hash)
 }
 
 // OutdatedPath is the state file holding the last upstream checks, next
@@ -421,6 +435,7 @@ func (s *Session) RecordedOutdated() *Outdated {
 		}
 		r.Changed = filter(e.Changed, func(n string) bool { return has(n) && !settled(n) })
 		r.Shelved = filter(e.Shelved, func(n string) bool { return has(n) && !settled(n) })
+		r.Landed = filter(e.Landed, has)
 		r.Moved = filter(e.Moved, has)
 		r.Gone = filter(e.Gone, has)
 		r.New = filter(e.New, func(n string) bool { return !has(n) })
