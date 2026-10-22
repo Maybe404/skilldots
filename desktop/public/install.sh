@@ -23,6 +23,22 @@ ASSET="skilldots-macos.zip"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'skilldots: %s\n' "$*" >&2; exit 1; }
+# The file a path ends at once every symbolic link is followed, with its
+# directory spelled physically, so two names for one file compare equal.
+resolve() {
+	p=$1
+	n=0
+	while [ -L "$p" ] && [ "$n" -lt 40 ]; do
+		t=$(readlink "$p") || break
+		case "$t" in
+		/*) p=$t ;;
+		*) p=$(dirname "$p")/$t ;;
+		esac
+		n=$((n + 1))
+	done
+	d=$(cd -P "$(dirname "$p")" 2>/dev/null && pwd -P) || d=$(dirname "$p")
+	printf '%s/%s\n' "$d" "$(basename "$p")"
+}
 
 [ "$(uname -s)" = "Darwin" ] || fail "the desktop app is for macOS; on other systems use: go install github.com/$REPO/cmd/skd@latest"
 
@@ -133,6 +149,14 @@ else
 		fi
 		;;
 	esac
+	# An skd earlier on PATH (say ~/.local/bin or ~/go/bin from go install)
+	# would run instead; say which, and leave it be.
+	first=$(command -v skd 2>/dev/null || true)
+	if [ -n "$first" ] && [ "$(resolve "$first")" != "$(resolve "$link")" ]; then
+		skd="$link"
+		say "Typing skd runs $first, another skd found first on your PATH, not this skilldots."
+		say "Remove it, or put $BIN_DIR before $(dirname "$first") in PATH; until then, run skd as $link."
+	fi
 	say "Prefer the command line? Set up from the terminal instead of the app:"
 	say "  $skd init                  create ~/.skilldots and teach your agents to use skd"
 	say "  $skd add owner/repo        pick skills from a GitHub repository (try: $skd add anthropics/skills)"
