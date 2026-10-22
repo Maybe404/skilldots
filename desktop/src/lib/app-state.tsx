@@ -177,6 +177,9 @@ export function errorText(t: T, error: unknown): string {
   const lower = detail.toLowerCase()
   if (lower.includes("folder picker")) return t("errorFolderPicker")
   if (lower.includes("no skilldots library") || lower.includes("cannot find the library")) return t("errorLibraryMissing")
+  // skd clone (import) of a repository without a skills.toml: app.CloneLibrary's error.
+  const notLibrary = /^(.+?) is not a skilldots library( but a repository of skills)?/.exec(detail)
+  if (notLibrary && !lower.includes("removing the clone failed")) return t(notLibrary[2] ? "errorCloneSkillsRepo" : "errorCloneNotLibrary", { url: notLibrary[1] })
   return detail
 }
 

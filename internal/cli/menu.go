@@ -316,7 +316,9 @@ func cloneCmd() *cobra.Command {
 			// from: no link outside it is taken for skd's on what its
 			// skills.toml and skills.lock say.
 			app.SealOlderSkd()
-			if _, err := library.Git("", "clone", "-q", "--", args[0], dir); err != nil {
+			// A repository that is not a library is not kept: no ✓, and
+			// the error names skd add for a repository of skills.
+			if err := app.CloneLibrary(args[0], dir); err != nil {
 				return err
 			}
 			say("%s cloned into %s\n", ok("✓"), dir)

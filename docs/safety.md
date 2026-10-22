@@ -19,6 +19,8 @@ Agent directories only ever contain symlinks into the library (copies on Windows
 - a copy only when that record says skd wrote exactly it;
 - a vendored directory only when it matches the lock.
 
+Outside agent directories, `skd clone` (and the desktop app's import) removes the directory it just cloned into when the repository turns out not to be a library (no `skills.toml`): the directory did not exist before, holds only what git fetched a moment earlier, and there may be no library yet whose trash could take it.
+
 The record is `placed.json`, beside the settings file and never part of a library. A link or copy made before skd kept the record is recorded by the next `skd apply`, while it is exactly what skd would make: a link to the library, or a copy identical to its source with nothing added.
 
 Everything else goes to the trash, or stays:

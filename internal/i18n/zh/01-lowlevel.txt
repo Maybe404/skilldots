@@ -34,7 +34,7 @@
 = 复制 %s：不是普通文件
 
 @ no %s in %s
-= %s 中没有 %s
+= %[2]s 中没有 %[1]s
 
 @ cannot find the library: %w (it remembers the library); fix it, or name the library with --library or $%s
 = 找不到资料库：%w（它记录着资料库的位置）；请修复，或用 --library 或 $%s 指定资料库
