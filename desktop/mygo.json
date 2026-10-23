@@ -1,7 +1,7 @@
 {
   "name": "skilldots",
   "identifier": "com.maybe404.skilldots",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "main": ".",
   "devUrl": "http://localhost:5173",
   "devCommand": "bun run dev --host 127.0.0.1 --strictPort",
