@@ -68,7 +68,7 @@ export type DialogState =
   | { kind: "contribute"; ref: Ref }
   /** Every skill of the source you changed or made, at once (推送 N 项). */
   | { kind: "contribute"; repo: string }
-  | { kind: "library"; mode: "use" | "clone" | "init" }
+  | { kind: "library"; mode: "use" | "clone" | "init" | "restore" }
   | { kind: "remove"; ref: Ref }
   | { kind: "unlink"; ref: Ref }
   | { kind: "purge"; repo: string }

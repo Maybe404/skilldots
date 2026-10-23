@@ -450,6 +450,16 @@ export interface LibraryStatus {
   syncing?: boolean
   /** A sync shelved on conflicts (files relative to the library root), remembered across launches; [] when none. */
   syncShelved?: string[]
+  /** restoreZip: how many skills the backup held, and links in it that pointed outside the library (not restored). */
+  restored?: { skills: number; skipped: string[] }
+}
+
+/** A zip backup that was written. */
+export interface BackupResult {
+  path: string
+  skills: number
+  files: number
+  bytes: number
 }
 
 /** The skd command: a link on the PATH to the app's own executable. */
@@ -535,6 +545,14 @@ export interface Backend {
   useLibrary(dir: string): Promise<LibraryStatus>
   /** Native folder picker (window API). */
   pickFolder(): Promise<string | null>
+  /** Native file picker for a .zip backup. */
+  pickBackupFile(): Promise<string | null>
+  /** Shows a backup backupZip wrote in Finder. */
+  revealBackup(path: string): Promise<void>
+  /** skd backup <dir>: the whole library as skilldots-backup-<time>.zip in dir. */
+  backupZip(dir: string): Promise<BackupResult>
+  /** skd restore <zip> <dir>: dir must not exist or be empty; the restored library becomes current and is applied. */
+  restoreZip(zip: string, dir: string): Promise<LibraryStatus>
 
   // Reading ---------------------------------------------------------------
   /** Session.Resolve: every entry. */

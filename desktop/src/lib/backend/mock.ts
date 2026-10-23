@@ -450,6 +450,24 @@ export function createMockBackend(): Backend {
       await wait(200)
       return LIBRARY
     },
+    async pickBackupFile() {
+      await wait(200)
+      return `${HOME}/Backups/skilldots-backup-20261023-120000.zip`
+    },
+    async revealBackup() {
+      await wait(100)
+    },
+    async backupZip(dir) {
+      await wait(600)
+      return { path: `${dir.replace(/\/$/, "")}/skilldots-backup-20261023-120000.zip`, skills: 12, files: 240, bytes: 1_200_000 }
+    },
+    async restoreZip(zip, dir) {
+      await wait(1000)
+      if (!zip.endsWith(".zip")) throw new Error(`${zip} is not a usable skilldots backup`)
+      if (dir.replace(/\/$/, "") === LIBRARY) throw new Error(`${dir} already exists and is not empty; nothing was restored. Restore into another directory, or move it to the Trash first`)
+      st = sampleState(dir)
+      return { ...(await status()), restored: { skills: 12, skipped: [] } }
+    },
 
     async skills() {
       await wait(80)

@@ -195,6 +195,7 @@ export function SettingsPage() {
                 </Button>
               </div>
             )}
+            <ZipBackup />
             <p className="py-3 fs-meta text-mut">
               {t("backupNote2")}{" "}
               <Button variant="link" size="inline" onClick={() => openDialog({ kind: "sync" })}>
@@ -205,6 +206,33 @@ export function SettingsPage() {
         </div>
       </div>
     </Page>
+  )
+}
+
+/** The library as one zip file in a folder the person picks, and the way back from one: no git remote needed. */
+function ZipBackup() {
+  const { t, run, openDialog } = useApp()
+  const [busy, setBusy] = React.useState(false)
+  const backupTo = async () => {
+    const dir = await run(() => backend.pickFolder())
+    if (!dir.ok || !dir.value) return
+    setBusy(true)
+    const r = await run(() => backend.backupZip(dir.value as string))
+    setBusy(false)
+    if (r.ok) toast(t("backupDone", { n: r.value.skills, path: tildify(r.value.path) }), { action: { label: t("revealInFinder"), onClick: () => void backend.revealBackup(r.value.path) } })
+  }
+  return (
+    <Row label={t("zipBackupLabel")} hint={t("zipBackupHint")}>
+      <div className="flex flex-col items-end gap-1.5">
+        <Button variant="outline" disabled={busy} onClick={() => void backupTo()}>
+          {busy && <Spinner />}
+          {busy ? t("backingUp") : t("backupTo")}
+        </Button>
+        <Button variant="link" size="inline" className="fs-meta" onClick={() => openDialog({ kind: "library", mode: "restore" })}>
+          {t("restoreFrom")}
+        </Button>
+      </div>
+    </Row>
   )
 }
 

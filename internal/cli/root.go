@@ -204,7 +204,7 @@ func Root() *cobra.Command {
 	root.PersistentFlags().StringVar(&flags.lang, "lang", "", i18n.Sprintf("language of skd's own text: en, zh or auto (default auto: the system's; also $%s, then the lang setting)", i18n.Env))
 	root.PersistentFlags().StringVar(&flags.theme, "theme", "", i18n.Sprintf("colours: light, dark or auto (default auto: ask the terminal; also $%s)", EnvTheme))
 	root.AddCommand(initCmd(), addCmd(), listCmd(), applyCmd(), updateCmd(), outdatedCmd(), enableCmd(), disableCmd(),
-		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd(), configCmd(), historyCmd(), editCmd(), resolveCmd(), diffCmd(), contributeCmd(), ownCmd())
+		removeCmd(), purgeCmd(), forkCmd(), pathCmd(), targetsCmd(), newCmd(), cloneCmd(), syncCmd(), useCmd(), showCmd(), scanCmd(), adoptCmd(), trashCmd(), configCmd(), historyCmd(), editCmd(), resolveCmd(), diffCmd(), contributeCmd(), ownCmd(), backupCmd(), restoreCmd())
 	localizeCobra(root)
 	return root
 }

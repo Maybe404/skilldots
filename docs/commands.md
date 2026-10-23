@@ -55,6 +55,24 @@ Commits the library and pushes it: your backup, and how other machines get your 
 - `--continue` refuses (non-zero; `--json`: `{unresolved}`) while a conflicted file holds a marker or stays unmerged; otherwise it adds the files, commits the merge, links what it brought in and pushes. `--abort` runs `git merge --abort`.
 - `private/` is a separate repository and is never pushed. `--json` prints `{committed, pushed, remote, pulled, conflicts, apply, privateUncommitted}`.
 
+### `skd backup <dir>`
+
+Writes the whole library as one zip file, `skilldots-backup-<yyyymmdd-hhmmss>.zip`, into `dir` (created if needed): a backup that needs no git remote.
+
+- It holds `skills.toml`, `skills.lock`, `skills.history.jsonl`, `vendor/`, `skills/`, `private/`, and the git repositories of the library and of `private/` with their whole history (uncommitted changes as they are), under `library/` in the zip.
+- Left out: the library trash (`.trash/`), the temporary files of an interrupted save, and skills that live outside the library: the skilldots skill the desktop app ships (its `[[app]]` entry stays in `skills.toml`; it is updated with the app). A top-level `skills/`, `vendor/` or `private/` that is a symbolic link is followed, so its skills are in the backup; any other link is kept as a link.
+- `skilldots-backup.json` at the top of the zip lists the skd version, the time, the skills, and every file with its size and SHA-256. A file that changes while the backup is made fails it; an existing file is never overwritten, and `dir` may not be inside the library.
+- `--json` prints `{path, skills, files, bytes}`. The desktop app's Settings → Backup → "Back up to…" does the same.
+
+### `skd restore <backup.zip> [dir]`
+
+Restores a library from `skd backup` into `dir` (default `~/.skilldots`), makes it the current library (`skd use`) and links its skills into the agents (`skd apply`), as `skd clone` does with a remote.
+
+- Every file is checked against the manifest before anything is written: a zip that is damaged, has a file missing, changed or added, or was not made by `skd backup` is refused (`not a usable skilldots backup`) and nothing is created.
+- `dir` must not exist or be an empty directory: restore never writes over a library or anything else. To restore in place of a library, move it to the Trash first, or restore elsewhere and `skd use` that.
+- The library is unpacked beside `dir` and renamed into place, so it is restored whole or not at all. A symbolic link in the backup that points outside the library is not restored and is named in the output (`skipped` in `--json`).
+- Custom targets are reviewed as after `skd clone`. The skilldots skill of the desktop app is linked once the app opens the library (it points the `[[app]]` entry at itself). `--json` prints `{library, backup, skipped, apply}`. The desktop app's "Import from backup…" does the same.
+
 ## Adding skills
 
 ### `skd show <owner/repo | url>`
