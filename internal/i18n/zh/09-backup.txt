@@ -1,0 +1,88 @@
+# Zip backups: skd backup, skd restore.
+
+@ Save the whole library, with its history, as a zip file in dir
+= 把整个资料库连同历史保存为 dir 里的一个 zip 文件
+
+@ backup writes skilldots-backup-<time>.zip into dir: skills.toml, skills.lock, the update history, vendor/, skills/, private/ and the git history of the library and of private/, with a checksum of every file. The library trash and the skilldots skill that ships with the app are left out. skd restore <zip> puts it back on this or another machine; no git remote is needed.
+= backup 在 dir 里写入 skilldots-backup-<时间>.zip：skills.toml、skills.lock、更新记录、vendor/、skills/、private/，以及资料库和 private/ 的 git 历史，并记录每个文件的校验和。资料库回收站和随 app 发布的 skilldots skill 不打包。用 skd restore <zip> 在本机或另一台机器上还原，不需要 git 远端。
+
+@ backed up %s to %s
+= 已把 %s 备份到 %s
+
+@ %s, %d files; restore with: skd restore %s
+= %s，%d 个文件；还原：skd restore %s
+
+@ Restore a library from a zip backup (default into ~/.skilldots) and apply it
+= 从 zip 备份还原资料库（默认到 ~/.skilldots）并应用
+
+@ restore checks every file of a backup made by skd backup against its checksums, unpacks the library into dir (default ~/.skilldots), makes it the current library and links its skills into the agents. dir must not exist or be empty: restore never writes over a library. To restore over one, move it to the Trash first.
+= restore 先按校验和逐个检查 skd backup 生成的备份，再把资料库解包到 dir（默认 ~/.skilldots），设为当前资料库，并把其中的 skill 链接到各 agent。dir 必须不存在或为空：restore 绝不覆盖已有资料库。要还原到已有的位置，请先把它移到废纸篓。
+
+@ %s is not a .zip backup (skd trash restore brings back something from the trash)
+= %s 不是 .zip 备份（从回收站找回东西用 skd trash restore）
+
+@ restored %s into %s
+= 已还原 %s 到 %s
+
+@ %s: a link outside the library, not restored
+= %s：指向资料库之外的链接，未还原
+
+@ %s is inside the library; choose a directory outside it for the backup
+= %s 在资料库里面；请为备份选一个资料库之外的目录
+
+@ %s changed while the backup was being made; try again
+= 备份过程中 %s 发生了变化；请重试
+
+@ not a usable skilldots backup
+= 不是可用的 skilldots 备份
+
+@ %s is %w: %v
+= %s %w：%v
+
+@ %s is %w: %s
+= %s %w：%s
+
+@ unexpected entry %q
+= 有意外的条目 %q
+
+@ %q appears twice
+= %q 出现了两次
+
+@ no %s in it
+= 里面没有 %s
+
+@ cannot read %s: %v
+= 无法读取 %s：%v
+
+@ format %d; this skd reads format %d (a newer skd made it?)
+= 格式为 %d；这个 skd 只认格式 %d（是更新版本的 skd 生成的吗？）
+
+@ bad file %q in %s
+= %[2]s 里有无效的文件 %[1]q
+
+@ %s is missing
+= 缺少 %s
+
+@ %s should be a directory
+= %s 应该是目录
+
+@ %s should be a symbolic link
+= %s 应该是符号链接
+
+@ %s does not match its checksum
+= %s 与校验和不符
+
+@ %s should be a file
+= %s 应该是文件
+
+@ unknown type %q of %s
+= %[2]s 的类型 %[1]q 无法识别
+
+@ does not match its checksum
+= 与校验和不符
+
+@ %w; restore records the library there, so fix or remove it first (nothing was restored)
+= %w；restore 要在那里记录资料库，请先修好或删掉它（什么都没有还原）
+
+@ %s already exists and is not empty; nothing was restored. Restore into another directory, or move it to the Trash first
+= %s 已存在且不为空；什么都没有还原。请还原到另一个目录，或先把它移到废纸篓

@@ -91,6 +91,8 @@ One line each; [docs/commands.md](docs/commands.md) has every option and rule.
 | `skd clone <git-url> [dir]` | set up a machine from a library you pushed elsewhere |
 | `skd use <dir>` | point skd at an existing library from any directory |
 | `skd sync [--remote url] [-m msg]` | commit the library, merge what its remote has, and push: your backup (`--resolve`, `--continue`, `--abort` for a sync whose merge conflicts) |
+| `skd backup <dir>` | the whole library, with `private/` and its git history, as one zip file in `dir`: a backup with no git remote |
+| `skd restore <backup.zip> [dir]` | check a zip backup, restore it into an empty `dir` (default `~/.skilldots`) and link its skills |
 | `skd diff <skill>` | your changes to a vendored skill, against the upstream version it is based on |
 | `skd contribute <skill \| pack> --pr \| --push` | send your changes to a vendored skill, or every changed and new skill of a pack in one commit, upstream: a pull request, or a push (`--dry-run` first) |
 | **Adding** | |

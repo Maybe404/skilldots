@@ -18,7 +18,7 @@ skd list --json        # fails with a clear message if there is no library yet
 
 No `skd` on the PATH ("command not found"): it comes with the skilldots desktop app — ask the user to install the skd command in the app (Settings → Agents; 设置 → Agent 接入 in Chinese), or to install it with `go install github.com/Maybe404/skilldots/cmd/skd@latest`. Do not look for it elsewhere or install anything yourself.
 
-No library: ask the user whether to create one (`skd init`), clone their backup (`skd clone <git-url>`), or point at an existing directory (`skd use <dir>`). Do not pick for them.
+No library: ask the user whether to create one (`skd init`), clone their backup (`skd clone <git-url>`), restore a zip backup (`skd restore <backup.zip>`), or point at an existing directory (`skd use <dir>`). Do not pick for them.
 
 A library cloned from someone else decides where its custom targets point. Before `skd clone` of a library that is not the user's own, and whenever skd warns that a custom target "is not used", show the user the `[targets.custom.*]` part of `skills.toml` (or `skd targets --json`: rows with `"Active": false` and their `Problem`). You cannot approve a custom target — `skd targets trust` refuses without a terminal, and with `--yes` or `--json`. If the user wants one, ask them to run `skd targets trust <name>` in their own terminal (it shows the directory and asks them), then run `skd apply`. Never edit skd's approvals file (`trusted-targets.toml` beside its settings) or point a custom target somewhere to work around a refusal. When apply forgets a record of a target that is not in use, or skips one whose link it left behind (also listed by `skd scan` with state `left`), it names a path it left alone; tell the user rather than removing it yourself.
 
@@ -199,6 +199,15 @@ skd sync --resolve          # a shelved sync: redo the merge, leaving the confli
 skd sync --continue         # finish: refuses while a conflict marker is left; commits the merge and pushes
 skd sync --abort            # give up (git merge --abort)
 ```
+
+**Back up without a remote** (a zip file in a folder the user picks; no GitHub needed):
+
+```bash
+skd backup <dir>                 # writes <dir>/skilldots-backup-<time>.zip: the whole library with private/ and both git histories
+skd restore <backup.zip> [dir]   # checks it, unpacks into dir (default ~/.skilldots), makes it current, links the skills
+```
+
+Ask the user which folder to back up to; do not pick one inside the library. `skd restore` refuses a damaged backup and any `dir` that exists and is not empty — it never overwrites a library. If the user wants to restore in place of their current library, they move it to the Trash themselves first (do not move or delete it for them); otherwise restore into another directory. The skilldots skill shipped with the desktop app is not in the backup; the app links it again when it opens the library.
 
 Run `skd sync` after adding, updating or writing skills unless the user says otherwise. When the remote and the library both changed the same lines, `skd sync` exits non-zero with the conflicting files (`conflicts` in `--json`) and changes nothing: the sync is shelved. Tell the user; with their go-ahead `skd sync --resolve` leaves git's merge state (`git -C <library> status` shows `UU`, the files hold markers, `git checkout --ours|--theirs -- <path>` and `git add <path>` work), then edit, `skd sync --continue`. Agents linked to skills among those files read the markers until it is finished. Plain git equivalent: `git -C <library> pull --no-rebase` then `git push`, then `skd apply`. `private/` is a separate repository and is never pushed by `sync`. `sync` also pushes the upstream snapshots (`refs/skilldots/*`), and `skd clone` fetches them; it refuses while a skill or a sync is being resolved.
 

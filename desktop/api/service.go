@@ -26,7 +26,9 @@ type object = map[string]any
 
 type Native struct {
 	PickFolder func(context.Context) (string, error)
-	Reveal     func(string) error
+	// PickFile chooses one file with one of the extensions.
+	PickFile func(context.Context, []string) (string, error)
+	Reveal   func(string) error
 }
 
 // Service serializes calls because app.Session and the engine registry are
@@ -207,6 +209,37 @@ func (s *Service) Invoke(ctx context.Context, method string, args []json.RawMess
 			return nil, err
 		}
 		return p, err
+	case "pickBackupFile":
+		if s.native.PickFile == nil {
+			return nil, errors.New("file picker unavailable")
+		}
+		p, err := s.native.PickFile(ctx, []string{"zip"})
+		if p == "" {
+			return nil, err
+		}
+		return p, err
+	case "revealBackup":
+		p, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.revealBackup(p)
+	case "backupZip":
+		dir, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		return s.backupZip(dir)
+	case "restoreZip":
+		zipPath, err := argument[string](args, 0)
+		if err != nil {
+			return nil, err
+		}
+		dir, err := argument[string](args, 1)
+		if err != nil {
+			return nil, err
+		}
+		return s.restoreZip(zipPath, dir)
 	case "status":
 		return s.status()
 	case "useLibrary":

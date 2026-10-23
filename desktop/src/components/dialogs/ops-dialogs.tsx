@@ -387,14 +387,15 @@ export function LibraryForm({
   onCancel,
   autoFocus = true,
 }: {
-  mode: "use" | "clone" | "init"
+  mode: "use" | "clone" | "init" | "restore"
   onDone: () => void
   onCancel?: () => void
   autoFocus?: boolean
 }) {
   const { t, runTask, run, reload, status } = useApp()
-  const [dir, setDir] = React.useState(mode === "init" ? "~/.skilldots" : mode === "clone" ? "~/.skilldots" : "")
+  const [dir, setDir] = React.useState(mode === "use" ? "" : "~/.skilldots")
   const [url, setUrl] = React.useState("")
+  const [zip, setZip] = React.useState("")
   const [busy, setBusy] = React.useState(false)
   // So the agents can use the library right away: the skilldots skill and the skd command. The skill is on by
   // default for a new library only: an existing one (perhaps someone else's, or one it was taken out of) is
@@ -418,7 +419,10 @@ export function LibraryForm({
           ? await backend.initLibrary(expand(dir), withSkill)
           : mode === "clone"
             ? await backend.cloneLibrary(url.trim(), expand(dir))
-            : await backend.useLibrary(expand(dir))
+            : mode === "restore"
+              ? await backend.restoreZip(zip.trim(), expand(dir))
+              : await backend.useLibrary(expand(dir))
+      if (lib.restored?.skipped.length) notes.push(t("restoreSkipped", { n: lib.restored.skipped.length }))
       if (withSkill && lib.skillError) notes.push(t("selfSkillFailed", { error: lib.skillError }))
       else if (withSkill && !lib.selfSkill) {
         await backend.installSelfSkill().catch((e: unknown) => notes.push(t("selfSkillFailed", { error: errorText(t, e) })))
@@ -437,7 +441,7 @@ export function LibraryForm({
     setBusy(false)
     if (!r.ok) return
     await reload()
-    toast(t("libraryReady"))
+    toast(mode === "restore" ? t("restoredToast", { n: r.value.restored?.skills ?? 0 }) : t("libraryReady"))
     notes.forEach((n) => toast.warning(n))
     onDone()
   }
@@ -445,6 +449,10 @@ export function LibraryForm({
   const pick = async () => {
     const r = await run(() => backend.pickFolder())
     if (r.ok && r.value) setDir(r.value)
+  }
+  const pickZip = async () => {
+    const r = await run(() => backend.pickBackupFile())
+    if (r.ok && r.value) setZip(r.value)
   }
 
   return (
@@ -461,15 +469,27 @@ export function LibraryForm({
           <Input id="lib-url" autoFocus={autoFocus} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="git@github.com:you/agent-skills.git" className="font-mono fs-body" spellCheck={false} />
         </Field>
       )}
+      {mode === "restore" && (
+        <Field>
+          <FieldLabel htmlFor="lib-zip">{t("backupFile")}</FieldLabel>
+          <div className="flex gap-2">
+            <Input id="lib-zip" autoFocus={autoFocus} value={zip} onChange={(e) => setZip(e.target.value)} placeholder="skilldots-backup-….zip" className="font-mono fs-body" spellCheck={false} />
+            <Button type="button" variant="outline" size="lg" onClick={pickZip}>
+              {t("choose")}
+            </Button>
+          </div>
+        </Field>
+      )}
       <Field>
-        <FieldLabel htmlFor="lib-dir">{mode === "clone" ? t("cloneInto") : t("folder")}</FieldLabel>
+        <FieldLabel htmlFor="lib-dir">{mode === "clone" ? t("cloneInto") : mode === "restore" ? t("restoreInto") : t("folder")}</FieldLabel>
         <div className="flex gap-2">
-          <Input id="lib-dir" autoFocus={autoFocus && mode !== "clone"} value={dir} onChange={(e) => setDir(e.target.value)} className="font-mono fs-body" spellCheck={false} />
+          <Input id="lib-dir" autoFocus={autoFocus && mode !== "clone" && mode !== "restore"} value={dir} onChange={(e) => setDir(e.target.value)} className="font-mono fs-body" spellCheck={false} />
           <Button type="button" variant="outline" size="lg" onClick={pick}>
             {t("choose")}
           </Button>
         </div>
         {mode === "use" && <FieldDescription>{t("switchBody")}</FieldDescription>}
+        {mode === "restore" && <FieldDescription>{t("restoreIntoHint")}</FieldDescription>}
       </Field>
       <div className="grid gap-3">
         <label className="flex items-start gap-2.5 fs-body text-ink">
@@ -496,18 +516,18 @@ export function LibraryForm({
             {t("cancel")}
           </Button>
         )}
-        <Button type="submit" size="lg" disabled={busy || !dir.trim() || (mode === "clone" && !url.trim())}>
+        <Button type="submit" size="lg" disabled={busy || !dir.trim() || (mode === "clone" && !url.trim()) || (mode === "restore" && !zip.trim())}>
           {busy && <RefreshIcon spinning />}
-          {busy ? (mode === "clone" ? t("cloning") : t("creating")) : t("continue")}
+          {busy ? (mode === "clone" ? t("cloning") : mode === "restore" ? t("restoring") : t("creating")) : t("continue")}
         </Button>
       </div>
     </form>
   )
 }
 
-export function LibraryDialog({ mode, onClose }: { mode: "use" | "clone" | "init"; onClose: () => void }) {
+export function LibraryDialog({ mode, onClose }: { mode: "use" | "clone" | "init" | "restore"; onClose: () => void }) {
   const { t, navigate } = useApp()
-  const title = mode === "use" ? t("switchTitle") : mode === "clone" ? t("importTitle") : t("newLibraryTitle")
+  const title = mode === "use" ? t("switchTitle") : mode === "clone" ? t("importTitle") : mode === "restore" ? t("restoreTitle") : t("newLibraryTitle")
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent closeLabel={t("close")} className="w-[500px]">

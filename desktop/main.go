@@ -27,7 +27,14 @@ func main() {
 	service := api.New(os.Getenv("SKILLDOTS_LIBRARY"), api.Native{
 		Reveal: func(path string) error { mygo.Shell.ShowItemInFolder(path); return nil },
 		PickFolder: func(ctx context.Context) (string, error) {
-			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: mygo.CallerWindow(ctx), Directory: true})
+			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: mygo.CallerWindow(ctx), Directory: true, CreateDirectories: true})
+			if err != nil || len(paths) == 0 {
+				return "", err
+			}
+			return paths[0], nil
+		},
+		PickFile: func(ctx context.Context, exts []string) (string, error) {
+			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: mygo.CallerWindow(ctx), Filters: []mygo.FileFilter{{Name: "skilldots backup", Extensions: exts}}})
 			if err != nil || len(paths) == 0 {
 				return "", err
 			}
